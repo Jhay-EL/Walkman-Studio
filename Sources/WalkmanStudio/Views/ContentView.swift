@@ -12,6 +12,8 @@ public struct ContentView: View {
     @State private var showInspector: Bool = false
     @State private var showEjectSheet: Bool = false
     @State private var queueCount: Int = 0
+    @State private var deviceInfo: WalkmanDeviceInfo? = nil
+    @State private var showAboutSheet: Bool = false
     
     @ObservedObject private var player = AudioPlayerService.shared
     
@@ -24,6 +26,7 @@ public struct ContentView: View {
         isRefreshingDrives = true
         let detected = WalkmanEngine.shared.detectDrives()
         self.drives = detected
+        self.deviceInfo = WalkmanDeviceDetector.shared.detect(drives: detected)
         
         if let current = activeDrive, detected.contains(where: { $0.mountPoint == current.mountPoint }) {
             // Keep current active drive
@@ -79,12 +82,12 @@ public struct ContentView: View {
                     
                     ZStack {
                         Circle()
-                            .fill(WalkmanTheme.gold.opacity(0.12))
+                            .fill(Color.white.opacity(0.08))
                             .frame(width: 88, height: 88)
                         
                         Image(systemName: "cable.connector.horizontal")
                             .font(.system(size: 36))
-                            .foregroundStyle(WalkmanTheme.gold)
+                            .foregroundStyle(WalkmanTheme.silver)
                     }
                     
                     VStack(spacing: 8) {
@@ -107,8 +110,8 @@ public struct ContentView: View {
                         .font(.system(size: 11, weight: .semibold))
                         .padding(.horizontal, 16)
                         .padding(.vertical, 7)
-                        .background(WalkmanTheme.goldGradient)
-                        .foregroundStyle(.black)
+                        .background(WalkmanTheme.silverGradient)
+                        .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
@@ -124,9 +127,16 @@ public struct ContentView: View {
                         selectedTab: $selectedTab,
                         drives: drives,
                         trackCount: tracks.count,
-                        queueCount: queueCount
+                        queueCount: queueCount,
+                        deviceInfo: deviceInfo,
+                        activeDrive: activeDrive,
+                        onSelectDrive: { drive in
+                            activeDrive = drive
+                            refreshLibrary()
+                        },
+                        onOpenAbout: { self.showAboutSheet = true }
                     )
-                    .frame(minWidth: 200, idealWidth: 230)
+                    .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 280)
                 } detail: {
                     VStack(spacing: 0) {
                         ZStack {
@@ -140,7 +150,9 @@ public struct ContentView: View {
                                     tracks: tracks,
                                     onNavigateToTab: { tab in selectedTab = tab },
                                     onOpenEject: { showEjectSheet = true },
-                                    onRefresh: { refreshDrives() }
+                                    onRefresh: { refreshDrives() },
+                                    deviceInfo: deviceInfo,
+                                    onOpenAbout: { self.showAboutSheet = true }
                                 )
                                 
                             case .library:
@@ -198,12 +210,6 @@ public struct ContentView: View {
                                     libraryTracks: tracks
                                 )
                                 .padding(14)
-                                
-                            case .dsp:
-                                WalkmanOneDspView(
-                                    drives: drives,
-                                    activeDrive: activeDrive
-                                )
                             }
                         }
                         
@@ -212,65 +218,19 @@ public struct ContentView: View {
                             self.showInspector = true
                         })
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(WalkmanTheme.background.ignoresSafeArea())
                     .inspector(isPresented: $showInspector) {
                         MetadataStudioView(
                             track: selectedTrack,
-                            onSaved: { refreshLibrary() }
+                            onSaved: { refreshLibrary() },
+                            onClose: { self.showInspector = false }
                         )
                         .inspectorColumnWidth(min: 270, ideal: 310, max: 360)
                     }
-                }
-                .toolbar {
-                    // Drive Selector in Toolbar (Always displays Icon + Label)
-                    ToolbarItem(placement: .navigation) {
-                        if !drives.isEmpty {
-                            Menu {
-                                ForEach(drives) { d in
-                                    Button {
-                                        activeDrive = d
-                                        refreshLibrary()
-                                    } label: {
-                                        HStack {
-                                            if activeDrive?.mountPoint == d.mountPoint {
-                                                Image(systemName: "checkmark")
-                                            }
-                                            Text(d.type == .internal ? "Internal Storage (\(d.name))" : "SD Card (\(d.name))")
-                                        }
-                                    }
-                                }
-                            } label: {
-                                HStack(spacing: 5) {
-                                    Image(systemName: activeDrive?.type == .internal ? "internaldrive" : "sdcard")
-                                        .font(.system(size: 11, weight: .semibold))
-                                        .foregroundStyle(WalkmanTheme.gold)
-                                    
-                                    Text(activeDrive?.type == .internal ? "Internal Storage" : "SD Card")
-                                        .font(.system(size: 11, weight: .semibold))
-                                        .foregroundStyle(.primary)
-                                    
-                                    Image(systemName: "chevron.up.chevron.down")
-                                        .font(.system(size: 8, weight: .bold))
-                                        .foregroundStyle(.secondary)
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.white.opacity(0.06))
-                                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                            }
-                            .menuStyle(.borderlessButton)
-                            .help("Switch between Internal Storage and SD Card")
-                        }
-                    }
-                    
-                    // Center Subtitle
-                    ToolbarItem(placement: .principal) {
-                        Text("Sony Walkman NW-A55L")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(.primary)
-                    }
-                    
-                    // Trailing Action Controls
-                    ToolbarItemGroup(placement: .primaryAction) {
+                    .toolbar {
+                        Spacer()
+                        
                         // Rescan
                         Button(action: { refreshDrives() }) {
                             Label("Refresh", systemImage: "arrow.clockwise")
@@ -283,7 +243,7 @@ public struct ContentView: View {
                         }
                         .help("Clean macOS junk files and safely unmount Walkman")
                         
-                        // Trailing Inspector Toggle
+                        // Inspector Toggle
                         Button(action: { showInspector.toggle() }) {
                             Label("Inspector", systemImage: "sidebar.trailing")
                         }
@@ -294,6 +254,13 @@ public struct ContentView: View {
         }
         .onAppear {
             setupVolumeNotifications()
+            NotificationCenter.default.addObserver(
+                forName: .showAboutWalkmanStudio,
+                object: nil,
+                queue: .main
+            ) { _ in
+                self.showAboutSheet = true
+            }
             refreshDrives()
         }
         .sheet(isPresented: $showEjectSheet) {
@@ -301,6 +268,12 @@ public struct ContentView: View {
                 drives: drives,
                 onEjectComplete: { refreshDrives() },
                 onDismiss: { showEjectSheet = false }
+            )
+        }
+        .sheet(isPresented: $showAboutSheet) {
+            AboutWalkmanStudioView(
+                currentDeviceInfo: deviceInfo,
+                onDismiss: { showAboutSheet = false }
             )
         }
     }

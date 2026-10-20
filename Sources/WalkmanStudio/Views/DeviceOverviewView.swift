@@ -6,6 +6,8 @@ public struct DeviceOverviewView: View {
     let onNavigateToTab: (NavigationTab) -> Void
     let onOpenEject: () -> Void
     let onRefresh: () -> Void
+    var deviceInfo: WalkmanDeviceInfo? = nil
+    var onOpenAbout: (() -> Void)? = nil
     
     private var internalDrive: WalkmanDrive? {
         drives.first(where: { $0.type == .internal })
@@ -30,34 +32,38 @@ public struct DeviceOverviewView: View {
             VStack(spacing: 24) {
                 // Hero Device Header (Finder / Apple Devices Style)
                 HStack(spacing: 20) {
-                    // Device Icon
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(WalkmanTheme.goldGradient)
-                            .frame(width: 68, height: 68)
-                            .shadow(color: WalkmanTheme.gold.opacity(0.35), radius: 10, x: 0, y: 4)
-                        
-                        Image(systemName: "hifispeaker.fill")
-                            .font(.system(size: 32))
-                            .foregroundStyle(.black)
-                    }
+                    // Device Icon (Accurate Sony Walkman Hardware Icon)
+                    WalkmanDeviceIconView(
+                        size: 68,
+                        mountPoint: internalDrive?.mountPoint ?? drives.first?.mountPoint
+                    )
                     
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 8) {
-                            Text("Sony Walkman NW-A55L")
+                            Text(deviceInfo?.displayName ?? "Sony Walkman NW-A55L")
                                 .font(.system(size: 20, weight: .bold))
                                 .foregroundStyle(.white)
                             
                             Text("Hi-Res Audio")
-                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(WalkmanTheme.gold.opacity(0.18))
-                                .foregroundStyle(WalkmanTheme.gold)
+                                .background(Color.white.opacity(0.1))
+                                .foregroundStyle(WalkmanTheme.silver)
                                 .clipShape(Capsule())
+                            
+                            if let fw = deviceInfo?.firmwareVersion {
+                                Text("FW v\(fw)")
+                                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.white.opacity(0.08))
+                                    .foregroundStyle(WalkmanTheme.silverMuted)
+                                    .clipShape(Capsule())
+                            }
                         }
                         
-                        Text("Connected via USB Mass Storage • Dual-Drive S-Master HX Architecture")
+                        Text("Connected via USB Mass Storage • Sony OS / Linux Architecture")
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                         
@@ -82,8 +88,8 @@ public struct DeviceOverviewView: View {
                         .font(.system(size: 12, weight: .semibold))
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
-                        .background(WalkmanTheme.goldGradient)
-                        .foregroundStyle(.black)
+                        .background(WalkmanTheme.silverGradient)
+                        .foregroundStyle(Color(red: 18 / 255, green: 18 / 255, blue: 22 / 255))
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
@@ -174,10 +180,10 @@ public struct DeviceOverviewView: View {
                         )
                         
                         ActionCard(
-                            title: "Walkman One DSP",
-                            description: "Tune S-Master HX sound signature (WM1Z, DMP-Z1) and DAC Gain.",
-                            icon: "slider.vertical.3",
-                            action: { onNavigateToTab(.dsp) }
+                            title: "Playlists (.M3U8)",
+                            description: "Manage hardware-compliant CRLF POSIX playlists saved in /MUSIC/.",
+                            icon: "list.bullet.rectangle",
+                            action: { onNavigateToTab(.playlists) }
                         )
                     }
                 }
@@ -185,13 +191,31 @@ public struct DeviceOverviewView: View {
                 // Strict Hardware Constraints Checklist (Live Status)
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
-                        Text("SONY NW-A55L HARDWARE COMPLIANCE")
+                        Text("SONY NON-ANDROID HARDWARE COMPLIANCE")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(.secondary)
                         Spacer()
-                        Text("Active & Enforced")
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundStyle(WalkmanTheme.gold)
+                        
+                        if let onAbout = onOpenAbout {
+                            Button(action: onAbout) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "info.circle")
+                                        .font(.system(size: 10))
+                                    Text("About & Supported Devices")
+                                        .font(.system(size: 10, weight: .semibold))
+                                }
+                                .foregroundStyle(WalkmanTheme.silverLight)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            Text("Active & Enforced")
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundStyle(WalkmanTheme.silverMuted)
+                        }
                     }
                     .padding(.horizontal, 4)
                     
@@ -246,7 +270,7 @@ private struct StorageDriveCard: View {
             HStack(spacing: 10) {
                 Image(systemName: icon)
                     .font(.system(size: 16))
-                    .foregroundStyle(WalkmanTheme.gold)
+                    .foregroundStyle(WalkmanTheme.silverMuted)
                     .frame(width: 24)
                 
                 VStack(alignment: .leading, spacing: 1) {
@@ -262,7 +286,7 @@ private struct StorageDriveCard: View {
                 
                 Text(String(format: "%.1f%%", percentUsed))
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
-                    .foregroundStyle(percentUsed > 90 ? Color.orange : WalkmanTheme.gold)
+                    .foregroundStyle(percentUsed > 95 ? Color.orange : WalkmanTheme.silver)
             }
             
             // Progress Bar
@@ -310,7 +334,7 @@ private struct ActionCard: View {
                 HStack {
                     Image(systemName: icon)
                         .font(.system(size: 18))
-                        .foregroundStyle(WalkmanTheme.gold)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.system(size: 10, weight: .semibold))

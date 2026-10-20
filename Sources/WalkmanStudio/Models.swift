@@ -59,6 +59,49 @@ public struct Playlist: Identifiable, Hashable, Sendable {
     public let fullPath: String
 }
 
+public struct WalkmanDeviceInfo: Sendable, Hashable, Codable {
+    public let modelRaw: String // e.g. "NW-A50Series"
+    public let marketingName: String // e.g. "WALKMAN NW-A50Series"
+    public let displayName: String // e.g. "Sony Walkman NW-A55L"
+    public let seriesName: String // e.g. "NW-A50 Series"
+    public let specificModel: String // e.g. "NW-A55L"
+    public let vendor: String // e.g. "Sony Corporation"
+    public let firmwareVersion: String // e.g. "1.02"
+    public let isNonAndroid: Bool
+    public let hasCfw: Bool
+    public let displayResolution: String // e.g. "800x480"
+    public let internalCapacityGb: Double
+    public let supportedAudioFormats: [String]
+    
+    public init(
+        modelRaw: String,
+        marketingName: String,
+        displayName: String,
+        seriesName: String,
+        specificModel: String,
+        vendor: String,
+        firmwareVersion: String,
+        isNonAndroid: Bool,
+        hasCfw: Bool,
+        displayResolution: String,
+        internalCapacityGb: Double,
+        supportedAudioFormats: [String]
+    ) {
+        self.modelRaw = modelRaw
+        self.marketingName = marketingName
+        self.displayName = displayName
+        self.seriesName = seriesName
+        self.specificModel = specificModel
+        self.vendor = vendor
+        self.firmwareVersion = firmwareVersion
+        self.isNonAndroid = isNonAndroid
+        self.hasCfw = hasCfw
+        self.displayResolution = displayResolution
+        self.internalCapacityGb = internalCapacityGb
+        self.supportedAudioFormats = supportedAudioFormats
+    }
+}
+
 public struct AlbumItem: Identifiable, Hashable, Sendable {
     public var id: String { "\(artist)|\(name)" }
     public let name: String
@@ -79,12 +122,6 @@ public struct ArtistItem: Identifiable, Hashable, Sendable {
     public let trackCount: Int
     public let albums: [AlbumItem]
     public let tracks: [Track]
-}
-
-public struct CfwSettings: Sendable {
-    public let hasCfw: Bool
-    public var rawText: String
-    public var parsed: [String: String]
 }
 
 public enum TransferStatus: Equatable, Sendable {
