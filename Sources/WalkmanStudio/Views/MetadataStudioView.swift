@@ -25,9 +25,12 @@ public struct MetadataStudioView: View {
     @State private var lyricsDraft: String = ""
     @State private var lyricsStatusMessage: String? = nil
     
-    public init(track: Track?, onSaved: @escaping () -> Void) {
+    var onClose: (() -> Void)? = nil
+    
+    public init(track: Track?, onSaved: @escaping () -> Void, onClose: (() -> Void)? = nil) {
         self.track = track
         self.onSaved = onSaved
+        self.onClose = onClose
     }
     
     private func loadTrack() {
@@ -140,33 +143,59 @@ public struct MetadataStudioView: View {
     }
     
     public var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                if let tr = track {
-                    // Track Title & Header
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack(spacing: 6) {
-                            Text(tr.title.isEmpty ? tr.filename : tr.title)
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(.white)
-                                .lineLimit(2)
-                            
-                            if isHiRes(tr) {
-                                Text("Hi-Res")
-                                    .font(.system(size: 8, weight: .black, design: .monospaced))
-                                    .padding(.horizontal, 4)
-                                    .padding(.vertical, 1)
-                                    .background(WalkmanTheme.gold)
-                                    .foregroundStyle(.black)
-                                    .clipShape(RoundedRectangle(cornerRadius: 3))
-                            }
-                        }
-                        
-                        Text("\(tr.artist) — \(tr.album)")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+        VStack(spacing: 0) {
+            // Header Bar aligned to mid page navigation bar
+            HStack {
+                Spacer()
+                
+                if let onClose = onClose {
+                    Button(action: onClose) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.tertiary)
                     }
+                    .buttonStyle(.plain)
+                    .help("Close Preview Pane (Cmd+I)")
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(height: 36)
+            
+            Divider()
+                .overlay(Color.white.opacity(0.06))
+            
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if let tr = track {
+                        // Track Title & Header
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack(spacing: 6) {
+                                    Text(tr.title.isEmpty ? tr.filename : tr.title)
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .lineLimit(2)
+                                    
+                                    if isHiRes(tr) {
+                                        Text("Hi-Res")
+                                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                            .padding(.horizontal, 4)
+                                            .padding(.vertical, 1)
+                                            .background(Color.white.opacity(0.16))
+                                            .foregroundStyle(WalkmanTheme.silverLight)
+                                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                                    }
+                                }
+                                
+                                Text("\(tr.artist) — \(tr.album)")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            
+                            Spacer()
+                        }
                     
                     // Album Artwork Card (Drop Zone)
                     VStack(spacing: 8) {
@@ -185,7 +214,7 @@ public struct MetadataStudioView: View {
                                 VStack(spacing: 6) {
                                     Image(systemName: "photo.badge.plus")
                                         .font(.system(size: 28))
-                                        .foregroundStyle(WalkmanTheme.gold)
+                                        .foregroundStyle(WalkmanTheme.silverMuted)
                                     Text("Drop Album Artwork Here")
                                         .font(.system(size: 11, weight: .medium))
                                         .foregroundStyle(.secondary)
@@ -197,7 +226,7 @@ public struct MetadataStudioView: View {
                         }
                         .overlay(
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(isTargeted ? WalkmanTheme.gold : Color.white.opacity(0.1), lineWidth: isTargeted ? 2 : 1)
+                                .stroke(isTargeted ? WalkmanTheme.silver : Color.white.opacity(0.1), lineWidth: isTargeted ? 2 : 1)
                         )
                         .onDrop(of: [.fileURL, .image], isTargeted: $isTargeted) { providers in
                             guard let provider = providers.first else { return false }
@@ -238,14 +267,14 @@ public struct MetadataStudioView: View {
                             if let msg = lyricsStatusMessage {
                                 Text(msg)
                                     .font(.system(size: 9, design: .monospaced))
-                                    .foregroundStyle(WalkmanTheme.gold)
+                                    .foregroundStyle(WalkmanTheme.silverLight)
                             } else if lyrics != nil {
                                 Text("Synced / .LRC")
                                     .font(.system(size: 8, weight: .bold, design: .monospaced))
                                     .padding(.horizontal, 5)
                                     .padding(.vertical, 1)
-                                    .background(WalkmanTheme.gold.opacity(0.15))
-                                    .foregroundStyle(WalkmanTheme.gold)
+                                    .background(Color.white.opacity(0.12))
+                                    .foregroundStyle(WalkmanTheme.silverLight)
                                     .clipShape(Capsule())
                             }
                             
@@ -257,7 +286,7 @@ public struct MetadataStudioView: View {
                             }) {
                                 Image(systemName: isEditingLyrics ? "xmark" : (lyrics != nil ? "pencil" : "plus"))
                                     .font(.system(size: 10))
-                                    .foregroundStyle(WalkmanTheme.gold)
+                                    .foregroundStyle(WalkmanTheme.silver)
                             }
                             .buttonStyle(.plain)
                             .help(isEditingLyrics ? "Cancel editing" : (lyrics != nil ? "Edit lyrics" : "Add lyrics (.lrc)"))
@@ -280,8 +309,8 @@ public struct MetadataStudioView: View {
                                     .font(.system(size: 10, weight: .semibold))
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 4)
-                                    .background(WalkmanTheme.goldGradient)
-                                    .foregroundStyle(.black)
+                                    .background(WalkmanTheme.silverGradient)
+                                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                                     .clipShape(RoundedRectangle(cornerRadius: 4))
                                     .buttonStyle(.plain)
                                 }
@@ -318,7 +347,7 @@ public struct MetadataStudioView: View {
                                     isEditingLyrics = true
                                 }
                                 .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(WalkmanTheme.gold)
+                                .foregroundStyle(WalkmanTheme.silver)
                                 .buttonStyle(.plain)
                             }
                             .padding(10)
@@ -397,11 +426,11 @@ public struct MetadataStudioView: View {
                                 if showSuccess {
                                     Color.green.opacity(0.85)
                                 } else {
-                                    WalkmanTheme.gold
+                                    WalkmanTheme.silverGradient
                                 }
                             }
                         )
-                        .foregroundStyle(showSuccess ? .white : .black)
+                        .foregroundStyle(showSuccess ? .white : Color(red: 20/255, green: 20/255, blue: 24/255))
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                     .buttonStyle(.plain)
@@ -424,10 +453,13 @@ public struct MetadataStudioView: View {
                     .frame(maxWidth: .infinity, minHeight: 280)
                 }
             }
-            .padding(14)
+            .padding(.horizontal, 14)
+            .padding(.top, 10)
+            .padding(.bottom, 24)
         }
         .onAppear { loadTrack() }
         .onChange(of: track?.id) { loadTrack() }
+    }
     }
 }
 
