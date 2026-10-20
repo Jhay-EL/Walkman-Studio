@@ -35,22 +35,22 @@ Sony Walkman digital audio players deliver exceptional audio fidelity via their 
 
 ## Core Features
 
-### 🖼️ Automated Baseline RGB JPEG Artwork Engine
+### Automated Baseline RGB JPEG Artwork Engine
 * Automatically inspects and converts album artwork to strict **Baseline RGB JPEG** format ($\le 800\times 800$ resolution).
 * Strips progressive scan passes, alpha channels, and CMYK color spaces that crash or freeze the Walkman NW-A55 display engine.
 * Instant drag-and-drop cover art validator with real-time hardware compliance status.
 
-### 🏷️ Strict ID3v2.3 (UTF-16) & FLAC Metadata Tagger
+### Strict ID3v2.3 (UTF-16) & FLAC Metadata Tagger
 * Enforces pure binary `ID3v2.3` tagging with `UTF-16` Little Endian encoding and BOM (`encoding=1`) on all MP3 files—preventing database corruption on the Walkman.
 * Standard Vorbis comments and Front Cover `Picture` block (`type=3`, `image/jpeg`) embedding for FLAC files.
 * Direct editing of Title, Artist, Album, Track Number, Year, and Genre with one-click atomic saving.
 
-### 📝 Synchronized Lyrics Manager (.LRC & Embedded USLT)
+### Synchronized Lyrics Manager (.LRC & Embedded USLT)
 * Detects and displays companion **`.lrc`** synchronized lyrics files—the native lyrics standard supported by the Sony NW-A55.
 * Reads embedded ID3 `USLT` (Unsynchronized lyrics) frames.
 * Built-in lyrics editor: paste or write lyrics and save them directly as `.lrc` companion files alongside your tracks for instant on-screen display during Walkman playback.
 
-### ⚡ Walkman One Custom Firmware (CFW) DSP Tuning
+### Walkman One Custom Firmware (CFW) DSP Tuning
 * Direct reader and writer for `/CFW/settings.txt` on the Walkman root directory.
 * Switch between hardware sound emulation profiles:
   * **WM1Z:** Warm, lush, analog sound signature with deep bass authority.
@@ -59,24 +59,24 @@ Sony Walkman digital audio players deliver exceptional audio fidelity via their 
   * **Neutral:** Bit-perfect studio reference frequency response.
 * Toggle **DAC Gain** (Normal for sensitive IEMs vs High Gain for demanding headphones), **Vinyl Processor**, and **Walkman Plus v2** audio driver pipeline.
 
-### 🧹 macOS Dotfile Purge & Safe Eject
+### macOS Dotfile Purge & Safe Eject
 * Automatically runs `/usr/bin/dot_clean -m` to merge AppleDouble resource forks before unmounting.
 * Recursively searches for and removes hidden `._*`, `.DS_Store`, `.Spotlight-V100`, `.Trashes`, and `.fseventsd` ghost files.
 * Cleanly unmounts both Internal Flash and MicroSD volumes via `diskutil` to prevent filesystem corruption.
 
-### 💽 Dual-Drive Detection & Storage Manager
+### Dual-Drive Detection & Storage Manager
 * Automatically detects both the **Internal Flash** (`/Volumes/WALKMAN`) and **MicroSD Card** (`/Volumes/SD_CARD`).
 * Direct Darwin kernel `statvfs` integration providing exact byte counts, used storage, and remaining capacity.
 * Quick-switch selector to seamlessly manage or browse either storage drive.
 
-### 🎵 High-Performance Library Browser
+### High-Performance Library Browser
 * **All Songs (Table View):** Multi-column sortable table (`#`, `Title`, `Artist`, `Album`, `Format`, `Duration`, `Bitrate`) with search filtering and instant playback.
 * **Albums (Artwork Grid):** Visual album browser with cover art caching, year indicators, track counts, and an Album Detail drill-down view.
 * **Artists (Discography Browser):** Master-detail view grouping tracks by artist and album.
 * **Hi-Res Audio (Studio Masters):** Filtered view exclusively displaying **24-bit / 96kHz+** lossless FLAC tracks calibrated for the S-Master HX DAC.
 * Sub-second library indexing: scans 7,000+ tracks over USB 2.0 in ~0.25 seconds without UI lag.
 
-### 🔄 Batch Audio Transcoding & Transfer Queue (FFmpeg)
+### Batch Audio Transcoding & Transfer Queue (FFmpeg)
 * Drag-and-drop batch transfer queue supporting multiple audio formats.
 * Integrated FFmpeg conversion presets:
   * `Bit-Perfect Copy` (direct transfer without re-encoding)
@@ -85,7 +85,7 @@ Sony Walkman digital audio players deliver exceptional audio fidelity via their 
   * `MP3 320kbps` (High-bitrate MP3)
 * Automatically sanitizes illegal FAT32/exFAT filesystem characters (`< > : " / \ | ? *`) and organizes files into `/MUSIC/Artist/Album/NN - Title.ext`.
 
-### 📋 CRLF Relative POSIX .M3U8 Playlist Engine
+### CRLF Relative POSIX .M3U8 Playlist Engine
 * Creates and edits playlists stored in `/MUSIC/`.
 * Enforces relative POSIX paths (`Artist/Album/Track.flac`) and strict **CRLF** (`\r\n`) line endings required by Sony Walkman firmware for playlist recognition.
 
