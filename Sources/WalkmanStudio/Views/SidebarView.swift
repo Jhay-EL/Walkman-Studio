@@ -48,42 +48,11 @@ public struct SidebarView: View {
                 
                 ForEach(drives) { drive in
                     let isCurrent = activeDrive?.mountPoint == drive.mountPoint
-                    Button(action: {
-                        onSelectDrive?(drive)
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: drive.type == .internal ? "internaldrive" : "sdcard")
-                                .font(.system(size: 12))
-                                .foregroundStyle(isCurrent ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
-                                .frame(width: 16)
-                            
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(drive.name)
-                                    .font(.system(size: 11, weight: isCurrent ? .semibold : .medium))
-                                    .foregroundStyle(isCurrent ? .white : .primary)
-                                    .lineLimit(1)
-                                
-                                let freeGb = Double(drive.freeBytes) / (1024 * 1024 * 1024)
-                                Text(String(format: "%.1f GB free", freeGb))
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(.secondary)
-                            }
-                            
-                            Spacer()
-                            
-                            if isCurrent {
-                                Circle()
-                                    .fill(WalkmanTheme.silver)
-                                    .frame(width: 5, height: 5)
-                            }
-                        }
-                        .padding(.vertical, 3)
-                        .padding(.horizontal, 4)
-                        .background(isCurrent ? Color.white.opacity(0.08) : Color.clear)
-                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Select \(drive.name) as active library drive")
+                    DriveSidebarRow(
+                        drive: drive,
+                        isCurrent: isCurrent,
+                        onSelect: { onSelectDrive?(drive) }
+                    )
                 }
             }
 
@@ -181,24 +150,75 @@ private struct AboutSidebarButton: View {
     }
 }
 
+private struct DriveSidebarRow: View {
+    let drive: WalkmanDrive
+    let isCurrent: Bool
+    let onSelect: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 8) {
+                Image(systemName: drive.type == .internal ? "internaldrive" : "sdcard")
+                    .font(.system(size: 12))
+                    .foregroundStyle(isCurrent ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
+                    .frame(width: 18)
+                
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(drive.name)
+                        .font(.system(size: 11, weight: isCurrent ? .semibold : .medium))
+                        .foregroundStyle(isCurrent ? .white : .primary)
+                        .lineLimit(1)
+                    
+                    let freeGb = Double(drive.freeBytes) / (1024 * 1024 * 1024)
+                    Text(String(format: "%.1f GB free", freeGb))
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                }
+                
+                Spacer()
+                
+                if isCurrent {
+                    Circle()
+                        .fill(WalkmanTheme.silver)
+                        .frame(width: 5, height: 5)
+                }
+            }
+            .padding(.vertical, 4)
+            .padding(.horizontal, 6)
+            .background(isCurrent ? Color.white.opacity(0.08) : (isHovered ? Color.white.opacity(0.04) : Color.clear))
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .help("Select \(drive.name) as active library drive")
+    }
+}
+
 private struct SidebarRow: View {
     let tab: NavigationTab
     @Binding var selectedTab: NavigationTab
     let title: String
     let icon: String
     let badge: String?
+    @State private var isHovered = false
+
+    private var isSelected: Bool {
+        selectedTab == tab
+    }
 
     var body: some View {
         Button(action: { selectedTab = tab }) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
                     .font(.system(size: 13))
-                    .foregroundStyle(selectedTab == tab ? WalkmanTheme.silverLight : .secondary)
+                    .foregroundStyle(isSelected ? WalkmanTheme.silverLight : (isHovered ? .white : .secondary))
                     .frame(width: 18)
 
                 Text(title)
-                    .font(.system(size: 12, weight: selectedTab == tab ? .semibold : .regular))
-                    .foregroundStyle(selectedTab == tab ? .white : .primary)
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? .white : (isHovered ? .white : .primary))
 
                 Spacer()
 
@@ -207,13 +227,18 @@ private struct SidebarRow: View {
                         .font(.system(size: 9, weight: .bold, design: .monospaced))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(selectedTab == tab ? Color.white.opacity(0.18) : Color.white.opacity(0.08))
-                        .foregroundStyle(selectedTab == tab ? WalkmanTheme.silverLight : .secondary)
+                        .background(isSelected ? Color.white.opacity(0.18) : Color.white.opacity(0.08))
+                        .foregroundStyle(isSelected ? WalkmanTheme.silverLight : .secondary)
                         .clipShape(Capsule())
                 }
             }
+            .padding(.vertical, 4)
+            .padding(.horizontal, 6)
+            .background(isSelected ? Color.white.opacity(0.08) : (isHovered ? Color.white.opacity(0.04) : Color.clear))
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
     }
 }
