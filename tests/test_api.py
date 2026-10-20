@@ -18,7 +18,7 @@ def test_api_drives():
     assert len(data["drives"]) >= 1
 
 
-def test_api_library_and_playlists_and_cfw():
+def test_api_library_and_playlists():
     with tempfile.TemporaryDirectory() as tmp_dir:
         mount = Path(tmp_dir)
         music_dir = mount / "MUSIC"
@@ -48,23 +48,7 @@ def test_api_library_and_playlists_and_cfw():
         assert pls[0]["filename"] == "My Heavy Rotation.m3u8"
         assert len(pls[0]["tracks"]) == 2
 
-        # 4. Test CFW settings GET & POST
-        res_cfw = client.get(f"/api/cfw-dsp?mount_point={mount}")
-        assert res_cfw.status_code == 200
-        
-        save_cfw_data = {
-            "mount_point": str(mount),
-            "settings": {"sound_signature": "WM1Z", "dac_gain": "1"},
-        }
-        res_save_cfw = client.post("/api/cfw-dsp", json=save_cfw_data)
-        assert res_save_cfw.status_code == 200
-
-        res_cfw_after = client.get(f"/api/cfw-dsp?mount_point={mount}")
-        assert res_cfw_after.json()["has_cfw"] is True
-        assert res_cfw_after.json()["parsed"]["sound_signature"] == "WM1Z"
-        assert res_cfw_after.json()["parsed"]["dac_gain"] == "1"
-
-        # 5. Test clean-eject endpoint
+        # 4. Test clean-eject endpoint
         res_clean = client.post("/api/clean-eject", json={"mount_point": str(mount)})
         assert res_clean.status_code == 200
         assert res_clean.json()["status"] == "ok"

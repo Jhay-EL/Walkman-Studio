@@ -37,9 +37,8 @@ public struct TrackPreviewBar: View {
                             }
                             .overlay(
                                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .stroke(player.isPlaying ? WalkmanTheme.gold.opacity(0.5) : Color.white.opacity(0.12), lineWidth: 1)
+                                    .stroke(player.isPlaying ? Color.white.opacity(0.35) : Color.white.opacity(0.12), lineWidth: 1)
                             )
-                            .shadow(color: player.isPlaying ? WalkmanTheme.gold.opacity(0.2) : .clear, radius: 6)
                         }
                         .buttonStyle(.plain)
                         .help("Click to view full metadata details & artwork")
@@ -48,17 +47,17 @@ public struct TrackPreviewBar: View {
                             HStack(spacing: 6) {
                                 Text(track.title)
                                     .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(player.isPlaying ? WalkmanTheme.gold : .white)
+                                    .foregroundStyle(player.isPlaying ? .white : Color(white: 0.9))
                                     .lineLimit(1)
 
                                 let isHiRes = track.bitsPerSample > 16 || track.sampleRate > 48000
                                 if isHiRes {
                                     Text("Hi-Res")
-                                        .font(.system(size: 8, weight: .black, design: .monospaced))
+                                        .font(.system(size: 8, weight: .bold, design: .monospaced))
                                         .padding(.horizontal, 4)
                                         .padding(.vertical, 1)
-                                        .background(WalkmanTheme.gold)
-                                        .foregroundStyle(.black)
+                                        .background(Color.white.opacity(0.15))
+                                        .foregroundStyle(WalkmanTheme.silver)
                                         .clipShape(RoundedRectangle(cornerRadius: 2))
                                 }
                             }
@@ -71,7 +70,7 @@ public struct TrackPreviewBar: View {
                             HStack(spacing: 6) {
                                 Text(track.format)
                                     .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                    .foregroundStyle(WalkmanTheme.gold.opacity(0.9))
+                                    .foregroundStyle(WalkmanTheme.silverMuted)
 
                                 if track.sampleRate > 0 {
                                     Text("\(track.bitsPerSample)b/\(String(format: "%.1f", Double(track.sampleRate)/1000.0))k")
@@ -105,13 +104,12 @@ public struct TrackPreviewBar: View {
                             Button(action: { player.togglePlayPause() }) {
                                 ZStack {
                                     Circle()
-                                        .fill(WalkmanTheme.goldGradient)
+                                        .fill(WalkmanTheme.silverGradient)
                                         .frame(width: 32, height: 32)
-                                        .shadow(color: WalkmanTheme.gold.opacity(0.35), radius: 4)
 
                                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                                        .font(.system(size: 13, weight: .bold))
-                                        .foregroundStyle(.black)
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundStyle(Color(red: 18 / 255, green: 18 / 255, blue: 22 / 255))
                                         .offset(x: player.isPlaying ? 0 : 1)
                                 }
                             }
@@ -156,7 +154,7 @@ public struct TrackPreviewBar: View {
                                 }
                             )
                             .controlSize(.mini)
-                            .tint(WalkmanTheme.gold)
+                            .tint(WalkmanTheme.silver)
                             .frame(width: 280)
 
                             Text(formatTime(player.duration))
@@ -177,7 +175,7 @@ public struct TrackPreviewBar: View {
 
                             Slider(value: $player.volume, in: 0...1)
                                 .controlSize(.mini)
-                                .tint(WalkmanTheme.gold)
+                                .tint(WalkmanTheme.silver)
                                 .frame(width: 70)
                         }
 

@@ -2,7 +2,7 @@
 Walkman Studio - FastAPI Backend Server.
 Provides REST API endpoints for drive detection, library management,
 batch audio conversion, metadata & baseline JPEG cover art studio,
-CRLF .m3u8 playlist generation, Walkman One CFW DSP tuning, and safe macOS eject.
+CRLF .m3u8 playlist generation, and safe macOS eject.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from backend import walkman_engine
 
 app = FastAPI(
     title="Sony Walkman Studio API",
-    description="macOS Apple Silicon manager for Sony Walkman NW-A55L & Walkman One CFW",
+    description="macOS Apple Silicon manager for Sony Walkman NW-A55L",
     version="1.0.0",
 )
 
@@ -57,12 +57,6 @@ class PlaylistCreateRequest(BaseModel):
     relative_tracks: List[str]
 
 
-class CfwSettingsUpdateRequest(BaseModel):
-    mount_point: str
-    settings: Dict[str, str]
-    raw_override: Optional[str] = None
-
-
 class CleanEjectRequest(BaseModel):
     mount_point: str
 
@@ -83,6 +77,13 @@ def get_drives(allow_virtual: bool = Query(False)):
     """Returns detected physical Walkman drives (/Volumes/WALKMAN and MicroSD)."""
     drives = walkman_engine.detect_walkman_drives(allow_virtual=allow_virtual)
     return {"drives": drives}
+
+
+@app.get("/api/device-info")
+def get_device_info():
+    """Returns detected non-Android Walkman model specifications and hardware info."""
+    info = walkman_engine.detect_walkman_device_info()
+    return {"device_info": info}
 
 
 @app.post("/api/drives/virtual/init")
@@ -337,34 +338,7 @@ def delete_playlist(mount_point: str = Query(...), playlist_name: str = Query(..
 
 
 # ---------------------------------------------------------------------------
-# 6. Walkman One CFW DSP Settings (/CFW/settings.txt)
-# ---------------------------------------------------------------------------
-@app.get("/api/cfw-dsp")
-def get_cfw(mount_point: str = Query(...)):
-    """Reads Walkman One CFW DSP settings from /CFW/settings.txt."""
-    if not os.path.exists(mount_point):
-        raise HTTPException(status_code=404, detail="Mount point not found")
-    return walkman_engine.get_cfw_settings(mount_point)
-
-
-@app.post("/api/cfw-dsp")
-def save_cfw(payload: CfwSettingsUpdateRequest):
-    """Saves Walkman One CFW DSP settings to /CFW/settings.txt."""
-    if not os.path.exists(payload.mount_point):
-        raise HTTPException(status_code=404, detail="Mount point not found")
-    try:
-        walkman_engine.save_cfw_settings(
-            mount_point=payload.mount_point,
-            settings_dict=payload.settings,
-            raw_override=payload.raw_override,
-        )
-        return {"status": "ok", "message": "CFW settings saved"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ---------------------------------------------------------------------------
-# 7. macOS Ghost File Cleanup & Safe Eject
+# 6. macOS Ghost File Cleanup & Safe Eject
 # ---------------------------------------------------------------------------
 @app.post("/api/clean-eject")
 def clean_and_eject(payload: CleanEjectRequest):

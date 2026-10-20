@@ -94,7 +94,7 @@ public struct TrackCoverThumbnail: View {
                     .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .stroke(isPlaying ? WalkmanTheme.gold : Color.white.opacity(0.12), lineWidth: isPlaying ? 1.5 : 0.5)
+                            .stroke(isPlaying ? Color.white.opacity(0.35) : Color.white.opacity(0.12), lineWidth: isPlaying ? 1 : 0.5)
                     )
             } else {
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
@@ -103,7 +103,7 @@ public struct TrackCoverThumbnail: View {
                     .overlay(
                         Image(systemName: "music.note")
                             .font(.system(size: size * 0.42))
-                            .foregroundStyle(WalkmanTheme.gold.opacity(0.7))
+                            .foregroundStyle(WalkmanTheme.silverMuted)
                     )
             }
 
@@ -115,7 +115,7 @@ public struct TrackCoverThumbnail: View {
                     
                     Image(systemName: "speaker.wave.2.fill")
                         .font(.system(size: size * 0.4))
-                        .foregroundStyle(WalkmanTheme.gold)
+                        .foregroundStyle(WalkmanTheme.silver)
                 }
             }
         }

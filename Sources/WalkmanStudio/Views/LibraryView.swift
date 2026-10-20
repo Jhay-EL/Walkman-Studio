@@ -135,8 +135,8 @@ public struct LibraryView: View {
                     .font(.system(size: 11, weight: .medium))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 6)
-                    .background(WalkmanTheme.goldGradient)
-                    .foregroundStyle(.black)
+                    .background(WalkmanTheme.silverGradient)
+                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                     .clipShape(RoundedRectangle(cornerRadius: 6))
                     .buttonStyle(.plain)
                     
@@ -172,7 +172,7 @@ public struct LibraryView: View {
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(track.title)
                                     .font(.system(size: 11, weight: isPlayingThis ? .bold : .medium))
-                                    .foregroundStyle(isPlayingThis ? WalkmanTheme.gold : .primary)
+                                    .foregroundStyle(isPlayingThis ? .white : .primary)
                                     .lineLimit(1)
                             }
                         }
@@ -201,17 +201,17 @@ public struct LibraryView: View {
                                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1)
-                                .background(isHiRes(track) ? WalkmanTheme.gold.opacity(0.18) : (track.format == "FLAC" ? WalkmanTheme.gold.opacity(0.12) : Color.white.opacity(0.06)))
-                                .foregroundStyle(isHiRes(track) ? WalkmanTheme.gold : (track.format == "FLAC" ? WalkmanTheme.gold : .secondary))
+                                .background(isHiRes(track) ? Color.white.opacity(0.12) : Color.white.opacity(0.06))
+                                .foregroundStyle(isHiRes(track) ? WalkmanTheme.silverLight : .secondary)
                                 .clipShape(RoundedRectangle(cornerRadius: 3))
                             
                             if isHiRes(track) {
                                 Text("Hi-Res")
-                                    .font(.system(size: 8, weight: .black, design: .monospaced))
+                                    .font(.system(size: 8, weight: .bold, design: .monospaced))
                                     .padding(.horizontal, 3)
                                     .padding(.vertical, 1)
-                                    .background(WalkmanTheme.gold)
-                                    .foregroundStyle(.black)
+                                    .background(Color.white.opacity(0.18))
+                                    .foregroundStyle(WalkmanTheme.silverLight)
                                     .clipShape(RoundedRectangle(cornerRadius: 2))
                             }
                         }

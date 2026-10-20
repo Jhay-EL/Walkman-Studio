@@ -38,7 +38,7 @@ public struct TransferQueueView: View {
                         }
                     }
                     .pickerStyle(.menu)
-                    .tint(WalkmanTheme.gold)
+                    .tint(WalkmanTheme.silver)
 
                     Text("Organized to /MUSIC/Artist/Album/")
                         .font(.system(size: 9))
@@ -61,7 +61,7 @@ public struct TransferQueueView: View {
                         Text("Transcode to MP3 320 kbps (ID3v2.3)").tag("mp3_320")
                     }
                     .pickerStyle(.menu)
-                    .tint(WalkmanTheme.gold)
+                    .tint(WalkmanTheme.silver)
 
                     Text("Apple Silicon hardware acceleration")
                         .font(.system(size: 9))
@@ -91,8 +91,8 @@ public struct TransferQueueView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
-                        .background(queue.isEmpty ? AnyShapeStyle(Color.secondary.opacity(0.3)) : AnyShapeStyle(WalkmanTheme.goldGradient))
-                        .foregroundStyle(queue.isEmpty ? Color.white.opacity(0.5) : Color.black)
+                        .background(queue.isEmpty ? AnyShapeStyle(Color.secondary.opacity(0.3)) : AnyShapeStyle(WalkmanTheme.silverGradient))
+                        .foregroundStyle(queue.isEmpty ? Color.white.opacity(0.5) : Color(red: 20/255, green: 20/255, blue: 24/255))
                         .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                     }
                     .buttonStyle(.plain)
@@ -113,15 +113,15 @@ public struct TransferQueueView: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .stroke(
-                        isTargeted ? WalkmanTheme.gold : WalkmanTheme.border,
+                        isTargeted ? WalkmanTheme.silver : WalkmanTheme.border,
                         style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])
                     )
-                    .background(isTargeted ? WalkmanTheme.gold.opacity(0.05) : WalkmanTheme.card.opacity(0.4))
+                    .background(isTargeted ? Color.white.opacity(0.08) : WalkmanTheme.card.opacity(0.4))
 
                 VStack(spacing: 8) {
                     Image(systemName: "arrow.down.doc.fill")
                         .font(.system(size: 28))
-                        .foregroundStyle(WalkmanTheme.gold)
+                        .foregroundStyle(WalkmanTheme.silver)
 
                     Text("Drag & Drop Audio Files or Folders from Finder")
                         .font(.system(size: 12, weight: .semibold))
@@ -226,7 +226,7 @@ public struct TransferQueueView: View {
                     ProgressView().scaleEffect(0.6)
                     Text("Converting...")
                         .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(WalkmanTheme.gold)
+                        .foregroundStyle(WalkmanTheme.silverLight)
                 }
             case .success:
                 HStack(spacing: 4) {

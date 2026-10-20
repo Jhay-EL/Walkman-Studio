@@ -64,12 +64,12 @@ public struct CleanEjectSheet: View {
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
-                        .fill(isFinished ? Color.green.opacity(0.15) : WalkmanTheme.gold.opacity(0.15))
+                        .fill(isFinished ? Color.green.opacity(0.15) : Color.white.opacity(0.10))
                         .frame(width: 44, height: 44)
                     
                     Image(systemName: isFinished ? "checkmark.circle.fill" : "eject.circle.fill")
                         .font(.system(size: 24))
-                        .foregroundStyle(isFinished ? Color.green : WalkmanTheme.gold)
+                        .foregroundStyle(isFinished ? Color.green : WalkmanTheme.silver)
                 }
                 
                 VStack(alignment: .leading, spacing: 2) {
@@ -113,7 +113,7 @@ public struct CleanEjectSheet: View {
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark")
                             .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(WalkmanTheme.gold)
+                            .foregroundStyle(WalkmanTheme.silver)
                         Text("Executes native macOS `dot_clean -m` to merge AppleDouble resource forks")
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
@@ -122,7 +122,7 @@ public struct CleanEjectSheet: View {
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark")
                             .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(WalkmanTheme.gold)
+                            .foregroundStyle(WalkmanTheme.silver)
                         Text("Deletes hidden .DS_Store, .Spotlight-V100, .Trashes, and ._* ghost files")
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
@@ -131,7 +131,7 @@ public struct CleanEjectSheet: View {
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark")
                             .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(WalkmanTheme.gold)
+                            .foregroundStyle(WalkmanTheme.silver)
                         Text("Unmounts safely via diskutil so device does not trigger corrupted filesystem errors")
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
@@ -146,7 +146,7 @@ public struct CleanEjectSheet: View {
                     if isCleaning {
                         ProgressView()
                             .progressViewStyle(.circular)
-                            .tint(WalkmanTheme.gold)
+                            .tint(WalkmanTheme.silver)
                             .scaleEffect(1.2)
                             .padding(.top, 10)
                     }
@@ -164,7 +164,7 @@ public struct CleanEjectSheet: View {
                                 Spacer()
                                 Text("\(deletedFiles.count) Ghost Files Removed")
                                     .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                    .foregroundStyle(WalkmanTheme.gold)
+                                    .foregroundStyle(WalkmanTheme.silverLight)
                             }
                             
                             ForEach(Array(unmountResults.keys), id: \.self) { driveName in
@@ -207,8 +207,8 @@ public struct CleanEjectSheet: View {
                         .font(.system(size: 11, weight: .bold))
                         .padding(.horizontal, 14)
                         .padding(.vertical, 7)
-                        .background(WalkmanTheme.goldGradient)
-                        .foregroundStyle(.black)
+                        .background(WalkmanTheme.silverGradient)
+                        .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                     .buttonStyle(.plain)
@@ -219,8 +219,8 @@ public struct CleanEjectSheet: View {
                     .font(.system(size: 11, weight: .bold))
                     .padding(.horizontal, 18)
                     .padding(.vertical, 7)
-                    .background(WalkmanTheme.goldGradient)
-                    .foregroundStyle(.black)
+                    .background(WalkmanTheme.silverGradient)
+                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .buttonStyle(.plain)
                 }

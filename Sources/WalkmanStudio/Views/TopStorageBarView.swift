@@ -32,13 +32,12 @@ public struct TopStorageBarView: View {
             HStack(spacing: 10) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(WalkmanTheme.goldGradient)
+                        .fill(WalkmanTheme.silverGradient)
                         .frame(width: 34, height: 34)
-                        .shadow(color: WalkmanTheme.gold.opacity(0.3), radius: 6, x: 0, y: 2)
 
                     Text("W.")
                         .font(.system(size: 14, weight: .black, design: .rounded))
-                        .foregroundStyle(.black)
+                        .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -51,8 +50,8 @@ public struct TopStorageBarView: View {
                             .font(.system(size: 9, weight: .semibold, design: .monospaced))
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
-                            .background(WalkmanTheme.gold.opacity(0.15))
-                            .foregroundStyle(WalkmanTheme.gold)
+                            .background(Color.white.opacity(0.12))
+                            .foregroundStyle(WalkmanTheme.silverLight)
                             .clipShape(Capsule())
                     }
 
@@ -65,7 +64,7 @@ public struct TopStorageBarView: View {
                             .foregroundStyle(.tertiary)
                         Text("Signature Edition")
                             .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(WalkmanTheme.goldLight)
+                            .foregroundStyle(WalkmanTheme.silverMuted)
                     }
                 }
             }
@@ -118,11 +117,11 @@ public struct TopStorageBarView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "eject.circle.fill")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(WalkmanTheme.gold)
+                        .foregroundStyle(WalkmanTheme.silver)
 
                     Text("Clean Junk & Safe Eject")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(WalkmanTheme.gold)
+                        .foregroundStyle(WalkmanTheme.silverLight)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
@@ -130,7 +129,7 @@ public struct TopStorageBarView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .stroke(WalkmanTheme.gold.opacity(0.4), lineWidth: 1)
+                        .stroke(WalkmanTheme.silver.opacity(0.25), lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)
@@ -151,7 +150,7 @@ public struct TopStorageBarView: View {
                 HStack(spacing: 8) {
                     Image(systemName: icon)
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(isSelected ? WalkmanTheme.gold : .secondary)
+                        .foregroundStyle(isSelected ? WalkmanTheme.silverLight : .secondary)
 
                     Text(drive.name)
                         .font(.system(size: 11, weight: .semibold))
@@ -189,7 +188,7 @@ public struct TopStorageBarView: View {
             .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(isSelected ? WalkmanTheme.gold : WalkmanTheme.border, lineWidth: isSelected ? 1.5 : 1)
+                    .stroke(isSelected ? WalkmanTheme.silver.opacity(0.6) : WalkmanTheme.border, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)

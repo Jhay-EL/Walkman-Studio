@@ -148,8 +148,8 @@ private struct AlbumGridCard: View {
                             .font(.system(size: 8, weight: .black, design: .monospaced))
                             .padding(.horizontal, 4)
                             .padding(.vertical, 2)
-                            .background(WalkmanTheme.gold)
-                            .foregroundStyle(.black)
+                            .background(WalkmanTheme.silverGradient)
+                            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                             .clipShape(RoundedRectangle(cornerRadius: 3))
                             .padding(6)
                     }
@@ -212,7 +212,7 @@ private struct AlbumDetailView: View {
                         Text("Albums")
                             .font(.system(size: 12))
                     }
-                    .foregroundStyle(WalkmanTheme.gold)
+                    .foregroundStyle(WalkmanTheme.silverLight)
                 }
                 .buttonStyle(.plain)
                 
@@ -246,15 +246,15 @@ private struct AlbumDetailView: View {
                                         .font(.system(size: 9, weight: .black, design: .monospaced))
                                         .padding(.horizontal, 5)
                                         .padding(.vertical, 2)
-                                        .background(WalkmanTheme.gold)
-                                        .foregroundStyle(.black)
+                                        .background(WalkmanTheme.silverGradient)
+                                        .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                                         .clipShape(Capsule())
                                 }
                             }
                             
                             Text(album.artist)
                                 .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(WalkmanTheme.gold)
+                                .foregroundStyle(WalkmanTheme.silverMuted)
                             
                             HStack(spacing: 6) {
                                 if !album.year.isEmpty {
@@ -283,8 +283,8 @@ private struct AlbumDetailView: View {
                                 }
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 6)
-                                .background(WalkmanTheme.goldGradient)
-                                .foregroundStyle(.black)
+                                .background(WalkmanTheme.silverGradient)
+                                .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                             }
                             .buttonStyle(.plain)
@@ -313,12 +313,12 @@ private struct AlbumDetailView: View {
                                     ZStack {
                                         Text("\(index + 1)")
                                             .font(.system(size: 11, weight: .medium, design: .monospaced))
-                                            .foregroundStyle(isPlayingThis ? WalkmanTheme.gold : .secondary)
+                                            .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : .secondary)
                                             .opacity(isPlayingThis ? 0 : 1)
                                         
                                         Image(systemName: isPlayingThis ? "pause.fill" : "play.fill")
                                             .font(.system(size: 10))
-                                            .foregroundStyle(WalkmanTheme.gold)
+                                            .foregroundStyle(WalkmanTheme.silverLight)
                                             .opacity(isPlayingThis ? 1 : 0)
                                     }
                                     .frame(width: 24, alignment: .trailing)
@@ -327,7 +327,7 @@ private struct AlbumDetailView: View {
                                 
                                 Text(track.title)
                                     .font(.system(size: 12, weight: isPlayingThis ? .bold : .regular))
-                                    .foregroundStyle(isPlayingThis ? WalkmanTheme.gold : .white)
+                                    .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : .white)
                                     .lineLimit(1)
                                 
                                 Spacer()
@@ -335,7 +335,7 @@ private struct AlbumDetailView: View {
                                 if track.bitsPerSample > 16 || track.sampleRate > 48000 {
                                     Text("Hi-Res")
                                         .font(.system(size: 8, weight: .bold, design: .monospaced))
-                                        .foregroundStyle(WalkmanTheme.gold)
+                                        .foregroundStyle(WalkmanTheme.silverMuted)
                                 }
                                 
                                 Text(track.format)

@@ -125,8 +125,8 @@ public struct PlaylistsView: View {
                             .font(.system(size: 9, weight: .semibold, design: .monospaced))
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(WalkmanTheme.gold.opacity(0.15))
-                            .foregroundStyle(WalkmanTheme.gold)
+                            .background(Color.white.opacity(0.12))
+                            .foregroundStyle(WalkmanTheme.silverLight)
                             .clipShape(Capsule())
                     }
                     
@@ -142,8 +142,8 @@ public struct PlaylistsView: View {
                         .font(.system(size: 10, weight: .medium))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
-                        .background(WalkmanTheme.gold.opacity(0.2))
-                        .foregroundStyle(WalkmanTheme.gold)
+                        .background(Color.white.opacity(0.12))
+                        .foregroundStyle(WalkmanTheme.silverLight)
                         .clipShape(Capsule())
                 }
                 
@@ -155,8 +155,8 @@ public struct PlaylistsView: View {
                     .font(.system(size: 11, weight: .semibold))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
-                    .background(WalkmanTheme.goldGradient)
-                    .foregroundStyle(.black)
+                    .background(WalkmanTheme.silverGradient)
+                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
@@ -187,7 +187,7 @@ public struct PlaylistsView: View {
                             
                             Button("Save") { createPlaylist() }
                                 .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(WalkmanTheme.gold)
+                                .foregroundStyle(WalkmanTheme.silverLight)
                             
                             Button("Cancel") { isCreating = false }
                                 .font(.system(size: 10))
@@ -220,7 +220,7 @@ public struct PlaylistsView: View {
                                     HStack(spacing: 10) {
                                         Image(systemName: "list.bullet")
                                             .font(.system(size: 11))
-                                            .foregroundStyle(isSel ? WalkmanTheme.gold : .secondary)
+                                            .foregroundStyle(isSel ? WalkmanTheme.silverLight : .secondary)
                                         
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(pl.name)
@@ -250,7 +250,7 @@ public struct PlaylistsView: View {
                                     )
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .stroke(isSel ? WalkmanTheme.gold.opacity(0.3) : Color.clear, lineWidth: 1)
+                                            .stroke(isSel ? WalkmanTheme.silver.opacity(0.4) : Color.clear, lineWidth: 1)
                                     )
                                     .contentShape(Rectangle())
                                     .onTapGesture {
@@ -291,7 +291,7 @@ public struct PlaylistsView: View {
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
                                 .background(WalkmanTheme.card)
-                                .foregroundStyle(WalkmanTheme.gold)
+                                .foregroundStyle(WalkmanTheme.silverLight)
                                 .clipShape(RoundedRectangle(cornerRadius: 6))
                             }
                             .buttonStyle(.plain)
@@ -304,8 +304,8 @@ public struct PlaylistsView: View {
                                 .font(.system(size: 10, weight: .semibold))
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
-                                .background(WalkmanTheme.goldGradient)
-                                .foregroundStyle(.black)
+                                .background(WalkmanTheme.silverGradient)
+                                .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                                 .clipShape(RoundedRectangle(cornerRadius: 6))
                             }
                             .buttonStyle(.plain)
@@ -335,7 +335,7 @@ public struct PlaylistsView: View {
                                         HStack(spacing: 12) {
                                             Text(String(format: "%02d", index + 1))
                                                 .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                                .foregroundStyle(WalkmanTheme.gold)
+                                                .foregroundStyle(WalkmanTheme.silverLight)
                                                 .frame(width: 24, alignment: .trailing)
                                             
                                             Image(systemName: "music.note")
@@ -398,7 +398,7 @@ public struct PlaylistsView: View {
                             Spacer()
                             Image(systemName: "arrow.left")
                                 .font(.system(size: 20))
-                                .foregroundStyle(WalkmanTheme.gold)
+                                .foregroundStyle(WalkmanTheme.silverMuted)
                             Text("Select or create a playlist from the left")
                                 .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
@@ -464,8 +464,8 @@ private struct AddTracksModal: View {
                 .font(.system(size: 11, weight: .bold))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 5)
-                .background(WalkmanTheme.goldGradient)
-                .foregroundStyle(.black)
+                .background(WalkmanTheme.silverGradient)
+                .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             }
             
@@ -485,7 +485,7 @@ private struct AddTracksModal: View {
                         let isSel = selectedTrackPaths.contains(tr.relativePath)
                         HStack(spacing: 10) {
                             Image(systemName: isSel ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(isSel ? WalkmanTheme.gold : .secondary)
+                                .foregroundStyle(isSel ? WalkmanTheme.silverLight : .secondary)
                             
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(tr.title)
@@ -500,7 +500,7 @@ private struct AddTracksModal: View {
                             
                             Text(tr.format)
                                 .font(.system(size: 8, weight: .bold, design: .monospaced))
-                                .foregroundStyle(WalkmanTheme.gold)
+                                .foregroundStyle(WalkmanTheme.silverMuted)
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)

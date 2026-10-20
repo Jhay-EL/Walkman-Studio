@@ -43,20 +43,19 @@ public struct HiResAudioView: View {
         VStack(spacing: 0) {
             // Header Banner
             HStack(spacing: 14) {
-                // Hi-Res Gold Badge
+                // Hi-Res Silver Badge
                 ZStack {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(WalkmanTheme.goldGradient)
+                        .fill(WalkmanTheme.silverGradient)
                         .frame(width: 48, height: 48)
-                        .shadow(color: WalkmanTheme.gold.opacity(0.3), radius: 6)
                     
                     VStack(spacing: 1) {
                         Text("Hi-Res")
                             .font(.system(size: 11, weight: .black, design: .monospaced))
-                            .foregroundStyle(.black)
+                            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                         Text("AUDIO")
                             .font(.system(size: 8, weight: .bold, design: .rounded))
-                            .foregroundStyle(.black)
+                            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                     }
                 }
                 
@@ -87,8 +86,8 @@ public struct HiResAudioView: View {
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
-                        .background(WalkmanTheme.goldGradient)
-                        .foregroundStyle(.black)
+                        .background(WalkmanTheme.silverGradient)
+                        .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                     }
                     .buttonStyle(.plain)
@@ -135,7 +134,7 @@ public struct HiResAudioView: View {
                 
                 Text("\(filteredTracks.count) Studio Master Tracks")
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(WalkmanTheme.gold)
+                    .foregroundStyle(WalkmanTheme.silverMuted)
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
@@ -165,15 +164,15 @@ public struct HiResAudioView: View {
                                 HStack(spacing: 6) {
                                     Text(track.title)
                                         .font(.system(size: 12, weight: isPlayingThis ? .bold : .medium))
-                                        .foregroundStyle(isPlayingThis ? WalkmanTheme.gold : .white)
+                                        .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : .white)
                                         .lineLimit(1)
                                     
                                     Text("\(track.bitsPerSample)-bit / \(track.sampleRate / 1000)kHz")
                                         .font(.system(size: 9, weight: .bold, design: .monospaced))
                                         .padding(.horizontal, 4)
                                         .padding(.vertical, 1)
-                                        .background(WalkmanTheme.gold.opacity(0.18))
-                                        .foregroundStyle(WalkmanTheme.gold)
+                                        .background(Color.white.opacity(0.12))
+                                        .foregroundStyle(WalkmanTheme.silverLight)
                                         .clipShape(Capsule())
                                 }
                                 
@@ -193,8 +192,8 @@ public struct HiResAudioView: View {
                                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                                 .padding(.horizontal, 4)
                                 .padding(.vertical, 1)
-                                .background(WalkmanTheme.gold.opacity(0.12))
-                                .foregroundStyle(WalkmanTheme.gold)
+                                .background(Color.white.opacity(0.10))
+                                .foregroundStyle(WalkmanTheme.silverLight)
                                 .clipShape(RoundedRectangle(cornerRadius: 3))
                             
                             Text(formatDuration(track.durationSeconds))

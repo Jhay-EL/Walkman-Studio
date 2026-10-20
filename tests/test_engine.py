@@ -119,28 +119,6 @@ def test_playlist_crlf_format():
         assert read_back == tracks
 
 
-def test_cfw_settings_parser():
-    """Rule 7: Parse and save /CFW/settings.txt."""
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        mount = Path(tmp_dir)
-        cfw_info = walkman_engine.get_cfw_settings(mount)
-        assert cfw_info["has_cfw"] is False
-        assert "sound_signature" in cfw_info["parsed"]
-
-        # Modify settings and save
-        new_settings = {
-            "sound_signature": "DMP-Z1",
-            "dac_gain": "1",
-            "plus_v2": "1",
-        }
-        walkman_engine.save_cfw_settings(mount, new_settings)
-
-        cfw_saved = walkman_engine.get_cfw_settings(mount)
-        assert cfw_saved["has_cfw"] is True
-        assert cfw_saved["parsed"]["sound_signature"] == "DMP-Z1"
-        assert cfw_saved["parsed"]["dac_gain"] == "1"
-
-
 def test_macos_ghost_file_cleanup():
     """Rule 6: Purge .DS_Store, ._*, .Spotlight-V100, .Trashes."""
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -257,3 +235,50 @@ def test_flac_and_mp3_tagging_and_artwork():
         mp3_extracted = walkman_engine.extract_cover_art(mp3_path)
         assert mp3_extracted is not None
         assert mp3_extracted == apic.data
+
+
+def test_detect_walkman_device_info():
+    """Verify accurate detection of non-Android Walkman model from default-capability.xml."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        xml_content = """<?xml version="1.0" encoding="ISO-8859-1"?>
+<devices xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <device>
+    <identification>
+      <class>WALKMAN/Standard/AudioOnly</class>
+      <model>NW-A50Series</model>
+      <marketingname>WALKMAN NW-A50Series</marketingname>
+      <vendor>Sony Corporation</vendor>
+      <firmwareversion>1.02</firmwareversion>
+    </identification>
+    <display index="0">
+      <width unit="pixels">800</width>
+      <height unit="pixels">480</height>
+    </display>
+  </device>
+</devices>"""
+        (tmp_path / "default-capability.xml").write_text(xml_content, encoding="latin-1")
+        (tmp_path / "MUSIC").mkdir()
+
+        mock_drive = [{
+            "id": "WALKMAN",
+            "name": "WALKMAN",
+            "mount_point": str(tmp_path),
+            "type": "internal",
+            "total_bytes": 13164281856,  # 13.2 GB formatted (NW-A55L 16GB)
+            "used_bytes": 1000000,
+            "free_bytes": 13163281856,
+            "percent_used": 0.1,
+            "has_cfw": False,
+            "music_dir": str(tmp_path / "MUSIC"),
+        }]
+
+        info = walkman_engine.detect_walkman_device_info(mock_drive)
+        assert info is not None
+        assert info["model_raw"] == "NW-A50Series"
+        assert info["specific_model"] == "NW-A55L"
+        assert "Sony Walkman NW-A55L" in info["display_name"]
+        assert info["is_non_android"] is True
+        assert info["firmware_version"] == "1.02"
+        assert info["display_resolution"] == "800x480"
+

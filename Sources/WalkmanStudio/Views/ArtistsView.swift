@@ -114,12 +114,12 @@ public struct ArtistsView: View {
                                     // Circular Artist Badge
                                     ZStack {
                                         Circle()
-                                            .fill(isSelected ? WalkmanTheme.gold : Color.white.opacity(0.1))
+                                            .fill(isSelected ? WalkmanTheme.silver : Color.white.opacity(0.1))
                                             .frame(width: 32, height: 32)
                                         
                                         Text(String(art.name.prefix(1)).uppercased())
                                             .font(.system(size: 12, weight: .bold))
-                                            .foregroundStyle(isSelected ? .black : .white)
+                                            .foregroundStyle(isSelected ? Color(red: 20/255, green: 20/255, blue: 24/255) : .white)
                                     }
                                     
                                     VStack(alignment: .leading, spacing: 2) {
@@ -162,12 +162,12 @@ public struct ArtistsView: View {
                         HStack(spacing: 16) {
                             ZStack {
                                 Circle()
-                                    .fill(WalkmanTheme.goldGradient)
+                                    .fill(WalkmanTheme.silverGradient)
                                     .frame(width: 60, height: 60)
                                 
                                 Text(String(artist.name.prefix(1)).uppercased())
                                     .font(.system(size: 26, weight: .black))
-                                    .foregroundStyle(.black)
+                                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                             }
                             
                             VStack(alignment: .leading, spacing: 3) {
@@ -196,8 +196,8 @@ public struct ArtistsView: View {
                                 }
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 7)
-                                .background(WalkmanTheme.goldGradient)
-                                .foregroundStyle(.black)
+                                .background(WalkmanTheme.silverGradient)
+                                .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                                 .clipShape(RoundedRectangle(cornerRadius: 6))
                             }
                             .buttonStyle(.plain)
@@ -226,8 +226,8 @@ public struct ArtistsView: View {
                                                     .font(.system(size: 8, weight: .black, design: .monospaced))
                                                     .padding(.horizontal, 4)
                                                     .padding(.vertical, 1)
-                                                    .background(WalkmanTheme.gold)
-                                                    .foregroundStyle(.black)
+                                                    .background(WalkmanTheme.silverGradient)
+                                                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                                                     .clipShape(RoundedRectangle(cornerRadius: 2))
                                             }
                                         }
@@ -261,7 +261,7 @@ public struct ArtistsView: View {
                                             }) {
                                                 Image(systemName: isPlayingThis ? "pause.fill" : "play.fill")
                                                     .font(.system(size: 9))
-                                                    .foregroundStyle(WalkmanTheme.gold)
+                                                    .foregroundStyle(WalkmanTheme.silverLight)
                                                     .frame(width: 16)
                                             }
                                             .buttonStyle(.plain)
@@ -273,7 +273,7 @@ public struct ArtistsView: View {
                                             
                                             Text(track.title)
                                                 .font(.system(size: 11, weight: isPlayingThis ? .bold : .medium))
-                                                .foregroundStyle(isPlayingThis ? WalkmanTheme.gold : .white)
+                                                .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : .white)
                                                 .lineLimit(1)
                                             
                                             Spacer()
