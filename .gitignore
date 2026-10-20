@@ -20,3 +20,8 @@ frontend/dist/
 ._*
 .Spotlight-V100
 .Trashes
+
+# Local Environment
+.agents/
+GEMINI.md
+.gemini/

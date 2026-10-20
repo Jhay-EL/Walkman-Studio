@@ -1,6 +1,6 @@
 """
 Walkman Studio Engine for Sony Walkman NW-A55L (macOS Apple Silicon).
-Implements all strict hardware rules defined in GEMINI.md:
+Implements all strict hardware rules for non-Android Sony Walkman DAPs:
 1. Baseline RGB JPEG Only (max 800x800, non-progressive, subsampling=0).
 2. ID3v2.3 Enforcement (v2_version=3, UTF-16 encoding=1, never ID3v2.4).
 3. FLAC Artwork & Vorbis Tags (mutagen.flac.Picture type=3 Front Cover, image/jpeg).

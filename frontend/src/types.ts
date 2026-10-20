@@ -7,7 +7,6 @@ export interface WalkmanDrive {
   used_bytes: number;
   free_bytes: number;
   percent_used: number;
-  has_cfw: boolean;
   music_dir: string;
 }
 
@@ -43,12 +42,6 @@ export interface Playlist {
   track_count: number;
   tracks: string[];
   full_path: string;
-}
-
-export interface CfwSettings {
-  has_cfw: boolean;
-  raw_text: string;
-  parsed: Record<string, string>;
 }
 
 export interface TransferQueueItem {

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Music2, ArrowDownUp, Image as ImageIcon, ListMusic, Sliders, ShieldCheck } from 'lucide-react';
 
-export type NavTab = 'library' | 'transfer' | 'metadata' | 'playlists' | 'dsp';
+export type NavTab = 'library' | 'transfer' | 'metadata' | 'playlists';
 
 interface Props {
   activeTab: NavTab;
@@ -38,11 +38,6 @@ export const Sidebar: React.FC<Props> = ({
       id: 'playlists',
       label: 'Playlists (.M3U8)',
       icon: <ListMusic className="w-4 h-4" />,
-    },
-    {
-      id: 'dsp',
-      label: 'Walkman One DSP',
-      icon: <Sliders className="w-4 h-4" />,
     },
   ];
 

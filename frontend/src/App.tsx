@@ -5,7 +5,6 @@ import { LibraryView } from './components/LibraryView';
 import { TransferQueueView } from './components/TransferQueueView';
 import { MetadataStudioView } from './components/MetadataStudioView';
 import { PlaylistsView } from './components/PlaylistsView';
-import { WalkmanOneDspView } from './components/WalkmanOneDspView';
 import { CleanEjectModal } from './components/CleanEjectModal';
 import { WalkmanDrive, Track, Playlist } from './types';
 import { api } from './api';
@@ -211,10 +210,6 @@ export const App: React.FC = () => {
                     if (activeDrive) loadLibraryAndPlaylists(activeDrive.mount_point);
                   }}
                 />
-              )}
-
-              {activeTab === 'dsp' && (
-                <WalkmanOneDspView activeDrive={activeDrive} />
               )}
             </>
           )}

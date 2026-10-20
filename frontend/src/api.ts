@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { WalkmanDrive, LibraryData, Playlist, CfwSettings } from './types';
+import { WalkmanDrive, LibraryData, Playlist } from './types';
 
 const API_BASE = '/api';
 
@@ -70,22 +70,6 @@ export const api = {
   async deletePlaylist(mountPoint: string, name: string) {
     const res = await axios.delete(`${API_BASE}/playlists`, {
       params: { mount_point: mountPoint, playlist_name: name },
-    });
-    return res.data;
-  },
-
-  async getCfw(mountPoint: string): Promise<CfwSettings> {
-    const res = await axios.get<CfwSettings>(`${API_BASE}/cfw-dsp`, {
-      params: { mount_point: mountPoint },
-    });
-    return res.data;
-  },
-
-  async saveCfw(mountPoint: string, settings: Record<string, string>, rawOverride?: string) {
-    const res = await axios.post(`${API_BASE}/cfw-dsp`, {
-      mount_point: mountPoint,
-      settings,
-      raw_override: rawOverride,
     });
     return res.data;
   },
