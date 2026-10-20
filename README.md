@@ -1,4 +1,12 @@
-# Walkman Studio (macOS Native Apple Silicon)
+<p align="center">
+  <img src="assets/icon.png" width="160" height="160" alt="Walkman Studio Icon" style="border-radius: 36px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);" />
+</p>
+
+# <p align="center">Walkman Studio</p>
+
+<p align="center">
+  <strong>Native macOS Manager for the Sony Walkman NW-A55L & A50 Series</strong>
+</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-macOS%2014%2B%20(Apple%20Silicon)-black?style=for-the-badge&logo=apple" alt="macOS" />
