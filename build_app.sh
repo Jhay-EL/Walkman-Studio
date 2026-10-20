@@ -21,9 +21,15 @@ mkdir -p "$RESOURCES_DIR"
 cp "$DIR/.build/release/WalkmanStudio" "$MACOS_DIR/WalkmanStudio"
 chmod +x "$MACOS_DIR/WalkmanStudio"
 
-# Copy App Icon
+# Copy App Icon & Device Assets
 if [ -f "$DIR/assets/AppIcon.icns" ]; then
     cp "$DIR/assets/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
+fi
+if [ -f "$DIR/assets/walkman_device_cropped.png" ]; then
+    cp "$DIR/assets/walkman_device_cropped.png" "$RESOURCES_DIR/walkman_device_cropped.png"
+fi
+if [ -f "$DIR/assets/walkman_device.png" ]; then
+    cp "$DIR/assets/walkman_device.png" "$RESOURCES_DIR/walkman_device.png"
 fi
 
 # Create Info.plist
