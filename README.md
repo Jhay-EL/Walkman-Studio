@@ -50,15 +50,6 @@ Sony Walkman digital audio players deliver exceptional audio fidelity via their 
 * Reads embedded ID3 `USLT` (Unsynchronized lyrics) frames.
 * Built-in lyrics editor: paste or write lyrics and save them directly as `.lrc` companion files alongside your tracks for instant on-screen display during Walkman playback.
 
-### Walkman One Custom Firmware (CFW) DSP Tuning
-* Direct reader and writer for `/CFW/settings.txt` on the Walkman root directory.
-* Switch between hardware sound emulation profiles:
-  * **WM1Z:** Warm, lush, analog sound signature with deep bass authority.
-  * **DMP-Z1:** Reference transparency, holographic soundstage, and analytical dynamics.
-  * **ZX300:** Energetic, punchy mid-bass slam with forward vocal presence.
-  * **Neutral:** Bit-perfect studio reference frequency response.
-* Toggle **DAC Gain** (Normal for sensitive IEMs vs High Gain for demanding headphones), **Vinyl Processor**, and **Walkman Plus v2** audio driver pipeline.
-
 ### macOS Dotfile Purge & Safe Eject
 * Automatically runs `/usr/bin/dot_clean -m` to merge AppleDouble resource forks before unmounting.
 * Recursively searches for and removes hidden `._*`, `.DS_Store`, `.Spotlight-V100`, `.Trashes`, and `.fseventsd` ghost files.
@@ -170,7 +161,6 @@ Walkman-Studio/
 │           ├── TrackPreviewBar.swift    # Persistent bottom playback bar
 │           ├── TransferQueueView.swift  # Drag & drop queue with FFmpeg transcoding
 │           ├── PlaylistsView.swift      # CRLF .M3U8 playlist generator
-│           ├── WalkmanOneDspView.swift  # Walkman One CFW registers & sound signatures
 │           └── CleanEjectSheet.swift    # dot_clean & safe unmount modal
 ```
 

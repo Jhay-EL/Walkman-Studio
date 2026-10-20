@@ -1,7 +1,7 @@
 # Walkman Studio (macOS Apple Silicon) — Workspace Rules
 
 ## Project Overview
-A native-feeling macOS desktop application for managing the Sony Walkman NW-A55L on Apple Silicon Macs. It handles dual-drive detection (Internal `WALKMAN` + MicroSD), audio conversion, metadata tagging, Baseline JPEG cover art encoding, folder organization, `.M3U8` playlists, Walkman One CFW DSP settings, and macOS dotfile purging.
+A native-feeling macOS desktop application for managing the Sony Walkman NW-A55L on Apple Silicon Macs. It handles dual-drive detection (Internal `WALKMAN` + MicroSD), audio conversion, metadata tagging, Baseline JPEG cover art encoding, folder organization, `.M3U8` playlists, and macOS dotfile purging.
 
 ## Tech Stack & Architecture
 - **Backend:** Python 3.11+ with `FastAPI`, `uvicorn`, `mutagen`, `Pillow`, `psutil`, and native `/opt/homebrew/bin/ffmpeg`.
