@@ -17,7 +17,7 @@ public struct AlbumsView: View {
     private var albums: [AlbumItem] {
         var grouped: [String: [Track]] = [:]
         for track in tracks {
-            let key = "\(track.artist)|\(track.album)"
+            let key = "\(track.primaryArtist)|\(track.album)"
             grouped[key, default: []].append(track)
         }
         
@@ -325,10 +325,24 @@ private struct AlbumDetailView: View {
                                 }
                                 .buttonStyle(.plain)
                                 
-                                Text(track.title)
-                                    .font(.system(size: 12, weight: isPlayingThis ? .bold : .regular))
-                                    .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : .white)
-                                    .lineLimit(1)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(track.title)
+                                        .font(.system(size: 12, weight: isPlayingThis ? .bold : .regular))
+                                        .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : .white)
+                                        .lineLimit(1)
+                                    
+                                    if let feat = track.featuredDisplayString(primaryArtist: album.artist) {
+                                        HStack(spacing: 4) {
+                                            Text("feat.")
+                                                .font(.system(size: 8.5, weight: .bold, design: .monospaced))
+                                                .foregroundStyle(WalkmanTheme.silverLight)
+                                            Text(feat)
+                                                .font(.system(size: 9.5))
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                        }
+                                    }
+                                }
                                 
                                 Spacer()
                                 

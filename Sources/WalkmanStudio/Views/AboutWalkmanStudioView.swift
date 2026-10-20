@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 public struct AboutWalkmanStudioView: View {
     let currentDeviceInfo: WalkmanDeviceInfo?
@@ -11,309 +12,333 @@ public struct AboutWalkmanStudioView: View {
         self.onDismiss = onDismiss
     }
     
+    private var appIcon: NSImage? {
+        if let icon = NSImage(named: NSImage.applicationIconName) {
+            return icon
+        }
+        if let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
+           let img = NSImage(contentsOf: iconURL) {
+            return img
+        }
+        return NSImage(contentsOfFile: "assets/icon.png")
+    }
+    
     public var body: some View {
         VStack(spacing: 0) {
-            // Header Bar
+            // Dismiss button on top right
             HStack {
-                HStack(spacing: 8) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(WalkmanTheme.silverGradient)
-                            .frame(width: 28, height: 28)
-                        
-                        Text("W.")
-                            .font(.system(size: 13, weight: .black, design: .rounded))
-                            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("About Walkman Studio")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(.white)
-                        
-                        Text("Version 1.2.0 • Native Apple Silicon (ARM64)")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                
                 Spacer()
-                
                 Button(action: onDismiss) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 16))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 17))
+                        .foregroundStyle(.tertiary)
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.cancelAction)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 14)
-            .background(WalkmanTheme.card.opacity(0.8))
-            .overlay(Rectangle().frame(height: 1).foregroundStyle(WalkmanTheme.border), alignment: .bottom)
+            .padding(.top, 14)
+            .padding(.horizontal, 16)
             
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    // Active Device Hardware Detection Card
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("HARDWARE STATUS")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(.tertiary)
-                            
-                            Spacer()
-                            
-                            if currentDeviceInfo != nil {
-                                HStack(spacing: 5) {
-                                    Circle()
-                                        .fill(Color.green)
-                                        .frame(width: 6, height: 6)
-                                    Text("Non-Android Sony DAP Verified")
-                                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                        .foregroundStyle(Color.green)
-                                }
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.green.opacity(0.12))
-                                .clipShape(Capsule())
-                            } else {
-                                HStack(spacing: 5) {
-                                    Circle()
-                                        .fill(Color.secondary)
-                                        .frame(width: 6, height: 6)
-                                    Text("No Device Connected")
-                                        .font(.system(size: 9, design: .monospaced))
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                        
-                        if let dev = currentDeviceInfo {
-                            HStack(spacing: 14) {
-                                WalkmanDeviceIconView(size: 44)
-                                
-                                VStack(alignment: .leading, spacing: 2) {
-                                    HStack(spacing: 6) {
-                                        Text(dev.displayName)
-                                            .font(.system(size: 13, weight: .bold))
-                                            .foregroundStyle(.white)
-                                        
-                                        if dev.hasCfw {
-                                            Text("Walkman One CFW")
-                                                .font(.system(size: 8, weight: .bold, design: .monospaced))
-                                                .padding(.horizontal, 5)
-                                                .padding(.vertical, 1)
-                                                .background(Color.white.opacity(0.15))
-                                                .foregroundStyle(WalkmanTheme.silverLight)
-                                                .clipShape(Capsule())
-                                        }
-                                    }
-                                    
-                                    Text("Model: \(dev.modelRaw) • Firmware: \(dev.firmwareVersion) • Screen: \(dev.displayResolution) • Internal: \(String(format: "%.1f GB", dev.internalCapacityGb))")
-                                        .font(.system(size: 10, design: .monospaced))
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .padding(12)
-                            .background(Color.white.opacity(0.04))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                        } else {
-                            Text("Connect a non-Android Sony Walkman via USB Mass Storage mode to inspect hardware specifications.")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                                .padding(12)
-                                .background(Color.white.opacity(0.04))
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                        }
+            // Hero App Header (Apple macOS System Style)
+            VStack(spacing: 6) {
+                if let icon = appIcon {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 64, height: 64)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .shadow(color: Color.black.opacity(0.35), radius: 8, x: 0, y: 4)
+                } else {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(WalkmanTheme.silverGradient)
+                            .frame(width: 64, height: 64)
+                        Text("W.")
+                            .font(.system(size: 26, weight: .black, design: .rounded))
+                            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                     }
-                    .padding(14)
-                    .liquidGlass(cornerRadius: 10)
-                    
-                    // Non-Android Specialization Banner
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "cpu")
-                                .font(.system(size: 14))
-                                .foregroundStyle(WalkmanTheme.silver)
-                            
-                            Text("Engineered Exclusively for Non-Android Sony Walkmans")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(.white)
-                        }
-                        
-                        Text("Walkman Studio is purpose-built for Sony's proprietary Linux/Sony OS Digital Audio Players. These players run direct hardware DAC pipelines (S-Master HX, DSEE HX, Vinyl Processor) and enforce strict hardware filesystem rules that standard modern software overlooks:")
-                            .font(.system(size: 10.5))
-                            .foregroundStyle(.secondary)
-                            .lineSpacing(3)
-                        
-                        VStack(alignment: .leading, spacing: 4) {
-                            ComplianceBullet(title: "Baseline RGB JPEG Only", detail: "Sony OS decoders cannot render Progressive JPEGs or CMYK artwork; Walkman Studio strictly enforces 800x800 Baseline RGB.")
-                            ComplianceBullet(title: "Strict ID3v2.3 (UTF-16)", detail: "Non-Android firmware misreads ID3v2.4 frames; Walkman Studio converts and saves strictly as ID3v2.3.")
-                            ComplianceBullet(title: "CRLF Relative .M3U8 Playlists", detail: "Generates hardware-compatible playlists stored in /MUSIC/ with relative POSIX paths and Windows CRLF line endings.")
-                            ComplianceBullet(title: "macOS Ghost File Clean & Eject", detail: "Executes `dot_clean -m` and purges .DS_Store, ._ AppleDouble files, and .Spotlight-V100 before unmounting.")
-                        }
-                        .padding(.top, 4)
-                    }
-                    .padding(14)
-                    .liquidGlass(cornerRadius: 10)
-                    
-                    // Categorized Supported Devices List
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Text("SUPPORTED SONY WALKMAN DEVICES (NON-ANDROID ONLY)")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(.tertiary)
-                            
-                            Spacer()
-                            
-                            Text("\(WalkmanDeviceDetector.supportedSeriesCategories.flatMap { $0.models }.count) Models Supported")
-                                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                .foregroundStyle(WalkmanTheme.silverLight)
-                        }
-                        
-                        ForEach(WalkmanDeviceDetector.supportedSeriesCategories, id: \.category) { cat in
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(cat.category)
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundStyle(WalkmanTheme.silverLight)
-                                    .padding(.top, 4)
-                                
-                                ForEach(cat.models) { m in
-                                    HStack(alignment: .top, spacing: 10) {
-                                        Text("•")
-                                            .font(.system(size: 12, weight: .bold))
-                                            .foregroundStyle(WalkmanTheme.silverMuted)
-                                        
-                                        VStack(alignment: .leading, spacing: 1) {
-                                            HStack(spacing: 6) {
-                                                Text(m.modelCode)
-                                                    .font(.system(size: 11, weight: .semibold))
-                                                    .foregroundStyle(.white)
-                                                
-                                                Text("(\(m.series), \(m.releaseYear))")
-                                                    .font(.system(size: 9))
-                                                    .foregroundStyle(.secondary)
-                                                
-                                                Spacer()
-                                                
-                                                Text(m.storageOptions)
-                                                    .font(.system(size: 9, design: .monospaced))
-                                                    .foregroundStyle(WalkmanTheme.silverMuted)
-                                            }
-                                            
-                                            Text(m.description)
-                                                .font(.system(size: 9.5))
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 5)
-                                    .background(Color.white.opacity(0.025))
-                                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                                }
-                            }
-                        }
-                    }
-                    .padding(14)
-                    .liquidGlass(cornerRadius: 10)
-                    
-                    // Explicit Unsupported Notice: Android Walkmans
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.system(size: 12))
-                                .foregroundStyle(Color.orange)
-                            
-                            Text("Unsupported Devices: Android-Based Walkmans")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(.white)
-                        }
-                        
-                        Text("Walkman Studio does NOT support Android-powered Sony Walkmans. Android models run standard Google Android OS, connect via MTP (Media Transfer Protocol) rather than Mass Storage, and do not have the FAT32/Baseline JPEG/ID3v2.3 hardware limitations:")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                        
-                        ForEach(WalkmanDeviceDetector.unsupportedAndroidModels) { un in
-                            HStack(spacing: 8) {
-                                Text("✕")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(.red.opacity(0.8))
-                                
-                                Text(un.modelCode)
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(.white)
-                                
-                                Text("(\(un.androidVersion))")
-                                    .font(.system(size: 9, design: .monospaced))
-                                    .foregroundStyle(.secondary)
-                                
-                                Spacer()
-                                
-                                Text(un.reason)
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.red.opacity(0.05))
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
-                        }
-                    }
-                    .padding(14)
-                    .liquidGlass(cornerRadius: 10)
+                    .shadow(color: Color.black.opacity(0.35), radius: 8, x: 0, y: 4)
                 }
-                .padding(20)
-            }
-            
-            // Bottom Footer
-            HStack {
-                Text("Designed for Sony NW-A55L & Sony Non-Android DAPs • macOS Apple Silicon")
-                    .font(.system(size: 10))
+                
+                Text("Walkman Studio")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.primary)
+                
+                Text("Version 1.2.0 • Apple Silicon Native")
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
+                
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 5, height: 5)
+                    Text("Non-Android Sony OS / Linux Architecture")
+                        .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Color.white.opacity(0.06))
+                .clipShape(Capsule())
+            }
+            .padding(.top, -6)
+            .padding(.bottom, 14)
+            
+            // Segmented Tab Picker
+            Picker("", selection: $selectedTab) {
+                Text("Hardware").tag(0)
+                Text("Supported DAPs").tag(1)
+                Text("Engine Rules").tag(2)
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 320)
+            .padding(.bottom, 12)
+            
+            // Tab Content
+            Group {
+                switch selectedTab {
+                case 0:
+                    hardwareTabView
+                case 1:
+                    supportedModelsTabView
+                default:
+                    engineRulesTabView
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, 20)
+            
+            // Bottom Action Footer
+            HStack(alignment: .center) {
+                Text("Sony & Walkman are registered trademarks of Sony Group Corporation.")
+                    .font(.system(size: 8.5))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
                 
                 Spacer()
                 
                 Button("Done") {
                     onDismiss()
                 }
+                .keyboardShortcut(.defaultAction)
                 .font(.system(size: 11, weight: .semibold))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 5)
-                .background(WalkmanTheme.silverGradient)
-                .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 4)
+                .background(Color.white.opacity(0.12))
+                .foregroundStyle(.primary)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
-            .background(WalkmanTheme.card.opacity(0.8))
-            .overlay(Rectangle().frame(height: 1).foregroundStyle(WalkmanTheme.border), alignment: .top)
         }
-        .frame(width: 660, height: 600)
+        .frame(width: 530, height: 490)
         .background(WalkmanTheme.background)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+    
+    // MARK: - Tab 0: Hardware View
+    private var hardwareTabView: some View {
+        VStack(spacing: 12) {
+            if let dev = currentDeviceInfo {
+                HStack(spacing: 12) {
+                    WalkmanDeviceIconView(size: 44)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text(dev.displayName)
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(.primary)
+                            
+                            HStack(spacing: 4) {
+                                Circle().fill(Color.green).frame(width: 5, height: 5)
+                                Text("Verified")
+                                    .font(.system(size: 8.5, weight: .bold))
+                                    .foregroundStyle(Color.green)
+                            }
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1.5)
+                            .background(Color.green.opacity(0.12))
+                            .clipShape(Capsule())
+                        }
+                        
+                        Text("Connected via USB Mass Storage • S-Master HX DAC")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                    
+                    Spacer()
+                }
+                .padding(10)
+                .background(Color.white.opacity(0.04))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                
+                // Specifications Grid
+                VStack(spacing: 1) {
+                    SpecRow(label: "Hardware Model", value: dev.modelRaw)
+                    SpecRow(label: "Firmware Version", value: "v\(dev.firmwareVersion)")
+                    SpecRow(label: "Screen Engine", value: "\(dev.displayResolution) (Baseline RGB)")
+                    SpecRow(label: "Internal Flash", value: String(format: "%.1f GB", dev.internalCapacityGb))
+                    SpecRow(label: "Audio Pipeline", value: "S-Master HX, DSEE HX, Vinyl")
+                    SpecRow(label: "Tag Standard", value: "Strict ID3v2.3 (UTF-16) & Vorbis")
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            } else {
+                VStack(spacing: 10) {
+                    Spacer()
+                    Image(systemName: "cable.connector.horizontal")
+                        .font(.system(size: 28))
+                        .foregroundStyle(WalkmanTheme.silverMuted)
+                    
+                    Text("No Walkman Connected")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.primary)
+                    
+                    Text("Connect your Sony NW-A55 via WM-PORT USB in Mass Storage mode to inspect hardware specifications.")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 320)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.white.opacity(0.025))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+        }
+    }
+    
+    // MARK: - Tab 1: Supported Models View
+    private var supportedModelsTabView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(WalkmanDeviceDetector.supportedSeriesCategories, id: \.category) { cat in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(cat.category.uppercased())
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.tertiary)
+                            .padding(.leading, 2)
+                        
+                        VStack(spacing: 1) {
+                            ForEach(cat.models) { m in
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(m.modelCode)
+                                            .font(.system(size: 10.5, weight: .semibold))
+                                            .foregroundStyle(.primary)
+                                        Text(m.description)
+                                            .font(.system(size: 9))
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    Text(m.storageOptions)
+                                        .font(.system(size: 8.5, design: .monospaced))
+                                        .foregroundStyle(WalkmanTheme.silverMuted)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color.white.opacity(0.03))
+                            }
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
+                }
+                
+                HStack(spacing: 6) {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                    Text("Android Walkmans (NW-A100/A300, NW-ZX500) use MTP and are not supported.")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(Color.white.opacity(0.02))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            }
+            .padding(.vertical, 2)
+        }
+    }
+    
+    // MARK: - Tab 2: Engine Rules View
+    private var engineRulesTabView: some View {
+        VStack(spacing: 8) {
+            RuleCard(
+                icon: "photo.artframe",
+                title: "Baseline RGB JPEG Artwork",
+                detail: "Strips progressive passes, CMYK color spaces, and limits resolution to 800×800 to prevent display engine freezes."
+            )
+            RuleCard(
+                icon: "tag",
+                title: "Strict ID3v2.3 (UTF-16)",
+                detail: "Enforces UTF-16 with BOM (encoding=1) and binary ID3v2.3 tags, avoiding ID3v2.4 database corruption."
+            )
+            RuleCard(
+                icon: "list.bullet.rectangle",
+                title: "CRLF Relative .M3U8 Playlists",
+                detail: "Writes Windows-compliant CRLF (\\r\\n) line endings and relative POSIX paths directly into /MUSIC/."
+            )
+            RuleCard(
+                icon: "sparkles",
+                title: "macOS Shadow File Purge",
+                detail: "Merges AppleDouble forks with dot_clean -m and removes ._* and .DS_Store ghost files before safe eject."
+            )
+        }
     }
 }
 
-private struct ComplianceBullet: View {
+// MARK: - Subviews
+private struct SpecRow: View {
+    let label: String
+    let value: String
+    
+    var body: some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundStyle(.primary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Color.white.opacity(0.03))
+    }
+}
+
+private struct RuleCard: View {
+    let icon: String
     let title: String
     let detail: String
     
     var body: some View {
-        HStack(alignment: .top, spacing: 6) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 9))
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 13))
                 .foregroundStyle(WalkmanTheme.silver)
-                .padding(.top, 2)
+                .frame(width: 18, height: 18)
+                .padding(.top, 1)
             
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.primary)
                 Text(detail)
                     .font(.system(size: 9.5))
                     .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
+            
+            Spacer()
         }
+        .padding(9)
+        .background(Color.white.opacity(0.035))
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 }

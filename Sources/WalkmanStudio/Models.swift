@@ -50,6 +50,149 @@ public struct Track: Identifiable, Hashable, Sendable {
     public let sizeBytes: Int64
 }
 
+extension Track {
+    /// Extracts the primary artist name, stripping guest/featured artists (e.g. "6CycleMind, Ebe Dancel" -> "6CycleMind").
+    public var primaryArtist: String {
+        Track.parsePrimaryAndFeaturedArtist(from: artist).primary
+    }
+
+    /// Extracts any featured or guest artists if present.
+    public var featuredArtist: String? {
+        Track.parsePrimaryAndFeaturedArtist(from: artist).featured
+    }
+
+    /// Parses an artist string into primary artist and optional featured artist string.
+    public static func parsePrimaryAndFeaturedArtist(from raw: String) -> (primary: String, featured: String?) {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return ("Unknown Artist", nil)
+        }
+
+        let lower = trimmed.lowercased()
+
+        // Known artists that contain commas, ampersands, or slashes as part of their official name
+        let knownExceptions: [String] = [
+            "tyler, the creator",
+            "earth, wind & fire",
+            "crosby, stills, nash & young",
+            "crosby, stills & nash",
+            "emerson, lake & palmer",
+            "blood, sweat & tears",
+            "peter, paul and mary",
+            "peter, paul & mary",
+            "simon & garfunkel",
+            "hall & oates",
+            "daryl hall & john oates",
+            "brooks & dunn",
+            "bell biv devoe",
+            "kool & the gang",
+            "kc & the sunshine band"
+        ]
+
+        for known in knownExceptions {
+            if lower == known {
+                return (trimmed, nil)
+            }
+            if lower.hasPrefix(known) {
+                let rest = trimmed.dropFirst(known.count).trimmingCharacters(in: .whitespacesAndNewlines)
+                if rest.isEmpty {
+                    return (trimmed, nil)
+                }
+                let primary = String(trimmed.prefix(known.count))
+                let cleanedFeat = stripLeadingFeatTokens(String(rest))
+                return (primary, cleanedFeat.isEmpty ? nil : cleanedFeat)
+            }
+        }
+
+        // 1. Explicit keyword markers: feat., ft., featuring, with (case-insensitive)
+        let keywords = [" feat. ", " feat ", " ft. ", " ft ", " featuring ", " Featuring ", " with ", " With "]
+        for kw in keywords {
+            if let range = trimmed.range(of: kw, options: .caseInsensitive) {
+                let primary = String(trimmed[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+                let feat = String(trimmed[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !primary.isEmpty {
+                    return (primary, feat.isEmpty ? nil : feat)
+                }
+            }
+        }
+
+        // 2. Parenthesized feat: e.g. "Drake (feat. Rihanna)" or "Drake [ft. Rihanna]"
+        for (open, close) in [("(", ")"), ("[", "]")] {
+            if trimmed.hasSuffix(close), let openIdx = trimmed.range(of: open, options: .backwards)?.lowerBound {
+                let primary = String(trimmed[..<openIdx]).trimmingCharacters(in: .whitespacesAndNewlines)
+                let inside = String(trimmed[openIdx...].dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+                let lowerInside = inside.lowercased()
+                for prefix in ["feat. ", "feat ", "ft. ", "ft ", "featuring ", "with "] {
+                    if lowerInside.hasPrefix(prefix) {
+                        let feat = String(inside.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !primary.isEmpty {
+                            return (primary, feat.isEmpty ? nil : feat)
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Delimiters: comma (", "), semicolon ("; "), forward slashes (" / ", " // ")
+        // Split on the first delimiter so e.g. "2 Chainz, Big Sean, Drake" -> "2 Chainz", "Big Sean, Drake"
+        let delimiters = [", ", "; ", " / ", " // "]
+        for delim in delimiters {
+            if let range = trimmed.range(of: delim) {
+                let primary = String(trimmed[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+                let feat = String(trimmed[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !primary.isEmpty && !feat.isEmpty {
+                    return (primary, feat)
+                }
+            }
+        }
+
+        return (trimmed, nil)
+    }
+
+    private static func stripLeadingFeatTokens(_ text: String) -> String {
+        var str = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        while str.hasPrefix(",") || str.hasPrefix(";") || str.hasPrefix("/") || str.hasPrefix("-") || str.hasPrefix("&") {
+            str = String(str.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let lower = str.lowercased()
+        for prefix in ["feat. ", "feat ", "ft. ", "ft ", "featuring ", "with "] {
+            if lower.hasPrefix(prefix) {
+                return String(str.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        return str
+    }
+
+    /// Formats the guest/featured artists for display on track rows.
+    /// Returns nil if track title already contains feat information or if no guest is present.
+    public func featuredDisplayString(primaryArtist: String? = nil) -> String? {
+        let lowerTitle = title.lowercased()
+        if lowerTitle.contains("feat.") || lowerTitle.contains("feat ") || lowerTitle.contains("ft.") || lowerTitle.contains("featuring") {
+            return nil
+        }
+
+        let raw = artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return nil }
+
+        let parsed = Track.parsePrimaryAndFeaturedArtist(from: raw)
+        if let feat = parsed.featured, !feat.isEmpty {
+            return feat
+        }
+
+        if let pa = primaryArtist, !pa.isEmpty, raw.localizedCaseInsensitiveCompare(pa) != .orderedSame {
+            if raw.lowercased().hasPrefix(pa.lowercased()) {
+                let rest = raw.dropFirst(pa.count)
+                let cleaned = Track.stripLeadingFeatTokens(String(rest))
+                if !cleaned.isEmpty {
+                    return cleaned
+                }
+            }
+        }
+
+        return nil
+    }
+}
+
 public struct Playlist: Identifiable, Hashable, Sendable {
     public var id: String { fullPath }
     public let name: String

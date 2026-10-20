@@ -17,8 +17,8 @@ public struct ArtistsView: View {
     private var artists: [ArtistItem] {
         var grouped: [String: [Track]] = [:]
         for track in tracks {
-            let artist = track.artist.trimmingCharacters(in: .whitespacesAndNewlines)
-            let key = artist.isEmpty ? "Unknown Artist" : artist
+            let primary = track.primaryArtist.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = primary.isEmpty ? "Unknown Artist" : primary
             grouped[key, default: []].append(track)
         }
         
@@ -26,7 +26,9 @@ public struct ArtistsView: View {
         for (artistName, artistTracks) in grouped {
             var albumGrouped: [String: [Track]] = [:]
             for track in artistTracks {
-                albumGrouped[track.album, default: []].append(track)
+                let alb = track.album.trimmingCharacters(in: .whitespacesAndNewlines)
+                let albumKey = alb.isEmpty ? "Unknown Album" : alb
+                albumGrouped[albumKey, default: []].append(track)
             }
             
             var albumItems: [AlbumItem] = []
@@ -61,7 +63,9 @@ public struct ArtistsView: View {
     private var filteredArtists: [ArtistItem] {
         let q = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if q.isEmpty { return artists }
-        return artists.filter { $0.name.lowercased().contains(q) }
+        return artists.filter { art in
+            art.name.lowercased().contains(q) || art.tracks.contains(where: { $0.artist.lowercased().contains(q) || $0.title.lowercased().contains(q) })
+        }
     }
     
     private var activeArtist: ArtistItem? {
@@ -271,10 +275,24 @@ public struct ArtistsView: View {
                                                 .foregroundStyle(.secondary)
                                                 .frame(width: 22, alignment: .trailing)
                                             
-                                            Text(track.title)
-                                                .font(.system(size: 11, weight: isPlayingThis ? .bold : .medium))
-                                                .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : .white)
-                                                .lineLimit(1)
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(track.title)
+                                                    .font(.system(size: 11, weight: isPlayingThis ? .bold : .medium))
+                                                    .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : .white)
+                                                    .lineLimit(1)
+                                                
+                                                if let feat = track.featuredDisplayString(primaryArtist: artist.name) {
+                                                    HStack(spacing: 4) {
+                                                        Text("feat.")
+                                                            .font(.system(size: 8.5, weight: .bold, design: .monospaced))
+                                                            .foregroundStyle(WalkmanTheme.silverLight)
+                                                        Text(feat)
+                                                            .font(.system(size: 9.5))
+                                                            .foregroundStyle(.secondary)
+                                                            .lineLimit(1)
+                                                    }
+                                                }
+                                            }
                                             
                                             Spacer()
                                             
