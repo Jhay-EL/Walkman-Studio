@@ -8,7 +8,6 @@ public enum NavigationTab: String, CaseIterable, Identifiable, Hashable {
     case hiRes = "Hi-Res Audio"
     case transfer = "Transfer & Convert"
     case playlists = "Playlists (.M3U8)"
-    case dsp = "Walkman One DSP"
 
     public var id: String { rawValue }
 
@@ -21,7 +20,6 @@ public enum NavigationTab: String, CaseIterable, Identifiable, Hashable {
         case .hiRes: return "waveform.badge.magnifyingglass"
         case .transfer: return "arrow.up.arrow.down.circle"
         case .playlists: return "list.bullet.rectangle"
-        case .dsp: return "slider.vertical.3"
         }
     }
 }
@@ -31,6 +29,10 @@ public struct SidebarView: View {
     let drives: [WalkmanDrive]
     let trackCount: Int
     let queueCount: Int
+    var deviceInfo: WalkmanDeviceInfo? = nil
+    var activeDrive: WalkmanDrive? = nil
+    var onSelectDrive: ((WalkmanDrive) -> Void)? = nil
+    var onOpenAbout: (() -> Void)? = nil
 
     public var body: some View {
         List {
@@ -39,31 +41,49 @@ public struct SidebarView: View {
                 SidebarRow(
                     tab: .overview,
                     selectedTab: $selectedTab,
-                    title: "NW-A55L Overview",
+                    title: "\(deviceInfo?.specificModel ?? "NW-A55L") Overview",
                     icon: "hifispeaker.fill",
                     badge: nil
                 )
                 
                 ForEach(drives) { drive in
-                    HStack(spacing: 8) {
-                        Image(systemName: drive.type == .internal ? "internaldrive" : "sdcard")
-                            .font(.system(size: 12))
-                            .foregroundStyle(WalkmanTheme.gold)
-                            .frame(width: 16)
-                        
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(drive.name)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
+                    let isCurrent = activeDrive?.mountPoint == drive.mountPoint
+                    Button(action: {
+                        onSelectDrive?(drive)
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: drive.type == .internal ? "internaldrive" : "sdcard")
+                                .font(.system(size: 12))
+                                .foregroundStyle(isCurrent ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
+                                .frame(width: 16)
                             
-                            let freeGb = Double(drive.freeBytes) / (1024 * 1024 * 1024)
-                            Text(String(format: "%.1f GB free", freeGb))
-                                .font(.system(size: 9))
-                                .foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(drive.name)
+                                    .font(.system(size: 11, weight: isCurrent ? .semibold : .medium))
+                                    .foregroundStyle(isCurrent ? .white : .primary)
+                                    .lineLimit(1)
+                                
+                                let freeGb = Double(drive.freeBytes) / (1024 * 1024 * 1024)
+                                Text(String(format: "%.1f GB free", freeGb))
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.secondary)
+                            }
+                            
+                            Spacer()
+                            
+                            if isCurrent {
+                                Circle()
+                                    .fill(WalkmanTheme.silver)
+                                    .frame(width: 5, height: 5)
+                            }
                         }
+                        .padding(.vertical, 3)
+                        .padding(.horizontal, 4)
+                        .background(isCurrent ? Color.white.opacity(0.08) : Color.clear)
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                     }
-                    .padding(.vertical, 2)
+                    .buttonStyle(.plain)
+                    .help("Select \(drive.name) as active library drive")
                 }
             }
 
@@ -119,31 +139,45 @@ public struct SidebarView: View {
                     icon: "list.bullet.rectangle",
                     badge: nil
                 )
-
-                SidebarRow(
-                    tab: .dsp,
-                    selectedTab: $selectedTab,
-                    title: "Walkman One DSP",
-                    icon: "slider.vertical.3",
-                    badge: nil
-                )
             }
         }
         .listStyle(.sidebar)
         .safeAreaInset(edge: .bottom) {
-            // Minimal Hardware compliance badge
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(Color.green)
-                    .frame(width: 6, height: 6)
-                Text("NW-A55L Compliant (Baseline RGB / ID3v2.3)")
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
+            if let onAbout = onOpenAbout {
+                AboutSidebarButton(action: onAbout)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
         }
+    }
+}
+
+private struct AboutSidebarButton: View {
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: "info.circle")
+                    .font(.system(size: 13))
+                    .foregroundStyle(isHovered ? WalkmanTheme.silverLight : .secondary)
+                    .frame(width: 18)
+
+                Text("About Walkman Studio")
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(isHovered ? .white : WalkmanTheme.silverMuted)
+
+                Spacer()
+            }
+            .padding(.vertical, 5)
+            .padding(.horizontal, 6)
+            .background(isHovered ? Color.white.opacity(0.06) : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
     }
 }
 
@@ -159,7 +193,7 @@ private struct SidebarRow: View {
             HStack(spacing: 8) {
                 Image(systemName: icon)
                     .font(.system(size: 13))
-                    .foregroundStyle(selectedTab == tab ? WalkmanTheme.gold : .secondary)
+                    .foregroundStyle(selectedTab == tab ? WalkmanTheme.silverLight : .secondary)
                     .frame(width: 18)
 
                 Text(title)
@@ -173,8 +207,8 @@ private struct SidebarRow: View {
                         .font(.system(size: 9, weight: .bold, design: .monospaced))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(selectedTab == tab ? WalkmanTheme.gold.opacity(0.25) : Color.white.opacity(0.08))
-                        .foregroundStyle(selectedTab == tab ? WalkmanTheme.gold : .secondary)
+                        .background(selectedTab == tab ? Color.white.opacity(0.18) : Color.white.opacity(0.08))
+                        .foregroundStyle(selectedTab == tab ? WalkmanTheme.silverLight : .secondary)
                         .clipShape(Capsule())
                 }
             }
