@@ -1,0 +1,22 @@
+# Swift / SPM
+.build/
+*.xcodeproj
+*.xcworkspace
+Walkman Studio.app/
+.swiftpm/
+
+# Python
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes

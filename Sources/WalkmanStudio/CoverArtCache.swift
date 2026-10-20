@@ -1,0 +1,141 @@
+import Foundation
+import AppKit
+import SwiftUI
+
+public final class CoverArtCache: @unchecked Sendable {
+    public static let shared = CoverArtCache()
+    private let pathCache = NSCache<NSString, NSImage>()
+    private let albumCache = NSCache<NSString, NSImage>()
+
+    private init() {
+        pathCache.countLimit = 1200
+        albumCache.countLimit = 600
+    }
+
+    public func thumbnail(for track: Track) -> NSImage? {
+        let pKey = track.fullPath as NSString
+        if let img = pathCache.object(forKey: pKey) {
+            return img
+        }
+        let aKey = "\(track.artist)|\(track.album)" as NSString
+        if let img = albumCache.object(forKey: aKey) {
+            pathCache.setObject(img, forKey: pKey)
+            return img
+        }
+        return nil
+    }
+
+    public func loadThumbnail(for track: Track, targetSize: CGFloat = 32, completion: @escaping @Sendable (NSImage?) -> Void) {
+        let pKey = track.fullPath as NSString
+        let aKey = "\(track.artist)|\(track.album)" as NSString
+
+        if let img = pathCache.object(forKey: pKey) {
+            completion(img)
+            return
+        }
+        if let img = albumCache.object(forKey: aKey) {
+            pathCache.setObject(img, forKey: pKey)
+            completion(img)
+            return
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            let url = URL(fileURLWithPath: track.fullPath)
+            guard let data = AudioTagger.shared.extractCoverArt(fileURL: url),
+                  let fullImg = NSImage(data: data) else {
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+
+            let thumb = self.renderThumbnail(from: fullImg, size: CGSize(width: targetSize * 2, height: targetSize * 2))
+            self.pathCache.setObject(thumb, forKey: pKey)
+            self.albumCache.setObject(thumb, forKey: aKey)
+
+            DispatchQueue.main.async {
+                completion(thumb)
+            }
+        }
+    }
+
+    private func renderThumbnail(from image: NSImage, size: CGSize) -> NSImage {
+        let thumb = NSImage(size: size)
+        thumb.lockFocus()
+        image.draw(
+            in: NSRect(origin: .zero, size: size),
+            from: NSRect(origin: .zero, size: image.size),
+            operation: .copy,
+            fraction: 1.0
+        )
+        thumb.unlockFocus()
+        return thumb
+    }
+}
+
+public struct TrackCoverThumbnail: View {
+    let track: Track
+    var size: CGFloat = 26
+    var isPlaying: Bool = false
+    @State private var image: NSImage?
+
+    public init(track: Track, size: CGFloat = 26, isPlaying: Bool = false) {
+        self.track = track
+        self.size = size
+        self.isPlaying = isPlaying
+    }
+
+    public var body: some View {
+        ZStack {
+            if let img = image {
+                Image(nsImage: img)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: size, height: size)
+                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .stroke(isPlaying ? WalkmanTheme.gold : Color.white.opacity(0.12), lineWidth: isPlaying ? 1.5 : 0.5)
+                    )
+            } else {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(Color.white.opacity(0.06))
+                    .frame(width: size, height: size)
+                    .overlay(
+                        Image(systemName: "music.note")
+                            .font(.system(size: size * 0.42))
+                            .foregroundStyle(WalkmanTheme.gold.opacity(0.7))
+                    )
+            }
+
+            if isPlaying {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(Color.black.opacity(0.45))
+                        .frame(width: size, height: size)
+                    
+                    Image(systemName: "speaker.wave.2.fill")
+                        .font(.system(size: size * 0.4))
+                        .foregroundStyle(WalkmanTheme.gold)
+                }
+            }
+        }
+        .onAppear {
+            loadImage()
+        }
+        .onChange(of: track.id) { _, _ in
+            loadImage()
+        }
+    }
+
+    private func loadImage() {
+        if let cached = CoverArtCache.shared.thumbnail(for: track) {
+            self.image = cached
+        } else {
+            CoverArtCache.shared.loadThumbnail(for: track, targetSize: size) { img in
+                Task { @MainActor in
+                    self.image = img
+                }
+            }
+        }
+    }
+}
