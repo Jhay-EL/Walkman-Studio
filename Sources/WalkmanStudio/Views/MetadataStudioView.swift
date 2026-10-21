@@ -138,11 +138,11 @@ public struct MetadataStudioView: View {
                         self.lyricsDraft = result.lyrics
                         self.isEditingLyrics = false
                         self.isFetchingLyrics = false
-                        self.lyricsStatusMessage = result.synced ? "Synced .LRC imported!" : "Imported .LRC to Walkman!"
+                        self.lyricsStatusMessage = result.synced ? "Synced .LRC added!" : "Added .LRC to Walkman!"
                     }
 
                     DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
-                        if self.lyricsStatusMessage?.contains("imported") == true || self.lyricsStatusMessage?.contains("Imported") == true {
+                        if self.lyricsStatusMessage?.contains("added") == true || self.lyricsStatusMessage?.contains("Added") == true {
                             withAnimation {
                                 self.lyricsStatusMessage = nil
                             }
@@ -164,34 +164,6 @@ public struct MetadataStudioView: View {
                         }
                     }
                 }
-            }
-        }
-    }
-
-    private func importLrcFile() {
-        guard let tr = track else { return }
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.plainText]
-        panel.prompt = "Import .LRC"
-        panel.message = "Choose a .lrc lyrics file for \(tr.title)"
-        if panel.runModal() == .OK, let url = panel.url, let content = try? String(contentsOf: url, encoding: .utf8) {
-            let targetURL = URL(fileURLWithPath: tr.fullPath)
-            do {
-                try AudioTagger.shared.saveLyrics(fileURL: targetURL, lyrics: content)
-                self.lyrics = content
-                self.lyricsDraft = content
-                self.isEditingLyrics = false
-                self.lyricsStatusMessage = "Imported .LRC to Walkman!"
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                    if self.lyricsStatusMessage?.contains("Imported") == true {
-                        self.lyricsStatusMessage = nil
-                    }
-                }
-            } catch {
-                self.lyricsStatusMessage = "Failed to save: \(error.localizedDescription)"
             }
         }
     }
@@ -401,20 +373,22 @@ public struct MetadataStudioView: View {
                                 .help("Re-fetch / update .LRC from internet")
                             }
                             
-                            Button(action: {
-                                isEditingLyrics.toggle()
-                                if isEditingLyrics {
-                                    lyricsDraft = lyrics ?? ""
+                            if lyrics != nil {
+                                Button(action: {
+                                    isEditingLyrics.toggle()
+                                    if isEditingLyrics {
+                                        lyricsDraft = lyrics ?? ""
+                                    }
+                                }) {
+                                    Image(systemName: isEditingLyrics ? "xmark" : "pencil")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(WalkmanTheme.silver)
+                                        .frame(width: 22, height: 22)
+                                        .contentShape(Rectangle())
                                 }
-                            }) {
-                                Image(systemName: isEditingLyrics ? "xmark" : (lyrics != nil ? "pencil" : "plus"))
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(WalkmanTheme.silver)
-                                    .frame(width: 22, height: 22)
-                                    .contentShape(Rectangle())
+                                .buttonStyle(WalkmanPressableButtonStyle())
+                                .help(isEditingLyrics ? "Cancel editing" : "Edit lyrics manually")
                             }
-                            .buttonStyle(WalkmanPressableButtonStyle())
-                            .help(isEditingLyrics ? "Cancel editing" : (lyrics != nil ? "Edit lyrics manually" : "Add or write lyrics (.lrc)"))
                         }
                         
                         if isEditingLyrics {
@@ -562,7 +536,7 @@ public struct MetadataStudioView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .disabled(isFetchingLyrics)
-                                .help(isFetchingLyrics ? "Fetching lyrics from internet in progress..." : "Automatically grab synced lyrics from internet and import .lrc to Walkman")
+                                .help(isFetchingLyrics ? "Fetching lyrics from internet in progress..." : "Automatically grab synced lyrics from internet and add .lrc to Walkman")
                             }
                             .padding(10)
                             .liquidGlass(cornerRadius: 8)
