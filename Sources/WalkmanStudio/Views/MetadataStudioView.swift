@@ -635,6 +635,7 @@ public struct MetadataStudioView: View {
                                 }
                                 .padding(10)
                                 .liquidGlass(cornerRadius: 8)
+                                .allowsHitTesting(false)
                                 
                                 // "Add .LRC" Button OUTSIDE the container
                                 Button(action: {
@@ -667,6 +668,7 @@ public struct MetadataStudioView: View {
                                     )
                                     .foregroundStyle(isFetchingLyrics ? WalkmanTheme.silverLight : Color(red: 20/255, green: 20/255, blue: 24/255))
                                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                    .contentShape(Rectangle())
                                 }
                                 .buttonStyle(WalkmanSideActionButtonStyle(isFullWidth: true, cornerRadius: 6))
                                 .disabled(isFetchingLyrics)
@@ -760,7 +762,7 @@ public struct MetadataStudioView: View {
                 }
             }
             .padding(.horizontal, 14)
-            .padding(.top, 12)
+            .padding(.top, 56)
             .padding(.bottom, 24)
         }
         .onAppear { loadTrack() }
