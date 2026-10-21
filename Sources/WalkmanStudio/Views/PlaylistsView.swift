@@ -420,7 +420,9 @@ public struct PlaylistsView: View {
         }
         .sheet(isPresented: $showAddTrackSheet) {
             AddTracksModal(
+                playlistName: selectedPlaylist?.name ?? "Playlist",
                 tracks: libraryTracks,
+                existingPlaylistPaths: Set(playlistTracks),
                 onAdd: { addedRelativePaths in
                     playlistTracks.append(contentsOf: addedRelativePaths)
                     showAddTrackSheet = false
@@ -431,95 +433,876 @@ public struct PlaylistsView: View {
     }
 }
 
-private struct AddTracksModal: View {
+private enum AddBrowsingMode: String, CaseIterable, Identifiable {
+    case songs = "Songs"
+    case albums = "By Album"
+    case artists = "By Artist"
+    
+    var id: String { rawValue }
+    
+    var icon: String {
+        switch self {
+        case .songs: return "music.note"
+        case .albums: return "square.stack"
+        case .artists: return "person.2"
+        }
+    }
+}
+
+private struct ModalAlbumItem: Identifiable {
+    let id: String
+    let name: String
+    let artist: String
+    let year: String
     let tracks: [Track]
+    var trackCount: Int { tracks.count }
+    var representativeTrack: Track? { tracks.first }
+    var isHiRes: Bool { tracks.contains { $0.bitsPerSample > 16 || $0.sampleRate > 48000 } }
+}
+
+private struct ModalArtistItem: Identifiable {
+    let id: String
+    let name: String
+    let tracks: [Track]
+    let albumCount: Int
+    var trackCount: Int { tracks.count }
+    var representativeTrack: Track? { tracks.first }
+}
+
+private struct AddTracksModal: View {
+    let playlistName: String
+    let tracks: [Track]
+    let existingPlaylistPaths: Set<String>
     let onAdd: ([String]) -> Void
     let onDismiss: () -> Void
     
+    @ObservedObject private var player = AudioPlayerService.shared
+    @State private var mode: AddBrowsingMode = .songs
     @State private var search: String = ""
+    @State private var formatFilter: String = "ALL"
+    @State private var hideExisting: Bool = false
     @State private var selectedTrackPaths: Set<String> = []
     
-    private var filtered: [Track] {
+    @State private var cachedAlbums: [ModalAlbumItem] = []
+    @State private var cachedArtists: [ModalArtistItem] = []
+    
+    private func isHiRes(_ track: Track) -> Bool {
+        return track.bitsPerSample > 16 || track.sampleRate > 48000
+    }
+    
+    private func formatDuration(_ seconds: Double) -> String {
+        if seconds <= 0 { return "—" }
+        let mins = Int(seconds) / 60
+        let secs = Int(seconds) % 60
+        return String(format: "%d:%02d", mins, secs)
+    }
+    
+    private static func buildAlbums(from tracks: [Track]) -> [ModalAlbumItem] {
+        var grouped: [String: [Track]] = [:]
+        var displayNames: [String: String] = [:]
+        for t in tracks {
+            let alb = t.album.trimmingCharacters(in: .whitespacesAndNewlines)
+            let name = alb.isEmpty ? "Unknown Album" : alb
+            let key = name.lowercased()
+            if displayNames[key] == nil { displayNames[key] = name }
+            grouped[key, default: []].append(t)
+        }
+        var items: [ModalAlbumItem] = []
+        for (key, trs) in grouped {
+            let name = displayNames[key] ?? key
+            let art = trs.first?.primaryArtist.isEmpty == false ? trs.first!.primaryArtist : (trs.first?.artist ?? "Unknown Artist")
+            let yr = trs.first(where: { !$0.year.isEmpty })?.year ?? ""
+            let sorted = trs.sorted {
+                let n0 = Int($0.trackNum.components(separatedBy: "/").first ?? "0") ?? 0
+                let n1 = Int($1.trackNum.components(separatedBy: "/").first ?? "0") ?? 0
+                return n0 < n1
+            }
+            items.append(ModalAlbumItem(id: key, name: name, artist: art, year: yr, tracks: sorted))
+        }
+        return items.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+    
+    private static func buildArtists(from tracks: [Track]) -> [ModalArtistItem] {
+        var grouped: [String: [Track]] = [:]
+        for t in tracks {
+            let art = t.primaryArtist.trimmingCharacters(in: .whitespacesAndNewlines)
+            let name = art.isEmpty ? "Unknown Artist" : art
+            grouped[name, default: []].append(t)
+        }
+        var items: [ModalArtistItem] = []
+        for (name, trs) in grouped {
+            let albumsSet = Set(trs.map { $0.album.lowercased() })
+            items.append(ModalArtistItem(id: name, name: name, tracks: trs, albumCount: albumsSet.count))
+        }
+        return items.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+    
+    private var filteredTracks: [Track] {
         let q = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if q.isEmpty { return Array(tracks.prefix(150)) }
-        return Array(tracks.filter {
-            $0.title.lowercased().contains(q) ||
-            $0.artist.lowercased().contains(q) ||
-            $0.album.lowercased().contains(q)
-        }.prefix(150))
+        return tracks.filter { tr in
+            if hideExisting && existingPlaylistPaths.contains(tr.relativePath) {
+                return false
+            }
+            if formatFilter == "HI-RES" {
+                if tr.bitsPerSample <= 16 && tr.sampleRate <= 48000 { return false }
+            } else if formatFilter != "ALL" {
+                if tr.format != formatFilter { return false }
+            }
+            if !q.isEmpty {
+                let match = tr.title.lowercased().contains(q)
+                    || tr.artist.lowercased().contains(q)
+                    || tr.album.lowercased().contains(q)
+                    || tr.filename.lowercased().contains(q)
+                if !match { return false }
+            }
+            return true
+        }
+    }
+    
+    private var filteredAlbums: [ModalAlbumItem] {
+        let q = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return cachedAlbums.compactMap { alb in
+            let matchingTracks = alb.tracks.filter { tr in
+                if hideExisting && existingPlaylistPaths.contains(tr.relativePath) {
+                    return false
+                }
+                if formatFilter == "HI-RES" {
+                    if tr.bitsPerSample <= 16 && tr.sampleRate <= 48000 { return false }
+                } else if formatFilter != "ALL" {
+                    if tr.format != formatFilter { return false }
+                }
+                return true
+            }
+            if matchingTracks.isEmpty { return nil }
+            
+            if !q.isEmpty {
+                let match = alb.name.lowercased().contains(q)
+                    || alb.artist.lowercased().contains(q)
+                    || matchingTracks.contains(where: { $0.title.lowercased().contains(q) })
+                if !match { return nil }
+            }
+            return ModalAlbumItem(id: alb.id, name: alb.name, artist: alb.artist, year: alb.year, tracks: matchingTracks)
+        }
+    }
+    
+    private var filteredArtists: [ModalArtistItem] {
+        let q = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return cachedArtists.compactMap { art in
+            let matchingTracks = art.tracks.filter { tr in
+                if hideExisting && existingPlaylistPaths.contains(tr.relativePath) {
+                    return false
+                }
+                if formatFilter == "HI-RES" {
+                    if tr.bitsPerSample <= 16 && tr.sampleRate <= 48000 { return false }
+                } else if formatFilter != "ALL" {
+                    if tr.format != formatFilter { return false }
+                }
+                return true
+            }
+            if matchingTracks.isEmpty { return nil }
+            
+            if !q.isEmpty {
+                let match = art.name.lowercased().contains(q)
+                    || matchingTracks.contains(where: { $0.title.lowercased().contains(q) || $0.album.lowercased().contains(q) })
+                if !match { return nil }
+            }
+            return ModalArtistItem(id: art.id, name: art.name, tracks: matchingTracks, albumCount: art.albumCount)
+        }
+    }
+    
+    private var resultsCountLabel: String {
+        switch mode {
+        case .songs:
+            return "\(filteredTracks.count.formatted()) songs"
+        case .albums:
+            return "\(filteredAlbums.count.formatted()) albums"
+        case .artists:
+            return "\(filteredArtists.count.formatted()) artists"
+        }
+    }
+    
+    private var visibleSelectablePaths: [String] {
+        switch mode {
+        case .songs:
+            return filteredTracks.map(\.relativePath)
+        case .albums:
+            return filteredAlbums.flatMap { $0.tracks.map(\.relativePath) }
+        case .artists:
+            return filteredArtists.flatMap { $0.tracks.map(\.relativePath) }
+        }
+    }
+    
+    private var visibleUnselectedCount: Int {
+        let set = selectedTrackPaths
+        return visibleSelectablePaths.filter { !set.contains($0) }.count
+    }
+    
+    private func selectAllVisible() {
+        selectedTrackPaths.formUnion(visibleSelectablePaths)
     }
     
     var body: some View {
-        VStack(spacing: 16) {
-            HStack {
-                Text("Add Tracks to Playlist")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(.white)
+        VStack(spacing: 0) {
+            // Header Bar
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(WalkmanTheme.card)
+                        .frame(width: 44, height: 44)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                        )
+                    
+                    Image(systemName: "plus.rectangle.on.rectangle")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                }
+                
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Add Tracks to Playlist")
+                        .font(WalkmanFont.title3)
+                        .foregroundStyle(.white)
+                    
+                    HStack(spacing: 6) {
+                        Text("Target Playlist:")
+                            .foregroundStyle(.secondary)
+                        Text(playlistName)
+                            .font(WalkmanFont.subheadlineBold)
+                            .foregroundStyle(.white)
+                        Text("•")
+                            .foregroundStyle(.tertiary)
+                        Text("\(existingPlaylistPaths.count) tracks currently in playlist")
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(WalkmanFont.subheadline)
+                }
                 
                 Spacer()
                 
-                Button("Done") {
-                    onAdd(Array(selectedTrackPaths))
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 19))
+                        .foregroundStyle(.secondary)
                 }
-                .font(.system(size: 11, weight: .bold))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
-                .background(WalkmanTheme.silverGradient)
-                .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .buttonStyle(.plain)
+                .help("Cancel & Close (Esc)")
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 18)
+            .padding(.bottom, 14)
             
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField("Search library tracks...", text: $search)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 11))
-            }
-            .padding(8)
-            .liquidGlass(cornerRadius: 8)
-            
-            ScrollView {
-                LazyVStack(spacing: 4) {
-                    ForEach(filtered) { tr in
-                        let isSel = selectedTrackPaths.contains(tr.relativePath)
-                        HStack(spacing: 10) {
-                            Image(systemName: isSel ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(isSel ? WalkmanTheme.silverLight : .secondary)
-                            
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(tr.title)
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(.white)
-                                Text("\(tr.artist) — \(tr.album)")
-                                    .font(.system(size: 9))
+            // Search & Navigation Toolbar
+            VStack(spacing: 10) {
+                HStack(spacing: 12) {
+                    // Mode Picker (Songs / By Album / By Artist)
+                    Picker("", selection: $mode) {
+                        ForEach(AddBrowsingMode.allCases) { m in
+                            Label(m.rawValue, systemImage: m.icon).tag(m)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 280)
+                    
+                    // Search Field
+                    HStack(spacing: 6) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                        
+                        TextField(
+                            mode == .songs ? "Search songs by title, artist, album..." :
+                            mode == .albums ? "Search albums by title or artist..." :
+                            "Search artists...",
+                            text: $search
+                        )
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12))
+                        
+                        if !search.isEmpty {
+                            Button(action: { search = "" }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 12))
                                     .foregroundStyle(.secondary)
                             }
-                            
-                            Spacer()
-                            
-                            Text(tr.format)
-                                .font(.system(size: 8, weight: .bold, design: .monospaced))
-                                .foregroundStyle(WalkmanTheme.silverMuted)
+                            .buttonStyle(.plain)
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(isSel ? WalkmanTheme.cardHover : WalkmanTheme.card.opacity(0.3))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            if isSel {
-                                selectedTrackPaths.remove(tr.relativePath)
-                            } else {
-                                selectedTrackPaths.insert(tr.relativePath)
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                
+                // Secondary Filter Controls: Format Picker & Toggle
+                HStack(spacing: 14) {
+                    Picker("", selection: $formatFilter) {
+                        Text("All Formats").tag("ALL")
+                        Text("FLAC").tag("FLAC")
+                        Text("MP3").tag("MP3")
+                        Text("Hi-Res").tag("HI-RES")
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 250)
+                    
+                    Toggle(isOn: $hideExisting) {
+                        HStack(spacing: 5) {
+                            Image(systemName: hideExisting ? "eye.slash" : "eye")
+                                .font(.system(size: 11))
+                            Text("Hide songs already in playlist")
+                                .font(WalkmanFont.subheadline)
+                        }
+                    }
+                    .toggleStyle(.checkbox)
+                    
+                    Spacer()
+                    
+                    Text(resultsCountLabel)
+                        .font(WalkmanFont.mono)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 12)
+            
+            Divider()
+                .overlay(Color.white.opacity(0.08))
+            
+            // Content Body
+            ZStack {
+                Color.black.opacity(0.18)
+                
+                switch mode {
+                case .songs:
+                    if filteredTracks.isEmpty {
+                        VStack(spacing: 10) {
+                            Spacer()
+                            Image(systemName: "music.note")
+                                .font(.system(size: 32))
+                                .foregroundStyle(.tertiary)
+                            Text("No matching tracks")
+                                .font(WalkmanFont.headline)
+                                .foregroundStyle(.secondary)
+                            Text(hideExisting
+                                 ? "All matching tracks may already be in the playlist. Try unchecking 'Hide songs already in playlist'."
+                                 : "Try clearing your search query or choosing 'All Formats'.")
+                                .font(WalkmanFont.subheadline)
+                                .foregroundStyle(.tertiary)
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: 380)
+                            Spacer()
+                        }
+                    } else {
+                        ScrollView {
+                            LazyVStack(spacing: 4) {
+                                ForEach(filteredTracks) { tr in
+                                    let isSel = selectedTrackPaths.contains(tr.relativePath)
+                                    let isInPlaylist = existingPlaylistPaths.contains(tr.relativePath)
+                                    let isCurrent = player.currentTrack?.relativePath == tr.relativePath
+                                    let isPlayingThis = isCurrent && player.isPlaying
+                                    
+                                    ModalTrackRow(
+                                        track: tr,
+                                        isSelected: isSel,
+                                        isInPlaylist: isInPlaylist,
+                                        isPlaying: isPlayingThis,
+                                        onToggleSelect: {
+                                            if isSel {
+                                                selectedTrackPaths.remove(tr.relativePath)
+                                            } else {
+                                                selectedTrackPaths.insert(tr.relativePath)
+                                            }
+                                        },
+                                        onTogglePlay: {
+                                            if isPlayingThis {
+                                                player.pause()
+                                            } else {
+                                                player.play(track: tr, in: filteredTracks)
+                                            }
+                                        }
+                                    )
+                                }
                             }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                        }
+                    }
+                    
+                case .albums:
+                    if filteredAlbums.isEmpty {
+                        VStack(spacing: 10) {
+                            Spacer()
+                            Image(systemName: "square.stack")
+                                .font(.system(size: 32))
+                                .foregroundStyle(.tertiary)
+                            Text("No matching albums")
+                                .font(WalkmanFont.headline)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                    } else {
+                        ScrollView {
+                            LazyVStack(spacing: 6) {
+                                ForEach(filteredAlbums) { alb in
+                                    let albumPaths = alb.tracks.map(\.relativePath)
+                                    let isAllSel = !albumPaths.isEmpty && albumPaths.allSatisfy { selectedTrackPaths.contains($0) }
+                                    let selCount = albumPaths.filter { selectedTrackPaths.contains($0) }.count
+                                    
+                                    ModalAlbumRow(
+                                        album: alb,
+                                        isAllSelected: isAllSel,
+                                        selectedCount: selCount,
+                                        onToggleSelect: {
+                                            if isAllSel {
+                                                for p in albumPaths { selectedTrackPaths.remove(p) }
+                                            } else {
+                                                selectedTrackPaths.formUnion(albumPaths)
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                        }
+                    }
+                    
+                case .artists:
+                    if filteredArtists.isEmpty {
+                        VStack(spacing: 10) {
+                            Spacer()
+                            Image(systemName: "person.2")
+                                .font(.system(size: 32))
+                                .foregroundStyle(.tertiary)
+                            Text("No matching artists")
+                                .font(WalkmanFont.headline)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                    } else {
+                        ScrollView {
+                            LazyVStack(spacing: 6) {
+                                ForEach(filteredArtists) { art in
+                                    let artistPaths = art.tracks.map(\.relativePath)
+                                    let isAllSel = !artistPaths.isEmpty && artistPaths.allSatisfy { selectedTrackPaths.contains($0) }
+                                    let selCount = artistPaths.filter { selectedTrackPaths.contains($0) }.count
+                                    
+                                    ModalArtistRow(
+                                        artist: art,
+                                        isAllSelected: isAllSel,
+                                        selectedCount: selCount,
+                                        onToggleSelect: {
+                                            if isAllSel {
+                                                for p in artistPaths { selectedTrackPaths.remove(p) }
+                                            } else {
+                                                selectedTrackPaths.formUnion(artistPaths)
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
                         }
                     }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            
+            // Bottom Action Footer Bar
+            Divider()
+                .overlay(Color.white.opacity(0.08))
+            
+            HStack(spacing: 14) {
+                // Left: Selection Counter & Bulk Controls
+                HStack(spacing: 10) {
+                    if selectedTrackPaths.isEmpty {
+                        Text("No tracks selected")
+                            .font(WalkmanFont.callout)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        HStack(spacing: 5) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 12))
+                                .foregroundStyle(WalkmanTheme.silverLight)
+                            Text("\(selectedTrackPaths.count) \(selectedTrackPaths.count == 1 ? "track" : "tracks") selected")
+                                .font(WalkmanFont.calloutBold)
+                                .foregroundStyle(.white)
+                        }
+                        
+                        Button("Clear") {
+                            selectedTrackPaths.removeAll()
+                        }
+                        .font(WalkmanFont.subheadline)
+                        .foregroundStyle(.secondary)
+                        .buttonStyle(.plain)
+                    }
+                    
+                    if visibleUnselectedCount > 0 {
+                        Button("Select All Visible (\(visibleUnselectedCount))") {
+                            selectAllVisible()
+                        }
+                        .font(WalkmanFont.subheadline)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3.5)
+                        .background(Color.white.opacity(0.06))
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                        .buttonStyle(.plain)
+                    }
+                }
+                
+                Spacer()
+                
+                // Right: Cancel & Redesigned Add / Done Button
+                Button("Cancel") {
+                    onDismiss()
+                }
+                .font(WalkmanFont.calloutMedium)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background(Color.white.opacity(0.08))
+                .foregroundStyle(.white.opacity(0.85))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .buttonStyle(.plain)
+                .keyboardShortcut(.cancelAction)
+                
+                Button(action: {
+                    onAdd(Array(selectedTrackPaths))
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text(selectedTrackPaths.isEmpty
+                             ? "Add to Playlist"
+                             : "Add \(selectedTrackPaths.count) \(selectedTrackPaths.count == 1 ? "Track" : "Tracks")")
+                            .font(WalkmanFont.calloutBold)
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 7)
+                    .background(selectedTrackPaths.isEmpty ? AnyShapeStyle(Color.white.opacity(0.10)) : AnyShapeStyle(WalkmanTheme.silverGradient))
+                    .foregroundStyle(selectedTrackPaths.isEmpty ? Color.white.opacity(0.3) : Color(red: 20/255, green: 20/255, blue: 24/255))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+                .disabled(selectedTrackPaths.isEmpty)
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+            .background(Color(red: 16/255, green: 16/255, blue: 18/255))
         }
-        .padding(18)
-        .frame(width: 520, height: 480)
+        .frame(width: 780, height: 600)
         .background(WalkmanTheme.background)
+        .onAppear {
+            cachedAlbums = Self.buildAlbums(from: tracks)
+            cachedArtists = Self.buildArtists(from: tracks)
+        }
+    }
+}
+
+// MARK: - Subviews for AddTracksModal
+
+private struct ModalTrackRow: View {
+    let track: Track
+    let isSelected: Bool
+    let isInPlaylist: Bool
+    let isPlaying: Bool
+    let onToggleSelect: () -> Void
+    let onTogglePlay: () -> Void
+    
+    private var isHiRes: Bool {
+        track.bitsPerSample > 16 || track.sampleRate > 48000
+    }
+    
+    private var formattedDuration: String {
+        if track.durationSeconds <= 0 { return "—" }
+        let mins = Int(track.durationSeconds) / 60
+        let secs = Int(track.durationSeconds) % 60
+        return String(format: "%d:%02d", mins, secs)
+    }
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Button(action: onToggleSelect) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 16, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? WalkmanTheme.silverLight : Color.white.opacity(0.3))
+            }
+            .buttonStyle(.plain)
+            
+            Button(action: onTogglePlay) {
+                TrackCoverThumbnail(track: track, size: 36, isPlaying: isPlaying)
+            }
+            .buttonStyle(.plain)
+            .help(isPlaying ? "Pause preview" : "Play preview")
+            
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(track.title)
+                        .font(isSelected ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
+                        .foregroundStyle(isSelected ? .white : .primary)
+                        .lineLimit(1)
+                    
+                    if isHiRes {
+                        Text("Hi-Res")
+                            .font(WalkmanFont.badge)
+                            .padding(.horizontal, 4.5)
+                            .padding(.vertical, 1.5)
+                            .background(WalkmanTheme.hiResGoldGradient)
+                            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                            .clipShape(RoundedRectangle(cornerRadius: 2.5))
+                    }
+                    
+                    if isInPlaylist {
+                        Text("In Playlist")
+                            .font(WalkmanFont.badge)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1.5)
+                            .background(Color.white.opacity(0.08))
+                            .foregroundStyle(.secondary)
+                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                    }
+                }
+                
+                Text("\(track.artist) — \(track.album)")
+                    .font(WalkmanFont.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            
+            Spacer()
+            
+            Text(track.format)
+                .font(WalkmanFont.badge)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(Color.white.opacity(0.06))
+                .foregroundStyle(.secondary)
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+            
+            Text(formattedDuration)
+                .font(WalkmanFont.mono)
+                .foregroundStyle(.tertiary)
+                .frame(width: 44, alignment: .trailing)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(isSelected ? WalkmanTheme.cardHover : Color.white.opacity(0.02))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(isSelected ? WalkmanTheme.silver.opacity(0.35) : Color.white.opacity(0.04), lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onToggleSelect()
+        }
+    }
+}
+
+private struct ModalAlbumRow: View {
+    let album: ModalAlbumItem
+    let isAllSelected: Bool
+    let selectedCount: Int
+    let onToggleSelect: () -> Void
+    
+    private var remainingCount: Int {
+        album.trackCount - selectedCount
+    }
+    
+    var body: some View {
+        HStack(spacing: 14) {
+            if let rep = album.representativeTrack {
+                TrackCoverThumbnail(track: rep, size: 44)
+                    .frame(width: 44, height: 44)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            } else {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.white.opacity(0.08))
+                    .frame(width: 44, height: 44)
+            }
+            
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(album.name)
+                        .font(WalkmanFont.bodyBold)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    
+                    if album.isHiRes {
+                        Text("Hi-Res")
+                            .font(WalkmanFont.badge)
+                            .padding(.horizontal, 4.5)
+                            .padding(.vertical, 1.5)
+                            .background(WalkmanTheme.hiResGoldGradient)
+                            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                            .clipShape(RoundedRectangle(cornerRadius: 2.5))
+                    }
+                }
+                
+                Text(album.artist)
+                    .font(WalkmanFont.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                
+                HStack(spacing: 8) {
+                    Text("\(album.trackCount) songs")
+                        .font(WalkmanFont.subheadline)
+                        .foregroundStyle(.tertiary)
+                    
+                    if !album.year.isEmpty {
+                        Text("•")
+                            .foregroundStyle(.tertiary)
+                        Text(album.year)
+                            .font(WalkmanFont.subheadline)
+                            .foregroundStyle(.tertiary)
+                    }
+                    
+                    if selectedCount > 0 {
+                        Text("•")
+                            .foregroundStyle(.tertiary)
+                        Text("\(selectedCount) / \(album.trackCount) selected")
+                            .font(WalkmanFont.subheadline)
+                            .foregroundStyle(WalkmanTheme.silverLight)
+                    }
+                }
+            }
+            
+            Spacer()
+            
+            Button(action: onToggleSelect) {
+                HStack(spacing: 5) {
+                    Image(systemName: isAllSelected ? "checkmark.circle.fill" : "plus.circle")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text(isAllSelected
+                         ? "Selected (\(album.trackCount))"
+                         : selectedCount > 0
+                            ? "Add Remaining (\(remainingCount))"
+                            : "Add Album (\(album.trackCount))")
+                        .font(WalkmanFont.calloutMedium)
+                }
+                .padding(.horizontal, 11)
+                .padding(.vertical, 6)
+                .background(isAllSelected ? WalkmanTheme.silver.opacity(0.2) : Color.white.opacity(0.08))
+                .foregroundStyle(isAllSelected ? WalkmanTheme.silverLight : .white)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(isAllSelected ? WalkmanTheme.silver.opacity(0.4) : Color.white.opacity(0.12), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(isAllSelected ? WalkmanTheme.cardHover : Color.white.opacity(0.02))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(isAllSelected ? WalkmanTheme.silver.opacity(0.35) : Color.white.opacity(0.04), lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onToggleSelect()
+        }
+    }
+}
+
+private struct ModalArtistRow: View {
+    let artist: ModalArtistItem
+    let isAllSelected: Bool
+    let selectedCount: Int
+    let onToggleSelect: () -> Void
+    
+    private var remainingCount: Int {
+        artist.trackCount - selectedCount
+    }
+    
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                if isAllSelected {
+                    Circle()
+                        .fill(WalkmanTheme.silverGradient)
+                        .frame(width: 40, height: 40)
+                } else {
+                    Circle()
+                        .fill(WalkmanTheme.card)
+                        .frame(width: 40, height: 40)
+                        .overlay(
+                            Circle().stroke(Color.white.opacity(0.12), lineWidth: 1)
+                        )
+                }
+                
+                Text(String(artist.name.prefix(1)).uppercased())
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(isAllSelected ? Color(red: 20/255, green: 20/255, blue: 24/255) : .white)
+            }
+            
+            VStack(alignment: .leading, spacing: 3) {
+                Text(artist.name)
+                    .font(WalkmanFont.bodyBold)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                
+                HStack(spacing: 6) {
+                    Text("\(artist.albumCount) albums • \(artist.trackCount) songs")
+                        .font(WalkmanFont.subheadline)
+                        .foregroundStyle(.secondary)
+                    
+                    if selectedCount > 0 {
+                        Text("•")
+                            .foregroundStyle(.tertiary)
+                        Text("\(selectedCount) / \(artist.trackCount) selected")
+                            .font(WalkmanFont.subheadline)
+                            .foregroundStyle(WalkmanTheme.silverLight)
+                    }
+                }
+            }
+            
+            Spacer()
+            
+            Button(action: onToggleSelect) {
+                HStack(spacing: 5) {
+                    Image(systemName: isAllSelected ? "checkmark.circle.fill" : "plus.circle")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text(isAllSelected
+                         ? "Selected (\(artist.trackCount))"
+                         : selectedCount > 0
+                            ? "Add Remaining (\(remainingCount))"
+                            : "Add All Songs (\(artist.trackCount))")
+                        .font(WalkmanFont.calloutMedium)
+                }
+                .padding(.horizontal, 11)
+                .padding(.vertical, 6)
+                .background(isAllSelected ? WalkmanTheme.silver.opacity(0.2) : Color.white.opacity(0.08))
+                .foregroundStyle(isAllSelected ? WalkmanTheme.silverLight : .white)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(isAllSelected ? WalkmanTheme.silver.opacity(0.4) : Color.white.opacity(0.12), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(isAllSelected ? WalkmanTheme.cardHover : Color.white.opacity(0.02))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(isAllSelected ? WalkmanTheme.silver.opacity(0.35) : Color.white.opacity(0.04), lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onToggleSelect()
+        }
     }
 }
