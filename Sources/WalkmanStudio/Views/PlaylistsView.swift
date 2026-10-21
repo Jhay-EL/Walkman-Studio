@@ -12,6 +12,7 @@ public struct PlaylistsView: View {
     @State private var showAddTrackSheet: Bool = false
     @State private var searchTrackQuery: String = ""
     @State private var messageBanner: String?
+    @State private var isSaving: Bool = false
     
     public init(activeDrive: WalkmanDrive?, libraryTracks: [Track]) {
         self.activeDrive = activeDrive
@@ -55,28 +56,132 @@ public struct PlaylistsView: View {
         }
     }
     
-    private func saveCurrentPlaylist() {
+    private var normalizedTrackLookup: [String: Track] {
+        var dict: [String: Track] = [:]
+        for track in libraryTracks {
+            let key = track.relativePath.replacingOccurrences(of: "\\", with: "/").trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+            dict[key] = track
+        }
+        return dict
+    }
+    
+    private func resolvedTrack(for path: String) -> Track? {
+        let key = path.replacingOccurrences(of: "\\", with: "/").trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+        return normalizedTrackLookup[key]
+    }
+    
+    private func persistPlaylistChanges(newTracks: [String]) {
         guard let drive = activeDrive, let playlist = selectedPlaylist else { return }
+        self.playlistTracks = newTracks
+        self.isSaving = true
         let musicURL = URL(fileURLWithPath: drive.musicDir)
         let filenameToSave = playlist.filename.isEmpty ? playlist.name : playlist.filename
         do {
-            _ = try WalkmanEngine.shared.writePlaylist(
+            let savedURL = try WalkmanEngine.shared.writePlaylist(
                 musicDir: musicURL,
                 name: filenameToSave,
-                relativeTracks: playlistTracks
+                relativeTracks: newTracks
             )
-            withAnimation {
-                messageBanner = "Saved \(filenameToSave) (\(playlistTracks.count) tracks) with CRLF endings"
+            self.isSaving = false
+            if let idx = playlists.firstIndex(where: { $0.id == playlist.id }) {
+                let updated = Playlist(
+                    name: playlist.name,
+                    filename: savedURL.lastPathComponent,
+                    trackCount: newTracks.count,
+                    tracks: newTracks,
+                    fullPath: savedURL.path
+                )
+                playlists[idx] = updated
+                selectedPlaylist = updated
             }
-            loadPlaylists()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
-                withAnimation { messageBanner = nil }
+            withAnimation {
+                messageBanner = "Saved to Walkman (\(newTracks.count) \(newTracks.count == 1 ? "track" : "tracks"))"
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                if self.messageBanner?.hasPrefix("Saved to Walkman") == true {
+                    withAnimation { self.messageBanner = nil }
+                }
             }
         } catch {
+            self.isSaving = false
             withAnimation {
-                messageBanner = "Error: \(error.localizedDescription)"
+                messageBanner = "Auto-save error: \(error.localizedDescription)"
             }
         }
+    }
+    
+    private func sortTracksByTitle(ascending: Bool) {
+        let lookup = normalizedTrackLookup
+        let sorted = playlistTracks.sorted { p1, p2 in
+            let k1 = p1.replacingOccurrences(of: "\\", with: "/").trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+            let k2 = p2.replacingOccurrences(of: "\\", with: "/").trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+            let t1 = lookup[k1]?.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let t2 = lookup[k2]?.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let name1 = (t1?.isEmpty == false ? t1! : (p1 as NSString).lastPathComponent)
+            let name2 = (t2?.isEmpty == false ? t2! : (p2 as NSString).lastPathComponent)
+            let cmp = name1.localizedStandardCompare(name2)
+            return ascending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
+        }
+        persistPlaylistChanges(newTracks: sorted)
+    }
+    
+    private func sortTracksByArtist(ascending: Bool) {
+        let lookup = normalizedTrackLookup
+        let sorted = playlistTracks.sorted { p1, p2 in
+            let k1 = p1.replacingOccurrences(of: "\\", with: "/").trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+            let k2 = p2.replacingOccurrences(of: "\\", with: "/").trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+            let a1 = lookup[k1]?.artist.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let a2 = lookup[k2]?.artist.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let cmp = a1.localizedStandardCompare(a2)
+            if cmp == .orderedSame {
+                let t1 = lookup[k1]?.title ?? (p1 as NSString).lastPathComponent
+                let t2 = lookup[k2]?.title ?? (p2 as NSString).lastPathComponent
+                return t1.localizedStandardCompare(t2) == .orderedAscending
+            }
+            return ascending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
+        }
+        persistPlaylistChanges(newTracks: sorted)
+    }
+    
+    private func sortTracksByAlbum() {
+        let lookup = normalizedTrackLookup
+        let sorted = playlistTracks.sorted { p1, p2 in
+            let k1 = p1.replacingOccurrences(of: "\\", with: "/").trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+            let k2 = p2.replacingOccurrences(of: "\\", with: "/").trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+            let alb1 = lookup[k1]?.album.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let alb2 = lookup[k2]?.album.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let cmpAlb = alb1.localizedStandardCompare(alb2)
+            if cmpAlb != .orderedSame {
+                return cmpAlb == .orderedAscending
+            }
+            let n1 = Int(lookup[k1]?.trackNum.components(separatedBy: "/").first ?? "0") ?? 0
+            let n2 = Int(lookup[k2]?.trackNum.components(separatedBy: "/").first ?? "0") ?? 0
+            if n1 != n2 {
+                return n1 < n2
+            }
+            let t1 = lookup[k1]?.title ?? (p1 as NSString).lastPathComponent
+            let t2 = lookup[k2]?.title ?? (p2 as NSString).lastPathComponent
+            return t1.localizedStandardCompare(t2) == .orderedAscending
+        }
+        persistPlaylistChanges(newTracks: sorted)
+    }
+    
+    private func sortTracksByFilename(ascending: Bool) {
+        let sorted = playlistTracks.sorted { p1, p2 in
+            let f1 = (p1 as NSString).lastPathComponent
+            let f2 = (p2 as NSString).lastPathComponent
+            let cmp = f1.localizedStandardCompare(f2)
+            return ascending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
+        }
+        persistPlaylistChanges(newTracks: sorted)
+    }
+    
+    private func reverseTrackOrder() {
+        persistPlaylistChanges(newTracks: Array(playlistTracks.reversed()))
+    }
+    
+    private func shuffleTracks() {
+        persistPlaylistChanges(newTracks: playlistTracks.shuffled())
     }
     
     private func createPlaylist() {
@@ -105,6 +210,9 @@ public struct PlaylistsView: View {
     
     private func deletePlaylist(_ playlist: Playlist) {
         try? FileManager.default.removeItem(atPath: playlist.fullPath)
+        let dotPath = (playlist.fullPath as NSString).deletingLastPathComponent + "/._" + (playlist.fullPath as NSString).lastPathComponent
+        try? FileManager.default.removeItem(atPath: dotPath)
+        sync()
         if selectedPlaylist?.id == playlist.id {
             selectedPlaylist = nil
             playlistTracks = []
@@ -270,23 +378,69 @@ public struct PlaylistsView: View {
                 // Right Column: Playlist Content / Editor
                 VStack(alignment: .leading, spacing: 12) {
                     if let pl = selectedPlaylist {
-                        HStack {
+                        HStack(alignment: .center, spacing: 10) {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(pl.name)
                                     .font(WalkmanFont.title3)
                                     .foregroundStyle(.white)
                                 
-                                Text("\(playlistTracks.count) tracks in sequence")
+                                Text("\(playlistTracks.count) \(playlistTracks.count == 1 ? "track" : "tracks") in sequence")
                                     .font(WalkmanFont.callout)
                                     .foregroundStyle(.secondary)
                             }
                             
                             Spacer()
                             
-                            Button(action: { showAddTrackSheet = true }) {
+                            // Auto-saved Status Indicator
+                            HStack(spacing: 5) {
+                                if isSaving {
+                                    ProgressView()
+                                        .controlSize(.mini)
+                                    Text("Saving...")
+                                        .font(WalkmanFont.subheadline)
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(Color.green)
+                                    Text("Auto-saved to Walkman")
+                                        .font(WalkmanFont.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(Capsule())
+                            
+                            // Sort Menu
+                            Menu {
+                                Button(action: { sortTracksByTitle(ascending: true) }) {
+                                    Label("Title (A → Z)", systemImage: "textformat")
+                                }
+                                Button(action: { sortTracksByTitle(ascending: false) }) {
+                                    Label("Title (Z → A)", systemImage: "textformat")
+                                }
+                                Button(action: { sortTracksByArtist(ascending: true) }) {
+                                    Label("Artist (A → Z)", systemImage: "person")
+                                }
+                                Button(action: { sortTracksByAlbum() }) {
+                                    Label("Album & Track Number", systemImage: "square.stack")
+                                }
+                                Button(action: { sortTracksByFilename(ascending: true) }) {
+                                    Label("Filename (A → Z)", systemImage: "doc.text")
+                                }
+                                Divider()
+                                Button(action: { reverseTrackOrder() }) {
+                                    Label("Reverse Current Order", systemImage: "arrow.up.arrow.down")
+                                }
+                                Button(action: { shuffleTracks() }) {
+                                    Label("Shuffle Order", systemImage: "shuffle")
+                                }
+                            } label: {
                                 HStack(spacing: 5) {
-                                    Image(systemName: "plus.circle")
-                                    Text("Add From Library")
+                                    Image(systemName: "arrow.up.arrow.down")
+                                    Text("Sort")
                                 }
                                 .font(WalkmanFont.calloutMedium)
                                 .padding(.horizontal, 11)
@@ -295,15 +449,17 @@ public struct PlaylistsView: View {
                                 .foregroundStyle(WalkmanTheme.silverLight)
                                 .clipShape(RoundedRectangle(cornerRadius: 6))
                             }
-                            .buttonStyle(.plain)
+                            .menuStyle(.borderlessButton)
+                            .disabled(playlistTracks.isEmpty)
                             
-                            Button(action: { saveCurrentPlaylist() }) {
+                            // Add From Library Button
+                            Button(action: { showAddTrackSheet = true }) {
                                 HStack(spacing: 5) {
-                                    Image(systemName: "square.and.arrow.down")
-                                    Text("Save Changes")
+                                    Image(systemName: "plus.circle")
+                                    Text("Add From Library")
                                 }
-                                .font(WalkmanFont.calloutBold)
-                                .padding(.horizontal, 11)
+                                .font(WalkmanFont.calloutMedium)
+                                .padding(.horizontal, 12)
                                 .padding(.vertical, 6)
                                 .background(WalkmanTheme.silverGradient)
                                 .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
@@ -333,27 +489,72 @@ public struct PlaylistsView: View {
                             ScrollView {
                                 LazyVStack(spacing: 4) {
                                     ForEach(Array(playlistTracks.enumerated()), id: \.offset) { index, trackPath in
+                                        let matchedTrack = resolvedTrack(for: trackPath)
+                                        let isPlayingThis = (AudioPlayerService.shared.currentTrack?.relativePath == trackPath || AudioPlayerService.shared.currentTrack?.fullPath == matchedTrack?.fullPath) && AudioPlayerService.shared.isPlaying
+                                        
                                         HStack(spacing: 12) {
                                             Text(String(format: "%02d", index + 1))
                                                 .font(WalkmanFont.mono)
                                                 .foregroundStyle(WalkmanTheme.silverLight)
                                                 .frame(width: 26, alignment: .trailing)
                                             
-                                            Image(systemName: "music.note")
-                                                .font(.system(size: 12))
-                                                .foregroundStyle(.secondary)
+                                            // Play / Note button
+                                            Button(action: {
+                                                if let tr = matchedTrack {
+                                                    if isPlayingThis {
+                                                        AudioPlayerService.shared.pause()
+                                                    } else {
+                                                        AudioPlayerService.shared.play(track: tr, in: libraryTracks)
+                                                    }
+                                                }
+                                            }) {
+                                                Image(systemName: isPlayingThis ? "speaker.wave.2.fill" : (matchedTrack != nil ? "play.circle" : "music.note"))
+                                                    .font(.system(size: 13))
+                                                    .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : .secondary)
+                                            }
+                                            .buttonStyle(.plain)
+                                            .disabled(matchedTrack == nil)
                                             
-                                            Text(trackPath)
-                                                .font(WalkmanFont.mono)
-                                                .foregroundStyle(.white)
-                                                .lineLimit(1)
+                                            // Track Details or Path
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                if let tr = matchedTrack, !tr.title.isEmpty {
+                                                    Text(tr.title)
+                                                        .font(WalkmanFont.bodyMedium)
+                                                        .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : .white)
+                                                        .lineLimit(1)
+                                                    
+                                                    HStack(spacing: 6) {
+                                                        if !tr.artist.isEmpty {
+                                                            Text(tr.artist)
+                                                                .font(WalkmanFont.subheadline)
+                                                                .foregroundStyle(.secondary)
+                                                                .lineLimit(1)
+                                                            
+                                                            Text("•")
+                                                                .font(.system(size: 8))
+                                                                .foregroundStyle(.tertiary)
+                                                        }
+                                                        Text(trackPath)
+                                                            .font(WalkmanFont.monoSmall)
+                                                            .foregroundStyle(.tertiary)
+                                                            .lineLimit(1)
+                                                    }
+                                                } else {
+                                                    Text(trackPath)
+                                                        .font(WalkmanFont.mono)
+                                                        .foregroundStyle(.white)
+                                                        .lineLimit(1)
+                                                }
+                                            }
                                             
                                             Spacer()
                                             
                                             // Move Up
                                             Button(action: {
                                                 if index > 0 {
-                                                    playlistTracks.swapAt(index, index - 1)
+                                                    var updated = playlistTracks
+                                                    updated.swapAt(index, index - 1)
+                                                    persistPlaylistChanges(newTracks: updated)
                                                 }
                                             }) {
                                                 Image(systemName: "chevron.up")
@@ -362,11 +563,14 @@ public struct PlaylistsView: View {
                                             }
                                             .buttonStyle(.plain)
                                             .disabled(index == 0)
+                                            .help("Move Up")
                                             
                                             // Move Down
                                             Button(action: {
                                                 if index < playlistTracks.count - 1 {
-                                                    playlistTracks.swapAt(index, index + 1)
+                                                    var updated = playlistTracks
+                                                    updated.swapAt(index, index + 1)
+                                                    persistPlaylistChanges(newTracks: updated)
                                                 }
                                             }) {
                                                 Image(systemName: "chevron.down")
@@ -375,21 +579,97 @@ public struct PlaylistsView: View {
                                             }
                                             .buttonStyle(.plain)
                                             .disabled(index == playlistTracks.count - 1)
+                                            .help("Move Down")
                                             
                                             // Remove
                                             Button(action: {
-                                                playlistTracks.remove(at: index)
+                                                var updated = playlistTracks
+                                                updated.remove(at: index)
+                                                persistPlaylistChanges(newTracks: updated)
                                             }) {
                                                 Image(systemName: "xmark.circle")
                                                     .font(.system(size: 10))
                                                     .foregroundStyle(.red.opacity(0.8))
                                             }
                                             .buttonStyle(.plain)
+                                            .help("Remove from Playlist")
                                         }
                                         .padding(.horizontal, 10)
                                         .padding(.vertical, 7)
-                                        .background(WalkmanTheme.card.opacity(0.5))
+                                        .background(isPlayingThis ? WalkmanTheme.cardHover : WalkmanTheme.card.opacity(0.5))
                                         .clipShape(RoundedRectangle(cornerRadius: 6))
+                                        .contentShape(Rectangle())
+                                        .onTapGesture(count: 2) {
+                                            if let tr = matchedTrack {
+                                                AudioPlayerService.shared.play(track: tr, in: libraryTracks)
+                                            }
+                                        }
+                                        .contextMenu {
+                                            if let tr = matchedTrack {
+                                                Button(action: {
+                                                    AudioPlayerService.shared.play(track: tr, in: libraryTracks)
+                                                }) {
+                                                    Label("Play Now", systemImage: "play.fill")
+                                                }
+                                                Divider()
+                                            }
+                                            
+                                            Button(action: {
+                                                if index > 0 {
+                                                    var updated = playlistTracks
+                                                    let item = updated.remove(at: index)
+                                                    updated.insert(item, at: 0)
+                                                    persistPlaylistChanges(newTracks: updated)
+                                                }
+                                            }) {
+                                                Label("Move to Top", systemImage: "arrow.up.to.line")
+                                            }
+                                            .disabled(index == 0)
+                                            
+                                            Button(action: {
+                                                if index > 0 {
+                                                    var updated = playlistTracks
+                                                    updated.swapAt(index, index - 1)
+                                                    persistPlaylistChanges(newTracks: updated)
+                                                }
+                                            }) {
+                                                Label("Move Up", systemImage: "chevron.up")
+                                            }
+                                            .disabled(index == 0)
+                                            
+                                            Button(action: {
+                                                if index < playlistTracks.count - 1 {
+                                                    var updated = playlistTracks
+                                                    updated.swapAt(index, index + 1)
+                                                    persistPlaylistChanges(newTracks: updated)
+                                                }
+                                            }) {
+                                                Label("Move Down", systemImage: "chevron.down")
+                                            }
+                                            .disabled(index == playlistTracks.count - 1)
+                                            
+                                            Button(action: {
+                                                if index < playlistTracks.count - 1 {
+                                                    var updated = playlistTracks
+                                                    let item = updated.remove(at: index)
+                                                    updated.append(item)
+                                                    persistPlaylistChanges(newTracks: updated)
+                                                }
+                                            }) {
+                                                Label("Move to Bottom", systemImage: "arrow.down.to.line")
+                                            }
+                                            .disabled(index == playlistTracks.count - 1)
+                                            
+                                            Divider()
+                                            
+                                            Button(role: .destructive, action: {
+                                                var updated = playlistTracks
+                                                updated.remove(at: index)
+                                                persistPlaylistChanges(newTracks: updated)
+                                            }) {
+                                                Label("Remove from Playlist", systemImage: "trash")
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -425,7 +705,8 @@ public struct PlaylistsView: View {
                 tracks: libraryTracks,
                 existingPlaylistPaths: Set(playlistTracks),
                 onAdd: { addedRelativePaths in
-                    playlistTracks.append(contentsOf: addedRelativePaths)
+                    let newTracks = playlistTracks + addedRelativePaths
+                    persistPlaylistChanges(newTracks: newTracks)
                     showAddTrackSheet = false
                 },
                 onDismiss: { showAddTrackSheet = false }
@@ -969,7 +1250,12 @@ private struct AddTracksModal: View {
                 .keyboardShortcut(.cancelAction)
                 
                 Button(action: {
-                    onAdd(Array(selectedTrackPaths))
+                    var ordered = tracks.filter { selectedTrackPaths.contains($0.relativePath) }.map(\.relativePath)
+                    let addedSet = Set(ordered)
+                    for p in selectedTrackPaths where !addedSet.contains(p) {
+                        ordered.append(p)
+                    }
+                    onAdd(ordered)
                 }) {
                     HStack(spacing: 6) {
                         Image(systemName: "plus.circle.fill")
