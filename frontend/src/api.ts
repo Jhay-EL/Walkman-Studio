@@ -74,6 +74,15 @@ export const api = {
     return res.data;
   },
 
+  async renamePlaylist(mountPoint: string, oldName: string, newName: string) {
+    const res = await axios.patch(`${API_BASE}/playlists/rename`, {
+      mount_point: mountPoint,
+      old_playlist_name: oldName,
+      new_playlist_name: newName,
+    });
+    return res.data;
+  },
+
   async cleanAndEject(mountPoint: string) {
     const res = await axios.post(`${API_BASE}/clean-eject`, {
       mount_point: mountPoint,

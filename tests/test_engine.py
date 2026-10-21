@@ -118,6 +118,13 @@ def test_playlist_crlf_format():
         read_back = walkman_engine.read_walkman_playlist(p_path)
         assert read_back == tracks
 
+        # Test renaming playlist
+        renamed_path = walkman_engine.rename_walkman_playlist(music_dir, "Rock Classics", "Ultimate Rock Hits")
+        assert renamed_path.exists()
+        assert renamed_path.name == "Ultimate Rock Hits.m3u8"
+        assert not p_path.exists()
+        assert walkman_engine.read_walkman_playlist(renamed_path) == tracks
+
 
 def test_macos_ghost_file_cleanup():
     """Rule 6: Purge .DS_Store, ._*, .Spotlight-V100, .Trashes."""

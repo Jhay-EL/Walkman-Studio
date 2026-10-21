@@ -168,6 +168,64 @@ public final class WalkmanEngine: @unchecked Sendable {
             .filter { !$0.isEmpty && !$0.hasPrefix("#") }
     }
 
+    public func renamePlaylist(at url: URL, newName: String) throws -> URL {
+        let cleanName = sanitizeFilename(newName)
+        if cleanName.isEmpty || cleanName == "Unknown" {
+            throw NSError(
+                domain: "WalkmanEngine",
+                code: 400,
+                userInfo: [NSLocalizedDescriptionKey: "Playlist name cannot be empty."]
+            )
+        }
+
+        var targetFilename = cleanName
+        let ext = url.pathExtension.isEmpty ? "m3u8" : url.pathExtension
+        if !targetFilename.lowercased().hasSuffix(".m3u8") && !targetFilename.lowercased().hasSuffix(".m3u") {
+            targetFilename += ".\(ext)"
+        }
+
+        let musicDir = url.deletingLastPathComponent()
+        let targetURL = musicDir.appendingPathComponent(targetFilename)
+
+        if targetURL.path == url.path {
+            return targetURL
+        }
+
+        if targetURL.path.lowercased() != url.path.lowercased() {
+            if FileManager.default.fileExists(atPath: targetURL.path) {
+                throw NSError(
+                    domain: "WalkmanEngine",
+                    code: 409,
+                    userInfo: [NSLocalizedDescriptionKey: "A playlist named '\(targetFilename)' already exists."]
+                )
+            }
+            try FileManager.default.moveItem(at: url, to: targetURL)
+        } else {
+            // Case-only rename on case-insensitive filesystems (FAT32/exFAT/APFS):
+            // Use temporary file to safely perform case rename
+            let tempURL = musicDir.appendingPathComponent(".tmp_rename_\(UUID().uuidString).\(ext)")
+            try FileManager.default.moveItem(at: url, to: tempURL)
+            try FileManager.default.moveItem(at: tempURL, to: targetURL)
+        }
+
+        // 1. Remove companion ._ AppleDouble shadow file of old name if present
+        let oldDot = url.deletingLastPathComponent().appendingPathComponent("._" + url.lastPathComponent)
+        try? FileManager.default.removeItem(at: oldDot)
+
+        // 2. Remove macOS extended attributes on renamed file
+        let cPath = (targetURL.path as NSString).fileSystemRepresentation
+        removexattr(cPath, "com.apple.TextEncoding", 0)
+
+        // 3. Remove companion ._ AppleDouble shadow file of new name if created
+        let newDot = targetURL.deletingLastPathComponent().appendingPathComponent("._" + targetURL.lastPathComponent)
+        try? FileManager.default.removeItem(at: newDot)
+
+        // 4. Flush buffers to physical flash storage
+        sync()
+
+        return targetURL
+    }
+
     // -----------------------------------------------------------------------
     // Hardware Constraint 6: macOS Ghost File Cleanup & Unmount
     // -----------------------------------------------------------------------

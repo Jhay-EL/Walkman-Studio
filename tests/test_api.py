@@ -48,6 +48,18 @@ def test_api_library_and_playlists():
         assert pls[0]["filename"] == "My Heavy Rotation.m3u8"
         assert len(pls[0]["tracks"]) == 2
 
+        # 3b. Test rename playlist
+        res_rename = client.patch("/api/playlists/rename", json={
+            "mount_point": str(mount),
+            "old_playlist_name": "My Heavy Rotation.m3u8",
+            "new_playlist_name": "Favorites 2026",
+        })
+        assert res_rename.status_code == 200
+        assert res_rename.json()["filename"] == "Favorites 2026.m3u8"
+
+        res_list_after = client.get(f"/api/playlists?mount_point={mount}")
+        assert res_list_after.json()["playlists"][0]["filename"] == "Favorites 2026.m3u8"
+
         # 4. Test clean-eject endpoint
         res_clean = client.post("/api/clean-eject", json={"mount_point": str(mount)})
         assert res_clean.status_code == 200

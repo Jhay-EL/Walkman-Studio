@@ -57,6 +57,12 @@ class PlaylistCreateRequest(BaseModel):
     relative_tracks: List[str]
 
 
+class PlaylistRenameRequest(BaseModel):
+    mount_point: str
+    old_playlist_name: str
+    new_playlist_name: str
+
+
 class CleanEjectRequest(BaseModel):
     mount_point: str
 
@@ -335,6 +341,31 @@ def delete_playlist(mount_point: str = Query(...), playlist_name: str = Query(..
         p_path.unlink()
         return {"status": "ok", "message": f"Deleted {playlist_name}"}
     raise HTTPException(status_code=404, detail="Playlist not found")
+
+
+@app.patch("/api/playlists/rename")
+@app.post("/api/playlists/rename")
+def rename_playlist(payload: PlaylistRenameRequest):
+    """Renames an .m3u8 playlist in /MUSIC/."""
+    music_dir = Path(payload.mount_point) / "MUSIC"
+    try:
+        new_path = walkman_engine.rename_walkman_playlist(
+            drive_music_dir=music_dir,
+            old_playlist_name=payload.old_playlist_name,
+            new_playlist_name=payload.new_playlist_name,
+        )
+        return {
+            "status": "ok",
+            "message": f"Renamed to {new_path.name}",
+            "filename": new_path.name,
+            "full_path": str(new_path)
+        }
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except FileExistsError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # ---------------------------------------------------------------------------

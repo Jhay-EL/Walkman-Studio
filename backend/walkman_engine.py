@@ -331,6 +331,60 @@ def read_walkman_playlist(playlist_path: str | Path) -> List[str]:
     return tracks
 
 
+def rename_walkman_playlist(drive_music_dir: str | Path, old_playlist_name: str, new_playlist_name: str) -> Path:
+    """
+    Renames an .m3u8 playlist inside /MUSIC/ on the Walkman drive.
+    Cleans up old and new companion AppleDouble ._ files.
+    """
+    music_dir = Path(drive_music_dir)
+    old_clean = sanitize_filename(old_playlist_name)
+    if not old_clean.lower().endswith((".m3u8", ".m3u")):
+        old_clean += ".m3u8"
+
+    old_path = music_dir / old_clean
+    if not old_path.exists():
+        old_path = music_dir / old_playlist_name
+        if not old_path.exists():
+            raise FileNotFoundError(f"Playlist '{old_playlist_name}' not found")
+
+    new_clean = sanitize_filename(new_playlist_name)
+    if not new_clean or new_clean == "Unknown":
+        raise ValueError("Playlist name cannot be empty")
+    if not new_clean.lower().endswith((".m3u8", ".m3u")):
+        new_clean += ".m3u8"
+
+    new_path = music_dir / new_clean
+    if new_path == old_path:
+        return new_path
+
+    if new_path.exists() and new_path.name.lower() != old_path.name.lower():
+        raise FileExistsError(f"A playlist named '{new_clean}' already exists")
+
+    if new_path.name.lower() == old_path.name.lower():
+        temp_path = music_dir / f".tmp_rename_{old_clean}"
+        old_path.rename(temp_path)
+        temp_path.rename(new_path)
+    else:
+        old_path.rename(new_path)
+
+    # Clean companion dotfiles
+    old_dot = music_dir / f"._{old_path.name}"
+    if old_dot.exists():
+        try:
+            old_dot.unlink()
+        except OSError:
+            pass
+
+    new_dot = music_dir / f"._{new_path.name}"
+    if new_dot.exists():
+        try:
+            new_dot.unlink()
+        except OSError:
+            pass
+
+    return new_path
+
+
 # ---------------------------------------------------------------------------
 # Hardware Constraint 6: macOS Ghost File Cleanup & Unmount
 # ---------------------------------------------------------------------------

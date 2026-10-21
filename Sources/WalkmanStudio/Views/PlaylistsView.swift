@@ -1,5 +1,10 @@
 import SwiftUI
 
+private enum RenameLocation {
+    case row
+    case header
+}
+
 public struct PlaylistsView: View {
     let activeDrive: WalkmanDrive?
     let libraryTracks: [Track]
@@ -7,8 +12,11 @@ public struct PlaylistsView: View {
     @State private var playlists: [Playlist] = []
     @State private var selectedPlaylist: Playlist?
     @State private var playlistTracks: [String] = []
-    @State private var newPlaylistName: String = ""
-    @State private var isCreating: Bool = false
+    @State private var editingPlaylistId: String? = nil
+    @State private var editingPlaylistName: String = ""
+    @State private var renameLocation: RenameLocation = .row
+    @FocusState private var isRowRenameFocused: Bool
+    @FocusState private var isHeaderRenameFocused: Bool
     @State private var showAddTrackSheet: Bool = false
     @State private var searchTrackQuery: String = ""
     @State private var messageBanner: String?
@@ -184,31 +192,157 @@ public struct PlaylistsView: View {
         persistPlaylistChanges(newTracks: playlistTracks.shuffled())
     }
     
-    private func createPlaylist() {
-        guard let drive = activeDrive else { return }
-        let clean = WalkmanEngine.shared.sanitizeFilename(newPlaylistName)
-        guard !clean.isEmpty else { return }
+    private func createNewPlaylist() {
+        guard let drive = activeDrive else {
+            withAnimation {
+                messageBanner = "No active Walkman drive detected."
+            }
+            return
+        }
+        
+        // Commit any pending rename before creating a new playlist
+        if let currentEditId = editingPlaylistId, let currentEditingPl = playlists.first(where: { $0.id == currentEditId }) {
+            commitRename(for: currentEditingPl)
+        }
         
         let musicURL = URL(fileURLWithPath: drive.musicDir)
+        try? FileManager.default.createDirectory(at: musicURL, withIntermediateDirectories: true)
+        
+        // Find next unique default name: "New Playlist", "New Playlist 2", etc.
+        var candidate = "New Playlist"
+        var counter = 2
+        while playlists.contains(where: { $0.name.localizedCaseInsensitiveCompare(candidate) == .orderedSame }) {
+            candidate = "New Playlist \(counter)"
+            counter += 1
+        }
+        
         do {
-            _ = try WalkmanEngine.shared.writePlaylist(
+            let savedURL = try WalkmanEngine.shared.writePlaylist(
                 musicDir: musicURL,
-                name: clean,
+                name: candidate,
                 relativeTracks: []
             )
-            newPlaylistName = ""
-            isCreating = false
-            loadPlaylists()
-            if let created = playlists.first(where: { $0.name == clean }) {
-                selectedPlaylist = created
-                playlistTracks = []
+            
+            let newPl = Playlist(
+                name: candidate,
+                filename: savedURL.lastPathComponent,
+                trackCount: 0,
+                tracks: [],
+                fullPath: savedURL.path
+            )
+            
+            playlists.append(newPl)
+            playlists.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+            
+            selectedPlaylist = newPl
+            playlistTracks = []
+            
+            // Automatically enter inline rename mode on the row so the user only has to enter the playlist name!
+            startRenaming(newPl, location: .row)
+            
+            withAnimation {
+                messageBanner = "Added to Walkman: enter playlist name and press Return."
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+                if self.messageBanner?.contains("enter playlist name") == true {
+                    withAnimation { self.messageBanner = nil }
+                }
             }
         } catch {
-            messageBanner = "Failed to create: \(error.localizedDescription)"
+            withAnimation {
+                messageBanner = "Failed to create: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    private func startRenaming(_ playlist: Playlist, location: RenameLocation = .row) {
+        if let currentEditId = editingPlaylistId, currentEditId != playlist.id, let currentEditingPl = playlists.first(where: { $0.id == currentEditId }) {
+            commitRename(for: currentEditingPl)
+        }
+        
+        editingPlaylistId = playlist.id
+        editingPlaylistName = playlist.name
+        renameLocation = location
+        
+        DispatchQueue.main.async {
+            if location == .row {
+                isRowRenameFocused = true
+            } else {
+                isHeaderRenameFocused = true
+            }
+        }
+    }
+    
+    private func cancelRename() {
+        editingPlaylistId = nil
+        editingPlaylistName = ""
+        isRowRenameFocused = false
+        isHeaderRenameFocused = false
+    }
+    
+    private func commitRename(for playlist: Playlist) {
+        guard editingPlaylistId == playlist.id else { return }
+        
+        let trimmed = editingPlaylistName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let clean = WalkmanEngine.shared.sanitizeFilename(trimmed)
+        
+        // If empty or identical to current name, just exit rename mode
+        if clean.isEmpty || clean == playlist.name {
+            cancelRename()
+            return
+        }
+        
+        // Check if another playlist already has this name
+        if playlists.contains(where: { $0.id != playlist.id && $0.name.localizedCaseInsensitiveCompare(clean) == .orderedSame }) {
+            withAnimation {
+                messageBanner = "A playlist named '\(clean)' already exists."
+            }
+            cancelRename()
+            return
+        }
+        
+        let oldURL = URL(fileURLWithPath: playlist.fullPath)
+        do {
+            let newURL = try WalkmanEngine.shared.renamePlaylist(at: oldURL, newName: clean)
+            let updatedPl = Playlist(
+                name: clean,
+                filename: newURL.lastPathComponent,
+                trackCount: playlist.trackCount,
+                tracks: playlist.tracks,
+                fullPath: newURL.path
+            )
+            
+            if let idx = playlists.firstIndex(where: { $0.id == playlist.id }) {
+                playlists[idx] = updatedPl
+                playlists.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+            }
+            
+            if selectedPlaylist?.id == playlist.id {
+                selectedPlaylist = updatedPl
+            }
+            
+            cancelRename()
+            
+            withAnimation {
+                messageBanner = "Renamed playlist to '\(clean)' on Walkman"
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                if self.messageBanner?.hasPrefix("Renamed playlist") == true {
+                    withAnimation { self.messageBanner = nil }
+                }
+            }
+        } catch {
+            cancelRename()
+            withAnimation {
+                messageBanner = "Rename error: \(error.localizedDescription)"
+            }
         }
     }
     
     private func deletePlaylist(_ playlist: Playlist) {
+        if editingPlaylistId == playlist.id {
+            cancelRename()
+        }
         try? FileManager.default.removeItem(atPath: playlist.fullPath)
         let dotPath = (playlist.fullPath as NSString).deletingLastPathComponent + "/._" + (playlist.fullPath as NSString).lastPathComponent
         try? FileManager.default.removeItem(atPath: dotPath)
@@ -256,7 +390,7 @@ public struct PlaylistsView: View {
                         .clipShape(Capsule())
                 }
                 
-                Button(action: { isCreating = true }) {
+                Button(action: createNewPlaylist) {
                     HStack(spacing: 6) {
                         Image(systemName: "plus")
                         Text("New Playlist")
@@ -269,6 +403,9 @@ public struct PlaylistsView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
+                .disabled(activeDrive == nil)
+                .opacity(activeDrive == nil ? 0.5 : 1.0)
+                .help(activeDrive == nil ? "Connect a Walkman to create playlists" : "Create a new playlist on the Walkman")
             }
             .padding(.horizontal, 4)
             
@@ -284,30 +421,8 @@ public struct PlaylistsView: View {
                     }
                     .padding(.horizontal, 8)
                     
-                    if isCreating {
-                        HStack(spacing: 6) {
-                            TextField("Playlist Name...", text: $newPlaylistName)
-                                .textFieldStyle(.plain)
-                                .font(.system(size: 12.5))
-                                .padding(6)
-                                .background(WalkmanTheme.surface)
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                                .onSubmit { createPlaylist() }
-                            
-                            Button("Save") { createPlaylist() }
-                                .font(WalkmanFont.calloutBold)
-                                .foregroundStyle(WalkmanTheme.silverLight)
-                            
-                            Button("Cancel") { isCreating = false }
-                                .font(WalkmanFont.callout)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(8)
-                        .liquidGlass(cornerRadius: 8)
-                    }
-                    
                     if playlists.isEmpty {
-                        VStack(spacing: 8) {
+                        VStack(spacing: 10) {
                             Spacer()
                             Image(systemName: "music.note.list")
                                 .font(.system(size: 28))
@@ -318,6 +433,23 @@ public struct PlaylistsView: View {
                             Text("Create one to organize your tracks")
                                 .font(WalkmanFont.subheadline)
                                 .foregroundStyle(.tertiary)
+                            
+                            Button(action: createNewPlaylist) {
+                                HStack(spacing: 5) {
+                                    Image(systemName: "plus")
+                                    Text("New Playlist")
+                                }
+                                .font(WalkmanFont.calloutBold)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(WalkmanTheme.silverGradient)
+                                .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(activeDrive == nil)
+                            .opacity(activeDrive == nil ? 0.5 : 1.0)
+                            
                             Spacer()
                         }
                         .frame(maxWidth: .infinity)
@@ -326,45 +458,125 @@ public struct PlaylistsView: View {
                             LazyVStack(spacing: 4) {
                                 ForEach(playlists) { pl in
                                     let isSel = selectedPlaylist?.id == pl.id
-                                    HStack(spacing: 10) {
-                                        Image(systemName: "list.bullet")
-                                            .font(.system(size: 12))
-                                            .foregroundStyle(isSel ? WalkmanTheme.silverLight : .secondary)
-                                        
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(pl.name)
-                                                .font(isSel ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
-                                                .foregroundStyle(isSel ? .white : .primary)
+                                    let isEditingRow = (editingPlaylistId == pl.id && renameLocation == .row)
+                                    
+                                    if isEditingRow {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "list.bullet")
+                                                .font(.system(size: 12))
+                                                .foregroundStyle(WalkmanTheme.silverLight)
                                             
-                                            Text("\(pl.trackCount) tracks")
-                                                .font(WalkmanFont.subheadline)
-                                                .foregroundStyle(.secondary)
+                                            TextField("Playlist Name", text: $editingPlaylistName)
+                                                .textFieldStyle(.plain)
+                                                .font(WalkmanFont.bodyMedium)
+                                                .foregroundStyle(.white)
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 4)
+                                                .background(WalkmanTheme.surface)
+                                                .clipShape(RoundedRectangle(cornerRadius: 5))
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 5)
+                                                        .stroke(WalkmanTheme.silverLight.opacity(0.8), lineWidth: 1)
+                                                )
+                                                .focused($isRowRenameFocused)
+                                                .onSubmit {
+                                                    commitRename(for: pl)
+                                                }
+                                                .onExitCommand {
+                                                    cancelRename()
+                                                }
+                                            
+                                            Button(action: { commitRename(for: pl) }) {
+                                                Image(systemName: "checkmark")
+                                                    .font(.system(size: 10, weight: .bold))
+                                                    .foregroundStyle(.green)
+                                            }
+                                            .buttonStyle(.plain)
+                                            .help("Save Name (Return)")
+                                            
+                                            Button(action: cancelRename) {
+                                                Image(systemName: "xmark")
+                                                    .font(.system(size: 9, weight: .bold))
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                            .buttonStyle(.plain)
+                                            .help("Cancel (Esc)")
                                         }
-                                        
-                                        Spacer()
-                                        
-                                        Button(action: { deletePlaylist(pl) }) {
-                                            Image(systemName: "trash")
-                                                .font(.system(size: 11))
-                                                .foregroundStyle(.tertiary)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 6)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                .fill(WalkmanTheme.cardHover)
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                .stroke(WalkmanTheme.silverLight.opacity(0.6), lineWidth: 1)
+                                        )
+                                    } else {
+                                        HStack(spacing: 10) {
+                                            Image(systemName: "list.bullet")
+                                                .font(.system(size: 12))
+                                                .foregroundStyle(isSel ? WalkmanTheme.silverLight : .secondary)
+                                            
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(pl.name)
+                                                    .font(isSel ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
+                                                    .foregroundStyle(isSel ? .white : .primary)
+                                                    .lineLimit(1)
+                                                
+                                                Text("\(pl.trackCount) tracks")
+                                                    .font(WalkmanFont.subheadline)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                            
+                                            Spacer()
+                                            
+                                            HStack(spacing: 6) {
+                                                Button(action: { startRenaming(pl, location: .row) }) {
+                                                    Image(systemName: "pencil")
+                                                        .font(.system(size: 11))
+                                                        .foregroundStyle(WalkmanTheme.silverLight)
+                                                }
+                                                .buttonStyle(.plain)
+                                                .help("Rename Playlist")
+                                                
+                                                Button(action: { deletePlaylist(pl) }) {
+                                                    Image(systemName: "trash")
+                                                        .font(.system(size: 11))
+                                                        .foregroundStyle(.tertiary)
+                                                }
+                                                .buttonStyle(.plain)
+                                                .help("Delete Playlist")
+                                            }
+                                            .opacity(isSel ? 1 : 0)
                                         }
-                                        .buttonStyle(.plain)
-                                        .opacity(isSel ? 1 : 0)
-                                    }
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 8)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .fill(isSel ? WalkmanTheme.cardHover : Color.clear)
-                                    )
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .stroke(isSel ? WalkmanTheme.silver.opacity(0.4) : Color.clear, lineWidth: 1)
-                                    )
-                                    .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        selectedPlaylist = pl
-                                        playlistTracks = pl.tracks
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 8)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                .fill(isSel ? WalkmanTheme.cardHover : Color.clear)
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                .stroke(isSel ? WalkmanTheme.silver.opacity(0.4) : Color.clear, lineWidth: 1)
+                                        )
+                                        .contentShape(Rectangle())
+                                        .onTapGesture {
+                                            if let editId = editingPlaylistId, let curPl = playlists.first(where: { $0.id == editId }) {
+                                                commitRename(for: curPl)
+                                            }
+                                            selectedPlaylist = pl
+                                            playlistTracks = pl.tracks
+                                        }
+                                        .contextMenu {
+                                            Button(action: { startRenaming(pl, location: .row) }) {
+                                                Label("Rename Playlist", systemImage: "pencil")
+                                            }
+                                            Divider()
+                                            Button(role: .destructive, action: { deletePlaylist(pl) }) {
+                                                Label("Delete Playlist", systemImage: "trash")
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -379,14 +591,69 @@ public struct PlaylistsView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     if let pl = selectedPlaylist {
                         HStack(alignment: .center, spacing: 10) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(pl.name)
-                                    .font(WalkmanFont.title3)
-                                    .foregroundStyle(.white)
-                                
-                                Text("\(playlistTracks.count) \(playlistTracks.count == 1 ? "track" : "tracks") in sequence")
-                                    .font(WalkmanFont.callout)
-                                    .foregroundStyle(.secondary)
+                            if editingPlaylistId == pl.id && renameLocation == .header {
+                                HStack(spacing: 8) {
+                                    TextField("Playlist Name", text: $editingPlaylistName)
+                                        .textFieldStyle(.plain)
+                                        .font(WalkmanFont.title3)
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(WalkmanTheme.surface)
+                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 6)
+                                                .stroke(WalkmanTheme.silverLight.opacity(0.8), lineWidth: 1)
+                                        )
+                                        .focused($isHeaderRenameFocused)
+                                        .onSubmit { commitRename(for: pl) }
+                                        .onExitCommand { cancelRename() }
+                                        .frame(maxWidth: 280)
+                                    
+                                    Button(action: { commitRename(for: pl) }) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "checkmark")
+                                            Text("Save")
+                                        }
+                                        .font(WalkmanFont.calloutBold)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 5)
+                                        .background(WalkmanTheme.silverGradient)
+                                        .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                    }
+                                    .buttonStyle(.plain)
+                                    
+                                    Button(action: cancelRename) {
+                                        Text("Cancel")
+                                            .font(WalkmanFont.callout)
+                                            .foregroundStyle(.secondary)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 5)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            } else {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    HStack(spacing: 8) {
+                                        Text(pl.name)
+                                            .font(WalkmanFont.title3)
+                                            .foregroundStyle(.white)
+                                            .lineLimit(1)
+                                        
+                                        Button(action: { startRenaming(pl, location: .header) }) {
+                                            Image(systemName: "pencil")
+                                                .font(.system(size: 13))
+                                                .foregroundStyle(WalkmanTheme.silverLight)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help("Rename Playlist on Walkman")
+                                    }
+                                    
+                                    Text("\(playlistTracks.count) \(playlistTracks.count == 1 ? "track" : "tracks") in sequence")
+                                        .font(WalkmanFont.callout)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                             
                             Spacer()
