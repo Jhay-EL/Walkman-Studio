@@ -14,7 +14,14 @@ public struct ArtistsView: View {
         self.onSelectTrack = onSelectTrack
     }
     
+    @State private var cachedArtists: [ArtistItem] = []
+    
     private var artists: [ArtistItem] {
+        if !cachedArtists.isEmpty { return cachedArtists }
+        return Self.buildArtists(from: tracks)
+    }
+    
+    nonisolated private static func buildArtists(from tracks: [Track]) -> [ArtistItem] {
         var grouped: [String: [Track]] = [:]
         for track in tracks {
             let primary = track.primaryArtist.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -82,23 +89,23 @@ public struct ArtistsView: View {
                 // Search Field
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                     
                     TextField("Filter artists...", text: $searchQuery)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 11))
+                        .font(.system(size: 12.5))
                     
                     if !searchQuery.isEmpty {
                         Button(action: { searchQuery = "" }) {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 11))
+                                .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
                         }
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, 8)
+                .padding(.horizontal, 9)
                 .padding(.vertical, 6)
                 .background(Color.white.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
@@ -122,18 +129,18 @@ public struct ArtistsView: View {
                                             .frame(width: 32, height: 32)
                                         
                                         Text(String(art.name.prefix(1)).uppercased())
-                                            .font(.system(size: 12, weight: .bold))
+                                            .font(.system(size: 13, weight: .bold))
                                             .foregroundStyle(isSelected ? Color(red: 20/255, green: 20/255, blue: 24/255) : .white)
                                     }
                                     
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(art.name)
-                                            .font(.system(size: 12, weight: isSelected ? .bold : .medium))
+                                            .font(isSelected ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
                                             .foregroundStyle(isSelected ? .white : .primary)
                                             .lineLimit(1)
                                         
                                         Text("\(art.albumCount) albums • \(art.trackCount) tracks")
-                                            .font(.system(size: 9))
+                                            .font(WalkmanFont.subheadline)
                                             .foregroundStyle(.secondary)
                                     }
                                     
@@ -153,7 +160,7 @@ public struct ArtistsView: View {
                     .padding(8)
                 }
             }
-            .frame(width: 250)
+            .frame(minWidth: 180, idealWidth: 215, maxWidth: 245)
             
             Divider()
                 .overlay(Color.white.opacity(0.08))
@@ -180,7 +187,7 @@ public struct ArtistsView: View {
                                     .foregroundStyle(.white)
                                 
                                 Text("\(artist.albumCount) Albums • \(artist.trackCount) Tracks on Walkman")
-                                    .font(.system(size: 11))
+                                    .font(WalkmanFont.callout)
                                     .foregroundStyle(.secondary)
                             }
                             
@@ -196,7 +203,7 @@ public struct ArtistsView: View {
                                     Image(systemName: "play.fill")
                                         .font(.system(size: 11))
                                     Text("Play All")
-                                        .font(.system(size: 11, weight: .bold))
+                                        .font(WalkmanFont.calloutBold)
                                 }
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 7)
@@ -219,20 +226,20 @@ public struct ArtistsView: View {
                                             .clipShape(RoundedRectangle(cornerRadius: 6))
                                     }
                                     
-                                    VStack(alignment: .leading, spacing: 2) {
+                                    VStack(alignment: .leading, spacing: 3) {
                                         HStack(spacing: 6) {
                                             Text(alb.name)
-                                                .font(.system(size: 14, weight: .bold))
+                                                .font(WalkmanFont.headline)
                                                 .foregroundStyle(.white)
                                             
                                             if alb.isHiRes {
                                                 Text("Hi-Res")
-                                                    .font(.system(size: 8, weight: .black, design: .monospaced))
-                                                    .padding(.horizontal, 4)
-                                                    .padding(.vertical, 1)
-                                                    .background(WalkmanTheme.silverGradient)
+                                                    .font(WalkmanFont.badge)
+                                                    .padding(.horizontal, 5)
+                                                    .padding(.vertical, 1.5)
+                                                    .background(WalkmanTheme.hiResGoldGradient)
                                                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                                                    .clipShape(RoundedRectangle(cornerRadius: 2))
+                                                    .clipShape(RoundedRectangle(cornerRadius: 2.5, style: .continuous))
                                             }
                                         }
                                         
@@ -243,7 +250,7 @@ public struct ArtistsView: View {
                                             }
                                             Text("\(alb.trackCount) tracks")
                                         }
-                                        .font(.system(size: 10))
+                                        .font(WalkmanFont.callout)
                                         .foregroundStyle(.secondary)
                                     }
                                     
@@ -264,30 +271,30 @@ public struct ArtistsView: View {
                                                 }
                                             }) {
                                                 Image(systemName: isPlayingThis ? "pause.fill" : "play.fill")
-                                                    .font(.system(size: 9))
+                                                    .font(.system(size: 10))
                                                     .foregroundStyle(WalkmanTheme.silverLight)
                                                     .frame(width: 16)
                                             }
                                             .buttonStyle(.plain)
                                             
                                             Text(track.trackNum.isEmpty ? "\(index + 1)" : track.trackNum)
-                                                .font(.system(size: 10, design: .monospaced))
+                                                .font(WalkmanFont.mono)
                                                 .foregroundStyle(.secondary)
-                                                .frame(width: 22, alignment: .trailing)
+                                                .frame(width: 24, alignment: .trailing)
                                             
                                             VStack(alignment: .leading, spacing: 2) {
                                                 Text(track.title)
-                                                    .font(.system(size: 11, weight: isPlayingThis ? .bold : .medium))
+                                                    .font(isPlayingThis ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
                                                     .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : .white)
                                                     .lineLimit(1)
                                                 
                                                 if let feat = track.featuredDisplayString(primaryArtist: artist.name) {
                                                     HStack(spacing: 4) {
                                                         Text("feat.")
-                                                            .font(.system(size: 8.5, weight: .bold, design: .monospaced))
+                                                            .font(WalkmanFont.badge)
                                                             .foregroundStyle(WalkmanTheme.silverLight)
                                                         Text(feat)
-                                                            .font(.system(size: 9.5))
+                                                            .font(WalkmanFont.subheadline)
                                                             .foregroundStyle(.secondary)
                                                             .lineLimit(1)
                                                     }
@@ -296,19 +303,29 @@ public struct ArtistsView: View {
                                             
                                             Spacer()
                                             
+                                            if track.bitsPerSample > 16 || track.sampleRate > 48000 {
+                                                Text("Hi-Res")
+                                                    .font(WalkmanFont.badge)
+                                                    .padding(.horizontal, 4.5)
+                                                    .padding(.vertical, 1.5)
+                                                    .background(WalkmanTheme.hiResGold.opacity(0.18))
+                                                    .foregroundStyle(WalkmanTheme.hiResGold)
+                                                    .clipShape(RoundedRectangle(cornerRadius: 2.5))
+                                            }
+                                            
                                             Text(track.format)
-                                                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                                .font(WalkmanFont.badge)
                                                 .foregroundStyle(.tertiary)
                                             
                                             let mins = Int(track.durationSeconds) / 60
                                             let secs = Int(track.durationSeconds) % 60
                                             Text(String(format: "%d:%02d", mins, secs))
-                                                .font(.system(size: 10, design: .monospaced))
+                                                .font(WalkmanFont.mono)
                                                 .foregroundStyle(.secondary)
-                                                .frame(width: 38, alignment: .trailing)
+                                                .frame(width: 44, alignment: .trailing)
                                         }
                                         .padding(.horizontal, 10)
-                                        .padding(.vertical, 6)
+                                        .padding(.vertical, 7)
                                         .background(
                                             RoundedRectangle(cornerRadius: 6)
                                                 .fill(isPlayingThis ? WalkmanTheme.cardHover : Color.clear)
@@ -345,6 +362,14 @@ public struct ArtistsView: View {
                     Spacer()
                 }
                 .frame(maxWidth: .infinity)
+            }
+        }
+        .task(id: tracks.count) {
+            let built = await Task.detached(priority: .userInitiated) {
+                Self.buildArtists(from: tracks)
+            }.value
+            await MainActor.run {
+                self.cachedArtists = built
             }
         }
     }
