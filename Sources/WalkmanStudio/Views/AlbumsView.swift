@@ -3,25 +3,32 @@ import AppKit
 
 public struct AlbumsView: View {
     let tracks: [Track]
+    let precomputedAlbums: [AlbumItem]?
     let onSelectTrack: (Track) -> Void
     
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var selectedAlbum: AlbumItem? = nil
     @State private var searchQuery: String = ""
     
-    public init(tracks: [Track], onSelectTrack: @escaping (Track) -> Void) {
+    public init(
+        tracks: [Track],
+        precomputedAlbums: [AlbumItem]? = nil,
+        onSelectTrack: @escaping (Track) -> Void
+    ) {
         self.tracks = tracks
+        self.precomputedAlbums = precomputedAlbums
         self.onSelectTrack = onSelectTrack
     }
     
     @State private var cachedAlbums: [AlbumItem] = []
     
     private var albums: [AlbumItem] {
+        if let pre = precomputedAlbums, !pre.isEmpty { return pre }
         if !cachedAlbums.isEmpty { return cachedAlbums }
         return Self.buildAlbums(from: tracks)
     }
     
-    nonisolated private static func buildAlbums(from tracks: [Track]) -> [AlbumItem] {
+    nonisolated public static func buildAlbums(from tracks: [Track]) -> [AlbumItem] {
         var grouped: [String: [Track]] = [:]
         var displayNames: [String: String] = [:]
         

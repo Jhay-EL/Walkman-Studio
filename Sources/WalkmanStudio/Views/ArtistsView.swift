@@ -3,25 +3,32 @@ import AppKit
 
 public struct ArtistsView: View {
     let tracks: [Track]
+    let precomputedArtists: [ArtistItem]?
     let onSelectTrack: (Track) -> Void
     
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var selectedArtistName: String? = nil
     @State private var searchQuery: String = ""
     
-    public init(tracks: [Track], onSelectTrack: @escaping (Track) -> Void) {
+    public init(
+        tracks: [Track],
+        precomputedArtists: [ArtistItem]? = nil,
+        onSelectTrack: @escaping (Track) -> Void
+    ) {
         self.tracks = tracks
+        self.precomputedArtists = precomputedArtists
         self.onSelectTrack = onSelectTrack
     }
     
     @State private var cachedArtists: [ArtistItem] = []
     
     private var artists: [ArtistItem] {
+        if let pre = precomputedArtists, !pre.isEmpty { return pre }
         if !cachedArtists.isEmpty { return cachedArtists }
         return Self.buildArtists(from: tracks)
     }
     
-    nonisolated private static func buildArtists(from tracks: [Track]) -> [ArtistItem] {
+    nonisolated public static func buildArtists(from tracks: [Track]) -> [ArtistItem] {
         var grouped: [String: [Track]] = [:]
         for track in tracks {
             let primary = track.primaryArtist.trimmingCharacters(in: .whitespacesAndNewlines)
