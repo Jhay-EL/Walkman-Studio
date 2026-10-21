@@ -212,7 +212,13 @@ public final class LibraryScanner: @unchecked Sendable {
                     }
 
                     for item in pendingEnrichment {
-                        let parsed = self.parseAudioFile(path: item.path, size: item.size, ext: item.ext, relPath: item.relPath)
+                        var parsed = self.parseAudioFile(path: item.path, size: item.size, ext: item.ext, relPath: item.relPath)
+                        
+                        // Preserve original dateAdded if track already exists in cache (tag/artwork/lyrics updates must never reset Date Added)
+                        if let existing = cachedTracks[item.path], existing.dateAdded.timeIntervalSince1970 > 86400 {
+                            parsed.dateAdded = existing.dateAdded
+                        }
+                        
                         newRows.append(parsed)
                         artistsSet.insert(parsed.artist)
                         albumsSet.insert("\(parsed.artist) - \(parsed.album)")
@@ -275,7 +281,19 @@ public final class LibraryScanner: @unchecked Sendable {
         if stat(path, &s) == 0 {
             let btime = Double(s.st_birthtimespec.tv_sec)
             let mtime = Double(s.st_mtimespec.tv_sec)
-            let chosen = btime > 0 ? btime : mtime
+            
+            // Choose the earliest valid date (min of birth and modify) so editing tags/metadata
+            // or re-copying doesn't bump the date to today.
+            let chosen: Double
+            if btime > 86400 && mtime > 86400 {
+                chosen = min(btime, mtime)
+            } else if btime > 86400 {
+                chosen = btime
+            } else if mtime > 86400 {
+                chosen = mtime
+            } else {
+                chosen = 0
+            }
             if chosen > 0 {
                 dateAdded = Date(timeIntervalSince1970: chosen)
             }
@@ -377,7 +395,8 @@ public final class LibraryScanner: @unchecked Sendable {
     public func invalidate(fullPath: String) {
         guard let db = getDB() else { return }
         defer { sqlite3_close(db) }
-        let sql = "DELETE FROM tracks_cache WHERE full_path = ?;"
+        // Set mtime = 0 to trigger metadata refresh on next scan while preserving original date_added
+        let sql = "UPDATE tracks_cache SET mtime = 0 WHERE full_path = ?;"
         var stmt: OpaquePointer?
         if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
             sqlite3_bind_text(stmt, 1, (fullPath as NSString).utf8String, -1, nil)

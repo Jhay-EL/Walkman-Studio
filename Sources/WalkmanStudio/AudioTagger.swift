@@ -68,6 +68,11 @@ public final class AudioTagger: @unchecked Sendable {
         genre: String?,
         coverArtData: Data?
     ) throws {
+        // Snapshot existing file timestamps to preserve original "Date Added"
+        let origAttr = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
+        let origCreation = origAttr?[.creationDate] as? Date
+        let origMod = origAttr?[.modificationDate] as? Date
+
         let fileData = try Data(contentsOf: fileURL)
         guard fileData.count >= 4 && fileData.starts(with: [0x66, 0x4C, 0x61, 0x43]) else {
             throw NSError(domain: "WalkmanStudio", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not a valid FLAC audio file"])
@@ -274,6 +279,9 @@ public final class AudioTagger: @unchecked Sendable {
         } catch {
             try output.write(to: fileURL, options: [])
         }
+
+        // Restore original timestamps so tag/artwork edits never reset Date Added
+        AudioTagger.restoreTimestamps(fileURL: fileURL, creationDate: origCreation, modificationDate: origMod)
     }
 
     // -----------------------------------------------------------------------
@@ -289,6 +297,11 @@ public final class AudioTagger: @unchecked Sendable {
         genre: String?,
         coverArtData: Data?
     ) throws {
+        // Snapshot existing file timestamps to preserve original "Date Added"
+        let origAttr = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
+        let origCreation = origAttr?[.creationDate] as? Date
+        let origMod = origAttr?[.modificationDate] as? Date
+
         let fileData = try Data(contentsOf: fileURL)
 
         // 1. Locate audio stream offset (skip existing ID3v2 tag if present)
@@ -348,6 +361,9 @@ public final class AudioTagger: @unchecked Sendable {
         } catch {
             try output.write(to: fileURL, options: [])
         }
+
+        // Restore original timestamps so tag/artwork edits never reset Date Added
+        AudioTagger.restoreTimestamps(fileURL: fileURL, creationDate: origCreation, modificationDate: origMod)
     }
 
     private func makeID3v23TextFrame(id: String, text: String) -> Data {
@@ -400,6 +416,23 @@ public final class AudioTagger: @unchecked Sendable {
             UInt8((size >> 7) & 0x7F),
             UInt8(size & 0x7F)
         ]
+    }
+
+    public static func restoreTimestamps(fileURL: URL, creationDate: Date?, modificationDate: Date?) {
+        if let cd = creationDate {
+            var attr: [FileAttributeKey: Any] = [.creationDate: cd]
+            if let md = modificationDate {
+                attr[.modificationDate] = md
+            }
+            try? FileManager.default.setAttributes(attr, ofItemAtPath: fileURL.path)
+        }
+        if let md = modificationDate {
+            var times = [
+                timeval(tv_sec: Int(md.timeIntervalSince1970), tv_usec: 0),
+                timeval(tv_sec: Int(md.timeIntervalSince1970), tv_usec: 0)
+            ]
+            utimes((fileURL.path as NSString).fileSystemRepresentation, &times)
+        }
     }
 
     public func invalidateCaches(fileURL: URL) {

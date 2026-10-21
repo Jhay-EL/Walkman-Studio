@@ -25,6 +25,8 @@ public struct MetadataStudioView: View {
     @State private var isInitialLoad: Bool = true
     @State private var currentTrackId: String? = nil
     @State private var autoSaveTask: Task<Void, Never>? = nil
+    @State private var baselineYear: String = ""
+    @State private var baselineGenre: String = ""
     
     // Lyrics State
     @State private var lyrics: String? = nil
@@ -59,6 +61,8 @@ public struct MetadataStudioView: View {
             trackNumber = tr.trackNum
             year = tr.year
             genre = tr.genre
+            baselineYear = tr.year
+            baselineGenre = tr.genre
             isEditingLyrics = false
             isFetchingLyrics = false
             lyricsErrorMessage = nil
@@ -83,11 +87,13 @@ public struct MetadataStudioView: View {
                     self.lyricsDraft = lyr ?? ""
                     
                     if let m = meta {
-                        if (self.year.isEmpty || tr.year.isEmpty) && !m.year.isEmpty {
+                        if (self.year.isEmpty || self.baselineYear.isEmpty) && !m.year.isEmpty {
                             self.year = m.year
+                            self.baselineYear = m.year
                         }
-                        if (self.genre.isEmpty || tr.genre.isEmpty) && !m.genre.isEmpty {
+                        if (self.genre.isEmpty || self.baselineGenre.isEmpty) && !m.genre.isEmpty {
                             self.genre = m.genre
+                            self.baselineGenre = m.genre
                         }
                         if !m.year.isEmpty || !m.genre.isEmpty {
                             LibraryScanner.shared.updateCachedMetadata(fullPath: tr.fullPath, year: m.year, genre: m.genre)
@@ -95,7 +101,7 @@ public struct MetadataStudioView: View {
                     }
                     
                     // Enable auto-save after initial population completes
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                         if self.track?.id == tr.id {
                             self.isInitialLoad = false
                         }
@@ -297,8 +303,8 @@ public struct MetadataStudioView: View {
                          (artist != tr.artist) ||
                          (album != tr.album) ||
                          (trackNumber != tr.trackNum) ||
-                         (year != tr.year) ||
-                         (genre != tr.genre)
+                         (year != baselineYear) ||
+                         (genre != baselineGenre)
         guard hasChanges else { return }
         
         autoSaveTask?.cancel()
@@ -319,8 +325,8 @@ public struct MetadataStudioView: View {
                          (artist != tr.artist) ||
                          (album != tr.album) ||
                          (trackNumber != tr.trackNum) ||
-                         (year != tr.year) ||
-                         (genre != tr.genre)
+                         (year != baselineYear) ||
+                         (genre != baselineGenre)
         guard hasChanges else { return }
         
         autoSaveTask?.cancel()
