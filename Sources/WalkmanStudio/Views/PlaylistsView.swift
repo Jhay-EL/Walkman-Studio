@@ -1512,24 +1512,12 @@ private struct ModalArtistRow: View {
     
     var body: some View {
         HStack(spacing: 14) {
-            ZStack {
-                if isAllSelected {
-                    Circle()
-                        .fill(WalkmanTheme.silverGradient)
-                        .frame(width: 40, height: 40)
-                } else {
-                    Circle()
-                        .fill(WalkmanTheme.card)
-                        .frame(width: 40, height: 40)
-                        .overlay(
-                            Circle().stroke(Color.white.opacity(0.12), lineWidth: 1)
-                        )
-                }
-                
-                Text(String(artist.name.prefix(1)).uppercased())
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(isAllSelected ? Color(red: 20/255, green: 20/255, blue: 24/255) : .white)
-            }
+            ArtistAvatarView(
+                artistName: artist.name,
+                representativeTrack: artist.representativeTrack,
+                size: 40,
+                isSelected: isAllSelected
+            )
             
             VStack(alignment: .leading, spacing: 3) {
                 Text(artist.name)

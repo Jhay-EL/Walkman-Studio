@@ -304,6 +304,9 @@ public struct ArtistItem: Identifiable, Hashable, Sendable {
     public let trackCount: Int
     public let albums: [AlbumItem]
     public let tracks: [Track]
+    public var representativeTrack: Track? {
+        tracks.first(where: { $0.hasArtwork }) ?? tracks.first
+    }
 }
 
 public enum TransferStatus: Equatable, Sendable {

@@ -129,16 +129,13 @@ public struct ArtistsView: View {
                             
                             Button(action: { selectedArtistName = art.name }) {
                                 HStack(spacing: 10) {
-                                    // Circular Artist Badge
-                                    ZStack {
-                                        Circle()
-                                            .fill(isSelected ? WalkmanTheme.silver : Color.white.opacity(0.1))
-                                            .frame(width: 32, height: 32)
-                                        
-                                        Text(String(art.name.prefix(1)).uppercased())
-                                            .font(.system(size: 13, weight: .bold))
-                                            .foregroundStyle(isSelected ? Color(red: 20/255, green: 20/255, blue: 24/255) : .white)
-                                    }
+                                    // Circular Artist Photo Avatar
+                                    ArtistAvatarView(
+                                        artistName: art.name,
+                                        representativeTrack: art.representativeTrack,
+                                        size: 34,
+                                        isSelected: isSelected
+                                    )
                                     
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(art.name)
@@ -162,6 +159,20 @@ public struct ArtistsView: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .contextMenu {
+                                Button("Play All (\(art.trackCount) tracks)") {
+                                    if let first = art.tracks.first {
+                                        player.play(track: first, in: art.tracks)
+                                    }
+                                }
+                                Divider()
+                                Button("Refresh Artist Photo") {
+                                    ArtistArtCache.shared.refresh(artistName: art.name, representativeTrack: art.representativeTrack)
+                                }
+                                Button("Choose Custom Photo...") {
+                                    promptCustomPhoto(for: art.name)
+                                }
+                            }
                         }
                     }
                     .padding(8)
@@ -178,14 +189,26 @@ public struct ArtistsView: View {
                     VStack(alignment: .leading, spacing: 24) {
                         // Artist Hero Banner
                         HStack(spacing: 16) {
-                            ZStack {
-                                Circle()
-                                    .fill(WalkmanTheme.silverGradient)
-                                    .frame(width: 60, height: 60)
-                                
-                                Text(String(artist.name.prefix(1)).uppercased())
-                                    .font(.system(size: 26, weight: .black))
-                                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                            Button(action: {
+                                promptCustomPhoto(for: artist.name)
+                            }) {
+                                ArtistAvatarView(
+                                    artistName: artist.name,
+                                    representativeTrack: artist.representativeTrack,
+                                    size: 64,
+                                    isSelected: false
+                                )
+                                .shadow(color: Color.black.opacity(0.35), radius: 6, x: 0, y: 3)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Click to change artist photo, or right-click to refresh")
+                            .contextMenu {
+                                Button("Refresh Artist Photo") {
+                                    ArtistArtCache.shared.refresh(artistName: artist.name, representativeTrack: artist.representativeTrack)
+                                }
+                                Button("Choose Custom Photo...") {
+                                    promptCustomPhoto(for: artist.name)
+                                }
                             }
                             
                             VStack(alignment: .leading, spacing: 3) {
@@ -378,6 +401,19 @@ public struct ArtistsView: View {
             await MainActor.run {
                 self.cachedArtists = built
             }
+        }
+    }
+    
+    private func promptCustomPhoto(for artistName: String) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.image, .jpeg, .png]
+        panel.prompt = "Choose Photo"
+        panel.message = "Select an artist photo for \(artistName)"
+        if panel.runModal() == .OK, let url = panel.url, let img = NSImage(contentsOf: url) {
+            ArtistArtCache.shared.setCustomImage(img, for: artistName)
         }
     }
 }
