@@ -27,6 +27,24 @@ public struct DeviceOverviewView: View {
         return String(format: "%.1f GB", gb)
     }
     
+    private var libraryStats: (albums: Int, artists: Int, hiRes: Int) {
+        var albumSet = Set<String>()
+        var artistSet = Set<String>()
+        var hiRes = 0
+        for track in tracks {
+            let alb = track.album.trimmingCharacters(in: .whitespacesAndNewlines)
+            let art = track.primaryArtist.trimmingCharacters(in: .whitespacesAndNewlines)
+            albumSet.insert("\(art)|\(alb)")
+            if !art.isEmpty {
+                artistSet.insert(art)
+            }
+            if track.bitsPerSample > 16 || track.sampleRate > 48000 {
+                hiRes += 1
+            }
+        }
+        return (albumSet.count, artistSet.count, hiRes)
+    }
+    
     public var body: some View {
         ScrollView {
             VStack(spacing: 24) {
@@ -40,21 +58,22 @@ public struct DeviceOverviewView: View {
                     
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 8) {
-                            Text(deviceInfo?.displayName ?? "Sony Walkman NW-A55L")
-                                .font(.system(size: 20, weight: .bold))
+                            Text(deviceInfo?.displayName ?? "Sony Walkman")
+                                .font(WalkmanFont.title1)
                                 .foregroundStyle(.white)
                             
                             Text("Hi-Res Audio")
-                                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.white.opacity(0.1))
-                                .foregroundStyle(WalkmanTheme.silver)
+                                .font(WalkmanFont.badge)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 2.5)
+                                .background(WalkmanTheme.hiResGoldGradient)
+                                .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                                 .clipShape(Capsule())
+                                .shadow(color: WalkmanTheme.hiResGold.opacity(0.35), radius: 4, x: 0, y: 1)
                             
                             if let fw = deviceInfo?.firmwareVersion {
                                 Text("FW v\(fw)")
-                                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                    .font(WalkmanFont.badge)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
                                     .background(Color.white.opacity(0.08))
@@ -64,15 +83,17 @@ public struct DeviceOverviewView: View {
                         }
                         
                         Text("Connected via USB Mass Storage • Sony OS / Linux Architecture")
-                            .font(.system(size: 12))
+                            .font(WalkmanFont.callout)
                             .foregroundStyle(.secondary)
                         
                         HStack(spacing: 12) {
-                            Label("\(tracks.count.formatted()) Tracks Indexed", systemImage: "music.note")
-                            Label(internalDrive != nil ? "Internal Storage Ready" : "Internal Offline", systemImage: "internaldrive")
-                            Label(microsdDrive != nil ? "MicroSD Ready" : "No MicroSD", systemImage: "sdcard")
+                            Label("\(tracks.count.formatted()) Tracks", systemImage: "music.note")
+                            Label("\(libraryStats.albums.formatted()) Albums", systemImage: "square.stack")
+                            Label("\(libraryStats.artists.formatted()) Artists", systemImage: "music.mic")
+                            Label("\(libraryStats.hiRes.formatted()) Hi-Res", systemImage: "waveform.badge.magnifyingglass")
+                                .foregroundStyle(WalkmanTheme.hiResGoldLight)
                         }
-                        .font(.system(size: 11))
+                        .font(WalkmanFont.callout)
                         .foregroundStyle(.tertiary)
                         .padding(.top, 2)
                     }
@@ -85,8 +106,8 @@ public struct DeviceOverviewView: View {
                             Image(systemName: "eject.circle.fill")
                             Text("Clean Junk & Eject")
                         }
-                        .font(.system(size: 12, weight: .semibold))
-                        .padding(.horizontal, 14)
+                        .font(WalkmanFont.calloutBold)
+                        .padding(.horizontal, 15)
                         .padding(.vertical, 8)
                         .background(WalkmanTheme.silverGradient)
                         .foregroundStyle(Color(red: 18 / 255, green: 18 / 255, blue: 22 / 255))
@@ -100,7 +121,7 @@ public struct DeviceOverviewView: View {
                 // Storage Capacities (Apple HIG Gauges)
                 VStack(alignment: .leading, spacing: 14) {
                     Text("STORAGE ALLOCATION")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(WalkmanFont.sectionHeader)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 4)
                     
@@ -160,14 +181,14 @@ public struct DeviceOverviewView: View {
                 // Quick Navigation Cards
                 VStack(alignment: .leading, spacing: 14) {
                     Text("QUICK WORKFLOWS")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(WalkmanFont.sectionHeader)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 4)
                     
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 14) {
+                    HStack(spacing: 14) {
                         ActionCard(
                             title: "Music Library",
-                            description: "Browse \(tracks.count.formatted()) tracks, search by artist or album, and inspect tags.",
+                            description: "Browse \(tracks.count.formatted()) tracks across \(libraryStats.albums.formatted()) albums and \(libraryStats.artists.formatted()) artists.",
                             icon: "music.note.list",
                             action: { onNavigateToTab(.library) }
                         )
@@ -192,28 +213,28 @@ public struct DeviceOverviewView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Text("SONY NON-ANDROID HARDWARE COMPLIANCE")
-                            .font(.system(size: 11, weight: .bold))
+                            .font(WalkmanFont.sectionHeader)
                             .foregroundStyle(.secondary)
                         Spacer()
                         
                         if let onAbout = onOpenAbout {
                             Button(action: onAbout) {
-                                HStack(spacing: 4) {
+                                HStack(spacing: 5) {
                                     Image(systemName: "info.circle")
-                                        .font(.system(size: 10))
+                                        .font(.system(size: 11))
                                     Text("About & Supported Devices")
-                                        .font(.system(size: 10, weight: .semibold))
+                                        .font(WalkmanFont.subheadlineMedium)
                                 }
                                 .foregroundStyle(WalkmanTheme.silverLight)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
                                 .background(Color.white.opacity(0.08))
                                 .clipShape(Capsule())
                             }
                             .buttonStyle(.plain)
                         } else {
                             Text("Active & Enforced")
-                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .font(WalkmanFont.monoSmall.weight(.bold))
                                 .foregroundStyle(WalkmanTheme.silverMuted)
                         }
                     }
@@ -275,17 +296,17 @@ private struct StorageDriveCard: View {
                 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
-                        .font(.system(size: 13, weight: .bold))
+                        .font(WalkmanFont.headline)
                         .foregroundStyle(.white)
                     Text(subtitle)
-                        .font(.system(size: 10, design: .monospaced))
+                        .font(WalkmanFont.monoSmall)
                         .foregroundStyle(.secondary)
                 }
                 
                 Spacer()
                 
                 Text(String(format: "%.1f%%", percentUsed))
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .font(WalkmanFont.monoSmall.weight(.bold))
                     .foregroundStyle(percentUsed > 95 ? Color.orange : WalkmanTheme.silver)
             }
             
@@ -306,13 +327,13 @@ private struct StorageDriveCard: View {
             // Numbers
             HStack {
                 Text("\(formatBytes(usedBytes)) Used")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(WalkmanFont.subheadlineMedium)
                     .foregroundStyle(.secondary)
                 
                 Spacer()
                 
                 Text("\(formatBytes(freeBytes)) Available")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(WalkmanFont.subheadlineMedium)
                     .foregroundStyle(.white)
             }
         }
@@ -337,24 +358,25 @@ private struct ActionCard: View {
                         .foregroundStyle(WalkmanTheme.silverMuted)
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.tertiary)
                 }
                 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
-                        .font(.system(size: 13, weight: .bold))
+                        .font(WalkmanFont.headline)
                         .foregroundStyle(.white)
+                        .lineLimit(1)
                     
                     Text(description)
-                        .font(.system(size: 11))
+                        .font(WalkmanFont.callout)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, minHeight: 36, alignment: .topLeading)
                 }
             }
             .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 114, alignment: .topLeading)
             .liquidGlass(cornerRadius: 12)
         }
         .buttonStyle(.plain)
@@ -369,15 +391,15 @@ private struct ComplianceRow: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: isEnforced ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                .font(.system(size: 13))
+                .font(.system(size: 14))
                 .foregroundStyle(isEnforced ? Color.green : Color.orange)
             
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(WalkmanFont.bodyMedium)
                     .foregroundStyle(.white)
                 Text(detail)
-                    .font(.system(size: 10))
+                    .font(WalkmanFont.subheadline)
                     .foregroundStyle(.secondary)
             }
             
