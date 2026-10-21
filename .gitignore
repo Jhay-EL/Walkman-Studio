@@ -1,27 +1,90 @@
-# Swift / SPM
+# ==============================================================================
+# Walkman Studio — Optimized .gitignore
+# Native macOS Swift, Xcode, Python, Node & Platform Artifacts
+# ==============================================================================
+
+# Swift & Swift Package Manager (SPM)
 .build/
-*.xcodeproj
-*.xcworkspace
-Walkman Studio.app/
 .swiftpm/
+DerivedData/
 
-# Python
+# Xcode & Apple Developer Artifacts
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+!*.xcworkspace/contents.xcworkspacedata
+*.xcworkspace/*
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad
+
+# App Bundles & Build Distributions
+*.app/
+*.dSYM/
+*.ipa
+*.pkg
+*.dmg
+dist/
+build/
+Walkman Studio.app/
+
+# Python Virtual Environments & Bytecode
 venv/
+.venv/
+env/
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.egg-info/
 .pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
 
-# Node
+# Node & Frontend Build Outputs
+node_modules/
 frontend/node_modules/
 frontend/dist/
+.npm/
+.eslintcache
 
-# macOS
+# macOS System & Metadata Files
 .DS_Store
+.DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
+.fseventsd
+.AppleDouble
+.AppleDesktop
+Network Trash Folder
+Temporary Items
 
-# Local Environment
+# Editor & IDE Workspaces
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-*
+.history/
+
+# Logs, Dumps & Temporary Files
+*.log
+crash.log
+tmp/
+scratch/
+.cache/
+
+# Local Environment & Agent Workspaces
+.env
+.env.local
+*.key
 .agents/
 GEMINI.md
 .gemini/
+.claude/
+.cursor/
+.windsurf/
+.antigravity/
