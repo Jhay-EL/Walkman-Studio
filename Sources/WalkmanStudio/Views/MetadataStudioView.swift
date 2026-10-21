@@ -21,6 +21,11 @@ public struct MetadataStudioView: View {
     @State private var showSuccess: Bool = false
     @State private var isTargeted: Bool = false
     
+    // Auto-Save State
+    @State private var isInitialLoad: Bool = true
+    @State private var currentTrackId: String? = nil
+    @State private var autoSaveTask: Task<Void, Never>? = nil
+    
     // Lyrics State
     @State private var lyrics: String? = nil
     @State private var isEditingLyrics: Bool = false
@@ -35,34 +40,54 @@ public struct MetadataStudioView: View {
     }
     
     private func loadTrack() {
-        guard let tr = track else { return }
-        title = tr.title
-        artist = tr.artist
-        album = tr.album
-        trackNumber = tr.trackNum
-        year = tr.year
-        genre = tr.genre
-        isEditingLyrics = false
-        isFetchingLyrics = false
-        lyricsErrorMessage = nil
-        lyricsStatusMessage = nil
+        guard let tr = track else {
+            currentTrackId = nil
+            return
+        }
         
-        let url = URL(fileURLWithPath: tr.fullPath)
+        let isDifferentTrack = (currentTrackId != tr.id)
+        currentTrackId = tr.id
         
-        // Fast asynchronous loading of artwork and lyrics to eliminate selection lag
-        DispatchQueue.global(qos: .userInitiated).async {
-            let art = AudioTagger.shared.extractCoverArt(fileURL: url)
-            let lyr = AudioTagger.shared.extractLyrics(fileURL: url)
-            let val = art != nil ? WalkmanEngine.shared.isBaselineRGBJPEG(data: art!) : nil
-            let img = art != nil ? NSImage(data: art!) : nil
+        if isDifferentTrack {
+            autoSaveTask?.cancel()
+            autoSaveTask = nil
+            isInitialLoad = true
             
-            DispatchQueue.main.async {
-                guard self.track?.id == tr.id else { return }
-                self.coverData = art
-                self.coverImage = img
-                self.validationStatus = val
-                self.lyrics = lyr
-                self.lyricsDraft = lyr ?? ""
+            title = tr.title
+            artist = tr.artist
+            album = tr.album
+            trackNumber = tr.trackNum
+            year = tr.year
+            genre = tr.genre
+            isEditingLyrics = false
+            isFetchingLyrics = false
+            lyricsErrorMessage = nil
+            lyricsStatusMessage = nil
+            
+            let url = URL(fileURLWithPath: tr.fullPath)
+            
+            // Fast asynchronous loading of artwork and lyrics to eliminate selection lag
+            DispatchQueue.global(qos: .userInitiated).async {
+                let art = AudioTagger.shared.extractCoverArt(fileURL: url)
+                let lyr = AudioTagger.shared.extractLyrics(fileURL: url)
+                let val = art != nil ? WalkmanEngine.shared.isBaselineRGBJPEG(data: art!) : nil
+                let img = art != nil ? NSImage(data: art!) : nil
+                
+                DispatchQueue.main.async {
+                    guard self.track?.id == tr.id else { return }
+                    self.coverData = art
+                    self.coverImage = img
+                    self.validationStatus = val
+                    self.lyrics = lyr
+                    self.lyricsDraft = lyr ?? ""
+                    
+                    // Enable auto-save after initial population completes
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        if self.track?.id == tr.id {
+                            self.isInitialLoad = false
+                        }
+                    }
+                }
             }
         }
     }
@@ -72,6 +97,8 @@ public struct MetadataStudioView: View {
             self.coverData = baseline
             self.coverImage = NSImage(data: baseline)
             self.validationStatus = WalkmanEngine.shared.isBaselineRGBJPEG(data: baseline)
+            // Auto-save artwork to Walkman immediately
+            self.saveMetadata()
         }
     }
     
@@ -204,18 +231,26 @@ public struct MetadataStudioView: View {
         guard let tr = track else { return }
         isSaving = true
         
+        let saveTitle = self.title
+        let saveArtist = self.artist
+        let saveAlbum = self.album
+        let saveTrackNumber = self.trackNumber
+        let saveYear = self.year
+        let saveGenre = self.genre
+        let saveCover = self.coverData
+        
         Task {
             let url = URL(fileURLWithPath: tr.fullPath)
             do {
                 try AudioTagger.shared.writeMetadata(
                     fileURL: url,
-                    title: title,
-                    artist: artist,
-                    album: album,
-                    trackNumber: trackNumber,
-                    year: year,
-                    genre: genre,
-                    coverArtData: coverData
+                    title: saveTitle,
+                    artist: saveArtist,
+                    album: saveAlbum,
+                    trackNumber: saveTrackNumber,
+                    year: saveYear,
+                    genre: saveGenre,
+                    coverArtData: saveCover
                 )
                 
                 // Invalidate all layers of artwork and scanner cache
@@ -229,7 +264,7 @@ public struct MetadataStudioView: View {
                     self.onSaved()
                 }
                 
-                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
                 await MainActor.run {
                     self.showSuccess = false
                 }
@@ -239,6 +274,45 @@ public struct MetadataStudioView: View {
                 }
             }
         }
+    }
+    
+    private func scheduleAutoSave() {
+        guard !isInitialLoad else { return }
+        guard let tr = track else { return }
+        
+        let hasChanges = (title != tr.title) ||
+                         (artist != tr.artist) ||
+                         (album != tr.album) ||
+                         (trackNumber != tr.trackNum) ||
+                         (year != tr.year) ||
+                         (genre != tr.genre)
+        guard hasChanges else { return }
+        
+        autoSaveTask?.cancel()
+        autoSaveTask = Task {
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            if !Task.isCancelled {
+                await MainActor.run {
+                    self.saveMetadata()
+                }
+            }
+        }
+    }
+    
+    private func saveMetadataImmediately() {
+        guard !isInitialLoad else { return }
+        guard let tr = track else { return }
+        let hasChanges = (title != tr.title) ||
+                         (artist != tr.artist) ||
+                         (album != tr.album) ||
+                         (trackNumber != tr.trackNum) ||
+                         (year != tr.year) ||
+                         (genre != tr.genre)
+        guard hasChanges else { return }
+        
+        autoSaveTask?.cancel()
+        autoSaveTask = nil
+        saveMetadata()
     }
     
     public var body: some View {
@@ -604,59 +678,44 @@ public struct MetadataStudioView: View {
                     
                     // Metadata Input Form
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("TAGS & METADATA")
-                            .font(WalkmanFont.sectionHeader)
-                            .foregroundStyle(.tertiary)
+                        HStack {
+                            Text("TAGS & METADATA")
+                                .font(WalkmanFont.sectionHeader)
+                                .foregroundStyle(.tertiary)
+                            
+                            Spacer()
+                            
+                            if isSaving {
+                                HStack(spacing: 4) {
+                                    ProgressView()
+                                        .scaleEffect(0.55)
+                                        .frame(width: 12, height: 12)
+                                    Text("Saving...")
+                                        .font(WalkmanFont.monoSmall)
+                                        .foregroundStyle(WalkmanTheme.silverLight)
+                                }
+                            } else if showSuccess {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 9, weight: .bold))
+                                    Text("Saved")
+                                        .font(WalkmanFont.monoSmall)
+                                }
+                                .foregroundStyle(Color.green)
+                            }
+                        }
                         
                         VStack(spacing: 8) {
-                            FormInput(label: "Title", text: $title)
-                            FormInput(label: "Artist", text: $artist)
-                            FormInput(label: "Album", text: $album)
+                            FormInput(label: "Title", text: $title, onCommit: saveMetadataImmediately)
+                            FormInput(label: "Artist", text: $artist, onCommit: saveMetadataImmediately)
+                            FormInput(label: "Album", text: $album, onCommit: saveMetadataImmediately)
                             HStack(spacing: 8) {
-                                FormInput(label: "Track #", text: $trackNumber)
-                                FormInput(label: "Year", text: $year)
+                                FormInput(label: "Track #", text: $trackNumber, onCommit: saveMetadataImmediately)
+                                FormInput(label: "Year", text: $year, onCommit: saveMetadataImmediately)
                             }
-                            FormInput(label: "Genre", text: $genre)
+                            FormInput(label: "Genre", text: $genre, onCommit: saveMetadataImmediately)
                         }
                     }
-                    
-                    // Save Button
-                    Button(action: saveMetadata) {
-                        HStack(spacing: 7) {
-                            if isSaving {
-                                ProgressView()
-                                    .scaleEffect(0.65)
-                                    .frame(width: 14, height: 14)
-                            } else if showSuccess {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 12, weight: .bold))
-                            } else {
-                                Image(systemName: "square.and.arrow.down")
-                                    .font(.system(size: 13, weight: .semibold))
-                            }
-                            Text(showSuccess ? "Saved (ID3v2.3 / Baseline Art)" : (isSaving ? "Saving..." : "Save Tags & Artwork"))
-                        }
-                        .font(WalkmanFont.calloutBold)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(
-                            Group {
-                                if showSuccess {
-                                    Color.green.opacity(0.85)
-                                } else if isSaving {
-                                    Color.white.opacity(0.12)
-                                } else {
-                                    WalkmanTheme.silverGradient
-                                }
-                            }
-                        )
-                        .foregroundStyle(
-                            showSuccess ? Color.white : (isSaving ? WalkmanTheme.silverLight : Color(red: 20/255, green: 20/255, blue: 24/255))
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    }
-                    .buttonStyle(WalkmanSideActionButtonStyle(isFullWidth: true, cornerRadius: 8))
-                    .disabled(isSaving)
                 } else {
                     VStack(spacing: 10) {
                         Spacer()
@@ -682,6 +741,12 @@ public struct MetadataStudioView: View {
         .ignoresSafeArea(.all, edges: .top)
         .onAppear { loadTrack() }
         .onChange(of: track) { loadTrack() }
+        .onChange(of: title) { scheduleAutoSave() }
+        .onChange(of: artist) { scheduleAutoSave() }
+        .onChange(of: album) { scheduleAutoSave() }
+        .onChange(of: trackNumber) { scheduleAutoSave() }
+        .onChange(of: year) { scheduleAutoSave() }
+        .onChange(of: genre) { scheduleAutoSave() }
     }
 }
 
@@ -705,6 +770,7 @@ private struct SpecRow: View {
 private struct FormInput: View {
     let label: String
     @Binding var text: String
+    var onCommit: (() -> Void)? = nil
     
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -719,6 +785,9 @@ private struct FormInput: View {
                 .padding(.vertical, 6)
                 .background(Color.white.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
+                .onSubmit {
+                    onCommit?()
+                }
         }
     }
 }
