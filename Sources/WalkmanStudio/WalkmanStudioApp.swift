@@ -28,9 +28,27 @@ public struct WindowConfigurator: NSViewRepresentable {
     
     private func configure(_ window: NSWindow) {
         window.titlebarAppearsTransparent = true
+        window.titlebarSeparatorStyle = .none
         window.isOpaque = true
         window.backgroundColor = NSColor(red: 16/255, green: 17/255, blue: 20/255, alpha: 1.0)
-        window.toolbar?.showsBaselineSeparator = false
+        
+        // Ensure the titlebar/toolbar container background and decoration views are transparent
+        if let contentView = window.contentView, let themeFrame = contentView.superview {
+            for sub in themeFrame.subviews {
+                if let titlebarContainer = NSClassFromString("NSTitlebarContainerView"), sub.isKind(of: titlebarContainer) {
+                    for child in sub.subviews {
+                        if let bgClass = NSClassFromString("NSTitlebarBackgroundView"), child.isKind(of: bgClass) {
+                            child.isHidden = true
+                            child.alphaValue = 0.0
+                        }
+                        if let decorClass = NSClassFromString("_NSTitlebarDecorationView"), child.isKind(of: decorClass) {
+                            child.isHidden = true
+                            child.alphaValue = 0.0
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
