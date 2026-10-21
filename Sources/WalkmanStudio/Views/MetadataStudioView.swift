@@ -25,12 +25,9 @@ public struct MetadataStudioView: View {
     @State private var lyricsDraft: String = ""
     @State private var lyricsStatusMessage: String? = nil
     
-    var onClose: (() -> Void)? = nil
-    
-    public init(track: Track?, onSaved: @escaping () -> Void, onClose: (() -> Void)? = nil) {
+    public init(track: Track?, onSaved: @escaping () -> Void) {
         self.track = track
         self.onSaved = onSaved
-        self.onClose = onClose
     }
     
     private func loadTrack() {
@@ -79,7 +76,7 @@ public struct MetadataStudioView: View {
             try AudioTagger.shared.saveLyrics(fileURL: url, lyrics: lyricsDraft)
             self.lyrics = lyricsDraft
             self.isEditingLyrics = false
-            self.lyricsStatusMessage = "Saved .lrc file (Walkman NW-A55 native)"
+            self.lyricsStatusMessage = "Saved .lrc file (Sony Walkman native)"
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                 self.lyricsStatusMessage = nil
             }
@@ -143,53 +140,31 @@ public struct MetadataStudioView: View {
     }
     
     public var body: some View {
-        VStack(spacing: 0) {
-            // Header Bar aligned to mid page navigation bar
-            HStack {
-                Spacer()
-                
-                if let onClose = onClose {
-                    Button(action: onClose) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 13))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Close Preview Pane (Cmd+I)")
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .frame(height: 36)
-            
-            Divider()
-                .overlay(Color.white.opacity(0.06))
-            
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if let tr = track {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if let tr = track {
                         // Track Title & Header
                         HStack(alignment: .top) {
                             VStack(alignment: .leading, spacing: 3) {
                                 HStack(spacing: 6) {
                                     Text(tr.title.isEmpty ? tr.filename : tr.title)
-                                        .font(.system(size: 14, weight: .bold))
+                                        .font(WalkmanFont.title3)
                                         .foregroundStyle(.white)
                                         .lineLimit(2)
                                     
                                     if isHiRes(tr) {
                                         Text("Hi-Res")
-                                            .font(.system(size: 8, weight: .bold, design: .monospaced))
-                                            .padding(.horizontal, 4)
-                                            .padding(.vertical, 1)
-                                            .background(Color.white.opacity(0.16))
-                                            .foregroundStyle(WalkmanTheme.silverLight)
-                                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                                            .font(WalkmanFont.badge)
+                                            .padding(.horizontal, 4.5)
+                                            .padding(.vertical, 1.5)
+                                            .background(WalkmanTheme.hiResGoldGradient)
+                                            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                                            .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
                                     }
                                 }
                                 
                                 Text("\(tr.artist) — \(tr.album)")
-                                    .font(.system(size: 11))
+                                    .font(WalkmanFont.subheadline)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
                             }
@@ -213,13 +188,13 @@ public struct MetadataStudioView: View {
                             } else {
                                 VStack(spacing: 6) {
                                     Image(systemName: "photo.badge.plus")
-                                        .font(.system(size: 28))
+                                        .font(.system(size: 30))
                                         .foregroundStyle(WalkmanTheme.silverMuted)
                                     Text("Drop Album Artwork Here")
-                                        .font(.system(size: 11, weight: .medium))
+                                        .font(WalkmanFont.calloutMedium)
                                         .foregroundStyle(.secondary)
                                     Text("Auto-encoded to Baseline RGB JPEG (max 800×800)")
-                                        .font(.system(size: 9))
+                                        .font(WalkmanFont.subheadline)
                                         .foregroundStyle(.tertiary)
                                 }
                             }
@@ -246,7 +221,7 @@ public struct MetadataStudioView: View {
                                 Image(systemName: st.valid ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                                     .foregroundStyle(st.valid ? Color.green : Color.orange)
                                 Text(st.message)
-                                    .font(.system(size: 9, design: .monospaced))
+                                    .font(WalkmanFont.monoSmall)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
                             }
@@ -259,20 +234,20 @@ public struct MetadataStudioView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Label("LYRICS", systemImage: "quote.bubble.fill")
-                                .font(.system(size: 9, weight: .bold))
+                                .font(WalkmanFont.sectionHeader)
                                 .foregroundStyle(.tertiary)
                             
                             Spacer()
                             
                             if let msg = lyricsStatusMessage {
                                 Text(msg)
-                                    .font(.system(size: 9, design: .monospaced))
+                                    .font(WalkmanFont.monoSmall)
                                     .foregroundStyle(WalkmanTheme.silverLight)
                             } else if lyrics != nil {
                                 Text("Synced / .LRC")
-                                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                    .font(WalkmanFont.badge)
                                     .padding(.horizontal, 5)
-                                    .padding(.vertical, 1)
+                                    .padding(.vertical, 1.5)
                                     .background(Color.white.opacity(0.12))
                                     .foregroundStyle(WalkmanTheme.silverLight)
                                     .clipShape(Capsule())
@@ -285,7 +260,7 @@ public struct MetadataStudioView: View {
                                 }
                             }) {
                                 Image(systemName: isEditingLyrics ? "xmark" : (lyrics != nil ? "pencil" : "plus"))
-                                    .font(.system(size: 10))
+                                    .font(.system(size: 11))
                                     .foregroundStyle(WalkmanTheme.silver)
                             }
                             .buttonStyle(.plain)
@@ -295,7 +270,7 @@ public struct MetadataStudioView: View {
                         if isEditingLyrics {
                             VStack(alignment: .trailing, spacing: 6) {
                                 TextEditor(text: $lyricsDraft)
-                                    .font(.system(size: 11, design: .monospaced))
+                                    .font(WalkmanFont.mono)
                                     .scrollContentBackground(.hidden)
                                     .padding(8)
                                     .frame(minHeight: 120, maxHeight: 180)
@@ -306,9 +281,9 @@ public struct MetadataStudioView: View {
                                     Button("Save as .LRC") {
                                         saveLyrics()
                                     }
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 4)
+                                    .font(WalkmanFont.subheadlineMedium)
+                                    .padding(.horizontal, 11)
+                                    .padding(.vertical, 5)
                                     .background(WalkmanTheme.silverGradient)
                                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                                     .clipShape(RoundedRectangle(cornerRadius: 4))
@@ -318,7 +293,7 @@ public struct MetadataStudioView: View {
                         } else if let lyr = lyrics, !lyr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             ScrollView {
                                 Text(lyr)
-                                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                                    .font(WalkmanFont.body)
                                     .lineSpacing(4)
                                     .foregroundStyle(.primary)
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -334,11 +309,11 @@ public struct MetadataStudioView: View {
                         } else {
                             HStack(spacing: 8) {
                                 Image(systemName: "music.mic")
-                                    .font(.system(size: 14))
+                                    .font(.system(size: 15))
                                     .foregroundStyle(.tertiary)
                                 
                                 Text("No lyrics available for this song")
-                                    .font(.system(size: 11))
+                                    .font(WalkmanFont.callout)
                                     .foregroundStyle(.secondary)
                                 
                                 Spacer()
@@ -346,7 +321,7 @@ public struct MetadataStudioView: View {
                                 Button("Add .LRC") {
                                     isEditingLyrics = true
                                 }
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(WalkmanFont.calloutMedium)
                                 .foregroundStyle(WalkmanTheme.silver)
                                 .buttonStyle(.plain)
                             }
@@ -358,7 +333,7 @@ public struct MetadataStudioView: View {
                     // Technical Specifications (Compact Grid)
                     VStack(alignment: .leading, spacing: 6) {
                         Text("AUDIO PROPERTIES")
-                            .font(.system(size: 9, weight: .bold))
+                            .font(WalkmanFont.sectionHeader)
                             .foregroundStyle(.tertiary)
                         
                         VStack(spacing: 4) {
@@ -379,9 +354,9 @@ public struct MetadataStudioView: View {
                     }) {
                         HStack(spacing: 6) {
                             Image(systemName: "folder")
-                                .font(.system(size: 10))
+                                .font(.system(size: 11))
                             Text("Reveal in Finder")
-                                .font(.system(size: 10))
+                                .font(WalkmanFont.callout)
                         }
                         .foregroundStyle(.secondary)
                     }
@@ -390,7 +365,7 @@ public struct MetadataStudioView: View {
                     // Metadata Input Form
                     VStack(alignment: .leading, spacing: 6) {
                         Text("TAGS & METADATA")
-                            .font(.system(size: 9, weight: .bold))
+                            .font(WalkmanFont.sectionHeader)
                             .foregroundStyle(.tertiary)
                         
                         VStack(spacing: 8) {
@@ -418,7 +393,7 @@ public struct MetadataStudioView: View {
                             }
                             Text(showSuccess ? "Saved (ID3v2.3 / Baseline Art)" : (isSaving ? "Saving..." : "Save Tags & Artwork"))
                         }
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(WalkmanFont.calloutBold)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
                         .background(
@@ -454,12 +429,12 @@ public struct MetadataStudioView: View {
                 }
             }
             .padding(.horizontal, 14)
-            .padding(.top, 10)
+            .padding(.top, -38)
             .padding(.bottom, 24)
         }
+        .contentMargins(.top, 0, for: .scrollContent)
         .onAppear { loadTrack() }
         .onChange(of: track?.id) { loadTrack() }
-    }
     }
 }
 
@@ -470,11 +445,11 @@ private struct SpecRow: View {
     var body: some View {
         HStack {
             Text(label)
-                .font(.system(size: 10))
+                .font(WalkmanFont.subheadline)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .font(WalkmanFont.mono)
                 .foregroundStyle(.white)
         }
     }
@@ -485,16 +460,16 @@ private struct FormInput: View {
     @Binding var text: String
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 3) {
             Text(label)
-                .font(.system(size: 9, weight: .medium))
+                .font(WalkmanFont.subheadlineMedium)
                 .foregroundStyle(.secondary)
             
             TextField("", text: $text)
                 .textFieldStyle(.plain)
-                .font(.system(size: 11))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
+                .font(WalkmanFont.body)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 6)
                 .background(Color.white.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
         }
