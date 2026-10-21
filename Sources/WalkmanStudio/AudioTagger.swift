@@ -485,8 +485,21 @@ public final class AudioTagger: @unchecked Sendable {
 
     public func saveLyrics(fileURL: URL, lyrics: String) throws {
         let lrcURL = fileURL.deletingPathExtension().appendingPathExtension("lrc")
-        try lyrics.write(to: lrcURL, atomically: true, encoding: .utf8)
+        do {
+            try lyrics.write(to: lrcURL, atomically: true, encoding: .utf8)
+        } catch {
+            // Non-atomic fallback for external FAT32/exFAT Walkman volumes
+            try lyrics.write(to: lrcURL, atomically: false, encoding: .utf8)
+        }
         lyricsCache.setObject(lyrics as NSString, forKey: fileURL as NSURL)
+    }
+
+    public func deleteLyrics(fileURL: URL) throws {
+        let lrcURL = fileURL.deletingPathExtension().appendingPathExtension("lrc")
+        if FileManager.default.fileExists(atPath: lrcURL.path) {
+            try FileManager.default.removeItem(at: lrcURL)
+        }
+        lyricsCache.removeObject(forKey: fileURL as NSURL)
     }
 
     private func extractMP3Lyrics(data: Data) -> String? {

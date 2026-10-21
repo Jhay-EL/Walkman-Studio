@@ -24,6 +24,7 @@ public struct MetadataStudioView: View {
     @State private var isEditingLyrics: Bool = false
     @State private var lyricsDraft: String = ""
     @State private var lyricsStatusMessage: String? = nil
+    @State private var isFetchingLyrics: Bool = false
     
     public init(track: Track?, onSaved: @escaping () -> Void) {
         self.track = track
@@ -84,16 +85,104 @@ public struct MetadataStudioView: View {
     private func saveLyrics() {
         guard let tr = track else { return }
         let url = URL(fileURLWithPath: tr.fullPath)
+        let trimmed = lyricsDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
-            try AudioTagger.shared.saveLyrics(fileURL: url, lyrics: lyricsDraft)
-            self.lyrics = lyricsDraft
-            self.isEditingLyrics = false
-            self.lyricsStatusMessage = "Saved .lrc file (Sony Walkman native)"
+            if trimmed.isEmpty {
+                try AudioTagger.shared.deleteLyrics(fileURL: url)
+                self.lyrics = nil
+                self.isEditingLyrics = false
+                self.lyricsStatusMessage = "Removed .LRC from Walkman"
+            } else {
+                try AudioTagger.shared.saveLyrics(fileURL: url, lyrics: trimmed)
+                self.lyrics = trimmed
+                self.isEditingLyrics = false
+                self.lyricsStatusMessage = "Saved .lrc file (Sony Walkman native)"
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                 self.lyricsStatusMessage = nil
             }
         } catch {
             self.lyricsStatusMessage = "Error: \(error.localizedDescription)"
+        }
+    }
+
+    private func grabLyrics() {
+        guard let tr = track else { return }
+        isFetchingLyrics = true
+        lyricsStatusMessage = "Grabbing .LRC from internet..."
+
+        let trackTitle = self.title.isEmpty ? tr.title : self.title
+        let trackArtist = self.artist.isEmpty ? tr.artist : self.artist
+        let trackAlbum = self.album.isEmpty ? tr.album : self.album
+        let duration = tr.durationSeconds
+        let fileURL = URL(fileURLWithPath: tr.fullPath)
+
+        Task {
+            do {
+                let result = try await LyricsService.shared.fetchLyrics(
+                    title: trackTitle,
+                    artist: trackArtist,
+                    album: trackAlbum,
+                    durationSeconds: duration
+                )
+
+                // Write paired .lrc file to Walkman
+                try AudioTagger.shared.saveLyrics(fileURL: fileURL, lyrics: result.lyrics)
+
+                await MainActor.run {
+                    self.lyrics = result.lyrics
+                    self.lyricsDraft = result.lyrics
+                    self.isEditingLyrics = false
+                    self.isFetchingLyrics = false
+                    self.lyricsStatusMessage = result.synced ? "Synced .LRC imported to Walkman!" : "Imported .LRC to Walkman!"
+
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+                        if self.lyricsStatusMessage?.contains("imported") == true {
+                            self.lyricsStatusMessage = nil
+                        }
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.isFetchingLyrics = false
+                    self.lyricsStatusMessage = "Lyrics not found online"
+                    self.isEditingLyrics = true // Open editor as fallback so user can paste or type
+
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+                        if self.lyricsStatusMessage == "Lyrics not found online" {
+                            self.lyricsStatusMessage = nil
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func importLrcFile() {
+        guard let tr = track else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.plainText]
+        panel.prompt = "Import .LRC"
+        panel.message = "Choose a .lrc lyrics file for \(tr.title)"
+        if panel.runModal() == .OK, let url = panel.url, let content = try? String(contentsOf: url, encoding: .utf8) {
+            let targetURL = URL(fileURLWithPath: tr.fullPath)
+            do {
+                try AudioTagger.shared.saveLyrics(fileURL: targetURL, lyrics: content)
+                self.lyrics = content
+                self.lyricsDraft = content
+                self.isEditingLyrics = false
+                self.lyricsStatusMessage = "Imported .LRC to Walkman!"
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                    if self.lyricsStatusMessage?.contains("Imported") == true {
+                        self.lyricsStatusMessage = nil
+                    }
+                }
+            } catch {
+                self.lyricsStatusMessage = "Failed to save: \(error.localizedDescription)"
+            }
         }
     }
     
@@ -263,18 +352,33 @@ public struct MetadataStudioView: View {
                             
                             Spacer()
                             
+                            if isFetchingLyrics {
+                                ProgressView()
+                                    .scaleEffect(0.6)
+                            }
+                            
                             if let msg = lyricsStatusMessage {
                                 Text(msg)
                                     .font(WalkmanFont.monoSmall)
                                     .foregroundStyle(WalkmanTheme.silverLight)
-                            } else if lyrics != nil {
-                                Text("Synced / .LRC")
+                            } else if let lyr = lyrics {
+                                Text(lyr.contains("[") ? "Synced .LRC" : ".LRC File")
                                     .font(WalkmanFont.badge)
                                     .padding(.horizontal, 5)
                                     .padding(.vertical, 1.5)
                                     .background(Color.white.opacity(0.12))
                                     .foregroundStyle(WalkmanTheme.silverLight)
                                     .clipShape(Capsule())
+                            }
+                            
+                            if lyrics != nil && !isEditingLyrics {
+                                Button(action: { grabLyrics() }) {
+                                    Image(systemName: "arrow.clockwise")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(WalkmanTheme.silver)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Re-fetch / update .LRC from internet")
                             }
                             
                             Button(action: {
@@ -288,7 +392,7 @@ public struct MetadataStudioView: View {
                                     .foregroundStyle(WalkmanTheme.silver)
                             }
                             .buttonStyle(.plain)
-                            .help(isEditingLyrics ? "Cancel editing" : (lyrics != nil ? "Edit lyrics" : "Add lyrics (.lrc)"))
+                            .help(isEditingLyrics ? "Cancel editing" : (lyrics != nil ? "Edit lyrics manually" : "Add or write lyrics (.lrc)"))
                         }
                         
                         if isEditingLyrics {
@@ -301,7 +405,41 @@ public struct MetadataStudioView: View {
                                     .background(Color.white.opacity(0.05))
                                     .clipShape(RoundedRectangle(cornerRadius: 6))
                                 
-                                HStack {
+                                HStack(spacing: 8) {
+                                    Button(action: { grabLyrics() }) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "arrow.down.circle")
+                                                .font(.system(size: 11))
+                                            Text("Grab Online")
+                                                .font(WalkmanFont.subheadlineMedium)
+                                        }
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4.5)
+                                        .background(Color.white.opacity(0.08))
+                                        .foregroundStyle(.white)
+                                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help("Fetch synced .LRC from internet")
+                                    
+                                    Button(action: { importLrcFile() }) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "doc.text")
+                                                .font(.system(size: 11))
+                                            Text("Import File...")
+                                                .font(WalkmanFont.subheadlineMedium)
+                                        }
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4.5)
+                                        .background(Color.white.opacity(0.08))
+                                        .foregroundStyle(.white)
+                                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help("Import a .lrc file from Mac")
+                                    
+                                    Spacer()
+                                    
                                     Button("Save as .LRC") {
                                         saveLyrics()
                                     }
@@ -330,24 +468,46 @@ public struct MetadataStudioView: View {
                                 RoundedRectangle(cornerRadius: 8)
                                     .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
                             )
+                        } else if isFetchingLyrics {
+                            HStack(spacing: 9) {
+                                ProgressView()
+                                    .scaleEffect(0.7)
+                                Text("Grabbing synced .LRC from internet...")
+                                    .font(WalkmanFont.callout)
+                                    .foregroundStyle(WalkmanTheme.silverLight)
+                                Spacer()
+                            }
+                            .padding(10)
+                            .liquidGlass(cornerRadius: 8)
                         } else {
                             HStack(spacing: 8) {
                                 Image(systemName: "music.mic")
                                     .font(.system(size: 15))
                                     .foregroundStyle(.tertiary)
                                 
-                                Text("No lyrics available for this song")
+                                Text("No lyrics on Walkman")
                                     .font(WalkmanFont.callout)
                                     .foregroundStyle(.secondary)
                                 
                                 Spacer()
                                 
-                                Button("Add .LRC") {
-                                    isEditingLyrics = true
+                                Button(action: {
+                                    grabLyrics()
+                                }) {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: "arrow.down.circle.fill")
+                                            .font(.system(size: 11))
+                                        Text("Add .LRC")
+                                            .font(WalkmanFont.calloutBold)
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4.5)
+                                    .background(WalkmanTheme.silverGradient)
+                                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                                    .clipShape(RoundedRectangle(cornerRadius: 5))
                                 }
-                                .font(WalkmanFont.calloutMedium)
-                                .foregroundStyle(WalkmanTheme.silver)
                                 .buttonStyle(.plain)
+                                .help("Automatically grab synced lyrics from internet and import .lrc to Walkman")
                             }
                             .padding(10)
                             .liquidGlass(cornerRadius: 8)
