@@ -14,25 +14,37 @@ public struct TrackPreviewBar: View {
         return String(format: "%d:%02d", mins, secs)
     }
 
+    private func secondarySpecs(for track: Track) -> String {
+        var parts: [String] = []
+        if track.sampleRate > 0 {
+            parts.append("\(track.bitsPerSample)b/\(String(format: "%.1f", Double(track.sampleRate)/1000.0))k")
+        }
+        if track.bitrateKbps > 0 {
+            parts.append("\(track.bitrateKbps) kbps")
+        }
+        return parts.joined(separator: " • ")
+    }
+
     public var body: some View {
         if let track = player.currentTrack {
             VStack(spacing: 0) {
                 Divider()
                     .overlay(Color.white.opacity(0.1))
 
-                HStack(spacing: 16) {
+                HStack(spacing: 12) {
                     // LEFT: Track Info & Cover Art Thumbnail
-                    HStack(spacing: 12) {
+                    let isHiRes = track.bitsPerSample > 16 || track.sampleRate > 48000
+                    HStack(spacing: 10) {
                         Button(action: onOpenInspector) {
                             ZStack {
                                 if let img = player.currentCoverArt {
                                     Image(nsImage: img)
                                         .resizable()
                                         .aspectRatio(contentMode: .fill)
-                                        .frame(width: 44, height: 44)
+                                        .frame(width: 42, height: 42)
                                         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                                 } else {
-                                    TrackCoverThumbnail(track: track, size: 44, isPlaying: player.isPlaying)
+                                    TrackCoverThumbnail(track: track, size: 42, isPlaying: player.isPlaying)
                                 }
                             }
                             .overlay(
@@ -43,55 +55,65 @@ public struct TrackPreviewBar: View {
                         .buttonStyle(.plain)
                         .help("Click to view full metadata details & artwork")
 
-                        VStack(alignment: .leading, spacing: 3) {
+                        VStack(alignment: .leading, spacing: 2.5) {
                             HStack(spacing: 6) {
                                 Text(track.title)
-                                    .font(.system(size: 12, weight: .semibold))
+                                    .font(WalkmanFont.bodyBold)
                                     .foregroundStyle(player.isPlaying ? .white : Color(white: 0.9))
                                     .lineLimit(1)
+                                    .truncationMode(.tail)
 
-                                let isHiRes = track.bitsPerSample > 16 || track.sampleRate > 48000
                                 if isHiRes {
                                     Text("Hi-Res")
-                                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                                        .padding(.horizontal, 4)
-                                        .padding(.vertical, 1)
-                                        .background(Color.white.opacity(0.15))
-                                        .foregroundStyle(WalkmanTheme.silver)
-                                        .clipShape(RoundedRectangle(cornerRadius: 2))
+                                        .font(WalkmanFont.badge)
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 1.5)
+                                        .background(WalkmanTheme.hiResGoldGradient)
+                                        .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                                        .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                                .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
+                                        )
+                                        .shadow(color: WalkmanTheme.hiResGold.opacity(player.isPlaying ? 0.45 : 0.2), radius: player.isPlaying ? 4 : 2)
+                                        .fixedSize()
                                 }
                             }
 
                             Text("\(track.artist) • \(track.album)")
-                                .font(.system(size: 10))
+                                .font(WalkmanFont.subheadline)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
+                                .truncationMode(.tail)
 
-                            HStack(spacing: 6) {
+                            HStack(spacing: 5) {
                                 Text(track.format)
-                                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                    .foregroundStyle(WalkmanTheme.silverMuted)
+                                    .font(WalkmanFont.badge)
+                                    .padding(.horizontal, 4.5)
+                                    .padding(.vertical, 1.5)
+                                    .background(isHiRes ? WalkmanTheme.hiResGold.opacity(0.16) : Color.white.opacity(0.10))
+                                    .foregroundStyle(isHiRes ? WalkmanTheme.hiResGold : WalkmanTheme.silverLight)
+                                    .clipShape(RoundedRectangle(cornerRadius: 3))
+                                    .fixedSize()
 
-                                if track.sampleRate > 0 {
-                                    Text("\(track.bitsPerSample)b/\(String(format: "%.1f", Double(track.sampleRate)/1000.0))k")
-                                        .font(.system(size: 9, design: .monospaced))
-                                        .foregroundStyle(.tertiary)
-                                }
-
-                                if track.bitrateKbps > 0 {
-                                    Text("• \(track.bitrateKbps) kbps")
-                                        .font(.system(size: 9, design: .monospaced))
-                                        .foregroundStyle(.tertiary)
+                                let specs = secondarySpecs(for: track)
+                                if !specs.isEmpty {
+                                    Text(specs)
+                                        .font(WalkmanFont.monoSmall)
+                                        .foregroundStyle(isHiRes ? WalkmanTheme.hiResGold.opacity(0.9) : Color.white.opacity(0.45))
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
                                 }
                             }
                         }
-                        .frame(maxWidth: 240, alignment: .leading)
+                        .frame(minWidth: 130, idealWidth: 190, maxWidth: 250, alignment: .leading)
                     }
+                    .layoutPriority(1)
 
-                    Spacer()
+                    Spacer(minLength: 6)
 
                     // CENTER: Playback Controls & Interactive Scrubber
-                    VStack(spacing: 6) {
+                    VStack(spacing: 4) {
                         HStack(spacing: 16) {
                             Button(action: { player.playPrevious() }) {
                                 Image(systemName: "backward.fill")
@@ -127,12 +149,12 @@ public struct TrackPreviewBar: View {
                         }
 
                         // Scrubber Slider Row
-                        HStack(spacing: 8) {
+                        HStack(spacing: 6) {
                             let curTime = dragTime ?? player.currentTime
                             Text(formatTime(curTime))
-                                .font(.system(size: 9, design: .monospaced))
+                                .font(WalkmanFont.monoSmall)
                                 .foregroundStyle(.secondary)
-                                .frame(width: 36, alignment: .trailing)
+                                .frame(width: 38, alignment: .trailing)
 
                             Slider(
                                 value: Binding(
@@ -155,49 +177,53 @@ public struct TrackPreviewBar: View {
                             )
                             .controlSize(.mini)
                             .tint(WalkmanTheme.silver)
-                            .frame(width: 280)
+                            .frame(minWidth: 70, idealWidth: 180, maxWidth: 280)
 
                             Text(formatTime(player.duration))
-                                .font(.system(size: 9, design: .monospaced))
+                                .font(WalkmanFont.monoSmall)
                                 .foregroundStyle(.secondary)
-                                .frame(width: 36, alignment: .leading)
+                                .frame(width: 38, alignment: .leading)
                         }
                     }
+                    .frame(minWidth: 160, maxWidth: 380)
+                    .layoutPriority(2)
 
-                    Spacer()
+                    Spacer(minLength: 6)
 
                     // RIGHT: Volume & Info Inspector Button
-                    HStack(spacing: 12) {
-                        HStack(spacing: 6) {
+                    HStack(spacing: 10) {
+                        HStack(spacing: 5) {
                             Image(systemName: player.volume > 0.5 ? "speaker.wave.2.fill" : (player.volume > 0 ? "speaker.wave.1.fill" : "speaker.slash.fill"))
-                                .font(.system(size: 11))
+                                .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
 
                             Slider(value: $player.volume, in: 0...1)
                                 .controlSize(.mini)
                                 .tint(WalkmanTheme.silver)
-                                .frame(width: 70)
+                                .frame(minWidth: 44, idealWidth: 60, maxWidth: 75)
                         }
 
                         Button(action: onOpenInspector) {
                             HStack(spacing: 4) {
                                 Image(systemName: "info.circle")
-                                    .font(.system(size: 11))
+                                    .font(.system(size: 12))
                                 Text("Details")
-                                    .font(.system(size: 10, weight: .medium))
+                                    .font(WalkmanFont.subheadlineMedium)
                             }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 4.5)
                             .background(Color.white.opacity(0.08))
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                             .foregroundStyle(.primary)
                         }
                         .buttonStyle(.plain)
+                        .fixedSize()
                         .help("View & edit metadata tags, hardware compliance, and artwork")
                     }
+                    .fixedSize(horizontal: true, vertical: false)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
                 .background(
                     WalkmanTheme.card
                         .background(.ultraThinMaterial)

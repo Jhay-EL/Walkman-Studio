@@ -1,7 +1,7 @@
 import SwiftUI
 
 public enum NavigationTab: String, CaseIterable, Identifiable, Hashable {
-    case overview = "NW-A55L Overview"
+    case overview = "Device Overview"
     case library = "All Songs"
     case albums = "Albums"
     case artists = "Artists"
@@ -28,6 +28,9 @@ public struct SidebarView: View {
     @Binding var selectedTab: NavigationTab
     let drives: [WalkmanDrive]
     let trackCount: Int
+    var albumCount: Int = 0
+    var artistCount: Int = 0
+    var hiResCount: Int = 0
     let queueCount: Int
     var deviceInfo: WalkmanDeviceInfo? = nil
     var activeDrive: WalkmanDrive? = nil
@@ -41,7 +44,7 @@ public struct SidebarView: View {
                 SidebarRow(
                     tab: .overview,
                     selectedTab: $selectedTab,
-                    title: "\(deviceInfo?.specificModel ?? "NW-A55L") Overview",
+                    title: "\(deviceInfo?.specificModel ?? "Device") Overview",
                     icon: "hifispeaker.fill",
                     badge: nil
                 )
@@ -71,7 +74,7 @@ public struct SidebarView: View {
                     selectedTab: $selectedTab,
                     title: "Albums",
                     icon: "square.stack",
-                    badge: nil
+                    badge: albumCount > 0 ? "\(albumCount.formatted())" : nil
                 )
 
                 SidebarRow(
@@ -79,7 +82,7 @@ public struct SidebarView: View {
                     selectedTab: $selectedTab,
                     title: "Artists",
                     icon: "music.mic",
-                    badge: nil
+                    badge: artistCount > 0 ? "\(artistCount.formatted())" : nil
                 )
 
                 SidebarRow(
@@ -87,7 +90,7 @@ public struct SidebarView: View {
                     selectedTab: $selectedTab,
                     title: "Hi-Res Audio",
                     icon: "waveform.badge.magnifyingglass",
-                    badge: nil
+                    badge: hiResCount > 0 ? "\(hiResCount.formatted())" : nil
                 )
             }
 
@@ -127,12 +130,12 @@ private struct AboutSidebarButton: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: "info.circle")
-                    .font(.system(size: 13))
+                    .font(.system(size: 14))
                     .foregroundStyle(isHovered ? WalkmanTheme.silverLight : .secondary)
                     .frame(width: 18)
 
                 Text("About Walkman Studio")
-                    .font(.system(size: 12, weight: .regular))
+                    .font(.system(size: 12.5, weight: .regular))
                     .foregroundStyle(isHovered ? .white : WalkmanTheme.silverMuted)
 
                 Spacer()
@@ -160,19 +163,19 @@ private struct DriveSidebarRow: View {
         Button(action: onSelect) {
             HStack(spacing: 8) {
                 Image(systemName: drive.type == .internal ? "internaldrive" : "sdcard")
-                    .font(.system(size: 12))
+                    .font(.system(size: 13))
                     .foregroundStyle(isCurrent ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
                     .frame(width: 18)
                 
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: 1.5) {
                     Text(drive.name)
-                        .font(.system(size: 11, weight: isCurrent ? .semibold : .medium))
+                        .font(.system(size: 12.5, weight: isCurrent ? .semibold : .medium))
                         .foregroundStyle(isCurrent ? .white : .primary)
                         .lineLimit(1)
                     
                     let freeGb = Double(drive.freeBytes) / (1024 * 1024 * 1024)
                     Text(String(format: "%.1f GB free", freeGb))
-                        .font(.system(size: 9))
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
                 
@@ -184,7 +187,7 @@ private struct DriveSidebarRow: View {
                         .frame(width: 5, height: 5)
                 }
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, 4.5)
             .padding(.horizontal, 6)
             .background(isCurrent ? Color.white.opacity(0.08) : (isHovered ? Color.white.opacity(0.04) : Color.clear))
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -212,27 +215,49 @@ private struct SidebarRow: View {
         Button(action: { selectedTab = tab }) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
-                    .font(.system(size: 13))
-                    .foregroundStyle(isSelected ? WalkmanTheme.silverLight : (isHovered ? .white : .secondary))
+                    .font(.system(size: 14))
+                    .foregroundStyle(
+                        tab == .hiRes
+                            ? (isSelected ? WalkmanTheme.hiResGoldLight : WalkmanTheme.hiResGold)
+                            : (isSelected ? WalkmanTheme.silverLight : (isHovered ? .white : .secondary))
+                    )
                     .frame(width: 18)
 
                 Text(title)
-                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
                     .foregroundStyle(isSelected ? .white : (isHovered ? .white : .primary))
 
                 Spacer()
 
                 if let b = badge {
-                    Text(b)
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(isSelected ? Color.white.opacity(0.18) : Color.white.opacity(0.08))
-                        .foregroundStyle(isSelected ? WalkmanTheme.silverLight : .secondary)
-                        .clipShape(Capsule())
+                    if tab == .hiRes {
+                        Text(b)
+                            .font(WalkmanFont.pillCounter)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2.5)
+                            .background(
+                                isSelected
+                                    ? WalkmanTheme.hiResGold.opacity(0.28)
+                                    : WalkmanTheme.hiResGold.opacity(0.14)
+                            )
+                            .foregroundStyle(WalkmanTheme.hiResGoldLight)
+                            .overlay(
+                                Capsule()
+                                    .strokeBorder(WalkmanTheme.hiResGold.opacity(isSelected ? 0.7 : 0.35), lineWidth: 0.8)
+                            )
+                            .clipShape(Capsule())
+                    } else {
+                        Text(b)
+                            .font(WalkmanFont.pillCounter)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2.5)
+                            .background(isSelected ? Color.white.opacity(0.18) : Color.white.opacity(0.08))
+                            .foregroundStyle(isSelected ? WalkmanTheme.silverLight : .secondary)
+                            .clipShape(Capsule())
+                    }
                 }
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, 4.5)
             .padding(.horizontal, 6)
             .background(isSelected ? Color.white.opacity(0.08) : (isHovered ? Color.white.opacity(0.04) : Color.clear))
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
