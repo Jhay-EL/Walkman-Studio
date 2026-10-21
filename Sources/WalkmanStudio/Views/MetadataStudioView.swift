@@ -762,8 +762,23 @@ public struct MetadataStudioView: View {
                 }
             }
             .padding(.horizontal, 14)
-            .padding(.top, 56)
+            .padding(.top, 64)
             .padding(.bottom, 24)
+        }
+        .ignoresSafeArea(.all, edges: .top)
+        .overlay(alignment: .top) {
+            LinearGradient(
+                colors: [
+                    WalkmanTheme.background,
+                    WalkmanTheme.background.opacity(0.85),
+                    Color.clear
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 52)
+            .allowsHitTesting(false)
+            .ignoresSafeArea(.all, edges: .top)
         }
         .onAppear { loadTrack() }
         .onChange(of: track) { loadTrack() }
