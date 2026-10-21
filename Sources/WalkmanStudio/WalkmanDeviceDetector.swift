@@ -358,19 +358,54 @@ public final class WalkmanDeviceDetector: Sendable {
     private func detectFromFilesystemHeuristics(drive: WalkmanDrive, drives: [WalkmanDrive], capacityGb: Double, hasCfw: Bool) -> WalkmanDeviceInfo {
         let name = drive.name.uppercased()
         
-        let (seriesName, specificModel, displayName) = resolveSpecificModel(modelRaw: name.contains("ZX300") ? "NW-ZX300Series" : (name.contains("WM1") ? "NW-WM1Series" : "NW-A50Series"), capacityGb: capacityGb, hasCfw: hasCfw)
+        let seriesRaw: String
+        if name.contains("ZX300") {
+            seriesRaw = "NW-ZX300Series"
+        } else if name.contains("WM1") {
+            seriesRaw = "NW-WM1Series"
+        } else if name.contains("A50") || name.contains("A55") {
+            seriesRaw = "NW-A50Series"
+        } else if name.contains("A40") || name.contains("A45") {
+            seriesRaw = "NW-A40Series"
+        } else if name.contains("A30") || name.contains("A35") {
+            seriesRaw = "NW-A30Series"
+        } else if name.contains("ZX100") {
+            seriesRaw = "NW-ZX100"
+        } else {
+            seriesRaw = "Generic"
+        }
         
+        if seriesRaw != "Generic" {
+            let (seriesName, specificModel, displayName) = resolveSpecificModel(modelRaw: seriesRaw, capacityGb: capacityGb, hasCfw: hasCfw)
+            return WalkmanDeviceInfo(
+                modelRaw: seriesRaw,
+                marketingName: displayName,
+                displayName: displayName,
+                seriesName: seriesName,
+                specificModel: specificModel,
+                vendor: "Sony Corporation",
+                firmwareVersion: "Sony OS DAP",
+                isNonAndroid: true,
+                hasCfw: hasCfw,
+                displayResolution: "800x480",
+                internalCapacityGb: capacityGb,
+                supportedAudioFormats: ["FLAC", "MP3", "WAV", "AIFF", "ALAC", "DSD", "APE"]
+            )
+        }
+        
+        // Generic fallback when specific series is not identified
+        let cfwTag = hasCfw ? " (Custom Firmware)" : ""
         return WalkmanDeviceInfo(
-            modelRaw: "NW-A50Series",
-            marketingName: "WALKMAN NW-A50Series",
-            displayName: displayName,
-            seriesName: seriesName,
-            specificModel: specificModel,
+            modelRaw: "Sony Walkman DAP",
+            marketingName: "Sony Walkman DAP",
+            displayName: "Sony Walkman\(cfwTag)",
+            seriesName: "Walkman DAP",
+            specificModel: "Walkman",
             vendor: "Sony Corporation",
             firmwareVersion: "Sony OS DAP",
             isNonAndroid: true,
             hasCfw: hasCfw,
-            displayResolution: "800x480",
+            displayResolution: "Standard RGB",
             internalCapacityGb: capacityGb,
             supportedAudioFormats: ["FLAC", "MP3", "WAV", "AIFF", "ALAC", "DSD", "APE"]
         )

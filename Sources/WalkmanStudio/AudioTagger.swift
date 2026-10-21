@@ -180,7 +180,7 @@ public final class AudioTagger: @unchecked Sendable {
             return cached as String
         }
 
-        // 1. Check companion .lrc or .txt file (Sony NW-A55 native standard)
+        // 1. Check companion .lrc or .txt file (Sony Walkman native standard)
         let lrcURL = fileURL.deletingPathExtension().appendingPathExtension("lrc")
         if let lrc = try? String(contentsOf: lrcURL, encoding: .utf8), !lrc.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             lyricsCache.setObject(lrc as NSString, forKey: fileURL as NSURL)

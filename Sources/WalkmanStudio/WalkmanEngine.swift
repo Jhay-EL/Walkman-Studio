@@ -95,7 +95,7 @@ public final class WalkmanEngine: @unchecked Sendable {
             return (false, "Image is Progressive JPEG (must be Baseline)")
         }
 
-        return (true, "Valid Sony NW-A55L Baseline RGB JPEG")
+        return (true, "Valid Sony Walkman Baseline RGB JPEG")
     }
 
     // -----------------------------------------------------------------------
@@ -229,6 +229,9 @@ public final class WalkmanEngine: @unchecked Sendable {
             return []
         }
 
+        var rootStat = stat()
+        stat("/", &rootStat)
+
         let systemVolumes: Set<String> = ["MACINTOSH HD", "RECOVERY", "PREBOOT", "VM", "UPDATE"]
         let candidates = contents.filter { url in
             let name = url.lastPathComponent.uppercased()
@@ -242,6 +245,13 @@ public final class WalkmanEngine: @unchecked Sendable {
 
         for volURL in candidates {
             let path = volURL.path
+            
+            // Verify this path is a distinct mounted filesystem and not a lingering folder on the root disk
+            var volStat = stat()
+            if stat(path, &volStat) != 0 || volStat.st_dev == rootStat.st_dev {
+                continue
+            }
+
             let volName = volURL.lastPathComponent.uppercased()
 
             let isInternal = volName.contains("WALKMAN") && (!volName.contains("SD") && !volName.contains("MICROSD"))
@@ -258,6 +268,8 @@ public final class WalkmanEngine: @unchecked Sendable {
                 if statvfs(path, &stat) == 0 {
                     let blockSize = Int64(stat.f_frsize)
                     let totalBytes = blockSize * Int64(stat.f_blocks)
+                    guard totalBytes > 0 else { continue }
+                    
                     let freeBytes = blockSize * Int64(stat.f_bavail)
                     let usedBytes = totalBytes - freeBytes
                     let percentUsed = totalBytes > 0 ? (Double(usedBytes) / Double(totalBytes)) * 100.0 : 0.0

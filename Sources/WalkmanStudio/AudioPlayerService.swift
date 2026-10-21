@@ -100,6 +100,16 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
         self.isPlaying = false
     }
 
+    public func stopAndClear() {
+        pause()
+        player.replaceCurrentItem(with: nil)
+        currentTrack = nil
+        currentQueue = []
+        currentTime = 0.0
+        duration = 0.0
+        currentCoverArt = nil
+    }
+
     public func togglePlayPause() {
         if isPlaying {
             pause()
