@@ -454,23 +454,6 @@ public struct MetadataStudioView: View {
                                     .disabled(isFetchingLyrics)
                                     .help("Fetch synced .LRC from internet")
                                     
-                                    Button(action: { importLrcFile() }) {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "doc.text")
-                                                .font(.system(size: 11))
-                                            Text("Import File...")
-                                                .font(WalkmanFont.subheadlineMedium)
-                                        }
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4.5)
-                                        .background(Color.white.opacity(0.08))
-                                        .foregroundStyle(.white)
-                                        .clipShape(RoundedRectangle(cornerRadius: 4))
-                                        .contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(WalkmanPressableButtonStyle())
-                                    .help("Import a .lrc file from Mac")
-                                    
                                     Spacer()
                                     
                                     Button("Save as .LRC") {
@@ -544,27 +527,6 @@ public struct MetadataStudioView: View {
                                 
                                 Spacer()
                                 
-                                // Import existing .LRC from Mac
-                                Button(action: {
-                                    importLrcFile()
-                                }) {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "folder")
-                                            .font(.system(size: 11))
-                                        Text("Import")
-                                            .font(WalkmanFont.subheadlineMedium)
-                                    }
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 5)
-                                    .background(Color.white.opacity(0.08))
-                                    .foregroundStyle(WalkmanTheme.silver)
-                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .disabled(isFetchingLyrics)
-                                .help("Import a local .lrc lyrics file from your Mac")
-
                                 // Grab .LRC online from internet
                                 Button(action: {
                                     grabLyrics()
