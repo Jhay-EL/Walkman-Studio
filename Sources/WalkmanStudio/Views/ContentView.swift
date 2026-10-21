@@ -226,16 +226,11 @@ public struct ContentView: View {
                 VStack(spacing: 24) {
                     Spacer()
                     
-                    ZStack {
-                        Circle()
-                            .fill(Color.white.opacity(0.06))
-                            .frame(width: 96, height: 96)
-                        
-                        WalkmanDeviceIconView(
-                            size: 64,
-                            mountPoint: activeDrive?.mountPoint
-                        )
-                    }
+                    WalkmanDeviceIconView(
+                        size: 84,
+                        mountPoint: activeDrive?.mountPoint,
+                        hasBackground: false
+                    )
                     
                     VStack(spacing: 8) {
                         Text("Reading Walkman Library")

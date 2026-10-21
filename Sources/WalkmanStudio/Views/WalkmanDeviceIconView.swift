@@ -4,12 +4,14 @@ import AppKit
 public struct WalkmanDeviceIconView: View {
     var size: CGFloat = 64
     var mountPoint: String? = nil
+    var hasBackground: Bool = true
     
     @State private var loadedImage: NSImage? = nil
     
-    public init(size: CGFloat = 64, mountPoint: String? = nil) {
+    public init(size: CGFloat = 64, mountPoint: String? = nil, hasBackground: Bool = true) {
         self.size = size
         self.mountPoint = mountPoint
+        self.hasBackground = hasBackground
     }
     
     private func loadIcon() -> NSImage? {
@@ -51,22 +53,23 @@ public struct WalkmanDeviceIconView: View {
     }
     
     public var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
-                .fill(WalkmanTheme.cardHeaderGradient)
-                .frame(width: size, height: size)
-                .overlay(
+        Group {
+            if hasBackground {
+                ZStack {
                     RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
-                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                )
-            
-            if let img = loadedImage ?? loadIcon() {
-                Image(nsImage: img)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: size * 0.72, height: size * 0.78)
+                        .fill(WalkmanTheme.cardHeaderGradient)
+                        .frame(width: size, height: size)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
+                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                        )
+                    
+                    deviceImage
+                        .frame(width: size * 0.72, height: size * 0.78)
+                }
             } else {
-                VectorWalkmanIcon(size: size * 0.7)
+                deviceImage
+                    .frame(width: size, height: size)
             }
         }
         .onAppear {
@@ -74,6 +77,17 @@ public struct WalkmanDeviceIconView: View {
         }
         .onChange(of: mountPoint) {
             self.loadedImage = loadIcon()
+        }
+    }
+    
+    @ViewBuilder
+    private var deviceImage: some View {
+        if let img = loadedImage ?? loadIcon() {
+            Image(nsImage: img)
+                .resizable()
+                .scaledToFit()
+        } else {
+            VectorWalkmanIcon(size: size * 0.85)
         }
     }
 }
