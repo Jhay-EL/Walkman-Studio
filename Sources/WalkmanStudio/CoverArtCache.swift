@@ -58,6 +58,21 @@ public final class CoverArtCache: @unchecked Sendable {
         return nil
     }
 
+    public func invalidate(forFullPath fullPath: String, artist: String = "", album: String = "") {
+        let pKey = fullPath as NSString
+        pathCache.removeObject(forKey: pKey)
+        if !artist.isEmpty && !album.isEmpty {
+            let aKey = "\(artist)|\(album)" as NSString
+            albumCache.removeObject(forKey: aKey)
+            let key = "\(artist)|\(album)".lowercased()
+            var hasher = Hasher()
+            hasher.combine(key)
+            let hashStr = String(format: "%016llx", UInt64(bitPattern: Int64(hasher.finalize())))
+            let fileURL = diskCacheURL.appendingPathComponent("\(hashStr).jpg")
+            try? FileManager.default.removeItem(at: fileURL)
+        }
+    }
+
     public func loadThumbnail(for track: Track, targetSize: CGFloat = 32, completion: @escaping @Sendable (NSImage?) -> Void) {
         // 1. If track has no embedded artwork according to scanner metadata, skip immediately
         guard track.hasArtwork else {

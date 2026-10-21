@@ -69,6 +69,38 @@ public struct MetadataStudioView: View {
         }
     }
     
+    private func selectArtworkFile() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.image, .jpeg, .png]
+        panel.prompt = "Choose Artwork"
+        if panel.runModal() == .OK, let url = panel.url, let data = try? Data(contentsOf: url) {
+            handleDroppedImage(data: data)
+        }
+    }
+    
+    private func revealInFinder(path: String) {
+        let fileURL = URL(fileURLWithPath: path)
+        if FileManager.default.fileExists(atPath: fileURL.path) {
+            if let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first {
+                finder.activate()
+            }
+            if !NSWorkspace.shared.selectFile(fileURL.path, inFileViewerRootedAtPath: "") {
+                NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+            }
+        } else {
+            let parent = fileURL.deletingLastPathComponent()
+            if FileManager.default.fileExists(atPath: parent.path) {
+                if let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first {
+                    finder.activate()
+                }
+                NSWorkspace.shared.open(parent)
+            }
+        }
+    }
+    
     private func saveLyrics() {
         guard let tr = track else { return }
         let url = URL(fileURLWithPath: tr.fullPath)
@@ -108,18 +140,21 @@ public struct MetadataStudioView: View {
         Task {
             let url = URL(fileURLWithPath: tr.fullPath)
             do {
-                if tr.format == "MP3" {
-                    try AudioTagger.shared.writeMP3Metadata(
-                        fileURL: url,
-                        title: title,
-                        artist: artist,
-                        album: album,
-                        trackNumber: trackNumber,
-                        year: year,
-                        genre: genre,
-                        coverArtData: coverData
-                    )
-                }
+                try AudioTagger.shared.writeMetadata(
+                    fileURL: url,
+                    title: title,
+                    artist: artist,
+                    album: album,
+                    trackNumber: trackNumber,
+                    year: year,
+                    genre: genre,
+                    coverArtData: coverData
+                )
+                
+                // Invalidate all layers of artwork and scanner cache
+                AudioTagger.shared.invalidateCaches(fileURL: url)
+                CoverArtCache.shared.invalidate(forFullPath: tr.fullPath, artist: tr.primaryArtist, album: tr.album)
+                LibraryScanner.shared.invalidate(fullPath: tr.fullPath)
                 
                 await MainActor.run {
                     self.isSaving = false
@@ -172,37 +207,45 @@ public struct MetadataStudioView: View {
                             Spacer()
                         }
                     
-                    // Album Artwork Card (Drop Zone)
+                    // Album Artwork (Direct Image, No Background Container)
                     VStack(spacing: 8) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(WalkmanTheme.card)
-                                .frame(height: 180)
-                            
+                        Group {
                             if let img = coverImage {
                                 Image(nsImage: img)
                                     .resizable()
                                     .scaledToFit()
-                                    .frame(maxHeight: 170)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                    .shadow(color: Color.black.opacity(0.4), radius: 8, x: 0, y: 4)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .stroke(isTargeted ? WalkmanTheme.silver : Color.white.opacity(0.12), lineWidth: isTargeted ? 2 : 1)
+                                    )
+                                    .frame(maxWidth: .infinity)
                             } else {
-                                VStack(spacing: 6) {
-                                    Image(systemName: "photo.badge.plus")
-                                        .font(.system(size: 30))
-                                        .foregroundStyle(WalkmanTheme.silverMuted)
-                                    Text("Drop Album Artwork Here")
-                                        .font(WalkmanFont.calloutMedium)
-                                        .foregroundStyle(.secondary)
-                                    Text("Auto-encoded to Baseline RGB JPEG (max 800×800)")
-                                        .font(WalkmanFont.subheadline)
-                                        .foregroundStyle(.tertiary)
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+                                        .foregroundStyle(isTargeted ? WalkmanTheme.silver : Color.white.opacity(0.2))
+                                        .frame(height: 160)
+                                    
+                                    VStack(spacing: 6) {
+                                        Image(systemName: "photo.badge.plus")
+                                            .font(.system(size: 28))
+                                            .foregroundStyle(WalkmanTheme.silverMuted)
+                                        Text("Drop Album Artwork Here")
+                                            .font(WalkmanFont.calloutMedium)
+                                            .foregroundStyle(.secondary)
+                                        Text("Auto-encoded to Baseline RGB JPEG (max 800×800)")
+                                            .font(WalkmanFont.subheadline)
+                                            .foregroundStyle(.tertiary)
+                                    }
                                 }
                             }
                         }
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(isTargeted ? WalkmanTheme.silver : Color.white.opacity(0.1), lineWidth: isTargeted ? 2 : 1)
-                        )
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            selectArtworkFile()
+                        }
                         .onDrop(of: [.fileURL, .image], isTargeted: $isTargeted) { providers in
                             guard let provider = providers.first else { return false }
                             _ = provider.loadDataRepresentation(forTypeIdentifier: "public.image") { data, _ in
@@ -214,6 +257,7 @@ public struct MetadataStudioView: View {
                             }
                             return true
                         }
+                        .help("Click or drag-and-drop to choose album cover art")
                         
                         // Artwork Compliance Status
                         if let st = validationStatus {
@@ -350,17 +394,22 @@ public struct MetadataStudioView: View {
                     
                     // Reveal in Finder Button
                     Button(action: {
-                        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: tr.fullPath)])
+                        revealInFinder(path: tr.fullPath)
                     }) {
                         HStack(spacing: 6) {
                             Image(systemName: "folder")
                                 .font(.system(size: 11))
                             Text("Reveal in Finder")
-                                .font(WalkmanFont.callout)
+                                .font(WalkmanFont.calloutMedium)
                         }
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
                     }
                     .buttonStyle(.plain)
+                    .help("Open containing folder in macOS Finder and highlight this file")
                     
                     // Metadata Input Form
                     VStack(alignment: .leading, spacing: 6) {
@@ -434,7 +483,7 @@ public struct MetadataStudioView: View {
         }
         .contentMargins(.top, 0, for: .scrollContent)
         .onAppear { loadTrack() }
-        .onChange(of: track?.id) { loadTrack() }
+        .onChange(of: track) { loadTrack() }
     }
 }
 

@@ -57,6 +57,8 @@ public final class LibraryScanner: @unchecked Sendable {
                 }
 
                 var cachedTracks: [String: Track] = [:]
+                var cachedMtimes: [String: Double] = [:]
+                var cachedSizes: [String: Int64] = [:]
                 var albumsSet = Set<String>()
                 var artistsSet = Set<String>()
 
@@ -76,6 +78,8 @@ public final class LibraryScanner: @unchecked Sendable {
                             let fPath = String(cString: sqlite3_column_text(stmt, 0))
                             let mtime = sqlite3_column_double(stmt, 1)
                             let size = sqlite3_column_int64(stmt, 2)
+                            cachedMtimes[fPath] = mtime
+                            cachedSizes[fPath] = size
                             let fmt = String(cString: sqlite3_column_text(stmt, 3))
                             let title = sqlite3_column_text(stmt, 4).map { String(cString: $0) } ?? ""
                             let artist = sqlite3_column_text(stmt, 5).map { String(cString: $0) } ?? "Unknown Artist"
@@ -136,14 +140,20 @@ public final class LibraryScanner: @unchecked Sendable {
                         guard self.supportedExts.contains(ext) else { continue }
 
                         let fullPath = fileURL.path
-                        if let cached = cachedTracks[fullPath], cached.durationSeconds > 0 {
+                        let rValues = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+                        let curMtime = rValues?.contentModificationDate?.timeIntervalSince1970 ?? 0
+                        let curSize = Int64(rValues?.fileSize ?? 0)
+                        let cachedMtime = cachedMtimes[fullPath] ?? 0
+                        let cachedSize = cachedSizes[fullPath] ?? 0
+
+                        if let cached = cachedTracks[fullPath], cached.durationSeconds > 0,
+                           abs(cachedMtime - curMtime) < 1.0, cachedSize == curSize {
                             finalTracks.append(cached)
                             artistsSet.insert(cached.artist)
                             albumsSet.insert("\(cached.artist) - \(cached.album)")
                         } else {
-                            let size = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
                             let relPath = fullPath.replacingOccurrences(of: musicDir.path, with: "").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-                            pendingEnrichment.append((fullPath, Int64(size), relPath, ext))
+                            pendingEnrichment.append((fullPath, curSize, relPath, ext))
                         }
                     }
                 }
@@ -389,5 +399,17 @@ public final class LibraryScanner: @unchecked Sendable {
             }
         }
         return res
+    }
+
+    public func invalidate(fullPath: String) {
+        guard let db = getDB() else { return }
+        defer { sqlite3_close(db) }
+        let sql = "DELETE FROM tracks_cache WHERE full_path = ?;"
+        var stmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+            sqlite3_bind_text(stmt, 1, (fullPath as NSString).utf8String, -1, nil)
+            sqlite3_step(stmt)
+            sqlite3_finalize(stmt)
+        }
     }
 }

@@ -1,9 +1,271 @@
 import Foundation
 import AppKit
+import CoreGraphics
+import ImageIO
 
 public final class AudioTagger: @unchecked Sendable {
     public static let shared = AudioTagger()
     private init() {}
+
+    // -----------------------------------------------------------------------
+    // Unified Hardware Metadata Writer (FLAC Vorbis & MP3 ID3v2.3)
+    // -----------------------------------------------------------------------
+    public func writeMetadata(
+        fileURL: URL,
+        title: String?,
+        artist: String?,
+        album: String?,
+        trackNumber: String?,
+        year: String?,
+        genre: String?,
+        coverArtData: Data?
+    ) throws {
+        let ext = fileURL.pathExtension.lowercased()
+        if ext == "flac" {
+            try writeFLACMetadata(
+                fileURL: fileURL,
+                title: title,
+                artist: artist,
+                album: album,
+                trackNumber: trackNumber,
+                year: year,
+                genre: genre,
+                coverArtData: coverArtData
+            )
+        } else if ext == "mp3" {
+            try writeMP3Metadata(
+                fileURL: fileURL,
+                title: title,
+                artist: artist,
+                album: album,
+                trackNumber: trackNumber,
+                year: year,
+                genre: genre,
+                coverArtData: coverArtData
+            )
+        } else {
+            throw NSError(domain: "WalkmanStudio", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unsupported audio format for metadata tagging: .\(ext)"])
+        }
+
+        // Clean macOS metadata shadow file and xattrs
+        let cPath = (fileURL.path as NSString).fileSystemRepresentation
+        removexattr(cPath, "com.apple.TextEncoding", 0)
+        let dotfileURL = fileURL.deletingLastPathComponent().appendingPathComponent("._" + fileURL.lastPathComponent)
+        try? FileManager.default.removeItem(at: dotfileURL)
+        sync()
+    }
+
+    // -----------------------------------------------------------------------
+    // Hardware Constraint 3: Native FLAC Vorbis Comments & Baseline JPEG Cover Art
+    // -----------------------------------------------------------------------
+    public func writeFLACMetadata(
+        fileURL: URL,
+        title: String?,
+        artist: String?,
+        album: String?,
+        trackNumber: String?,
+        year: String?,
+        genre: String?,
+        coverArtData: Data?
+    ) throws {
+        let fileData = try Data(contentsOf: fileURL)
+        guard fileData.count >= 4 && fileData.starts(with: [0x66, 0x4C, 0x61, 0x43]) else {
+            throw NSError(domain: "WalkmanStudio", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not a valid FLAC audio file"])
+        }
+
+        var offset = 4
+        var isLast = false
+
+        var streamInfoBlock: Data? = nil
+        var otherBlocks: [(type: Int, data: Data)] = []
+        var existingComments: [String: String] = [:]
+        var existingOtherComments: [(key: String, val: String)] = []
+        var vendorString = "reference libFLAC 1.4.3 20230623"
+        var existingPictureBlock: Data? = nil
+
+        while !isLast && offset + 4 <= fileData.count {
+            let b0 = fileData[offset]
+            isLast = (b0 & 0x80) != 0
+            let bType = Int(b0 & 0x7F)
+            let bLen = (Int(fileData[offset+1]) << 16) | (Int(fileData[offset+2]) << 8) | Int(fileData[offset+3])
+            offset += 4
+            guard offset + bLen <= fileData.count else {
+                throw NSError(domain: "WalkmanStudio", code: 2, userInfo: [NSLocalizedDescriptionKey: "Corrupted FLAC metadata block"])
+            }
+            let bData = fileData.subdata(in: offset..<offset+bLen)
+            offset += bLen
+
+            if bType == 0 { // STREAMINFO
+                streamInfoBlock = bData
+            } else if bType == 4 { // VORBIS_COMMENT
+                var pos = 0
+                if pos + 4 <= bData.count {
+                    let vLen = Int(bData[pos]) | (Int(bData[pos+1]) << 8) | (Int(bData[pos+2]) << 16) | (Int(bData[pos+3]) << 24)
+                    pos += 4
+                    if pos + vLen <= bData.count, let vStr = String(data: bData.subdata(in: pos..<pos+vLen), encoding: .utf8) {
+                        vendorString = vStr
+                    }
+                    pos += vLen
+                    if pos + 4 <= bData.count {
+                        let commentCount = Int(bData[pos]) | (Int(bData[pos+1]) << 8) | (Int(bData[pos+2]) << 16) | (Int(bData[pos+3]) << 24)
+                        pos += 4
+                        for _ in 0..<commentCount {
+                            guard pos + 4 <= bData.count else { break }
+                            let cLen = Int(bData[pos]) | (Int(bData[pos+1]) << 8) | (Int(bData[pos+2]) << 16) | (Int(bData[pos+3]) << 24)
+                            pos += 4
+                            guard pos + cLen <= bData.count else { break }
+                            if let cStr = String(data: bData.subdata(in: pos..<pos+cLen), encoding: .utf8) {
+                                let parts = cStr.components(separatedBy: "=")
+                                if parts.count >= 2 {
+                                    let k = parts[0].uppercased()
+                                    let v = parts[1...].joined(separator: "=")
+                                    let standardKeys: Set<String> = ["TITLE", "ARTIST", "ALBUM", "TRACKNUMBER", "TRACK", "DATE", "YEAR", "GENRE"]
+                                    if standardKeys.contains(k) {
+                                        existingComments[k] = v
+                                    } else {
+                                        existingOtherComments.append((parts[0], v))
+                                    }
+                                }
+                            }
+                            pos += cLen
+                        }
+                    }
+                }
+            } else if bType == 6 { // PICTURE
+                if existingPictureBlock == nil {
+                    existingPictureBlock = bData
+                }
+            } else if bType == 1 { // PADDING
+                // Skip old padding, fresh padding is added at the end
+            } else {
+                otherBlocks.append((bType, bData))
+            }
+        }
+
+        guard let streamInfo = streamInfoBlock else {
+            throw NSError(domain: "WalkmanStudio", code: 3, userInfo: [NSLocalizedDescriptionKey: "FLAC missing STREAMINFO block"])
+        }
+
+        let audioFrames = fileData.subdata(in: offset..<fileData.count)
+
+        // Construct updated Vorbis Comments
+        var newComments: [(String, String)] = []
+
+        let finTitle = title ?? existingComments["TITLE"]
+        if let t = finTitle, !t.isEmpty { newComments.append(("TITLE", t)) }
+
+        let finArtist = artist ?? existingComments["ARTIST"]
+        if let a = finArtist, !a.isEmpty { newComments.append(("ARTIST", a)) }
+
+        let finAlbum = album ?? existingComments["ALBUM"]
+        if let al = finAlbum, !al.isEmpty { newComments.append(("ALBUM", al)) }
+
+        let finTrack = trackNumber ?? (existingComments["TRACKNUMBER"] ?? existingComments["TRACK"])
+        if let tr = finTrack, !tr.isEmpty { newComments.append(("TRACKNUMBER", tr)) }
+
+        let finYear = year ?? (existingComments["DATE"] ?? existingComments["YEAR"])
+        if let y = finYear, !y.isEmpty { newComments.append(("DATE", y)) }
+
+        let finGenre = genre ?? existingComments["GENRE"]
+        if let g = finGenre, !g.isEmpty { newComments.append(("GENRE", g)) }
+
+        for (k, v) in existingOtherComments {
+            newComments.append((k, v))
+        }
+
+        var vorbisData = Data()
+        let vendorData = vendorString.data(using: .utf8) ?? Data("WalkmanStudio".utf8)
+        let vLen = UInt32(vendorData.count)
+        vorbisData.append(contentsOf: [
+            UInt8(vLen & 0xFF), UInt8((vLen >> 8) & 0xFF), UInt8((vLen >> 16) & 0xFF), UInt8((vLen >> 24) & 0xFF)
+        ])
+        vorbisData.append(vendorData)
+
+        let cCount = UInt32(newComments.count)
+        vorbisData.append(contentsOf: [
+            UInt8(cCount & 0xFF), UInt8((cCount >> 8) & 0xFF), UInt8((cCount >> 16) & 0xFF), UInt8((cCount >> 24) & 0xFF)
+        ])
+
+        for (k, v) in newComments {
+            let entry = "\(k)=\(v)"
+            let entryData = entry.data(using: .utf8) ?? Data()
+            let eLen = UInt32(entryData.count)
+            vorbisData.append(contentsOf: [
+                UInt8(eLen & 0xFF), UInt8((eLen >> 8) & 0xFF), UInt8((eLen >> 16) & 0xFF), UInt8((eLen >> 24) & 0xFF)
+            ])
+            vorbisData.append(entryData)
+        }
+
+        // Construct updated Picture block
+        var pictureBlockData: Data? = nil
+        if let rawArt = coverArtData {
+            if let baselineJPEG = WalkmanEngine.shared.encodeBaselineRGBJPEG(data: rawArt) {
+                var pic = Data()
+                // Picture type: 3 = Front cover (4 bytes BE)
+                pic.append(contentsOf: [0x00, 0x00, 0x00, 0x03])
+                // MIME: "image/jpeg"
+                let mime = "image/jpeg".data(using: .ascii)!
+                let mimeLen = UInt32(mime.count)
+                pic.append(contentsOf: [
+                    UInt8((mimeLen >> 24) & 0xFF), UInt8((mimeLen >> 16) & 0xFF), UInt8((mimeLen >> 8) & 0xFF), UInt8(mimeLen & 0xFF)
+                ])
+                pic.append(mime)
+                // Description: empty (0 length)
+                pic.append(contentsOf: [0x00, 0x00, 0x00, 0x00])
+                // Width & Height
+                var w: UInt32 = 800
+                var h: UInt32 = 800
+                if let src = CGImageSourceCreateWithData(baselineJPEG as CFData, nil),
+                   let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any] {
+                    w = UInt32(props[kCGImagePropertyPixelWidth] as? Int ?? 800)
+                    h = UInt32(props[kCGImagePropertyPixelHeight] as? Int ?? 800)
+                }
+                pic.append(contentsOf: [
+                    UInt8((w >> 24) & 0xFF), UInt8((w >> 16) & 0xFF), UInt8((w >> 8) & 0xFF), UInt8(w & 0xFF),
+                    UInt8((h >> 24) & 0xFF), UInt8((h >> 16) & 0xFF), UInt8((h >> 8) & 0xFF), UInt8(h & 0xFF)
+                ])
+                // Color depth: 24, colors: 0
+                pic.append(contentsOf: [0x00, 0x00, 0x00, 0x18, 0x00, 0x00, 0x00, 0x00])
+                // Image data length
+                let dataLen = UInt32(baselineJPEG.count)
+                pic.append(contentsOf: [
+                    UInt8((dataLen >> 24) & 0xFF), UInt8((dataLen >> 16) & 0xFF), UInt8((dataLen >> 8) & 0xFF), UInt8(dataLen & 0xFF)
+                ])
+                pic.append(baselineJPEG)
+                pictureBlockData = pic
+            }
+        } else if let existingPic = existingPictureBlock {
+            pictureBlockData = existingPic
+        }
+
+        // Assemble all blocks in canonical order
+        var allBlocks: [(type: Int, data: Data)] = []
+        allBlocks.append((0, streamInfo))
+        for ob in otherBlocks {
+            allBlocks.append(ob)
+        }
+        allBlocks.append((4, vorbisData))
+        if let pic = pictureBlockData {
+            allBlocks.append((6, pic))
+        }
+        // 4KB Padding
+        allBlocks.append((1, Data(repeating: 0, count: 4096)))
+
+        var output = Data([0x66, 0x4C, 0x61, 0x43])
+        for (idx, block) in allBlocks.enumerated() {
+            let isBlockLast = (idx == allBlocks.count - 1)
+            let typeByte = UInt8((isBlockLast ? 0x80 : 0x00) | (block.type & 0x7F))
+            let len = block.data.count
+            output.append(typeByte)
+            output.append(UInt8((len >> 16) & 0xFF))
+            output.append(UInt8((len >> 8) & 0xFF))
+            output.append(UInt8(len & 0xFF))
+            output.append(block.data)
+        }
+        output.append(audioFrames)
+
+        try output.write(to: fileURL, options: .atomic)
+    }
 
     // -----------------------------------------------------------------------
     // Hardware Constraint 2: Strict ID3v2.3 UTF-16 MP3 Tagging
@@ -99,10 +361,10 @@ public final class AudioTagger: @unchecked Sendable {
         frame.append("APIC".data(using: .ascii)!)
 
         var content = Data()
-        content.append(0x01) // Encoding: 1 = UTF-16
-        content.append("image/jpeg\0".data(using: .ascii)!) // MIME
+        content.append(0x00) // 0 = ISO-8859-1 for empty description
+        content.append("image/jpeg\0".data(using: .isoLatin1)!) // MIME
         content.append(0x03) // Picture type: 3 = Front cover
-        content.append(contentsOf: [0x00, 0x00]) // Description: empty UTF-16 string
+        content.append(0x00) // Description: single null terminator
         content.append(imageData)
 
         let size = UInt32(content.count)
@@ -124,6 +386,11 @@ public final class AudioTagger: @unchecked Sendable {
             UInt8((size >> 7) & 0x7F),
             UInt8(size & 0x7F)
         ]
+    }
+
+    public func invalidateCaches(fileURL: URL) {
+        artCache.removeObject(forKey: fileURL as NSURL)
+        lyricsCache.removeObject(forKey: fileURL as NSURL)
     }
 
     // -----------------------------------------------------------------------
