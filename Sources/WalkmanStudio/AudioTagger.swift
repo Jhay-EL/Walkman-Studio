@@ -491,6 +491,14 @@ public final class AudioTagger: @unchecked Sendable {
             // Non-atomic fallback for external FAT32/exFAT Walkman volumes
             try lyrics.write(to: lrcURL, atomically: false, encoding: .utf8)
         }
+
+        // Clean macOS metadata shadow file and xattrs on external storage
+        let cPath = (lrcURL.path as NSString).fileSystemRepresentation
+        removexattr(cPath, "com.apple.TextEncoding", 0)
+        let dotfileURL = lrcURL.deletingLastPathComponent().appendingPathComponent("._" + lrcURL.lastPathComponent)
+        try? FileManager.default.removeItem(at: dotfileURL)
+        sync()
+
         lyricsCache.setObject(lyrics as NSString, forKey: fileURL as NSURL)
     }
 
@@ -499,6 +507,14 @@ public final class AudioTagger: @unchecked Sendable {
         if FileManager.default.fileExists(atPath: lrcURL.path) {
             try FileManager.default.removeItem(at: lrcURL)
         }
+        let upperLrc = fileURL.deletingPathExtension().appendingPathExtension("LRC")
+        if FileManager.default.fileExists(atPath: upperLrc.path) {
+            try FileManager.default.removeItem(at: upperLrc)
+        }
+        let dotfileURL = lrcURL.deletingLastPathComponent().appendingPathComponent("._" + lrcURL.lastPathComponent)
+        try? FileManager.default.removeItem(at: dotfileURL)
+        sync()
+
         lyricsCache.removeObject(forKey: fileURL as NSURL)
     }
 

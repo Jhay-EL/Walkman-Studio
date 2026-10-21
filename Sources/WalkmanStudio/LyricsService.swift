@@ -29,35 +29,69 @@ public final class LyricsService: @unchecked Sendable {
 
     private let session: URLSession = {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 5.0
-        config.timeoutIntervalForResource = 10.0
+        config.timeoutIntervalForRequest = 4.0
+        config.timeoutIntervalForResource = 8.0
         config.requestCachePolicy = .returnCacheDataElseLoad
         return URLSession(configuration: config)
     }()
 
     private init() {}
 
-    /// Cleans fluff from track titles such as "(feat. X)", "(Official Video)", "[Remastered]", etc.
-    public static func cleanTrackTitle(_ title: String) -> String {
-        var t = title
-        // Remove feat / ft
+    /// Cleans fluff from track titles such as leading track numbers ("01. "), "(feat. X)", "(Official Video)", "[Remastered]", etc.
+    public static func cleanTrackTitle(_ title: String, artist: String? = nil) -> String {
+        var t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // 1. Strip audio file extensions if present in title
+        t = t.replacingOccurrences(
+            of: #"\.(flac|mp3|m4a|wav|aac|ogg|wma|aiff?)$"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+
+        // 2. Strip leading disc/track numbers (e.g. "01. ", "02 - ", "1-03 ", "01 ")
+        t = t.replacingOccurrences(
+            of: #"^(\d+[-_])?\d+[\s\.\-_]+"#,
+            with: "",
+            options: .regularExpression
+        )
+
+        // 3. Strip artist prefix if repeated in the title (e.g. "Harry Styles - Sign of the Times")
+        if let art = artist?.trimmingCharacters(in: .whitespacesAndNewlines), !art.isEmpty {
+            let artLower = art.lowercased()
+            let tLower = t.lowercased()
+            for sep in [" - ", " – ", " — ", " : ", ": "] {
+                let prefix = artLower + sep
+                if tLower.hasPrefix(prefix) {
+                    t = String(t.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+                    break
+                }
+            }
+        }
+
+        // 4. Remove feat / ft
         t = t.replacingOccurrences(
             of: #"\s*[\(\[](feat\.|ft\.|featuring).*?[\)\]]"#,
             with: "",
             options: [.regularExpression, .caseInsensitive]
         )
-        // Remove video / audio / visualizer / lyric video
+        // 5. Remove video / audio / visualizer / lyric video
         t = t.replacingOccurrences(
             of: #"\s*[\(\[](official|music video|video|audio|lyrics? video|visualizer|hd|4k|hq).*?[\)\]]"#,
             with: "",
             options: [.regularExpression, .caseInsensitive]
         )
-        // Remove remaster / deluxe / version
+        // 6. Remove remaster / deluxe / version / edit
         t = t.replacingOccurrences(
-            of: #"\s*[\(\[](remaster|remastered|deluxe|bonus|anniversary|version|edit|mono|stereo).*?[\)\]]"#,
+            of: #"\s*[\(\[](remaster|remastered|deluxe|bonus|anniversary|version|edit|mono|stereo|radio edit).*?[\)\]]"#,
             with: "",
             options: [.regularExpression, .caseInsensitive]
         )
+
+        // 7. Strip surrounding quotes if any
+        if (t.hasPrefix("\"") && t.hasSuffix("\"")) || (t.hasPrefix("'") && t.hasSuffix("'")) {
+            t = String(t.dropFirst().dropLast())
+        }
+
         return t.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
@@ -68,24 +102,22 @@ public final class LyricsService: @unchecked Sendable {
         album: String = "",
         durationSeconds: Double = 0
     ) async throws -> LyricsResult {
-        let cleanTitle = Self.cleanTrackTitle(title)
+        let cleanTitle = Self.cleanTrackTitle(title, artist: artist)
         let primaryArtist = Track.parsePrimaryAndFeaturedArtist(from: artist).primary
 
         var allowed = CharacterSet.urlQueryAllowed
         allowed.remove(charactersIn: "+&?/#%")
 
-        // 1. Try LRCLIB exact match with clean title and primary artist
+        // 1. Try LRCLIB exact match with clean title and primary artist (no strict album to prevent 503)
         if let result = await queryLrclibExact(
             title: cleanTitle,
             artist: primaryArtist,
-            album: album,
-            duration: durationSeconds,
             allowedChars: allowed
         ) {
             return result
         }
 
-        // 2. Try LRCLIB search (fuzzy matching)
+        // 2. Try LRCLIB search (fuzzy matching across synced lyrics)
         if let result = await queryLrclibSearch(
             title: cleanTitle,
             artist: primaryArtist,
@@ -123,34 +155,33 @@ public final class LyricsService: @unchecked Sendable {
     private func queryLrclibExact(
         title: String,
         artist: String,
-        album: String,
-        duration: Double,
         allowedChars: CharacterSet
     ) async -> LyricsResult? {
         guard let encTitle = title.addingPercentEncoding(withAllowedCharacters: allowedChars),
-              let encArtist = artist.addingPercentEncoding(withAllowedCharacters: allowedChars) else {
+              let encArtist = artist.addingPercentEncoding(withAllowedCharacters: allowedChars),
+              let url = URL(string: "https://lrclib.net/api/get?track_name=\(encTitle)&artist_name=\(encArtist)") else {
             return nil
         }
-
-        var urlString = "https://lrclib.net/api/get?track_name=\(encTitle)&artist_name=\(encArtist)"
-        if duration > 10 {
-            urlString += "&duration=\(Int(duration))"
-        }
-        if !album.isEmpty, let encAlbum = album.addingPercentEncoding(withAllowedCharacters: allowedChars) {
-            urlString += "&album_name=\(encAlbum)"
-        }
-
-        guard let url = URL(string: urlString) else { return nil }
 
         var request = URLRequest(url: url)
         request.setValue("WalkmanStudio/1.0 (https://github.com/Jhay-EL/Walkman-Studio)", forHTTPHeaderField: "User-Agent")
 
+        // First attempt
+        if let res = await executeLrclibRequest(request) {
+            return res
+        }
+
+        // Brief retry on 503 / transient error
+        try? await Task.sleep(nanoseconds: 350_000_000)
+        return await executeLrclibRequest(request)
+    }
+
+    private func executeLrclibRequest(_ request: URLRequest) async -> LyricsResult? {
         guard let (data, response) = try? await session.data(for: request),
               let http = response as? HTTPURLResponse, http.statusCode == 200,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
         }
-
         return extractFromLrclibDict(json)
     }
 
@@ -170,15 +201,18 @@ public final class LyricsService: @unchecked Sendable {
         var request = URLRequest(url: url)
         request.setValue("WalkmanStudio/1.0 (https://github.com/Jhay-EL/Walkman-Studio)", forHTTPHeaderField: "User-Agent")
 
-        guard let (data, response) = try? await session.data(for: request),
-              let http = response as? HTTPURLResponse, http.statusCode == 200,
-              let list = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
-              !list.isEmpty else {
+        var list = await executeLrclibSearchRequest(request)
+        if list == nil {
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            list = await executeLrclibSearchRequest(request)
+        }
+
+        guard let results = list, !results.isEmpty else {
             return nil
         }
 
         // Prioritize candidates with syncedLyrics and close duration
-        let sorted = list.sorted { a, b in
+        let sorted = results.sorted { a, b in
             let aSynced = (a["syncedLyrics"] as? String)?.isEmpty == false
             let bSynced = (b["syncedLyrics"] as? String)?.isEmpty == false
             if aSynced != bSynced {
@@ -199,6 +233,15 @@ public final class LyricsService: @unchecked Sendable {
         }
 
         return nil
+    }
+
+    private func executeLrclibSearchRequest(_ request: URLRequest) async -> [[String: Any]]? {
+        guard let (data, response) = try? await session.data(for: request),
+              let http = response as? HTTPURLResponse, http.statusCode == 200,
+              let list = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            return nil
+        }
+        return list
     }
 
     private func extractFromLrclibDict(_ dict: [String: Any]) -> LyricsResult? {

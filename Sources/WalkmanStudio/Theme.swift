@@ -99,6 +99,7 @@ public struct LiquidGlassModifier: ViewModifier {
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .stroke(Color.white.opacity(borderOpacity * 0.3), lineWidth: 1)
+                    .allowsHitTesting(false)
             )
             // Clean, minimal shadow without any colored glow
             .shadow(
@@ -113,5 +114,15 @@ public struct LiquidGlassModifier: ViewModifier {
 public extension View {
     func liquidGlass(cornerRadius: CGFloat = 12, borderOpacity: Double = 0.35, hasGoldGlow: Bool = false) -> some View {
         self.modifier(LiquidGlassModifier(cornerRadius: cornerRadius, borderOpacity: borderOpacity, hasGoldGlow: false))
+    }
+}
+
+public struct WalkmanPressableButtonStyle: ButtonStyle {
+    public init() {}
+    public func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.72 : 1.0)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
 }

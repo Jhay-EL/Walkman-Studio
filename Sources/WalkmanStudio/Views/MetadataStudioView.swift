@@ -108,12 +108,15 @@ public struct MetadataStudioView: View {
 
     private func grabLyrics() {
         guard let tr = track else { return }
-        isFetchingLyrics = true
-        lyricsStatusMessage = "Grabbing .LRC from internet..."
+        
+        withAnimation(.easeInOut(duration: 0.15)) {
+            isFetchingLyrics = true
+            lyricsStatusMessage = "Grabbing .LRC online..."
+        }
 
-        let trackTitle = self.title.isEmpty ? tr.title : self.title
-        let trackArtist = self.artist.isEmpty ? tr.artist : self.artist
-        let trackAlbum = self.album.isEmpty ? tr.album : self.album
+        let trackTitle = self.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? tr.title : self.title
+        let trackArtist = self.artist.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? tr.artist : self.artist
+        let trackAlbum = self.album.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? tr.album : self.album
         let duration = tr.durationSeconds
         let fileURL = URL(fileURLWithPath: tr.fullPath)
 
@@ -126,31 +129,39 @@ public struct MetadataStudioView: View {
                     durationSeconds: duration
                 )
 
-                // Write paired .lrc file to Walkman
+                // Write paired .lrc file to Walkman alongside music file
                 try AudioTagger.shared.saveLyrics(fileURL: fileURL, lyrics: result.lyrics)
 
                 await MainActor.run {
-                    self.lyrics = result.lyrics
-                    self.lyricsDraft = result.lyrics
-                    self.isEditingLyrics = false
-                    self.isFetchingLyrics = false
-                    self.lyricsStatusMessage = result.synced ? "Synced .LRC imported to Walkman!" : "Imported .LRC to Walkman!"
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        self.lyrics = result.lyrics
+                        self.lyricsDraft = result.lyrics
+                        self.isEditingLyrics = false
+                        self.isFetchingLyrics = false
+                        self.lyricsStatusMessage = result.synced ? "Synced .LRC imported!" : "Imported .LRC to Walkman!"
+                    }
 
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
-                        if self.lyricsStatusMessage?.contains("imported") == true {
-                            self.lyricsStatusMessage = nil
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+                        if self.lyricsStatusMessage?.contains("imported") == true || self.lyricsStatusMessage?.contains("Imported") == true {
+                            withAnimation {
+                                self.lyricsStatusMessage = nil
+                            }
                         }
                     }
                 }
             } catch {
                 await MainActor.run {
-                    self.isFetchingLyrics = false
-                    self.lyricsStatusMessage = "Lyrics not found online"
-                    self.isEditingLyrics = true // Open editor as fallback so user can paste or type
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        self.isFetchingLyrics = false
+                        self.lyricsStatusMessage = "No lyrics found online"
+                        self.isEditingLyrics = true // Open editor as fallback so user can paste or import file
+                    }
 
                     DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
-                        if self.lyricsStatusMessage == "Lyrics not found online" {
-                            self.lyricsStatusMessage = nil
+                        if self.lyricsStatusMessage == "No lyrics found online" {
+                            withAnimation {
+                                self.lyricsStatusMessage = nil
+                            }
                         }
                     }
                 }
@@ -355,6 +366,7 @@ public struct MetadataStudioView: View {
                             if isFetchingLyrics {
                                 ProgressView()
                                     .scaleEffect(0.6)
+                                    .frame(width: 14, height: 14)
                             }
                             
                             if let msg = lyricsStatusMessage {
@@ -376,8 +388,11 @@ public struct MetadataStudioView: View {
                                     Image(systemName: "arrow.clockwise")
                                         .font(.system(size: 11))
                                         .foregroundStyle(WalkmanTheme.silver)
+                                        .frame(width: 22, height: 22)
+                                        .contentShape(Rectangle())
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(WalkmanPressableButtonStyle())
+                                .disabled(isFetchingLyrics)
                                 .help("Re-fetch / update .LRC from internet")
                             }
                             
@@ -390,8 +405,10 @@ public struct MetadataStudioView: View {
                                 Image(systemName: isEditingLyrics ? "xmark" : (lyrics != nil ? "pencil" : "plus"))
                                     .font(.system(size: 11))
                                     .foregroundStyle(WalkmanTheme.silver)
+                                    .frame(width: 22, height: 22)
+                                    .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(WalkmanPressableButtonStyle())
                             .help(isEditingLyrics ? "Cancel editing" : (lyrics != nil ? "Edit lyrics manually" : "Add or write lyrics (.lrc)"))
                         }
                         
@@ -408,18 +425,28 @@ public struct MetadataStudioView: View {
                                 HStack(spacing: 8) {
                                     Button(action: { grabLyrics() }) {
                                         HStack(spacing: 4) {
-                                            Image(systemName: "arrow.down.circle")
-                                                .font(.system(size: 11))
-                                            Text("Grab Online")
-                                                .font(WalkmanFont.subheadlineMedium)
+                                            if isFetchingLyrics {
+                                                ProgressView()
+                                                    .scaleEffect(0.55)
+                                                    .frame(width: 12, height: 12)
+                                                Text("Fetching...")
+                                                    .font(WalkmanFont.subheadlineMedium)
+                                            } else {
+                                                Image(systemName: "arrow.down.circle")
+                                                    .font(.system(size: 11))
+                                                Text("Grab Online")
+                                                    .font(WalkmanFont.subheadlineMedium)
+                                            }
                                         }
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 4.5)
                                         .background(Color.white.opacity(0.08))
                                         .foregroundStyle(.white)
                                         .clipShape(RoundedRectangle(cornerRadius: 4))
+                                        .contentShape(Rectangle())
                                     }
-                                    .buttonStyle(.plain)
+                                    .buttonStyle(WalkmanPressableButtonStyle())
+                                    .disabled(isFetchingLyrics)
                                     .help("Fetch synced .LRC from internet")
                                     
                                     Button(action: { importLrcFile() }) {
@@ -434,8 +461,9 @@ public struct MetadataStudioView: View {
                                         .background(Color.white.opacity(0.08))
                                         .foregroundStyle(.white)
                                         .clipShape(RoundedRectangle(cornerRadius: 4))
+                                        .contentShape(Rectangle())
                                     }
-                                    .buttonStyle(.plain)
+                                    .buttonStyle(WalkmanPressableButtonStyle())
                                     .help("Import a .lrc file from Mac")
                                     
                                     Spacer()
@@ -449,7 +477,8 @@ public struct MetadataStudioView: View {
                                     .background(WalkmanTheme.silverGradient)
                                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                                     .clipShape(RoundedRectangle(cornerRadius: 4))
-                                    .buttonStyle(.plain)
+                                    .contentShape(Rectangle())
+                                    .buttonStyle(WalkmanPressableButtonStyle())
                                 }
                             }
                         } else if let lyr = lyrics, !lyr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -467,11 +496,13 @@ public struct MetadataStudioView: View {
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8)
                                     .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
+                                    .allowsHitTesting(false)
                             )
                         } else if isFetchingLyrics {
                             HStack(spacing: 9) {
                                 ProgressView()
                                     .scaleEffect(0.7)
+                                    .frame(width: 16, height: 16)
                                 Text("Grabbing synced .LRC from internet...")
                                     .font(WalkmanFont.callout)
                                     .foregroundStyle(WalkmanTheme.silverLight)
@@ -496,17 +527,19 @@ public struct MetadataStudioView: View {
                                 }) {
                                     HStack(spacing: 5) {
                                         Image(systemName: "arrow.down.circle.fill")
-                                            .font(.system(size: 11))
+                                            .font(.system(size: 11, weight: .bold))
                                         Text("Add .LRC")
                                             .font(WalkmanFont.calloutBold)
                                     }
                                     .padding(.horizontal, 10)
-                                    .padding(.vertical, 4.5)
+                                    .padding(.vertical, 5)
                                     .background(WalkmanTheme.silverGradient)
                                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                                    .clipShape(RoundedRectangle(cornerRadius: 5))
+                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                    .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(WalkmanPressableButtonStyle())
+                                .disabled(isFetchingLyrics)
                                 .help("Automatically grab synced lyrics from internet and import .lrc to Walkman")
                             }
                             .padding(10)
