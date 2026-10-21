@@ -246,7 +246,7 @@ public struct WalkmanDeviceInfo: Sendable, Hashable, Codable {
 }
 
 public struct AlbumItem: Identifiable, Hashable, Sendable {
-    public var id: String { "\(artist)|\(name)" }
+    public var id: String { "\(name.lowercased())|\(artist.lowercased())" }
     public let name: String
     public let artist: String
     public let year: String
