@@ -163,11 +163,16 @@ public final class AudioTagger: @unchecked Sendable {
         let finTrack = trackNumber ?? (existingComments["TRACKNUMBER"] ?? existingComments["TRACK"])
         if let tr = finTrack, !tr.isEmpty { newComments.append(("TRACKNUMBER", tr)) }
 
-        let finYear = year ?? (existingComments["DATE"] ?? existingComments["YEAR"])
-        if let y = finYear, !y.isEmpty { newComments.append(("DATE", y)) }
+        let finYear: String? = (year != nil && !year!.isEmpty) ? year : (existingComments["DATE"] ?? existingComments["YEAR"])
+        if let y = finYear, !y.isEmpty {
+            newComments.append(("DATE", y))
+            newComments.append(("YEAR", y))
+        }
 
-        let finGenre = genre ?? existingComments["GENRE"]
-        if let g = finGenre, !g.isEmpty { newComments.append(("GENRE", g)) }
+        let finGenre: String? = (genre != nil && !genre!.isEmpty) ? genre : existingComments["GENRE"]
+        if let g = finGenre, !g.isEmpty {
+            newComments.append(("GENRE", g))
+        }
 
         for (k, v) in existingOtherComments {
             newComments.append((k, v))
@@ -316,6 +321,7 @@ public final class AudioTagger: @unchecked Sendable {
         }
         if let y = year, !y.isEmpty {
             framesData.append(makeID3v23TextFrame(id: "TYER", text: y))
+            framesData.append(makeID3v23TextFrame(id: "TDRC", text: y))
         }
         if let g = genre, !g.isEmpty {
             framesData.append(makeID3v23TextFrame(id: "TCON", text: g))
@@ -399,6 +405,237 @@ public final class AudioTagger: @unchecked Sendable {
     public func invalidateCaches(fileURL: URL) {
         artCache.removeObject(forKey: fileURL as NSURL)
         lyricsCache.removeObject(forKey: fileURL as NSURL)
+    }
+
+    public static let id3v1Genres: [String] = [
+        "Blues", "Classic Rock", "Country", "Dance", "Disco", "Funk", "Grunge", "Hip-Hop",
+        "Jazz", "Metal", "New Age", "Oldies", "Other", "Pop", "R&B", "Rap", "Reggae", "Rock",
+        "Techno", "Industrial", "Alternative", "Ska", "Death Metal", "Pranks", "Soundtrack",
+        "Euro-Techno", "Ambient", "Trip-Hop", "Vocal", "Jazz+Funk", "Fusion", "Trance",
+        "Classical", "Instrumental", "Acid", "House", "Game", "Sound Clip", "Gospel", "Noise",
+        "AlternRock", "Bass", "Soul", "Punk", "Space", "Meditative", "Instrumental Pop",
+        "Instrumental Rock", "Ethnic", "Gothic", "Darkwave", "Techno-Industrial", "Electronic",
+        "Pop-Folk", "Eurodance", "Dream", "Southern Rock", "Comedy", "Cult", "Gangsta",
+        "Top 40", "Christian Rap", "Pop/Funk", "Jungle", "Native American", "Cabaret", "New Wave",
+        "Psychadelic", "Rave", "Showtunes", "Trailer", "Lo-Fi", "Tribal", "Acid Punk",
+        "Acid Jazz", "Polka", "Retro", "Musical", "Rock & Roll", "Hard Rock", "Folk",
+        "Folk-Rock", "National Folk", "Swing", "Fast Fusion", "Bebob", "Latin", "Revival",
+        "Celtic", "Bluegrass", "Avantgarde", "Gothic Rock", "Progressive Rock", "Psychedelic Rock",
+        "Symphonic Rock", "Slow Rock", "Big Band", "Chorus", "Easy Listening", "Acoustic",
+        "Humour", "Speech", "Chanson", "Opera", "Chamber Music", "Sonata", "Symphony",
+        "Booty Bass", "Primus", "Porn Groove", "Satire", "Slow Jam", "Club", "Tango",
+        "Samba", "Folklore", "Ballad", "Power Ballad", "Rhythmic Soul", "Freestyle",
+        "Duet", "Punk Rock", "Drum Solo", "A capella", "Euro-House", "Dance Hall"
+    ]
+
+    public static func normalizeGenre(_ genre: String) -> String {
+        let trimmed = genre.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed == "(255)" || trimmed == "255" || trimmed.lowercased() == "none" {
+            return ""
+        }
+        if trimmed.hasPrefix("(") {
+            if let closeParen = trimmed.firstIndex(of: ")") {
+                let inside = String(trimmed[trimmed.index(after: trimmed.startIndex)..<closeParen])
+                let remainder = String(trimmed[trimmed.index(after: closeParen)...]).trimmingCharacters(in: .whitespaces)
+                if !remainder.isEmpty {
+                    return remainder
+                }
+                if let num = Int(inside), num >= 0 && num < id3v1Genres.count {
+                    return id3v1Genres[num]
+                }
+            }
+        } else if let num = Int(trimmed), num >= 0 && num < id3v1Genres.count {
+            return id3v1Genres[num]
+        }
+        return trimmed
+    }
+
+    public static func extractYearString(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let match = trimmed.range(of: #"\b(19\d\d|20\d\d)\b"#, options: .regularExpression) {
+            return String(trimmed[match])
+        }
+        let digits = trimmed.filter { $0.isNumber }
+        if digits.count >= 4 {
+            return String(digits.prefix(4))
+        }
+        return trimmed
+    }
+
+    public func readMetadata(fileURL: URL) -> AudioFileMetadata? {
+        let ext = fileURL.pathExtension.lowercased()
+        if ext == "flac" {
+            return readFLACMetadata(fileURL: fileURL)
+        } else if ext == "mp3" {
+            return readMP3Metadata(fileURL: fileURL)
+        }
+        return nil
+    }
+
+    public func readFLACMetadata(fileURL: URL) -> AudioFileMetadata? {
+        guard let handle = try? FileHandle(forReadingFrom: fileURL) else { return nil }
+        defer { try? handle.close() }
+
+        guard let magic = try? handle.read(upToCount: 4), magic == Data([0x66, 0x4C, 0x61, 0x43]) else { return nil }
+
+        let fileSize = (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? NSNumber)?.int64Value ?? 0
+        var res = AudioFileMetadata()
+        var isLast = false
+
+        while !isLast {
+            guard let bh = try? handle.read(upToCount: 4), bh.count == 4 else { break }
+            isLast = (bh[0] & 0x80) != 0
+            let type = Int(bh[0] & 0x7F)
+            let len = (Int(bh[1]) << 16) | (Int(bh[2]) << 8) | Int(bh[3])
+
+            if type == 0 && len >= 34 { // STREAMINFO
+                guard let d = try? handle.read(upToCount: len), d.count >= 34 else { break }
+                let b10_17 = d.subdata(in: 10..<18)
+                let raw = b10_17.reduce(UInt64(0)) { ($0 << 8) | UInt64($1) }
+                let sr = Int((raw >> 44) & 0xFFFFF)
+                let bps = Int(((raw >> 36) & 0x1F) + 1)
+                let samples = Int64(raw & 0xFFFFFFFFF)
+                res.sampleRate = sr
+                res.bitsPerSample = bps
+                if sr > 0 {
+                    res.durationSeconds = Double(samples) / Double(sr)
+                    if res.durationSeconds > 0 && fileSize > 0 {
+                        res.bitrateKbps = Int((Double(fileSize) * 8.0) / (res.durationSeconds * 1000.0))
+                    }
+                }
+            } else if type == 4 { // VORBIS_COMMENT
+                guard let d = try? handle.read(upToCount: len), d.count == len else { break }
+                var offset = 0
+                if offset + 4 <= d.count {
+                    let vLen = Int(d[offset]) | (Int(d[offset+1]) << 8) | (Int(d[offset+2]) << 16) | (Int(d[offset+3]) << 24)
+                    offset += 4 + vLen
+                    if offset + 4 <= d.count {
+                        let count = Int(d[offset]) | (Int(d[offset+1]) << 8) | (Int(d[offset+2]) << 16) | (Int(d[offset+3]) << 24)
+                        offset += 4
+                        for _ in 0..<count {
+                            guard offset + 4 <= d.count else { break }
+                            let cLen = Int(d[offset]) | (Int(d[offset+1]) << 8) | (Int(d[offset+2]) << 16) | (Int(d[offset+3]) << 24)
+                            offset += 4
+                            guard offset + cLen <= d.count else { break }
+                            if let s = String(data: d.subdata(in: offset..<offset+cLen), encoding: .utf8) {
+                                let parts = s.components(separatedBy: "=")
+                                if parts.count >= 2 {
+                                    let k = parts[0].trimmingCharacters(in: .whitespaces).uppercased()
+                                    let v = parts[1...].joined(separator: "=").trimmingCharacters(in: .whitespacesAndNewlines)
+                                    if k == "TITLE" { res.title = v }
+                                    else if k == "ARTIST" { res.artist = v }
+                                    else if k == "ALBUM" { res.album = v }
+                                    else if k == "TRACKNUMBER" || k == "TRACK" { res.trackNumber = v }
+                                    else if (k == "DATE" || k == "YEAR" || k == "ORIGINALDATE" || k == "ORIGINALYEAR" || k == "ORIGINAL_DATE" || k == "RELEASEDATE" || k == "RELEASE_DATE") && res.year.isEmpty {
+                                        res.year = AudioTagger.extractYearString(v)
+                                    } else if k == "GENRE" {
+                                        let normalized = AudioTagger.normalizeGenre(v)
+                                        if !normalized.isEmpty {
+                                            if res.genre.isEmpty {
+                                                res.genre = normalized
+                                            } else if !res.genre.contains(normalized) {
+                                                res.genre += ", \(normalized)"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            offset += cLen
+                        }
+                    }
+                }
+            } else if type == 6 { // PICTURE
+                res.hasArtwork = true
+                try? handle.seek(toOffset: handle.offsetInFile + UInt64(len))
+            } else {
+                try? handle.seek(toOffset: handle.offsetInFile + UInt64(len))
+            }
+        }
+        return res
+    }
+
+    public func readMP3Metadata(fileURL: URL) -> AudioFileMetadata? {
+        guard let handle = try? FileHandle(forReadingFrom: fileURL) else { return nil }
+        defer { try? handle.close() }
+
+        guard let header = try? handle.read(upToCount: 10), header.count == 10 else { return nil }
+        let fileSize = (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? NSNumber)?.int64Value ?? 0
+
+        var res = AudioFileMetadata()
+        var audioOffset = 0
+
+        if header[0] == 0x49 && header[1] == 0x44 && header[2] == 0x33 {
+            let version = header[3]
+            let tagSize = (Int(header[6]) << 21) | (Int(header[7]) << 14) | (Int(header[8]) << 7) | Int(header[9])
+            audioOffset = 10 + tagSize
+
+            if let tagData = try? handle.read(upToCount: tagSize) {
+                var offset = 0
+                while offset + 10 <= tagData.count {
+                    let idData = tagData.subdata(in: offset..<offset+4)
+                    guard let frameID = String(data: idData, encoding: .ascii), frameID.allSatisfy({ $0.isLetter || $0.isNumber }) else {
+                        break
+                    }
+                    let fSize: Int
+                    if version == 4 {
+                        fSize = (Int(tagData[offset+4]) << 21) | (Int(tagData[offset+5]) << 14) | (Int(tagData[offset+6]) << 7) | Int(tagData[offset+7])
+                    } else {
+                        fSize = (Int(tagData[offset+4]) << 24) | (Int(tagData[offset+5]) << 16) | (Int(tagData[offset+6]) << 8) | Int(tagData[offset+7])
+                    }
+                    offset += 10
+                    guard offset + fSize <= tagData.count else { break }
+                    let frameContent = tagData.subdata(in: offset..<offset+fSize)
+                    offset += fSize
+
+                    if frameID == "APIC" || frameID == "PIC" {
+                        res.hasArtwork = true
+                    } else if frameID.hasPrefix("T") && frameContent.count > 1 {
+                        let enc = frameContent[0]
+                        let payload = frameContent.subdata(in: 1..<frameContent.count)
+                        let text: String?
+                        if enc == 0 { text = String(data: payload, encoding: .isoLatin1) }
+                        else if enc == 1 { text = String(data: payload, encoding: .utf16) }
+                        else if enc == 2 { text = String(data: payload, encoding: .utf16BigEndian) }
+                        else { text = String(data: payload, encoding: .utf8) }
+
+                        let val = (text ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "\0 \t\n\r"))
+                        if !val.isEmpty {
+                            if frameID == "TIT2" || frameID == "TT2" { res.title = val }
+                            else if frameID == "TPE1" || frameID == "TP1" { res.artist = val }
+                            else if frameID == "TALB" || frameID == "TAL" { res.album = val }
+                            else if frameID == "TRCK" || frameID == "TRK" { res.trackNumber = val }
+                            else if (frameID == "TYER" || frameID == "TYE" || frameID == "TDRC") && res.year.isEmpty {
+                                res.year = AudioTagger.extractYearString(val)
+                            } else if (frameID == "TCON" || frameID == "TCO") && res.genre.isEmpty {
+                                res.genre = AudioTagger.normalizeGenre(val)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Try reading MPEG frame for bitrate/sample rate/duration
+        if audioOffset > 0 && audioOffset < fileSize {
+            try? handle.seek(toOffset: UInt64(audioOffset))
+            if let frameBytes = try? handle.read(upToCount: 4), frameBytes.count == 4 {
+                if frameBytes[0] == 0xFF && (frameBytes[1] & 0xE0) == 0xE0 {
+                    let bitrateIndex = Int((frameBytes[2] >> 4) & 0x0F)
+                    let sampleRateIndex = Int((frameBytes[2] >> 2) & 0x03)
+                    let mpeg1Layer3Bitrates = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320]
+                    let sampleRates = [44100, 48000, 32000]
+                    let br = (bitrateIndex < mpeg1Layer3Bitrates.count) ? mpeg1Layer3Bitrates[bitrateIndex] : 128
+                    let sr = (sampleRateIndex < sampleRates.count) ? sampleRates[sampleRateIndex] : 44100
+                    res.bitrateKbps = br
+                    res.sampleRate = sr
+                    if br > 0 {
+                        res.durationSeconds = Double((fileSize - Int64(audioOffset)) * 8) / Double(br * 1000)
+                    }
+                }
+            }
+        }
+
+        return res
     }
 
     // -----------------------------------------------------------------------

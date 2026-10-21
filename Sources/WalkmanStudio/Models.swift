@@ -328,3 +328,43 @@ public struct TransferItem: Identifiable, Sendable {
         self.status = status
     }
 }
+
+public struct AudioFileMetadata: Sendable {
+    public var title: String = ""
+    public var artist: String = ""
+    public var album: String = ""
+    public var trackNumber: String = ""
+    public var year: String = ""
+    public var genre: String = ""
+    public var durationSeconds: Double = 0
+    public var bitrateKbps: Int = 0
+    public var sampleRate: Int = 44100
+    public var bitsPerSample: Int = 16
+    public var hasArtwork: Bool = false
+    
+    public init(
+        title: String = "",
+        artist: String = "",
+        album: String = "",
+        trackNumber: String = "",
+        year: String = "",
+        genre: String = "",
+        durationSeconds: Double = 0,
+        bitrateKbps: Int = 0,
+        sampleRate: Int = 44100,
+        bitsPerSample: Int = 16,
+        hasArtwork: Bool = false
+    ) {
+        self.title = title
+        self.artist = artist
+        self.album = album
+        self.trackNumber = trackNumber
+        self.year = year
+        self.genre = genre
+        self.durationSeconds = durationSeconds
+        self.bitrateKbps = bitrateKbps
+        self.sampleRate = sampleRate
+        self.bitsPerSample = bitsPerSample
+        self.hasArtwork = hasArtwork
+    }
+}

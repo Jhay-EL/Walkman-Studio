@@ -66,12 +66,13 @@ public struct MetadataStudioView: View {
             
             let url = URL(fileURLWithPath: tr.fullPath)
             
-            // Fast asynchronous loading of artwork and lyrics to eliminate selection lag
+            // Fast asynchronous loading of artwork, lyrics, and verified metadata to eliminate selection lag
             DispatchQueue.global(qos: .userInitiated).async {
                 let art = AudioTagger.shared.extractCoverArt(fileURL: url)
                 let lyr = AudioTagger.shared.extractLyrics(fileURL: url)
                 let val = art != nil ? WalkmanEngine.shared.isBaselineRGBJPEG(data: art!) : nil
                 let img = art != nil ? NSImage(data: art!) : nil
+                let meta = AudioTagger.shared.readMetadata(fileURL: url)
                 
                 DispatchQueue.main.async {
                     guard self.track?.id == tr.id else { return }
@@ -80,6 +81,18 @@ public struct MetadataStudioView: View {
                     self.validationStatus = val
                     self.lyrics = lyr
                     self.lyricsDraft = lyr ?? ""
+                    
+                    if let m = meta {
+                        if (self.year.isEmpty || tr.year.isEmpty) && !m.year.isEmpty {
+                            self.year = m.year
+                        }
+                        if (self.genre.isEmpty || tr.genre.isEmpty) && !m.genre.isEmpty {
+                            self.genre = m.genre
+                        }
+                        if !m.year.isEmpty || !m.genre.isEmpty {
+                            LibraryScanner.shared.updateCachedMetadata(fullPath: tr.fullPath, year: m.year, genre: m.genre)
+                        }
+                    }
                     
                     // Enable auto-save after initial population completes
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
@@ -339,7 +352,11 @@ public struct MetadataStudioView: View {
                                     }
                                 }
                                 
-                                Text("\(tr.artist) — \(tr.album)")
+                                let displayYear = !year.isEmpty ? year : tr.year
+                                let displayArtist = !artist.isEmpty ? artist : tr.artist
+                                let displayAlbum = !album.isEmpty ? album : tr.album
+                                
+                                Text("\(displayArtist) — \(displayAlbum)\(displayYear.isEmpty ? "" : " (\(displayYear))")")
                                     .font(WalkmanFont.subheadline)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
@@ -669,6 +686,14 @@ public struct MetadataStudioView: View {
                             SpecRow(label: "Duration", value: formatDuration(tr.durationSeconds))
                             SpecRow(label: "Bitrate", value: tr.bitrateKbps > 0 ? "\(tr.bitrateKbps) kbps" : "Lossless")
                             SpecRow(label: "Audio Quality", value: "\(tr.bitsPerSample)-bit / \(tr.sampleRate) Hz")
+                            let currentGenre = !genre.isEmpty ? genre : tr.genre
+                            if !currentGenre.isEmpty {
+                                SpecRow(label: "Genre", value: currentGenre)
+                            }
+                            let currentYear = !year.isEmpty ? year : tr.year
+                            if !currentYear.isEmpty {
+                                SpecRow(label: "Year", value: currentYear)
+                            }
                             SpecRow(label: "File Size", value: formatSize(tr.sizeBytes))
                             SpecRow(label: "Hardware Tags", value: tr.format == "MP3" ? "Strict ID3v2.3 (UTF-16)" : "Vorbis Comments")
                         }

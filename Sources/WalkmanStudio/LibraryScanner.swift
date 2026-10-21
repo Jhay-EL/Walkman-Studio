@@ -125,7 +125,8 @@ public final class LibraryScanner: @unchecked Sendable {
 
                 // 2. Quickly reconcile with directory entries
                 var finalTracks: [Track] = []
-                var pendingEnrichment: [(path: String, size: Int64, relPath: String, ext: String)] = []
+                var pendingEnrichment: [(path: String, size: Int64, mtime: Double, relPath: String, ext: String)] = []
+                var repairedRows: [(fullPath: String, year: String, genre: String)] = []
 
                 if let enumerator = fileManager.enumerator(
                     at: musicDir,
@@ -148,13 +149,47 @@ public final class LibraryScanner: @unchecked Sendable {
 
                         if let cached = cachedTracks[fullPath], cached.durationSeconds > 0,
                            abs(cachedMtime - curMtime) < 1.0, cachedSize == curSize {
+                            // Fast-enrich cached track if missing year or genre (e.g. from legacy scanner)
+                            if (cached.year.isEmpty || cached.genre.isEmpty), (ext == "flac" || ext == "mp3") {
+                                if let meta = AudioTagger.shared.readMetadata(fileURL: fileURL), (!meta.year.isEmpty || !meta.genre.isEmpty) {
+                                    var updatedTrack = cached
+                                    if updatedTrack.year.isEmpty && !meta.year.isEmpty { updatedTrack.year = meta.year }
+                                    if updatedTrack.genre.isEmpty && !meta.genre.isEmpty { updatedTrack.genre = meta.genre }
+                                    finalTracks.append(updatedTrack)
+                                    artistsSet.insert(updatedTrack.artist)
+                                    albumsSet.insert("\(updatedTrack.artist) - \(updatedTrack.album)")
+                                    repairedRows.append((fullPath, updatedTrack.year, updatedTrack.genre))
+                                    continue
+                                }
+                            }
                             finalTracks.append(cached)
                             artistsSet.insert(cached.artist)
                             albumsSet.insert("\(cached.artist) - \(cached.album)")
                         } else {
                             let relPath = fullPath.replacingOccurrences(of: musicDir.path, with: "").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-                            pendingEnrichment.append((fullPath, curSize, relPath, ext))
+                            pendingEnrichment.append((fullPath, curSize, curMtime, relPath, ext))
                         }
+                    }
+                }
+
+                // Batch-update any repaired rows with restored year/genre
+                if !repairedRows.isEmpty {
+                    if let db = self.getDB() {
+                        sqlite3_exec(db, "BEGIN TRANSACTION;", nil, nil, nil)
+                        let updateSql = "UPDATE tracks_cache SET year = ?, genre = ? WHERE full_path = ?;"
+                        var uStmt: OpaquePointer?
+                        if sqlite3_prepare_v2(db, updateSql, -1, &uStmt, nil) == SQLITE_OK {
+                            for row in repairedRows {
+                                sqlite3_bind_text(uStmt, 1, (row.year as NSString).utf8String, -1, nil)
+                                sqlite3_bind_text(uStmt, 2, (row.genre as NSString).utf8String, -1, nil)
+                                sqlite3_bind_text(uStmt, 3, (row.fullPath as NSString).utf8String, -1, nil)
+                                sqlite3_step(uStmt)
+                                sqlite3_reset(uStmt)
+                            }
+                            sqlite3_finalize(uStmt)
+                        }
+                        sqlite3_exec(db, "COMMIT;", nil, nil, nil)
+                        sqlite3_close(db)
                     }
                 }
 
@@ -194,7 +229,7 @@ public final class LibraryScanner: @unchecked Sendable {
                             let rStr = (parsed.relativePath as NSString).utf8String
 
                             sqlite3_bind_text(insStmt, 1, pStr, -1, nil)
-                            sqlite3_bind_double(insStmt, 2, CFAbsoluteTimeGetCurrent())
+                            sqlite3_bind_double(insStmt, 2, item.mtime)
                             sqlite3_bind_int64(insStmt, 3, parsed.sizeBytes)
                             sqlite3_bind_text(insStmt, 4, fmtStr, -1, nil)
                             sqlite3_bind_text(insStmt, 5, tStr, -1, nil)
@@ -272,16 +307,16 @@ public final class LibraryScanner: @unchecked Sendable {
             }
         }
 
-        if ext == "flac", let info = parseFlacHeader(path: path, fileSize: size) {
+        if (ext == "flac" || ext == "mp3"), let info = AudioTagger.shared.readMetadata(fileURL: URL(fileURLWithPath: path)) {
             return Track(
                 filename: URL(fileURLWithPath: path).lastPathComponent,
                 relativePath: relPath,
                 fullPath: path,
-                format: "FLAC",
+                format: ext.uppercased(),
                 title: info.title.isEmpty ? defTitle : info.title,
                 artist: info.artist.isEmpty ? defArtist : info.artist,
                 album: info.album.isEmpty ? defAlbum : info.album,
-                trackNum: info.trackNum.isEmpty ? defTrackNum : info.trackNum,
+                trackNum: info.trackNumber.isEmpty ? defTrackNum : info.trackNumber,
                 year: info.year,
                 genre: info.genre,
                 durationSeconds: info.durationSeconds,
@@ -315,90 +350,28 @@ public final class LibraryScanner: @unchecked Sendable {
         )
     }
 
-    private struct FlacHeaderInfo {
-        var title: String = ""
-        var artist: String = ""
-        var album: String = ""
-        var trackNum: String = ""
-        var year: String = ""
-        var genre: String = ""
-        var sampleRate: Int = 44100
-        var bitsPerSample: Int = 16
-        var durationSeconds: Double = 0
-        var bitrateKbps: Int = 0
-        var hasArtwork: Bool = false
-    }
-
-    private func parseFlacHeader(path: String, fileSize: Int64) -> FlacHeaderInfo? {
-        let url = URL(fileURLWithPath: path)
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
-        defer { try? handle.close() }
-
-        guard let magic = try? handle.read(upToCount: 4), magic == Data([0x66, 0x4C, 0x61, 0x43]) else { return nil }
-
-        var res = FlacHeaderInfo()
-        var isLast = false
-
-        while !isLast {
-            guard let bh = try? handle.read(upToCount: 4), bh.count == 4 else { break }
-            isLast = (bh[0] & 0x80) != 0
-            let type = Int(bh[0] & 0x7F)
-            let len = (Int(bh[1]) << 16) | (Int(bh[2]) << 8) | Int(bh[3])
-
-            if type == 0 && len >= 34 { // STREAMINFO
-                guard let d = try? handle.read(upToCount: len), d.count >= 34 else { break }
-                let b10_17 = d.subdata(in: 10..<18)
-                let raw = b10_17.reduce(UInt64(0)) { ($0 << 8) | UInt64($1) }
-                let sr = Int((raw >> 44) & 0xFFFFF)
-                let bps = Int(((raw >> 36) & 0x1F) + 1)
-                let samples = Int64(raw & 0xFFFFFFFFF)
-                res.sampleRate = sr
-                res.bitsPerSample = bps
-                if sr > 0 {
-                    res.durationSeconds = Double(samples) / Double(sr)
-                    if res.durationSeconds > 0 {
-                        res.bitrateKbps = Int((Double(fileSize) * 8.0) / (res.durationSeconds * 1000.0))
-                    }
-                }
-            } else if type == 4 { // VORBIS_COMMENT
-                guard let d = try? handle.read(upToCount: len), d.count == len else { break }
-                var offset = 0
-                if offset + 4 <= d.count {
-                    let vLen = Int(d[offset]) | (Int(d[offset+1]) << 8) | (Int(d[offset+2]) << 16) | (Int(d[offset+3]) << 24)
-                    offset += 4 + vLen
-                    if offset + 4 <= d.count {
-                        let count = Int(d[offset]) | (Int(d[offset+1]) << 8) | (Int(d[offset+2]) << 16) | (Int(d[offset+3]) << 24)
-                        offset += 4
-                        for _ in 0..<count {
-                            guard offset + 4 <= d.count else { break }
-                            let cLen = Int(d[offset]) | (Int(d[offset+1]) << 8) | (Int(d[offset+2]) << 16) | (Int(d[offset+3]) << 24)
-                            offset += 4
-                            guard offset + cLen <= d.count else { break }
-                            if let s = String(data: d.subdata(in: offset..<offset+cLen), encoding: .utf8) {
-                                let parts = s.components(separatedBy: "=")
-                                if parts.count >= 2 {
-                                    let k = parts[0].uppercased()
-                                    let v = parts[1...].joined(separator: "=")
-                                    if k == "TITLE" { res.title = v }
-                                    else if k == "ARTIST" { res.artist = v }
-                                    else if k == "ALBUM" { res.album = v }
-                                    else if k == "TRACKNUMBER" || k == "TRACK" { res.trackNum = v }
-                                    else if k == "DATE" || k == "YEAR" { res.year = String(v.prefix(4)) }
-                                    else if k == "GENRE" { res.genre = v }
-                                }
-                            }
-                            offset += cLen
-                        }
-                    }
-                }
-            } else if type == 6 { // PICTURE
-                res.hasArtwork = true
-                try? handle.seek(toOffset: handle.offsetInFile + UInt64(len))
-            } else {
-                try? handle.seek(toOffset: handle.offsetInFile + UInt64(len))
-            }
+    public func updateCachedMetadata(fullPath: String, year: String?, genre: String?) {
+        guard let db = getDB() else { return }
+        defer { sqlite3_close(db) }
+        let sql = """
+        UPDATE tracks_cache 
+        SET year = CASE WHEN ? != '' THEN ? ELSE year END,
+            genre = CASE WHEN ? != '' THEN ? ELSE genre END
+        WHERE full_path = ?;
+        """
+        var stmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+            let yStr = ((year ?? "") as NSString).utf8String
+            let gStr = ((genre ?? "") as NSString).utf8String
+            let pStr = (fullPath as NSString).utf8String
+            sqlite3_bind_text(stmt, 1, yStr, -1, nil)
+            sqlite3_bind_text(stmt, 2, yStr, -1, nil)
+            sqlite3_bind_text(stmt, 3, gStr, -1, nil)
+            sqlite3_bind_text(stmt, 4, gStr, -1, nil)
+            sqlite3_bind_text(stmt, 5, pStr, -1, nil)
+            sqlite3_step(stmt)
+            sqlite3_finalize(stmt)
         }
-        return res
     }
 
     public func invalidate(fullPath: String) {
