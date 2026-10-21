@@ -171,12 +171,18 @@ public struct WalkmanSideActionButtonStyle: ButtonStyle {
                 )
                 .animation(.spring(response: 0.22, dampingFraction: 0.65), value: configuration.isPressed)
                 .animation(.easeInOut(duration: 0.14), value: isHovered)
-                .contentShape(Rectangle())
+                .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
                 .onHover { hovering in
                     isHovered = hovering
                     if hovering {
                         NSCursor.pointingHand.push()
                     } else {
+                        NSCursor.pop()
+                    }
+                }
+                .onDisappear {
+                    if isHovered {
+                        isHovered = false
                         NSCursor.pop()
                     }
                 }

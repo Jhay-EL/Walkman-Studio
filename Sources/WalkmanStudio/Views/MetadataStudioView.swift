@@ -120,7 +120,7 @@ public struct MetadataStudioView: View {
         withAnimation(.easeInOut(duration: 0.12)) {
             isFetchingLyrics = true
             lyricsErrorMessage = nil
-            lyricsStatusMessage = "Fetching .LRC online..."
+            lyricsStatusMessage = nil
         }
 
         let trackTitle = self.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? tr.title : self.title
@@ -382,13 +382,7 @@ public struct MetadataStudioView: View {
                             
                             Spacer()
                             
-                            if isFetchingLyrics {
-                                ProgressView()
-                                    .scaleEffect(0.6)
-                                    .frame(width: 14, height: 14)
-                            }
-                            
-                            if let msg = lyricsStatusMessage {
+                            if let msg = lyricsStatusMessage, !isFetchingLyrics {
                                 Text(msg)
                                     .font(WalkmanFont.monoSmall)
                                     .foregroundStyle(WalkmanTheme.silverLight)
@@ -526,18 +520,9 @@ public struct MetadataStudioView: View {
                             }
                         } else {
                             VStack(spacing: 8) {
-                                // Status container ("No lyrics on Walkman" / fetching / error)
+                                // Status container ("No lyrics on Walkman" / error)
                                 HStack(spacing: 8) {
-                                    if isFetchingLyrics {
-                                        HStack(spacing: 6) {
-                                            ProgressView()
-                                                .scaleEffect(0.65)
-                                                .frame(width: 14, height: 14)
-                                            Text("Fetching lyrics from internet...")
-                                                .font(WalkmanFont.calloutMedium)
-                                                .foregroundStyle(WalkmanTheme.silverLight)
-                                        }
-                                    } else if let err = lyricsErrorMessage {
+                                    if let err = lyricsErrorMessage {
                                         HStack(spacing: 6) {
                                             Image(systemName: "exclamationmark.circle.fill")
                                                 .font(.system(size: 14))
@@ -567,9 +552,9 @@ public struct MetadataStudioView: View {
                                     HStack(spacing: 6) {
                                         if isFetchingLyrics {
                                             ProgressView()
-                                                .scaleEffect(0.6)
-                                                .frame(width: 12, height: 12)
-                                            Text("Fetching lyrics...")
+                                                .scaleEffect(0.65)
+                                                .frame(width: 14, height: 14)
+                                            Text("Fetching Lyrics on the internet...")
                                                 .font(WalkmanFont.calloutBold)
                                         } else {
                                             Image(systemName: "arrow.down.circle.fill")
@@ -594,7 +579,7 @@ public struct MetadataStudioView: View {
                                 }
                                 .buttonStyle(WalkmanSideActionButtonStyle(isFullWidth: true, cornerRadius: 6))
                                 .disabled(isFetchingLyrics)
-                                .help(isFetchingLyrics ? "Fetching lyrics from internet in progress..." : "Automatically grab synced lyrics from internet and add .lrc to Walkman")
+                                .help(isFetchingLyrics ? "Fetching lyrics on the internet in progress..." : "Automatically grab synced lyrics from internet and add .lrc to Walkman")
                             }
                         }
                     }
@@ -637,14 +622,17 @@ public struct MetadataStudioView: View {
                     
                     // Save Button
                     Button(action: saveMetadata) {
-                        HStack(spacing: 6) {
+                        HStack(spacing: 7) {
                             if isSaving {
                                 ProgressView()
-                                    .scaleEffect(0.6)
+                                    .scaleEffect(0.65)
+                                    .frame(width: 14, height: 14)
                             } else if showSuccess {
                                 Image(systemName: "checkmark")
+                                    .font(.system(size: 12, weight: .bold))
                             } else {
                                 Image(systemName: "square.and.arrow.down")
+                                    .font(.system(size: 13, weight: .semibold))
                             }
                             Text(showSuccess ? "Saved (ID3v2.3 / Baseline Art)" : (isSaving ? "Saving..." : "Save Tags & Artwork"))
                         }
@@ -655,13 +643,17 @@ public struct MetadataStudioView: View {
                             Group {
                                 if showSuccess {
                                     Color.green.opacity(0.85)
+                                } else if isSaving {
+                                    Color.white.opacity(0.12)
                                 } else {
                                     WalkmanTheme.silverGradient
                                 }
                             }
                         )
-                        .foregroundStyle(showSuccess ? .white : Color(red: 20/255, green: 20/255, blue: 24/255))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .foregroundStyle(
+                            showSuccess ? Color.white : (isSaving ? WalkmanTheme.silverLight : Color(red: 20/255, green: 20/255, blue: 24/255))
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(WalkmanSideActionButtonStyle(isFullWidth: true, cornerRadius: 8))
                     .disabled(isSaving)
@@ -687,7 +679,7 @@ public struct MetadataStudioView: View {
             .padding(.top, 12)
             .padding(.bottom, 24)
         }
-        .contentMargins(.top, 0, for: .scrollContent)
+        .ignoresSafeArea(.all, edges: .top)
         .onAppear { loadTrack() }
         .onChange(of: track) { loadTrack() }
     }
