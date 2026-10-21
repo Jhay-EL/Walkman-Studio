@@ -133,7 +133,7 @@ public final class WalkmanEngine: @unchecked Sendable {
     // -----------------------------------------------------------------------
     public func writePlaylist(musicDir: URL, name: String, relativeTracks: [String]) throws -> URL {
         var cleanName = sanitizeFilename(name)
-        if !cleanName.lowercased().hasSuffix(".m3u8") {
+        if !cleanName.lowercased().hasSuffix(".m3u8") && !cleanName.lowercased().hasSuffix(".m3u") {
             cleanName += ".m3u8"
         }
         let playlistURL = musicDir.appendingPathComponent(cleanName)
@@ -146,6 +146,18 @@ public final class WalkmanEngine: @unchecked Sendable {
 
         let content = lines.joined(separator: "\r\n") + "\r\n"
         try content.write(to: playlistURL, atomically: true, encoding: .utf8)
+        
+        // 1. Remove macOS extended attributes to avoid ._<name> AppleDouble files on ExFAT/FAT32
+        let cPath = (playlistURL.path as NSString).fileSystemRepresentation
+        removexattr(cPath, "com.apple.TextEncoding", 0)
+        
+        // 2. Remove companion ._ AppleDouble shadow file if created
+        let dotfileURL = playlistURL.deletingLastPathComponent().appendingPathComponent("._" + playlistURL.lastPathComponent)
+        try? FileManager.default.removeItem(at: dotfileURL)
+        
+        // 3. Force kernel buffer flush to physical flash storage
+        sync()
+
         return playlistURL
     }
 

@@ -58,17 +58,18 @@ public struct PlaylistsView: View {
     private func saveCurrentPlaylist() {
         guard let drive = activeDrive, let playlist = selectedPlaylist else { return }
         let musicURL = URL(fileURLWithPath: drive.musicDir)
+        let filenameToSave = playlist.filename.isEmpty ? playlist.name : playlist.filename
         do {
             _ = try WalkmanEngine.shared.writePlaylist(
                 musicDir: musicURL,
-                name: playlist.name,
+                name: filenameToSave,
                 relativeTracks: playlistTracks
             )
             withAnimation {
-                messageBanner = "Saved \(playlist.name).m3u8 with CRLF endings"
+                messageBanner = "Saved \(filenameToSave) (\(playlistTracks.count) tracks) with CRLF endings"
             }
             loadPlaylists()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
                 withAnimation { messageBanner = nil }
             }
         } catch {
