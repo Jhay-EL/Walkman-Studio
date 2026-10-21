@@ -1,6 +1,22 @@
 import SwiftUI
 import AppKit
 
+public struct RankedTrack: Identifiable, Sendable {
+    public let rank: Int
+    public let track: Track
+    public let formattedDate: String
+    public let formattedDuration: String
+    public let isHiRes: Bool
+    
+    public var id: String { track.id }
+    public var title: String { track.title }
+    public var artist: String { track.artist }
+    public var album: String { track.album }
+    public var format: String { track.format }
+    public var dateAdded: Date { track.dateAdded }
+    public var durationSeconds: Double { track.durationSeconds }
+}
+
 public struct RecentlyAddedView: View {
     let tracks: [Track]
     let isLoading: Bool
@@ -12,7 +28,10 @@ public struct RecentlyAddedView: View {
     @State private var searchQuery: String = ""
     @State private var timeframeFilter: TimeframeFilter = .all
     @State private var formatFilter: String = "ALL"
-    @State private var sortOrder = [KeyPathComparator(\Track.dateAdded, order: .reverse)]
+    @State private var sortOrder = [KeyPathComparator(\RankedTrack.dateAdded, order: .reverse)]
+    
+    @State private var displayedTracks: [RankedTrack] = []
+    @State private var currentPlaybackQueue: [Track] = []
     
     public enum TimeframeFilter: String, CaseIterable, Identifiable {
         case all = "All Newest"
@@ -36,7 +55,36 @@ public struct RecentlyAddedView: View {
         self.onGoToTransfer = onGoToTransfer
     }
     
-    private var filteredTracks: [Track] {
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .full
+        return f
+    }()
+    
+    private static let absoluteFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        return f
+    }()
+    
+    private func formatDateAdded(_ date: Date, now: Date) -> String {
+        let interval = now.timeIntervalSince(date)
+        if interval < 7 * 86400 && interval >= 0 {
+            return Self.relativeFormatter.localizedString(for: date, relativeTo: now)
+        }
+        return Self.absoluteFormatter.string(from: date)
+    }
+    
+    private func formatDuration(_ seconds: Double) -> String {
+        if seconds <= 0 { return "—" }
+        let mins = Int(seconds) / 60
+        let secs = Int(seconds) % 60
+        return String(format: "%d:%02d", mins, secs)
+    }
+    
+    private func recomputeDisplayedTracks(newSortOrder: [KeyPathComparator<RankedTrack>]? = nil) {
+        let activeSortOrder = newSortOrder ?? sortOrder
         let q = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let now = Date()
         let thirtyDaysAgo = now.addingTimeInterval(-30 * 86400)
@@ -72,40 +120,35 @@ public struct RecentlyAddedView: View {
             return true
         }
         
-        return filtered.sorted(using: sortOrder)
-    }
-    
-    private static let relativeFormatter: RelativeDateTimeFormatter = {
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .full
-        return f
-    }()
-    
-    private static let absoluteFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateStyle = .medium
-        f.timeStyle = .none
-        return f
-    }()
-    
-    private func formatDateAdded(_ date: Date) -> String {
-        let now = Date()
-        let interval = now.timeIntervalSince(date)
-        if interval < 7 * 86400 && interval >= 0 {
-            return Self.relativeFormatter.localizedString(for: date, relativeTo: now)
+        var items: [RankedTrack] = []
+        items.reserveCapacity(filtered.count)
+        
+        for (index, track) in filtered.enumerated() {
+            let fDate = formatDateAdded(track.dateAdded, now: now)
+            let fDuration = formatDuration(track.durationSeconds)
+            let hiRes = track.bitsPerSample > 16 || track.sampleRate > 48000
+            items.append(RankedTrack(
+                rank: index + 1,
+                track: track,
+                formattedDate: fDate,
+                formattedDuration: fDuration,
+                isHiRes: hiRes
+            ))
         }
-        return Self.absoluteFormatter.string(from: date)
-    }
-    
-    private func formatDuration(_ seconds: Double) -> String {
-        if seconds <= 0 { return "—" }
-        let mins = Int(seconds) / 60
-        let secs = Int(seconds) % 60
-        return String(format: "%d:%02d", mins, secs)
-    }
-    
-    private func isHiRes(_ track: Track) -> Bool {
-        return track.bitsPerSample > 16 || track.sampleRate > 48000
+        
+        let sorted = items.sorted(using: activeSortOrder)
+        let reindexed: [RankedTrack] = sorted.enumerated().map { (idx, item) in
+            RankedTrack(
+                rank: idx + 1,
+                track: item.track,
+                formattedDate: item.formattedDate,
+                formattedDuration: item.formattedDuration,
+                isHiRes: item.isHiRes
+            )
+        }
+        
+        self.displayedTracks = reindexed
+        self.currentPlaybackQueue = reindexed.map(\.track)
     }
     
     public var body: some View {
@@ -138,10 +181,10 @@ public struct RecentlyAddedView: View {
                 
                 Spacer()
                 
-                if !filteredTracks.isEmpty {
+                if !displayedTracks.isEmpty {
                     Button(action: {
-                        if let first = filteredTracks.first {
-                            player.play(track: first, in: filteredTracks)
+                        if let first = currentPlaybackQueue.first {
+                            player.play(track: first, in: currentPlaybackQueue)
                         }
                     }) {
                         HStack(spacing: 6) {
@@ -211,7 +254,7 @@ public struct RecentlyAddedView: View {
                 
                 Spacer()
                 
-                Text("\(filteredTracks.count.formatted()) tracks")
+                Text("\(displayedTracks.count.formatted()) tracks")
                     .font(WalkmanFont.mono)
                     .foregroundStyle(.secondary)
             }
@@ -222,7 +265,7 @@ public struct RecentlyAddedView: View {
                 .overlay(Color.white.opacity(0.06))
             
             // Content Table
-            if filteredTracks.isEmpty && !isLoading {
+            if displayedTracks.isEmpty && !isLoading {
                 VStack(spacing: 12) {
                     Spacer()
                     Image(systemName: "clock")
@@ -254,16 +297,16 @@ public struct RecentlyAddedView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                Table(filteredTracks, selection: $selectedTrackId, sortOrder: $sortOrder) {
-                    TableColumn("#") { track in
-                        let idx = (filteredTracks.firstIndex(where: { $0.id == track.id }) ?? 0) + 1
-                        Text("\(idx)")
+                Table(displayedTracks, selection: $selectedTrackId, sortOrder: $sortOrder) {
+                    TableColumn("#", value: \.rank) { item in
+                        Text("\(item.rank)")
                             .font(WalkmanFont.mono)
                             .foregroundStyle(.secondary)
                     }
                     .width(min: 30, ideal: 36, max: 48)
                     
-                    TableColumn("Title", value: \.title) { track in
+                    TableColumn("Title", value: \.title) { item in
+                        let track = item.track
                         let isCurrent = player.currentTrack?.id == track.id
                         let isPlayingThis = isCurrent && player.isPlaying
                         
@@ -272,7 +315,7 @@ public struct RecentlyAddedView: View {
                                 if isPlayingThis {
                                     player.pause()
                                 } else {
-                                    player.play(track: track, in: filteredTracks)
+                                    player.play(track: track, in: currentPlaybackQueue)
                                 }
                             }) {
                                 TrackCoverThumbnail(track: track, size: 28, isPlaying: isPlayingThis)
@@ -290,33 +333,33 @@ public struct RecentlyAddedView: View {
                     }
                     .width(min: 170, ideal: 240)
                     
-                    TableColumn("Artist", value: \.artist) { track in
-                        Text(track.artist)
+                    TableColumn("Artist", value: \.artist) { item in
+                        Text(item.artist)
                             .font(WalkmanFont.callout)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                     .width(min: 110, ideal: 150)
                     
-                    TableColumn("Album", value: \.album) { track in
-                        Text(track.album)
+                    TableColumn("Album", value: \.album) { item in
+                        Text(item.album)
                             .font(WalkmanFont.callout)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                     .width(min: 120, ideal: 170)
                     
-                    TableColumn("Format", value: \.format) { track in
+                    TableColumn("Format", value: \.format) { item in
                         HStack(spacing: 4) {
-                            Text(track.format)
+                            Text(item.format)
                                 .font(WalkmanFont.badge)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1.5)
-                                .background(isHiRes(track) ? WalkmanTheme.hiResGold.opacity(0.14) : Color.white.opacity(0.06))
-                                .foregroundStyle(isHiRes(track) ? WalkmanTheme.hiResGold : .secondary)
+                                .background(item.isHiRes ? WalkmanTheme.hiResGold.opacity(0.14) : Color.white.opacity(0.06))
+                                .foregroundStyle(item.isHiRes ? WalkmanTheme.hiResGold : .secondary)
                                 .clipShape(RoundedRectangle(cornerRadius: 3))
                             
-                            if isHiRes(track) {
+                            if item.isHiRes {
                                 Text("Hi-Res")
                                     .font(WalkmanFont.badge)
                                     .padding(.horizontal, 4.5)
@@ -329,44 +372,62 @@ public struct RecentlyAddedView: View {
                     }
                     .width(min: 90, ideal: 110, max: 125)
                     
-                    TableColumn("Date Added", value: \.dateAdded) { track in
-                        Text(formatDateAdded(track.dateAdded))
+                    TableColumn("Date Added", value: \.dateAdded) { item in
+                        Text(item.formattedDate)
                             .font(WalkmanFont.callout)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                     .width(min: 110, ideal: 130, max: 160)
                     
-                    TableColumn("Duration", value: \.durationSeconds) { track in
-                        Text(formatDuration(track.durationSeconds))
+                    TableColumn("Duration", value: \.durationSeconds) { item in
+                        Text(item.formattedDuration)
                             .font(WalkmanFont.mono)
                             .foregroundStyle(.secondary)
                     }
                     .width(min: 60, ideal: 70, max: 80)
                 }
-                .contextMenu(forSelectionType: Track.ID.self) { items in
-                    if let id = items.first, let track = tracks.first(where: { $0.id == id }) {
+                .contextMenu(forSelectionType: RankedTrack.ID.self) { items in
+                    if let id = items.first, let item = displayedTracks.first(where: { $0.id == id }) {
                         Button("Inspect Metadata & Specs") {
-                            onInspectTrack(track)
+                            onInspectTrack(item.track)
                         }
                         Button("Play") {
-                            player.play(track: track, in: filteredTracks)
+                            player.play(track: item.track, in: currentPlaybackQueue)
                         }
                         Divider()
                         Button("Reveal in Finder") {
-                            NSWorkspace.shared.selectFile(track.fullPath, inFileViewerRootedAtPath: "")
+                            NSWorkspace.shared.selectFile(item.track.fullPath, inFileViewerRootedAtPath: "")
                         }
                     }
                 } primaryAction: { items in
-                    if let id = items.first, let track = tracks.first(where: { $0.id == id }) {
-                        if player.currentTrack?.id == track.id && player.isPlaying {
+                    if let id = items.first, let item = displayedTracks.first(where: { $0.id == id }) {
+                        if player.currentTrack?.id == item.track.id && player.isPlaying {
                             player.pause()
                         } else {
-                            player.play(track: track, in: filteredTracks)
+                            player.play(track: item.track, in: currentPlaybackQueue)
                         }
                     }
                 }
             }
+        }
+        .onAppear {
+            recomputeDisplayedTracks()
+        }
+        .onChange(of: tracks) {
+            recomputeDisplayedTracks()
+        }
+        .onChange(of: searchQuery) {
+            recomputeDisplayedTracks()
+        }
+        .onChange(of: timeframeFilter) {
+            recomputeDisplayedTracks()
+        }
+        .onChange(of: formatFilter) {
+            recomputeDisplayedTracks()
+        }
+        .onChange(of: sortOrder) {
+            recomputeDisplayedTracks()
         }
     }
 }
