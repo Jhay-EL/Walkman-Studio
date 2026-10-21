@@ -81,26 +81,6 @@ public struct MetadataStudioView: View {
         }
     }
     
-    private func revealInFinder(path: String) {
-        let fileURL = URL(fileURLWithPath: path)
-        if FileManager.default.fileExists(atPath: fileURL.path) {
-            if let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first {
-                finder.activate()
-            }
-            if !NSWorkspace.shared.selectFile(fileURL.path, inFileViewerRootedAtPath: "") {
-                NSWorkspace.shared.activateFileViewerSelecting([fileURL])
-            }
-        } else {
-            let parent = fileURL.deletingLastPathComponent()
-            if FileManager.default.fileExists(atPath: parent.path) {
-                if let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first {
-                    finder.activate()
-                }
-                NSWorkspace.shared.open(parent)
-            }
-        }
-    }
-    
     private func saveLyrics() {
         guard let tr = track else { return }
         let url = URL(fileURLWithPath: tr.fullPath)
@@ -391,25 +371,6 @@ public struct MetadataStudioView: View {
                         .padding(10)
                         .liquidGlass(cornerRadius: 8)
                     }
-                    
-                    // Reveal in Finder Button
-                    Button(action: {
-                        revealInFinder(path: tr.fullPath)
-                    }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "folder")
-                                .font(.system(size: 11))
-                            Text("Reveal in Finder")
-                                .font(WalkmanFont.calloutMedium)
-                        }
-                        .foregroundStyle(WalkmanTheme.silverLight)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Open containing folder in macOS Finder and highlight this file")
                     
                     // Metadata Input Form
                     VStack(alignment: .leading, spacing: 6) {

@@ -252,10 +252,6 @@ public struct LibraryView: View {
                         
                         Divider()
                         
-                        Button("Reveal in Finder") {
-                            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: track.fullPath)])
-                        }
-                        
                         Button("Copy Path") {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(track.fullPath, forType: .string)

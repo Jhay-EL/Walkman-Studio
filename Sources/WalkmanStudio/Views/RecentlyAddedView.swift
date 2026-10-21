@@ -395,10 +395,6 @@ public struct RecentlyAddedView: View {
                         Button("Play") {
                             player.play(track: item.track, in: currentPlaybackQueue)
                         }
-                        Divider()
-                        Button("Reveal in Finder") {
-                            NSWorkspace.shared.selectFile(item.track.fullPath, inFileViewerRootedAtPath: "")
-                        }
                     }
                 } primaryAction: { items in
                     if let id = items.first, let item = displayedTracks.first(where: { $0.id == id }) {
