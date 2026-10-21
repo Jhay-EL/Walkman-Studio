@@ -261,6 +261,14 @@ public struct LibraryView: View {
                             NSPasteboard.general.setString(track.fullPath, forType: .string)
                         }
                     }
+                } primaryAction: { selection in
+                    if let firstId = selection.first, let track = tracks.first(where: { $0.id == firstId }) {
+                        if player.currentTrack?.id == track.id && player.isPlaying {
+                            player.pause()
+                        } else {
+                            player.play(track: track, in: filteredTracks)
+                        }
+                    }
                 }
             }
         }
