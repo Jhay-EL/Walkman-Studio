@@ -3,6 +3,8 @@ import AppKit
 
 public struct TrackPreviewBar: View {
     @ObservedObject var player = AudioPlayerService.shared
+    @ObservedObject var progress = AudioPlayerService.shared.progress
+    var isInspectorPresented: Bool = false
     let onOpenInspector: () -> Void
 
     @State private var dragTime: Double? = nil
@@ -150,7 +152,7 @@ public struct TrackPreviewBar: View {
 
                         // Scrubber Slider Row
                         HStack(spacing: 6) {
-                            let curTime = dragTime ?? player.currentTime
+                            let curTime = dragTime ?? progress.currentTime
                             Text(formatTime(curTime))
                                 .font(WalkmanFont.monoSmall)
                                 .foregroundStyle(.secondary)
@@ -158,12 +160,12 @@ public struct TrackPreviewBar: View {
 
                             Slider(
                                 value: Binding(
-                                    get: { dragTime ?? player.currentTime },
+                                    get: { dragTime ?? progress.currentTime },
                                     set: { newTime in
                                         dragTime = newTime
                                     }
                                 ),
-                                in: 0...max(1.0, player.duration),
+                                in: 0...max(1.0, progress.duration),
                                 onEditingChanged: { editing in
                                     if editing {
                                         player.isSeeking = true
@@ -179,7 +181,7 @@ public struct TrackPreviewBar: View {
                             .tint(WalkmanTheme.silver)
                             .frame(minWidth: 70, idealWidth: 180, maxWidth: 280)
 
-                            Text(formatTime(player.duration))
+                            Text(formatTime(progress.duration))
                                 .font(WalkmanFont.monoSmall)
                                 .foregroundStyle(.secondary)
                                 .frame(width: 38, alignment: .leading)
@@ -203,24 +205,28 @@ public struct TrackPreviewBar: View {
                                 .frame(minWidth: 44, idealWidth: 60, maxWidth: 75)
                         }
 
-                        Button(action: onOpenInspector) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "info.circle")
-                                    .font(.system(size: 12))
-                                Text("Details")
-                                    .font(WalkmanFont.subheadlineMedium)
+                        if !isInspectorPresented {
+                            Button(action: onOpenInspector) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "info.circle")
+                                        .font(.system(size: 12))
+                                    Text("Details")
+                                        .font(WalkmanFont.subheadlineMedium)
+                                }
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 4.5)
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .foregroundStyle(.primary)
                             }
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 4.5)
-                            .background(Color.white.opacity(0.08))
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                            .foregroundStyle(.primary)
+                            .buttonStyle(.plain)
+                            .fixedSize()
+                            .help("View & edit metadata tags, hardware compliance, and artwork")
+                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
                         }
-                        .buttonStyle(.plain)
-                        .fixedSize()
-                        .help("View & edit metadata tags, hardware compliance, and artwork")
                     }
                     .fixedSize(horizontal: true, vertical: false)
+                    .animation(.easeInOut(duration: 0.2), value: isInspectorPresented)
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)

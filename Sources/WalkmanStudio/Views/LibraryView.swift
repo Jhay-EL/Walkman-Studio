@@ -12,6 +12,7 @@ public struct LibraryView: View {
     @State private var formatFilter: String = "ALL"
     @State private var searchQuery: String = ""
     @State private var sortOrder = [KeyPathComparator(\Track.artist), KeyPathComparator(\Track.album), KeyPathComparator(\Track.trackNum)]
+    @State private var displayedTracks: [Track] = []
     
     public init(
         tracks: [Track],
@@ -27,7 +28,15 @@ public struct LibraryView: View {
         self.onGoToTransfer = onGoToTransfer
     }
     
-    private var filteredTracks: [Track] {
+    private var visibleTracks: [Track] {
+        if displayedTracks.isEmpty && !tracks.isEmpty && searchQuery.isEmpty && formatFilter == "ALL" {
+            return tracks
+        }
+        return displayedTracks
+    }
+    
+    private func recomputeDisplayedTracks(newSortOrder: [KeyPathComparator<Track>]? = nil) {
+        let activeSort = newSortOrder ?? sortOrder
         let q = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let filtered = tracks.filter { track in
             let matchesSearch = q.isEmpty
@@ -42,7 +51,7 @@ public struct LibraryView: View {
             if formatFilter == "HI-RES" { return track.bitsPerSample > 16 || track.sampleRate > 48000 }
             return track.format == formatFilter
         }
-        return filtered.sorted(using: sortOrder)
+        self.displayedTracks = filtered.sorted(using: activeSort)
     }
     
     private func formatDuration(_ seconds: Double) -> String {
@@ -104,7 +113,7 @@ public struct LibraryView: View {
                         .font(WalkmanFont.subheadline)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("\(filteredTracks.count.formatted()) tracks")
+                    Text("\(visibleTracks.count.formatted()) tracks")
                         .font(WalkmanFont.mono)
                         .foregroundStyle(.secondary)
                 }
@@ -144,7 +153,7 @@ public struct LibraryView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                Table(filteredTracks, selection: $selectedTrackId, sortOrder: $sortOrder) {
+                Table(visibleTracks, selection: $selectedTrackId, sortOrder: $sortOrder) {
                     TableColumn("#", value: \.trackNum) { track in
                         Text(track.trackNum.isEmpty ? "—" : track.trackNum)
                             .font(WalkmanFont.mono)
@@ -161,7 +170,7 @@ public struct LibraryView: View {
                                 if isPlayingThis {
                                     player.pause()
                                 } else {
-                                    player.play(track: track, in: filteredTracks)
+                                    player.play(track: track, in: visibleTracks)
                                 }
                             }) {
                                 TrackCoverThumbnail(track: track, size: 28, isPlaying: isPlayingThis)
@@ -240,7 +249,7 @@ public struct LibraryView: View {
                             if isThisPlaying {
                                 player.pause()
                             } else {
-                                player.play(track: track, in: filteredTracks)
+                                player.play(track: track, in: visibleTracks)
                             }
                         }
                         
@@ -262,11 +271,26 @@ public struct LibraryView: View {
                         if player.currentTrack?.id == track.id && player.isPlaying {
                             player.pause()
                         } else {
-                            player.play(track: track, in: filteredTracks)
+                            player.play(track: track, in: visibleTracks)
                         }
                     }
                 }
             }
+        }
+        .onAppear {
+            recomputeDisplayedTracks()
+        }
+        .onChange(of: tracks) {
+            recomputeDisplayedTracks()
+        }
+        .onChange(of: searchQuery) {
+            recomputeDisplayedTracks()
+        }
+        .onChange(of: formatFilter) {
+            recomputeDisplayedTracks()
+        }
+        .onChange(of: sortOrder) {
+            recomputeDisplayedTracks()
         }
     }
 }

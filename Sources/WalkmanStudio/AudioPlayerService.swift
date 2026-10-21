@@ -3,13 +3,25 @@ import AVFoundation
 import AppKit
 import Combine
 
+public final class PlaybackProgress: ObservableObject, @unchecked Sendable {
+    @Published public var currentTime: Double = 0.0
+    @Published public var duration: Double = 0.0
+
+    public init(currentTime: Double = 0.0, duration: Double = 0.0) {
+        self.currentTime = currentTime
+        self.duration = duration
+    }
+}
+
 public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Sendable {
     public static let shared = AudioPlayerService()
 
+    /// Dedicated high-frequency playback progress object.
+    /// Observers of AudioPlayerService won't be invalidated by sub-second timer ticks.
+    public let progress = PlaybackProgress()
+
     @Published public var currentTrack: Track?
     @Published public var isPlaying: Bool = false
-    @Published public var currentTime: Double = 0.0
-    @Published public var duration: Double = 0.0
     @Published public var volume: Float = 0.8 {
         didSet {
             player.volume = volume
@@ -17,6 +29,16 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
     }
     @Published public var currentCoverArt: NSImage?
     @Published public var isSeeking: Bool = false
+
+    /// Convenience accessors forwarding to `progress`
+    public var currentTime: Double {
+        get { progress.currentTime }
+        set { progress.currentTime = newValue }
+    }
+    public var duration: Double {
+        get { progress.duration }
+        set { progress.duration = newValue }
+    }
 
     private var player: AVPlayer = AVPlayer()
     private var timeObserverToken: Any?
@@ -33,7 +55,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
         let interval = CMTime(seconds: 0.25, preferredTimescale: 600)
         timeObserverToken = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             guard let self = self, !self.isSeeking else { return }
-            self.currentTime = CMTimeGetSeconds(time)
+            self.progress.currentTime = CMTimeGetSeconds(time)
         }
     }
 
@@ -59,8 +81,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
         if !queue.isEmpty {
             self.currentQueue = queue
         }
-        self.currentTime = 0.0
-        self.duration = track.durationSeconds
+        self.progress.currentTime = 0.0
+        self.progress.duration = track.durationSeconds
         self.isPlaying = autoPlay
 
         let url = URL(fileURLWithPath: track.fullPath)
@@ -105,8 +127,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
         player.replaceCurrentItem(with: nil)
         currentTrack = nil
         currentQueue = []
-        currentTime = 0.0
-        duration = 0.0
+        progress.currentTime = 0.0
+        progress.duration = 0.0
         currentCoverArt = nil
     }
 
@@ -122,7 +144,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
     }
 
     public func seek(to seconds: Double) {
-        currentTime = seconds
+        progress.currentTime = seconds
         let targetTime = CMTime(seconds: seconds, preferredTimescale: 600)
         player.seek(to: targetTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
             self?.isSeeking = false
@@ -144,7 +166,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
 
     public func playPrevious() {
         guard let current = currentTrack, !currentQueue.isEmpty else { return }
-        if currentTime > 3.0 {
+        if progress.currentTime > 3.0 {
             seek(to: 0)
             return
         }

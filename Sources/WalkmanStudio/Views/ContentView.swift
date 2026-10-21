@@ -376,9 +376,14 @@ public struct ContentView: View {
                         }
                         
                         // Audio Preview & Playback Bar
-                        TrackPreviewBar(onOpenInspector: {
-                            self.showInspector = true
-                        })
+                        TrackPreviewBar(
+                            isInspectorPresented: showInspector,
+                            onOpenInspector: {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    self.showInspector = true
+                                }
+                            }
+                        )
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(WalkmanTheme.background.ignoresSafeArea())
