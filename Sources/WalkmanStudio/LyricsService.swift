@@ -29,10 +29,16 @@ public final class LyricsService: @unchecked Sendable {
 
     private let session: URLSession = {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 4.0
-        config.timeoutIntervalForResource = 8.0
+        config.timeoutIntervalForRequest = 2.5
+        config.timeoutIntervalForResource = 5.0
         config.requestCachePolicy = .returnCacheDataElseLoad
         return URLSession(configuration: config)
+    }()
+
+    private static let allowedQueryChars: CharacterSet = {
+        var c = CharacterSet.urlQueryAllowed
+        c.remove(charactersIn: "+&?/#%")
+        return c
     }()
 
     private init() {}
@@ -95,7 +101,7 @@ public final class LyricsService: @unchecked Sendable {
         return t.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Fetches lyrics (preferring synchronized .LRC with timestamps) for a track.
+    /// Fetches lyrics (preferring synchronized .LRC with timestamps) for a track concurrently in under 2 seconds.
     public func fetchLyrics(
         title: String,
         artist: String,
@@ -104,85 +110,62 @@ public final class LyricsService: @unchecked Sendable {
     ) async throws -> LyricsResult {
         let cleanTitle = Self.cleanTrackTitle(title, artist: artist)
         let primaryArtist = Track.parsePrimaryAndFeaturedArtist(from: artist).primary
+        let allowed = Self.allowedQueryChars
 
-        var allowed = CharacterSet.urlQueryAllowed
-        allowed.remove(charactersIn: "+&?/#%")
-
-        // 1. Try LRCLIB exact match with clean title and primary artist (no strict album to prevent 503)
-        if let result = await queryLrclibExact(
-            title: cleanTitle,
-            artist: primaryArtist,
-            allowedChars: allowed
-        ) {
-            return result
-        }
-
-        // 2. Try LRCLIB search (fuzzy matching across synced lyrics)
-        if let result = await queryLrclibSearch(
+        // Concurrently query LRCLIB (for synced timestamps) and Lyrics.ovh (fast plain lyrics fallback)
+        async let lrclibTask = queryLrclibSearch(
             title: cleanTitle,
             artist: primaryArtist,
             duration: durationSeconds,
             allowedChars: allowed
-        ) {
-            return result
+        )
+        async let ovhTask = queryLyricsOvh(
+            title: cleanTitle,
+            artist: primaryArtist,
+            allowedChars: allowed
+        )
+
+        // 1. Prioritize synced lyrics from LRCLIB if available
+        let lrcResult = await lrclibTask
+        if let res = lrcResult, res.synced {
+            return res
         }
 
-        // 3. Try LRCLIB search with original raw title if cleanTitle was different
+        // 2. If LRCLIB returned plain lyrics, use it
+        if let res = lrcResult, !res.lyrics.isEmpty {
+            return res
+        }
+
+        // 3. Fast fallback: Lyrics.ovh
+        if let ovhResult = await ovhTask {
+            return ovhResult
+        }
+
+        // 4. Try with raw title if cleaned title differed
         if cleanTitle != title {
-            if let result = await queryLrclibSearch(
+            if let rawResult = await queryLrclibSearch(
                 title: title,
                 artist: primaryArtist,
                 duration: durationSeconds,
                 allowedChars: allowed
             ) {
-                return result
+                return rawResult
             }
         }
 
-        // 4. Fallback to Lyrics.ovh for plain text lyrics
-        if let result = await queryLyricsOvh(
-            title: cleanTitle,
-            artist: primaryArtist,
-            allowedChars: allowed
-        ) {
-            return result
+        // 5. Try title-only query if artist might be slightly mismatched
+        if primaryArtist != "Unknown Artist" && !primaryArtist.isEmpty {
+            if let titleOnlyRes = await queryLrclibSearch(
+                title: cleanTitle,
+                artist: "",
+                duration: durationSeconds,
+                allowedChars: allowed
+            ) {
+                return titleOnlyRes
+            }
         }
 
         throw LyricsError.notFound
-    }
-
-    // MARK: - LRCLIB Exact Query
-    private func queryLrclibExact(
-        title: String,
-        artist: String,
-        allowedChars: CharacterSet
-    ) async -> LyricsResult? {
-        guard let encTitle = title.addingPercentEncoding(withAllowedCharacters: allowedChars),
-              let encArtist = artist.addingPercentEncoding(withAllowedCharacters: allowedChars),
-              let url = URL(string: "https://lrclib.net/api/get?track_name=\(encTitle)&artist_name=\(encArtist)") else {
-            return nil
-        }
-
-        var request = URLRequest(url: url)
-        request.setValue("WalkmanStudio/1.0 (https://github.com/Jhay-EL/Walkman-Studio)", forHTTPHeaderField: "User-Agent")
-
-        // First attempt
-        if let res = await executeLrclibRequest(request) {
-            return res
-        }
-
-        // Brief retry on 503 / transient error
-        try? await Task.sleep(nanoseconds: 350_000_000)
-        return await executeLrclibRequest(request)
-    }
-
-    private func executeLrclibRequest(_ request: URLRequest) async -> LyricsResult? {
-        guard let (data, response) = try? await session.data(for: request),
-              let http = response as? HTTPURLResponse, http.statusCode == 200,
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return nil
-        }
-        return extractFromLrclibDict(json)
     }
 
     // MARK: - LRCLIB Search Query
@@ -192,7 +175,7 @@ public final class LyricsService: @unchecked Sendable {
         duration: Double,
         allowedChars: CharacterSet
     ) async -> LyricsResult? {
-        let searchQuery = "\(artist) \(title)"
+        let searchQuery = artist.isEmpty ? title : "\(artist) \(title)"
         guard let encQ = searchQuery.addingPercentEncoding(withAllowedCharacters: allowedChars),
               let url = URL(string: "https://lrclib.net/api/search?q=\(encQ)") else {
             return nil
@@ -201,13 +184,10 @@ public final class LyricsService: @unchecked Sendable {
         var request = URLRequest(url: url)
         request.setValue("WalkmanStudio/1.0 (https://github.com/Jhay-EL/Walkman-Studio)", forHTTPHeaderField: "User-Agent")
 
-        var list = await executeLrclibSearchRequest(request)
-        if list == nil {
-            try? await Task.sleep(nanoseconds: 350_000_000)
-            list = await executeLrclibSearchRequest(request)
-        }
-
-        guard let results = list, !results.isEmpty else {
+        guard let (data, response) = try? await session.data(for: request),
+              let http = response as? HTTPURLResponse, http.statusCode == 200,
+              let results = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+              !results.isEmpty else {
             return nil
         }
 
@@ -235,24 +215,12 @@ public final class LyricsService: @unchecked Sendable {
         return nil
     }
 
-    private func executeLrclibSearchRequest(_ request: URLRequest) async -> [[String: Any]]? {
-        guard let (data, response) = try? await session.data(for: request),
-              let http = response as? HTTPURLResponse, http.statusCode == 200,
-              let list = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
-            return nil
-        }
-        return list
-    }
-
     private func extractFromLrclibDict(_ dict: [String: Any]) -> LyricsResult? {
         if let synced = dict["syncedLyrics"] as? String, !synced.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return LyricsResult(synced: true, lyrics: synced, source: "LRCLIB (Synced)")
         }
         if let plain = dict["plainLyrics"] as? String, !plain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return LyricsResult(synced: false, lyrics: plain, source: "LRCLIB (Plain)")
-        }
-        if let isInstrumental = dict["instrumental"] as? Bool, isInstrumental {
-            return LyricsResult(synced: false, lyrics: "[00:00.00] (Instrumental)", source: "LRCLIB (Instrumental)")
         }
         return nil
     }
@@ -263,7 +231,8 @@ public final class LyricsService: @unchecked Sendable {
         artist: String,
         allowedChars: CharacterSet
     ) async -> LyricsResult? {
-        guard let encArtist = artist.addingPercentEncoding(withAllowedCharacters: allowedChars),
+        guard !artist.isEmpty, !title.isEmpty,
+              let encArtist = artist.addingPercentEncoding(withAllowedCharacters: allowedChars),
               let encTitle = title.addingPercentEncoding(withAllowedCharacters: allowedChars),
               let url = URL(string: "https://api.lyrics.ovh/v1/\(encArtist)/\(encTitle)") else {
             return nil

@@ -109,9 +109,9 @@ public struct MetadataStudioView: View {
     private func grabLyrics() {
         guard let tr = track else { return }
         
-        withAnimation(.easeInOut(duration: 0.15)) {
+        withAnimation(.easeInOut(duration: 0.12)) {
             isFetchingLyrics = true
-            lyricsStatusMessage = "Grabbing .LRC online..."
+            lyricsStatusMessage = "Fetching .LRC online..."
         }
 
         let trackTitle = self.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? tr.title : self.title
@@ -154,7 +154,6 @@ public struct MetadataStudioView: View {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         self.isFetchingLyrics = false
                         self.lyricsStatusMessage = "No lyrics found online"
-                        self.isEditingLyrics = true // Open editor as fallback so user can paste or import file
                     }
 
                     DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
@@ -545,6 +544,28 @@ public struct MetadataStudioView: View {
                                 
                                 Spacer()
                                 
+                                // Import existing .LRC from Mac
+                                Button(action: {
+                                    importLrcFile()
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "folder")
+                                            .font(.system(size: 11))
+                                        Text("Import")
+                                            .font(WalkmanFont.subheadlineMedium)
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 5)
+                                    .background(Color.white.opacity(0.08))
+                                    .foregroundStyle(WalkmanTheme.silver)
+                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(isFetchingLyrics)
+                                .help("Import a local .lrc lyrics file from your Mac")
+
+                                // Grab .LRC online from internet
                                 Button(action: {
                                     grabLyrics()
                                 }) {
@@ -575,9 +596,9 @@ public struct MetadataStudioView: View {
                                     )
                                     .foregroundStyle(isFetchingLyrics ? WalkmanTheme.silverLight : Color(red: 20/255, green: 20/255, blue: 24/255))
                                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                    .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                    .contentShape(Rectangle())
                                 }
-                                .buttonStyle(WalkmanPressableButtonStyle())
+                                .buttonStyle(.plain)
                                 .disabled(isFetchingLyrics)
                                 .help(isFetchingLyrics ? "Fetching lyrics from internet in progress..." : "Automatically grab synced lyrics from internet and import .lrc to Walkman")
                             }
