@@ -738,7 +738,6 @@ public struct MetadataStudioView: View {
             .padding(.top, 12)
             .padding(.bottom, 24)
         }
-        .ignoresSafeArea(.all, edges: .top)
         .onAppear { loadTrack() }
         .onChange(of: track) { loadTrack() }
         .onChange(of: title) { scheduleAutoSave() }
