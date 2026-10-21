@@ -126,3 +126,60 @@ public struct WalkmanPressableButtonStyle: ButtonStyle {
             .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
 }
+
+public struct WalkmanSideActionButtonStyle: ButtonStyle {
+    public var isFullWidth: Bool
+    public var cornerRadius: CGFloat
+
+    public init(isFullWidth: Bool = false, cornerRadius: CGFloat = 6) {
+        self.isFullWidth = isFullWidth
+        self.cornerRadius = cornerRadius
+    }
+
+    public func makeBody(configuration: Configuration) -> some View {
+        WalkmanSideActionButton(
+            configuration: configuration,
+            isFullWidth: isFullWidth,
+            cornerRadius: cornerRadius
+        )
+    }
+
+    private struct WalkmanSideActionButton: View {
+        let configuration: Configuration
+        let isFullWidth: Bool
+        let cornerRadius: CGFloat
+        @State private var isHovered: Bool = false
+
+        var body: some View {
+            configuration.label
+                .frame(maxWidth: isFullWidth ? .infinity : nil)
+                // Minimal & simple click animation (scale down on press, bounce back on release)
+                .scaleEffect(configuration.isPressed ? 0.95 : (isHovered ? 1.015 : 1.0))
+                .opacity(configuration.isPressed ? 0.82 : 1.0)
+                // Minimal & simple hover effect (brighten slightly + crisp border glow)
+                .brightness(isHovered ? 0.08 : 0.0)
+                .overlay(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .stroke(Color.white.opacity(isHovered ? 0.35 : 0.0), lineWidth: 1)
+                        .allowsHitTesting(false)
+                )
+                .shadow(
+                    color: Color.black.opacity(isHovered ? 0.28 : 0.12),
+                    radius: isHovered ? 6 : 2,
+                    x: 0,
+                    y: isHovered ? 2 : 1
+                )
+                .animation(.spring(response: 0.22, dampingFraction: 0.65), value: configuration.isPressed)
+                .animation(.easeInOut(duration: 0.14), value: isHovered)
+                .contentShape(Rectangle())
+                .onHover { hovering in
+                    isHovered = hovering
+                    if hovering {
+                        NSCursor.pointingHand.push()
+                    } else {
+                        NSCursor.pop()
+                    }
+                }
+        }
+    }
+}

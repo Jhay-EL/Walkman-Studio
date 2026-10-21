@@ -382,7 +382,7 @@ public struct MetadataStudioView: View {
                                             .contentShape(Rectangle())
                                     }
                                 }
-                                .buttonStyle(WalkmanPressableButtonStyle())
+                                .buttonStyle(WalkmanSideActionButtonStyle(cornerRadius: 6))
                                 .disabled(isFetchingLyrics)
                                 .help("Re-fetch / update .LRC from internet")
                             }
@@ -400,7 +400,7 @@ public struct MetadataStudioView: View {
                                         .frame(width: 22, height: 22)
                                         .contentShape(Rectangle())
                                 }
-                                .buttonStyle(WalkmanPressableButtonStyle())
+                                .buttonStyle(WalkmanSideActionButtonStyle(cornerRadius: 6))
                                 .help(isEditingLyrics ? "Cancel editing" : "Edit lyrics manually")
                             }
                         }
@@ -431,14 +431,13 @@ public struct MetadataStudioView: View {
                                                     .font(WalkmanFont.subheadlineMedium)
                                             }
                                         }
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4.5)
+                                        .padding(.horizontal, 9)
+                                        .padding(.vertical, 5)
                                         .background(Color.white.opacity(0.08))
                                         .foregroundStyle(.white)
                                         .clipShape(RoundedRectangle(cornerRadius: 4))
-                                        .contentShape(Rectangle())
                                     }
-                                    .buttonStyle(WalkmanPressableButtonStyle())
+                                    .buttonStyle(WalkmanSideActionButtonStyle(cornerRadius: 4))
                                     .disabled(isFetchingLyrics)
                                     .help("Fetch synced .LRC from internet")
                                     
@@ -453,8 +452,7 @@ public struct MetadataStudioView: View {
                                     .background(WalkmanTheme.silverGradient)
                                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                                     .clipShape(RoundedRectangle(cornerRadius: 4))
-                                    .contentShape(Rectangle())
-                                    .buttonStyle(WalkmanPressableButtonStyle())
+                                    .buttonStyle(WalkmanSideActionButtonStyle(cornerRadius: 4))
                                 }
                             }
                         } else if let lyr = lyrics, !lyr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -556,7 +554,7 @@ public struct MetadataStudioView: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                                     .contentShape(Rectangle())
                                 }
-                                .buttonStyle(WalkmanPressableButtonStyle())
+                                .buttonStyle(WalkmanSideActionButtonStyle(cornerRadius: 6))
                                 .disabled(isFetchingLyrics)
                                 .help(isFetchingLyrics ? "Fetching lyrics from internet in progress..." : "Automatically grab synced lyrics from internet and add .lrc to Walkman")
                             }
@@ -629,7 +627,7 @@ public struct MetadataStudioView: View {
                         .foregroundStyle(showSuccess ? .white : Color(red: 20/255, green: 20/255, blue: 24/255))
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(WalkmanSideActionButtonStyle(isFullWidth: true, cornerRadius: 8))
                     .disabled(isSaving)
                 } else {
                     VStack(spacing: 10) {
@@ -650,7 +648,7 @@ public struct MetadataStudioView: View {
                 }
             }
             .padding(.horizontal, 14)
-            .padding(.top, -38)
+            .padding(.top, 12)
             .padding(.bottom, 24)
         }
         .contentMargins(.top, 0, for: .scrollContent)

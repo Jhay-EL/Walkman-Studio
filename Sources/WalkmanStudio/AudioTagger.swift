@@ -264,7 +264,11 @@ public final class AudioTagger: @unchecked Sendable {
         }
         output.append(audioFrames)
 
-        try output.write(to: fileURL, options: .atomic)
+        do {
+            try output.write(to: fileURL, options: .atomic)
+        } catch {
+            try output.write(to: fileURL, options: [])
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -333,7 +337,11 @@ public final class AudioTagger: @unchecked Sendable {
         output.append(framesData)
         output.append(audioStream)
 
-        try output.write(to: fileURL, options: .atomic)
+        do {
+            try output.write(to: fileURL, options: .atomic)
+        } catch {
+            try output.write(to: fileURL, options: [])
+        }
     }
 
     private func makeID3v23TextFrame(id: String, text: String) -> Data {
