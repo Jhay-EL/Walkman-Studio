@@ -256,3 +256,14 @@ Distributed under the **MIT License**. See `LICENSE` for details.
 ## Acknowledgments
 
 * Dedicated to the **Sony Walkman** audiophile community.
+
+---
+
+## Support & Contact
+
+* **Email:** [jl.temporary@outlook.it](mailto:jl.temporary@outlook.it)
+* **Buy Me a Coffee:** [buymeacoffee.com/jhayel](https://www.buymeacoffee.com/jhayel)
+
+<a href="https://www.buymeacoffee.com/jhayel" target="_blank">
+  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="42" style="border-radius: 8px;" />
+</a>
