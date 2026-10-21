@@ -28,6 +28,9 @@ public struct ContentView: View {
     private let heartbeatTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
     
     @State private var libraryStats: (albums: Int, artists: Int, hiRes: Int, recentlyAdded: Int) = (0, 0, 0, 0)
+    @State private var cachedArtists: [ArtistItem] = []
+    @State private var cachedAlbums: [AlbumItem] = []
+    @State private var cachedRecentTracks: [Track] = []
     
     private var selectedTrack: Track? {
         guard let id = selectedTrackId else { return player.currentTrack }
@@ -43,6 +46,9 @@ public struct ContentView: View {
         if detected.isEmpty {
             self.activeDrive = nil
             self.tracks = []
+            self.cachedArtists = []
+            self.cachedAlbums = []
+            self.cachedRecentTracks = []
             self.libraryStats = (0, 0, 0, 0)
             self.selectedTrackId = nil
             self.showEjectSheet = false
@@ -71,6 +77,9 @@ public struct ContentView: View {
     private func refreshLibrary() {
         guard let drive = activeDrive else {
             self.tracks = []
+            self.cachedArtists = []
+            self.cachedAlbums = []
+            self.cachedRecentTracks = []
             self.libraryStats = (0, 0, 0, 0)
             self.isScanning = false
             return
@@ -81,8 +90,12 @@ public struct ContentView: View {
         Task {
             let result = await LibraryScanner.shared.scan(musicDir: URL(fileURLWithPath: drive.musicDir))
             
-            // Precompute library statistics off the main thread once
-            let stats = await Task.detached(priority: .userInitiated) {
+            // Precompute library statistics and models off the main thread once
+            let (stats, precomputedArtists, precomputedAlbums, precomputedRecent) = await Task.detached(priority: .userInitiated) {
+                let artists = ArtistsView.buildArtists(from: result.tracks)
+                let albums = AlbumsView.buildAlbums(from: result.tracks)
+                let recent = result.tracks.sorted { $0.dateAdded > $1.dateAdded }
+                
                 var albumSet = Set<String>()
                 var artistSet = Set<String>()
                 var hiRes = 0
@@ -100,12 +113,16 @@ public struct ContentView: View {
                 if recentCount == 0 && !result.tracks.isEmpty {
                     recentCount = min(50, result.tracks.count)
                 }
-                return (albumSet.count, artistSet.count, hiRes, recentCount)
+                let computedStats = (albumSet.count, artistSet.count, hiRes, recentCount)
+                return (computedStats, artists, albums, recent)
             }.value
             
             await MainActor.run {
                 guard self.activeDrive?.mountPoint == expectedMount else { return }
                 self.tracks = result.tracks
+                self.cachedArtists = precomputedArtists
+                self.cachedAlbums = precomputedAlbums
+                self.cachedRecentTracks = precomputedRecent
                 self.libraryStats = stats
                 self.isScanning = false
             }
@@ -305,7 +322,7 @@ public struct ContentView: View {
                                 
                             case .recentlyAdded:
                                 RecentlyAddedView(
-                                    tracks: tracks,
+                                    tracks: cachedRecentTracks.isEmpty ? tracks : cachedRecentTracks,
                                     isLoading: isScanning,
                                     selectedTrackId: $selectedTrackId,
                                     onInspectTrack: { track in
@@ -320,6 +337,7 @@ public struct ContentView: View {
                             case .albums:
                                 AlbumsView(
                                     tracks: tracks,
+                                    precomputedAlbums: cachedAlbums,
                                     onSelectTrack: { track in
                                         self.selectedTrackId = track.id
                                         self.showInspector = true
@@ -329,6 +347,7 @@ public struct ContentView: View {
                             case .artists:
                                 ArtistsView(
                                     tracks: tracks,
+                                    precomputedArtists: cachedArtists,
                                     onSelectTrack: { track in
                                         self.selectedTrackId = track.id
                                         self.showInspector = true
