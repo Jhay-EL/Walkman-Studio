@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Combine
 
 public struct ContentView: View {
     @State private var drives: [WalkmanDrive] = []
@@ -14,8 +15,19 @@ public struct ContentView: View {
     @State private var queueCount: Int = 0
     @State private var deviceInfo: WalkmanDeviceInfo? = nil
     @State private var showAboutSheet: Bool = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
     
     @ObservedObject private var player = AudioPlayerService.shared
+    
+    // Real-time macOS workspace volume publishers
+    private let didMountPublisher = NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didMountNotification)
+    private let didUnmountPublisher = NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didUnmountNotification)
+    private let willUnmountPublisher = NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.willUnmountNotification)
+    private let didRenamePublisher = NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didRenameVolumeNotification)
+    private let didBecomeActivePublisher = NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+    private let heartbeatTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
+    
+    @State private var libraryStats: (albums: Int, artists: Int, hiRes: Int) = (0, 0, 0)
     
     private var selectedTrack: Track? {
         guard let id = selectedTrackId else { return player.currentTrack }
@@ -28,11 +40,28 @@ public struct ContentView: View {
         self.drives = detected
         self.deviceInfo = WalkmanDeviceDetector.shared.detect(drives: detected)
         
-        if let current = activeDrive, detected.contains(where: { $0.mountPoint == current.mountPoint }) {
-            // Keep current active drive
+        if detected.isEmpty {
+            self.activeDrive = nil
+            self.tracks = []
+            self.libraryStats = (0, 0, 0)
+            self.selectedTrackId = nil
+            self.showEjectSheet = false
+            AudioPlayerService.shared.stopAndClear()
         } else {
-            // Prefer MicroSD if present (larger storage with music), otherwise internal
-            self.activeDrive = detected.first(where: { $0.type == .microsd }) ?? detected.first
+            if let current = activeDrive, detected.contains(where: { $0.mountPoint == current.mountPoint }) {
+                // Keep current active drive
+            } else {
+                // Prefer MicroSD if present (larger storage with music), otherwise internal
+                self.activeDrive = detected.first(where: { $0.type == .microsd }) ?? detected.first
+            }
+            
+            // If the currently playing track was on a drive that is no longer mounted, stop playback
+            if let current = AudioPlayerService.shared.currentTrack {
+                let stillMounted = detected.contains(where: { current.fullPath.hasPrefix($0.mountPoint) })
+                if !stillMounted {
+                    AudioPlayerService.shared.stopAndClear()
+                }
+            }
         }
         
         isRefreshingDrives = false
@@ -42,34 +71,73 @@ public struct ContentView: View {
     private func refreshLibrary() {
         guard let drive = activeDrive else {
             self.tracks = []
+            self.libraryStats = (0, 0, 0)
+            self.isScanning = false
             return
         }
         
         isScanning = true
+        let expectedMount = drive.mountPoint
         Task {
             let result = await LibraryScanner.shared.scan(musicDir: URL(fileURLWithPath: drive.musicDir))
+            
+            // Precompute library statistics off the main thread once
+            let stats = await Task.detached(priority: .userInitiated) {
+                var albumSet = Set<String>()
+                var artistSet = Set<String>()
+                var hiRes = 0
+                for track in result.tracks {
+                    let alb = track.album.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let cleanAlb = alb.isEmpty ? "Unknown Album" : alb
+                    let art = track.primaryArtist.trimmingCharacters(in: .whitespacesAndNewlines)
+                    albumSet.insert(cleanAlb.lowercased())
+                    if !art.isEmpty { artistSet.insert(art) }
+                    if track.bitsPerSample > 16 || track.sampleRate > 48000 { hiRes += 1 }
+                }
+                return (albumSet.count, artistSet.count, hiRes)
+            }.value
+            
             await MainActor.run {
+                guard self.activeDrive?.mountPoint == expectedMount else { return }
                 self.tracks = result.tracks
+                self.libraryStats = stats
                 self.isScanning = false
             }
         }
     }
     
-    private func setupVolumeNotifications() {
-        NotificationCenter.default.addObserver(
-            forName: NSWorkspace.didMountNotification,
-            object: nil,
-            queue: .main
-        ) { _ in
-            refreshDrives()
+    private func checkDrivesHeartbeat() {
+        guard !drives.isEmpty else {
+            DispatchQueue.global(qos: .utility).async {
+                let detected = WalkmanEngine.shared.detectDrives()
+                if !detected.isEmpty {
+                    DispatchQueue.main.async {
+                        self.refreshDrives()
+                    }
+                }
+            }
+            return
         }
         
-        NotificationCenter.default.addObserver(
-            forName: NSWorkspace.didUnmountNotification,
-            object: nil,
-            queue: .main
-        ) { _ in
-            refreshDrives()
+        let currentDrives = drives
+        DispatchQueue.global(qos: .utility).async {
+            var rootStat = stat()
+            stat("/", &rootStat)
+            
+            let anyDriveLost = currentDrives.contains { drive in
+                var volStat = stat()
+                if stat(drive.mountPoint, &volStat) != 0 || volStat.st_dev == rootStat.st_dev {
+                    return true
+                }
+                var isDir: ObjCBool = false
+                let exists = FileManager.default.fileExists(atPath: drive.mountPoint, isDirectory: &isDir)
+                return !exists || !isDir.boolValue
+            }
+            if anyDriveLost {
+                DispatchQueue.main.async {
+                    self.refreshDrives()
+                }
+            }
         }
     }
     
@@ -92,14 +160,14 @@ public struct ContentView: View {
                     
                     VStack(spacing: 8) {
                         Text("Connect Sony Walkman")
-                            .font(.system(size: 20, weight: .bold))
+                            .font(.system(size: 22, weight: .bold))
                             .foregroundStyle(.white)
                         
-                        Text("Plug in your Sony NW-A55L via WM-PORT USB cable and ensure USB Mass Storage mode is enabled on the player.")
-                            .font(.system(size: 12))
+                        Text("Plug in your Sony Walkman via USB cable and ensure USB Mass Storage mode is enabled on the player.")
+                            .font(.system(size: 13))
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
-                            .frame(maxWidth: 420)
+                            .frame(maxWidth: 440)
                     }
                     
                     Button(action: refreshDrives) {
@@ -107,7 +175,7 @@ public struct ContentView: View {
                             Image(systemName: "arrow.clockwise")
                             Text("Detect Drives")
                         }
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 12.5, weight: .semibold))
                         .padding(.horizontal, 16)
                         .padding(.vertical, 7)
                         .background(WalkmanTheme.silverGradient)
@@ -120,13 +188,70 @@ public struct ContentView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(WalkmanTheme.background)
+                .toolbar {
+                    Spacer()
+                    
+                    // Rescan
+                    Button(action: { refreshDrives() }) {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+                    .help("Refresh connected drives and reload library")
+                }
+                .toolbarBackground(.hidden, for: .windowToolbar)
+            } else if isScanning && tracks.isEmpty {
+                // Caching & Indexing Loading Screen
+                VStack(spacing: 24) {
+                    Spacer()
+                    
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.06))
+                            .frame(width: 96, height: 96)
+                        
+                        WalkmanDeviceIconView(
+                            size: 64,
+                            mountPoint: activeDrive?.mountPoint
+                        )
+                    }
+                    
+                    VStack(spacing: 8) {
+                        Text("Reading Walkman Library")
+                            .font(WalkmanFont.title1)
+                            .foregroundStyle(.white)
+                        
+                        Text("Caching music index & album metadata from \(activeDrive?.name ?? "Walkman")...")
+                            .font(WalkmanFont.callout)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 460)
+                    }
+                    
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .tint(WalkmanTheme.silver)
+                            .scaleEffect(1.2)
+                        
+                        Text("Optimizing library view...")
+                            .font(WalkmanFont.callout)
+                            .foregroundStyle(WalkmanTheme.silverMuted)
+                    }
+                    .padding(.top, 6)
+                    
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(WalkmanTheme.background)
             } else {
                 // Connected State: Native macOS NavigationSplitView
-                NavigationSplitView {
+                NavigationSplitView(columnVisibility: $columnVisibility) {
                     SidebarView(
                         selectedTab: $selectedTab,
                         drives: drives,
                         trackCount: tracks.count,
+                        albumCount: libraryStats.albums,
+                        artistCount: libraryStats.artists,
+                        hiResCount: libraryStats.hiRes,
                         queueCount: queueCount,
                         deviceInfo: deviceInfo,
                         activeDrive: activeDrive,
@@ -136,7 +261,9 @@ public struct ContentView: View {
                         },
                         onOpenAbout: { self.showAboutSheet = true }
                     )
-                    .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 280)
+                    .navigationSplitViewColumnWidth(min: 220, ideal: 220, max: 220)
+                    .animation(nil, value: showInspector)
+                    .toolbarBackground(.hidden, for: .windowToolbar)
                 } detail: {
                     VStack(spacing: 0) {
                         ZStack {
@@ -223,8 +350,7 @@ public struct ContentView: View {
                     .inspector(isPresented: $showInspector) {
                         MetadataStudioView(
                             track: selectedTrack,
-                            onSaved: { refreshLibrary() },
-                            onClose: { self.showInspector = false }
+                            onSaved: { refreshLibrary() }
                         )
                         .inspectorColumnWidth(min: 270, ideal: 310, max: 360)
                     }
@@ -237,11 +363,13 @@ public struct ContentView: View {
                         }
                         .help("Refresh connected drives and reload library")
                         
-                        // Safe Eject
-                        Button(action: { showEjectSheet = true }) {
-                            Label("Eject", systemImage: "eject.circle")
+                        // Safe Eject (only shown if a device is connected)
+                        if !drives.isEmpty {
+                            Button(action: { showEjectSheet = true }) {
+                                Label("Eject", systemImage: "eject.circle")
+                            }
+                            .help("Clean macOS junk files and safely unmount Walkman")
                         }
-                        .help("Clean macOS junk files and safely unmount Walkman")
                         
                         // Inspector Toggle
                         Button(action: { showInspector.toggle() }) {
@@ -249,19 +377,34 @@ public struct ContentView: View {
                         }
                         .help("Toggle Metadata & Artwork Inspector (Cmd+I)")
                     }
+                    .toolbarBackground(.hidden, for: .windowToolbar)
                 }
+                .toolbarBackground(.hidden, for: .windowToolbar)
             }
         }
         .onAppear {
-            setupVolumeNotifications()
-            NotificationCenter.default.addObserver(
-                forName: .showAboutWalkmanStudio,
-                object: nil,
-                queue: .main
-            ) { _ in
-                self.showAboutSheet = true
-            }
             refreshDrives()
+        }
+        .onReceive(didMountPublisher) { _ in
+            refreshDrives()
+        }
+        .onReceive(didUnmountPublisher) { _ in
+            refreshDrives()
+        }
+        .onReceive(willUnmountPublisher) { _ in
+            refreshDrives()
+        }
+        .onReceive(didRenamePublisher) { _ in
+            refreshDrives()
+        }
+        .onReceive(didBecomeActivePublisher) { _ in
+            checkDrivesHeartbeat()
+        }
+        .onReceive(heartbeatTimer) { _ in
+            checkDrivesHeartbeat()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showAboutWalkmanStudio)) { _ in
+            self.showAboutSheet = true
         }
         .sheet(isPresented: $showEjectSheet) {
             CleanEjectSheet(
