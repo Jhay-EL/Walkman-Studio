@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ListMusic, Plus, Trash2, ArrowUp, ArrowDown, Save, Music } from 'lucide-react';
+import { ListMusic, Plus, Trash2, ArrowUp, ArrowDown, Save, Edit2, Check, X } from 'lucide-react';
 import { Playlist, Track, WalkmanDrive } from '../types';
 import { api } from '../api';
 
@@ -17,25 +17,94 @@ export const PlaylistsView: React.FC<Props> = ({
   onRefreshPlaylists,
 }) => {
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
-  const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
   const [currentTracks, setCurrentTracks] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSelectPlaylist = (pl: Playlist) => {
+    if (editingId && editingId !== pl.filename) {
+      setEditingId(null);
+    }
     setSelectedPlaylist(pl);
     setCurrentTracks([...pl.tracks]);
   };
 
-  const handleCreateNew = () => {
-    setSelectedPlaylist({
-      name: 'New Playlist.m3u8',
-      filename: 'New Playlist.m3u8',
-      track_count: 0,
-      tracks: [],
-      full_path: '',
-    });
-    setNewPlaylistName('My Heavy Rotation');
-    setCurrentTracks([]);
+  const handleCreateNew = async () => {
+    if (!activeDrive) {
+      alert('Please connect a Walkman drive first');
+      return;
+    }
+    let candidate = 'New Playlist';
+    let counter = 2;
+    while (
+      playlists.some(
+        (p) =>
+          p.name.toLowerCase() === candidate.toLowerCase() ||
+          p.filename.toLowerCase() === `${candidate.toLowerCase()}.m3u8`
+      )
+    ) {
+      candidate = `New Playlist ${counter}`;
+      counter++;
+    }
+
+    try {
+      await api.createPlaylist(activeDrive.mount_point, candidate, []);
+      onRefreshPlaylists();
+      const newPl: Playlist = {
+        name: `${candidate}.m3u8`,
+        filename: `${candidate}.m3u8`,
+        track_count: 0,
+        tracks: [],
+        full_path: `${activeDrive.mount_point}/MUSIC/${candidate}.m3u8`,
+      };
+      setSelectedPlaylist(newPl);
+      setCurrentTracks([]);
+      setEditingId(newPl.filename);
+      setEditingName(candidate);
+    } catch (e: any) {
+      alert(`Failed to create playlist: ${e.message}`);
+    }
+  };
+
+  const handleStartRename = (pl: Playlist) => {
+    setEditingId(pl.filename);
+    const cleanName = pl.name.replace(/\.m3u8?$/i, '');
+    setEditingName(cleanName);
+  };
+
+  const handleCommitRename = async (pl: Playlist) => {
+    if (!activeDrive) return;
+    const trimmed = editingName.trim();
+    if (!trimmed) {
+      setEditingId(null);
+      return;
+    }
+    const currentBase = pl.name.replace(/\.m3u8?$/i, '');
+    if (trimmed === currentBase) {
+      setEditingId(null);
+      return;
+    }
+
+    try {
+      const res = await api.renamePlaylist(activeDrive.mount_point, pl.filename, trimmed);
+      onRefreshPlaylists();
+      setEditingId(null);
+      if (selectedPlaylist?.filename === pl.filename) {
+        setSelectedPlaylist((prev) =>
+          prev
+            ? {
+                ...prev,
+                name: res.filename || `${trimmed}.m3u8`,
+                filename: res.filename || `${trimmed}.m3u8`,
+                full_path: res.full_path || prev.full_path,
+              }
+            : null
+        );
+      }
+    } catch (e: any) {
+      alert(`Rename error: ${e.message}`);
+    }
   };
 
   const handleMove = (index: number, direction: 'up' | 'down') => {
@@ -59,14 +128,8 @@ export const PlaylistsView: React.FC<Props> = ({
   };
 
   const handleSavePlaylist = async () => {
-    if (!activeDrive) return;
-    const name = selectedPlaylist?.full_path
-      ? selectedPlaylist.name
-      : newPlaylistName.trim();
-    if (!name) {
-      alert('Please enter a playlist name');
-      return;
-    }
+    if (!activeDrive || !selectedPlaylist) return;
+    const name = selectedPlaylist.name;
 
     setIsSaving(true);
     try {
@@ -128,36 +191,87 @@ export const PlaylistsView: React.FC<Props> = ({
             </div>
           ) : (
             <div className="space-y-1">
-              {playlists.map((pl) => (
-                <div
-                  key={pl.filename}
-                  onClick={() => handleSelectPlaylist(pl)}
-                  className={`p-2.5 rounded-lg border text-xs cursor-pointer flex items-center justify-between transition-all ${
-                    selectedPlaylist?.filename === pl.filename
-                      ? 'bg-walkman-hover border-walkman-gold text-walkman-gold shadow-sm font-medium'
-                      : 'bg-zinc-900/40 border-walkman-border text-zinc-400 hover:border-zinc-700'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2.5 truncate">
-                    <ListMusic className="w-4 h-4 flex-shrink-0" />
-                    <span className="truncate">{pl.name}</span>
+              {playlists.map((pl) => {
+                const isSelected = selectedPlaylist?.filename === pl.filename;
+                const isEditing = editingId === pl.filename;
+
+                return (
+                  <div
+                    key={pl.filename}
+                    onClick={() => handleSelectPlaylist(pl)}
+                    className={`p-2.5 rounded-lg border text-xs cursor-pointer flex items-center justify-between transition-all ${
+                      isSelected
+                        ? 'bg-walkman-hover border-walkman-gold text-walkman-gold shadow-sm font-medium'
+                        : 'bg-zinc-900/40 border-walkman-border text-zinc-400 hover:border-zinc-700'
+                    }`}
+                  >
+                    {isEditing ? (
+                      <div
+                        className="flex items-center space-x-1.5 w-full"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <input
+                          type="text"
+                          autoFocus
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleCommitRename(pl);
+                            if (e.key === 'Escape') setEditingId(null);
+                          }}
+                          className="bg-zinc-950 border border-walkman-gold rounded px-2 py-1 text-xs text-white focus:outline-none w-full"
+                        />
+                        <button
+                          onClick={() => handleCommitRename(pl)}
+                          className="p-1 hover:text-green-400 text-zinc-400"
+                          title="Save"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setEditingId(null)}
+                          className="p-1 hover:text-zinc-200 text-zinc-500"
+                          title="Cancel"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center space-x-2.5 truncate">
+                          <ListMusic className="w-4 h-4 flex-shrink-0" />
+                          <span className="truncate">{pl.name.replace(/\.m3u8?$/i, '')}</span>
+                        </div>
+                        <div className="flex items-center space-x-2 flex-shrink-0">
+                          <span className="text-[10px] font-mono text-zinc-500">
+                            {pl.track_count} tracks
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStartRename(pl);
+                            }}
+                            className="p-1 hover:text-walkman-gold text-zinc-500"
+                            title="Rename Playlist"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeletePlaylist(pl);
+                            }}
+                            className="p-1 hover:text-red-400 text-zinc-600"
+                            title="Delete Playlist"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
-                  <div className="flex items-center space-x-2 flex-shrink-0">
-                    <span className="text-[10px] font-mono text-zinc-500">
-                      {pl.track_count} tracks
-                    </span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeletePlaylist(pl);
-                      }}
-                      className="p-1 hover:text-red-400 text-zinc-600"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -167,17 +281,47 @@ export const PlaylistsView: React.FC<Props> = ({
           {selectedPlaylist ? (
             <>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-walkman-border pb-4">
-                {!selectedPlaylist.full_path ? (
-                  <input
-                    type="text"
-                    value={newPlaylistName}
-                    onChange={(e) => setNewPlaylistName(e.target.value)}
-                    placeholder="Enter playlist title..."
-                    className="bg-walkman-input border border-walkman-border rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-walkman-gold w-64"
-                  />
+                {editingId === selectedPlaylist.filename ? (
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="text"
+                      autoFocus
+                      value={editingName}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleCommitRename(selectedPlaylist);
+                        if (e.key === 'Escape') setEditingId(null);
+                      }}
+                      className="bg-zinc-950 border border-walkman-gold rounded-lg px-3 py-1 text-xs text-white focus:outline-none w-64"
+                    />
+                    <button
+                      onClick={() => handleCommitRename(selectedPlaylist)}
+                      className="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-400 text-black text-xs font-semibold flex items-center space-x-1"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Save</span>
+                    </button>
+                    <button
+                      onClick={() => setEditingId(null)}
+                      className="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 ) : (
                   <div>
-                    <h3 className="text-sm font-semibold text-white">{selectedPlaylist.name}</h3>
+                    <div className="flex items-center space-x-2">
+                      <h3 className="text-sm font-semibold text-white">
+                        {selectedPlaylist.name.replace(/\.m3u8?$/i, '')}
+                      </h3>
+                      <button
+                        onClick={() => handleStartRename(selectedPlaylist)}
+                        className="p-1 hover:text-walkman-gold text-zinc-500"
+                        title="Rename Playlist"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                     <p className="text-[11px] text-zinc-500 font-mono">
                       {currentTracks.length} tracks in playlist
                     </p>
