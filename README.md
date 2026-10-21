@@ -11,7 +11,6 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-macOS%2014%2B%20(Apple%20Silicon)-black?style=for-the-badge&logo=apple" alt="macOS" />
   <img src="https://img.shields.io/badge/Language-Swift%205.9%2B-orange?style=for-the-badge&logo=swift" alt="Swift" />
-  <img src="https://img.shields.io/badge/Hardware-Sony%20Walkman%20NW--A55%20%2F%20A50%20Series-silver?style=for-the-badge&logo=sony" alt="Sony Walkman" />
   <img src="https://img.shields.io/badge/Architecture-Non--Android%20Sony%20OS-blue?style=for-the-badge" alt="Non-Android Sony OS" />
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License" />
 </p>
@@ -19,6 +18,10 @@
 A dedicated native macOS desktop application built specifically for managing the **Sony Walkman NW-A55 / NW-A55L** and other non-Android Sony Walkman digital audio players. It automates dual-drive library management, strict hardware-compliant metadata tagging, Baseline RGB JPEG artwork conversion, `.LRC` synchronized lyrics syncing, batch FFmpeg audio transcoding, `.M3U8` CRLF playlist creation, and macOS dotfile purging.
 
 Walkman Studio focuses strictly on safe, non-destructive music library management and conversion with **zero firmware risk**.
+
+<p align="center">
+  <img src="assets/sc/01_device_overview.png" alt="Walkman Studio Interface" width="100%" />
+</p>
 
 ---
 
@@ -87,6 +90,43 @@ Sony Walkman non-Android digital audio players deliver exceptional audio fidelit
 * Fully adopts macOS Sonoma / Sequoia design guidelines with a unified transparent title bar and seamless split dividers.
 * Brushed silver and matte dark obsidian palette inspired by the Sony Walkman Signature Series aluminum chassis, with zero glow or artificial visual clutter.
 * Aligned inspector pane with matching mid-page navigation dividers.
+
+---
+
+## Screenshots
+
+<p align="center">
+  <img src="assets/sc/01_device_overview.png" alt="Device Overview Dashboard" width="100%" />
+</p>
+<p align="center"><em><strong>Device Overview & Storage Dashboard:</strong> Real-time dual-drive gauges (Internal Flash & MicroSD), storage partition health, library statistics, dotfile clean & safe unmount, and atomic tag & synced lyrics inspector.</em></p>
+
+<br />
+
+<p align="center">
+  <img src="assets/sc/02_library_browser.png" alt="Library Browser" width="100%" />
+</p>
+<p align="center"><em><strong>All Songs Library Browser:</strong> High-performance multi-column sortable table, instant search, audio format filter chips (FLAC, MP3, Hi-Res), and synchronized audio playback preview bar.</em></p>
+
+<br />
+
+<p align="center">
+  <img src="assets/sc/03_hires_audio.png" alt="Hi-Res Studio Masters" width="100%" />
+</p>
+<p align="center"><em><strong>Hi-Res Audio Studio Master Library:</strong> Audiophile view filtering exclusively for 24-bit/96kHz+ lossless streams calibrated for the Sony S-Master HX DAC.</em></p>
+
+<br />
+
+<p align="center">
+  <img src="assets/sc/04_playlists.png" alt="Playlists Engine" width="100%" />
+</p>
+<p align="center"><em><strong>CRLF Relative POSIX .M3U8 Playlists:</strong> Hardware-compliant playlist editor enforcing CRLF line breaks and relative POSIX paths required by Sony Walkman firmware.</em></p>
+
+<br />
+
+<p align="center">
+  <img src="assets/sc/05_transfer_queue.png" alt="Batch Transfer Queue" width="100%" />
+</p>
+<p align="center"><em><strong>Batch Audio Transcoding & Transfer Queue:</strong> Drag-and-drop batch queue with integrated FFmpeg presets (Bit-perfect copy, FLAC 16/24-bit, MP3) and automatic FAT32/exFAT character sanitization.</em></p>
 
 ---
 
@@ -164,7 +204,8 @@ Walkman-Studio/
 │   ├── icon.png                          # High-resolution application icon
 │   ├── AppIcon.icns                      # macOS icon bundle (16x16 to 1024x1024)
 │   ├── walkman_device.png                # Sony Walkman NW-A55 hardware artwork
-│   └── walkman_device_cropped.png        # Cropped device preview icon
+│   ├── walkman_device_cropped.png        # Cropped device preview icon
+│   └── sc/                               # High-resolution application screenshots
 ├── Sources/
 │   └── WalkmanStudio/
 │       ├── WalkmanStudioApp.swift        # Main app entry point & transparent titlebar
