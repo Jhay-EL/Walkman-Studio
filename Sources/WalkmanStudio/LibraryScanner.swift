@@ -38,10 +38,12 @@ public final class LibraryScanner: @unchecked Sendable {
                 sample_rate INTEGER,
                 bits_per_sample INTEGER,
                 has_artwork INTEGER,
-                relative_path TEXT
+                relative_path TEXT,
+                date_added REAL
             );
             CREATE INDEX IF NOT EXISTS idx_cache_path ON tracks_cache(full_path);
         """, nil, nil, nil)
+        sqlite3_exec(db, "ALTER TABLE tracks_cache ADD COLUMN date_added REAL DEFAULT 0;", nil, nil, nil)
         return db
     }
 
@@ -62,7 +64,7 @@ public final class LibraryScanner: @unchecked Sendable {
                 if let db = self.getDB() {
                     let query = """
                     SELECT full_path, mtime, size, format, title, artist, album, track_num, year, genre,
-                           duration_seconds, bitrate_kbps, sample_rate, bits_per_sample, has_artwork, relative_path
+                           duration_seconds, bitrate_kbps, sample_rate, bits_per_sample, has_artwork, relative_path, date_added
                     FROM tracks_cache
                     WHERE full_path LIKE ?;
                     """
@@ -72,6 +74,7 @@ public final class LibraryScanner: @unchecked Sendable {
                         sqlite3_bind_text(stmt, 1, (searchPrefix as NSString).utf8String, -1, nil)
                         while sqlite3_step(stmt) == SQLITE_ROW {
                             let fPath = String(cString: sqlite3_column_text(stmt, 0))
+                            let mtime = sqlite3_column_double(stmt, 1)
                             let size = sqlite3_column_int64(stmt, 2)
                             let fmt = String(cString: sqlite3_column_text(stmt, 3))
                             let title = sqlite3_column_text(stmt, 4).map { String(cString: $0) } ?? ""
@@ -86,6 +89,9 @@ public final class LibraryScanner: @unchecked Sendable {
                             let bitsPerSample = Int(sqlite3_column_int(stmt, 13))
                             let hasArt = sqlite3_column_int(stmt, 14) != 0
                             let relPath = sqlite3_column_text(stmt, 15).map { String(cString: $0) } ?? URL(fileURLWithPath: fPath).lastPathComponent
+                            let dateAddedSec = sqlite3_column_double(stmt, 16)
+                            let effectiveAdded = dateAddedSec > 0 ? dateAddedSec : mtime
+                            let dateAdded = Date(timeIntervalSince1970: effectiveAdded > 0 ? effectiveAdded : CFAbsoluteTimeGetCurrent() + 978307200.0)
 
                             let tr = Track(
                                 filename: URL(fileURLWithPath: fPath).lastPathComponent,
@@ -103,7 +109,8 @@ public final class LibraryScanner: @unchecked Sendable {
                                 sampleRate: sampleRate,
                                 bitsPerSample: bitsPerSample,
                                 hasArtwork: hasArt,
-                                sizeBytes: size
+                                sizeBytes: size,
+                                dateAdded: dateAdded
                             )
                             cachedTracks[fPath] = tr
                         }
@@ -151,8 +158,8 @@ public final class LibraryScanner: @unchecked Sendable {
 
                     let insertSql = """
                     INSERT OR REPLACE INTO tracks_cache
-                    (full_path, mtime, size, format, title, artist, album, track_num, year, genre, duration_seconds, bitrate_kbps, sample_rate, bits_per_sample, has_artwork, relative_path)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    (full_path, mtime, size, format, title, artist, album, track_num, year, genre, duration_seconds, bitrate_kbps, sample_rate, bits_per_sample, has_artwork, relative_path, date_added)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                     """
                     var insStmt: OpaquePointer?
                     if let db = db {
@@ -192,6 +199,7 @@ public final class LibraryScanner: @unchecked Sendable {
                             sqlite3_bind_int(insStmt, 14, Int32(parsed.bitsPerSample))
                             sqlite3_bind_int(insStmt, 15, parsed.hasArtwork ? 1 : 0)
                             sqlite3_bind_text(insStmt, 16, rStr, -1, nil)
+                            sqlite3_bind_double(insStmt, 17, parsed.dateAdded.timeIntervalSince1970)
 
                             sqlite3_step(insStmt)
                             sqlite3_reset(insStmt)
@@ -217,6 +225,17 @@ public final class LibraryScanner: @unchecked Sendable {
     }
 
     private func parseAudioFile(path: String, size: Int64, ext: String, relPath: String) -> Track {
+        var s = stat()
+        var dateAdded = Date()
+        if stat(path, &s) == 0 {
+            let btime = Double(s.st_birthtimespec.tv_sec)
+            let mtime = Double(s.st_mtimespec.tv_sec)
+            let chosen = btime > 0 ? btime : mtime
+            if chosen > 0 {
+                dateAdded = Date(timeIntervalSince1970: chosen)
+            }
+        }
+
         let parts = relPath.components(separatedBy: "/")
         var defArtist = "Unknown Artist"
         var defAlbum = "Unknown Album"
@@ -260,7 +279,8 @@ public final class LibraryScanner: @unchecked Sendable {
                 sampleRate: info.sampleRate,
                 bitsPerSample: info.bitsPerSample,
                 hasArtwork: info.hasArtwork,
-                sizeBytes: size
+                sizeBytes: size,
+                dateAdded: dateAdded
             )
         }
 
@@ -280,7 +300,8 @@ public final class LibraryScanner: @unchecked Sendable {
             sampleRate: 44100,
             bitsPerSample: 16,
             hasArtwork: true,
-            sizeBytes: size
+            sizeBytes: size,
+            dateAdded: dateAdded
         )
     }
 

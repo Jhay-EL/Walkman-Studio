@@ -48,6 +48,45 @@ public struct Track: Identifiable, Hashable, Sendable {
     public var bitsPerSample: Int
     public var hasArtwork: Bool
     public let sizeBytes: Int64
+    public var dateAdded: Date
+
+    public init(
+        filename: String,
+        relativePath: String,
+        fullPath: String,
+        format: String,
+        title: String,
+        artist: String,
+        album: String,
+        trackNum: String,
+        year: String,
+        genre: String,
+        durationSeconds: Double,
+        bitrateKbps: Int,
+        sampleRate: Int,
+        bitsPerSample: Int,
+        hasArtwork: Bool,
+        sizeBytes: Int64,
+        dateAdded: Date = Date()
+    ) {
+        self.filename = filename
+        self.relativePath = relativePath
+        self.fullPath = fullPath
+        self.format = format
+        self.title = title
+        self.artist = artist
+        self.album = album
+        self.trackNum = trackNum
+        self.year = year
+        self.genre = genre
+        self.durationSeconds = durationSeconds
+        self.bitrateKbps = bitrateKbps
+        self.sampleRate = sampleRate
+        self.bitsPerSample = bitsPerSample
+        self.hasArtwork = hasArtwork
+        self.sizeBytes = sizeBytes
+        self.dateAdded = dateAdded
+    }
 }
 
 extension Track {

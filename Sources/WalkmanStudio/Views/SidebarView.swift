@@ -3,6 +3,7 @@ import SwiftUI
 public enum NavigationTab: String, CaseIterable, Identifiable, Hashable {
     case overview = "Device Overview"
     case library = "All Songs"
+    case recentlyAdded = "Recently Added"
     case albums = "Albums"
     case artists = "Artists"
     case hiRes = "Hi-Res Audio"
@@ -15,6 +16,7 @@ public enum NavigationTab: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .overview: return "hifispeaker.fill"
         case .library: return "music.note.list"
+        case .recentlyAdded: return "clock.arrow.circlepath"
         case .albums: return "square.stack"
         case .artists: return "music.mic"
         case .hiRes: return "waveform.badge.magnifyingglass"
@@ -28,6 +30,7 @@ public struct SidebarView: View {
     @Binding var selectedTab: NavigationTab
     let drives: [WalkmanDrive]
     let trackCount: Int
+    var recentlyAddedCount: Int = 0
     var albumCount: Int = 0
     var artistCount: Int = 0
     var hiResCount: Int = 0
@@ -67,6 +70,14 @@ public struct SidebarView: View {
                     title: "All Songs",
                     icon: "music.note.list",
                     badge: trackCount > 0 ? "\(trackCount.formatted())" : nil
+                )
+
+                SidebarRow(
+                    tab: .recentlyAdded,
+                    selectedTab: $selectedTab,
+                    title: "Recently Added",
+                    icon: "clock.arrow.circlepath",
+                    badge: recentlyAddedCount > 0 ? "\(recentlyAddedCount.formatted())" : nil
                 )
 
                 SidebarRow(

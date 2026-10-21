@@ -27,7 +27,7 @@ public struct ContentView: View {
     private let didBecomeActivePublisher = NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
     private let heartbeatTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
     
-    @State private var libraryStats: (albums: Int, artists: Int, hiRes: Int) = (0, 0, 0)
+    @State private var libraryStats: (albums: Int, artists: Int, hiRes: Int, recentlyAdded: Int) = (0, 0, 0, 0)
     
     private var selectedTrack: Track? {
         guard let id = selectedTrackId else { return player.currentTrack }
@@ -43,7 +43,7 @@ public struct ContentView: View {
         if detected.isEmpty {
             self.activeDrive = nil
             self.tracks = []
-            self.libraryStats = (0, 0, 0)
+            self.libraryStats = (0, 0, 0, 0)
             self.selectedTrackId = nil
             self.showEjectSheet = false
             AudioPlayerService.shared.stopAndClear()
@@ -71,7 +71,7 @@ public struct ContentView: View {
     private func refreshLibrary() {
         guard let drive = activeDrive else {
             self.tracks = []
-            self.libraryStats = (0, 0, 0)
+            self.libraryStats = (0, 0, 0, 0)
             self.isScanning = false
             return
         }
@@ -86,6 +86,8 @@ public struct ContentView: View {
                 var albumSet = Set<String>()
                 var artistSet = Set<String>()
                 var hiRes = 0
+                let thirtyDaysAgo = Date().addingTimeInterval(-30 * 86400)
+                var recentCount = 0
                 for track in result.tracks {
                     let alb = track.album.trimmingCharacters(in: .whitespacesAndNewlines)
                     let cleanAlb = alb.isEmpty ? "Unknown Album" : alb
@@ -93,8 +95,12 @@ public struct ContentView: View {
                     albumSet.insert(cleanAlb.lowercased())
                     if !art.isEmpty { artistSet.insert(art) }
                     if track.bitsPerSample > 16 || track.sampleRate > 48000 { hiRes += 1 }
+                    if track.dateAdded >= thirtyDaysAgo { recentCount += 1 }
                 }
-                return (albumSet.count, artistSet.count, hiRes)
+                if recentCount == 0 && !result.tracks.isEmpty {
+                    recentCount = min(50, result.tracks.count)
+                }
+                return (albumSet.count, artistSet.count, hiRes, recentCount)
             }.value
             
             await MainActor.run {
@@ -249,6 +255,7 @@ public struct ContentView: View {
                         selectedTab: $selectedTab,
                         drives: drives,
                         trackCount: tracks.count,
+                        recentlyAddedCount: libraryStats.recentlyAdded,
                         albumCount: libraryStats.albums,
                         artistCount: libraryStats.artists,
                         hiResCount: libraryStats.hiRes,
@@ -284,6 +291,20 @@ public struct ContentView: View {
                                 
                             case .library:
                                 LibraryView(
+                                    tracks: tracks,
+                                    isLoading: isScanning,
+                                    selectedTrackId: $selectedTrackId,
+                                    onInspectTrack: { track in
+                                        self.selectedTrackId = track.id
+                                        self.showInspector = true
+                                    },
+                                    onGoToTransfer: {
+                                        self.selectedTab = .transfer
+                                    }
+                                )
+                                
+                            case .recentlyAdded:
+                                RecentlyAddedView(
                                     tracks: tracks,
                                     isLoading: isScanning,
                                     selectedTrackId: $selectedTrackId,
