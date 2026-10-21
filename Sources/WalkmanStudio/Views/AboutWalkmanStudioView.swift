@@ -61,11 +61,11 @@ public struct AboutWalkmanStudioView: View {
                 }
                 
                 Text("Walkman Studio")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(WalkmanFont.title1)
                     .foregroundStyle(.primary)
                 
                 Text("Version 1.2.0 • Apple Silicon Native")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(WalkmanFont.callout)
                     .foregroundStyle(.secondary)
                 
                 HStack(spacing: 5) {
@@ -73,7 +73,7 @@ public struct AboutWalkmanStudioView: View {
                         .fill(Color.green)
                         .frame(width: 5, height: 5)
                     Text("Non-Android Sony OS / Linux Architecture")
-                        .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                        .font(WalkmanFont.badge)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 8)
@@ -111,7 +111,7 @@ public struct AboutWalkmanStudioView: View {
             // Bottom Action Footer
             HStack(alignment: .center) {
                 Text("Sony & Walkman are registered trademarks of Sony Group Corporation.")
-                    .font(.system(size: 8.5))
+                    .font(WalkmanFont.monoSmall)
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
                 
@@ -121,9 +121,9 @@ public struct AboutWalkmanStudioView: View {
                     onDismiss()
                 }
                 .keyboardShortcut(.defaultAction)
-                .font(.system(size: 11, weight: .semibold))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 4)
+                .font(WalkmanFont.calloutBold)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 5)
                 .background(Color.white.opacity(0.12))
                 .foregroundStyle(.primary)
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -132,7 +132,7 @@ public struct AboutWalkmanStudioView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
         }
-        .frame(width: 530, height: 490)
+        .frame(width: 540, height: 520)
         .background(WalkmanTheme.background)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
@@ -147,23 +147,23 @@ public struct AboutWalkmanStudioView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
                             Text(dev.displayName)
-                                .font(.system(size: 13, weight: .bold))
+                                .font(WalkmanFont.bodyBold)
                                 .foregroundStyle(.primary)
                             
                             HStack(spacing: 4) {
                                 Circle().fill(Color.green).frame(width: 5, height: 5)
                                 Text("Verified")
-                                    .font(.system(size: 8.5, weight: .bold))
+                                    .font(WalkmanFont.badge.weight(.bold))
                                     .foregroundStyle(Color.green)
                             }
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1.5)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
                             .background(Color.green.opacity(0.12))
                             .clipShape(Capsule())
                         }
                         
                         Text("Connected via USB Mass Storage • S-Master HX DAC")
-                            .font(.system(size: 10))
+                            .font(WalkmanFont.subheadline)
                             .foregroundStyle(.secondary)
                     }
                     
@@ -191,14 +191,14 @@ public struct AboutWalkmanStudioView: View {
                         .foregroundStyle(WalkmanTheme.silverMuted)
                     
                     Text("No Walkman Connected")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(WalkmanFont.headline)
                         .foregroundStyle(.primary)
                     
-                    Text("Connect your Sony NW-A55 via WM-PORT USB in Mass Storage mode to inspect hardware specifications.")
-                        .font(.system(size: 10.5))
+                    Text("Connect your Sony Walkman via USB in Mass Storage mode to inspect hardware specifications.")
+                        .font(WalkmanFont.callout)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
-                        .frame(maxWidth: 320)
+                        .frame(maxWidth: 340)
                     Spacer()
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -215,7 +215,7 @@ public struct AboutWalkmanStudioView: View {
                 ForEach(WalkmanDeviceDetector.supportedSeriesCategories, id: \.category) { cat in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(cat.category.uppercased())
-                            .font(.system(size: 9, weight: .bold))
+                            .font(WalkmanFont.sectionHeader)
                             .foregroundStyle(.tertiary)
                             .padding(.leading, 2)
                         
@@ -224,10 +224,10 @@ public struct AboutWalkmanStudioView: View {
                                 HStack {
                                     VStack(alignment: .leading, spacing: 1) {
                                         Text(m.modelCode)
-                                            .font(.system(size: 10.5, weight: .semibold))
+                                            .font(WalkmanFont.bodyMedium)
                                             .foregroundStyle(.primary)
                                         Text(m.description)
-                                            .font(.system(size: 9))
+                                            .font(WalkmanFont.subheadline)
                                             .foregroundStyle(.secondary)
                                             .lineLimit(1)
                                     }
@@ -235,7 +235,7 @@ public struct AboutWalkmanStudioView: View {
                                     Spacer()
                                     
                                     Text(m.storageOptions)
-                                        .font(.system(size: 8.5, design: .monospaced))
+                                        .font(WalkmanFont.monoSmall)
                                         .foregroundStyle(WalkmanTheme.silverMuted)
                                 }
                                 .padding(.horizontal, 10)
@@ -249,10 +249,10 @@ public struct AboutWalkmanStudioView: View {
                 
                 HStack(spacing: 6) {
                     Image(systemName: "info.circle")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                     Text("Android Walkmans (NW-A100/A300, NW-ZX500) use MTP and are not supported.")
-                        .font(.system(size: 9))
+                        .font(WalkmanFont.subheadline)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 8)
@@ -299,15 +299,15 @@ private struct SpecRow: View {
     var body: some View {
         HStack {
             Text(label)
-                .font(.system(size: 10.5))
+                .font(WalkmanFont.callout)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .font(WalkmanFont.mono)
                 .foregroundStyle(.primary)
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 5)
+        .padding(.vertical, 6)
         .background(Color.white.opacity(0.03))
     }
 }
@@ -320,24 +320,24 @@ private struct RuleCard: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: icon)
-                .font(.system(size: 13))
+                .font(.system(size: 14))
                 .foregroundStyle(WalkmanTheme.silver)
                 .frame(width: 18, height: 18)
                 .padding(.top, 1)
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(WalkmanFont.bodyMedium)
                     .foregroundStyle(.primary)
                 Text(detail)
-                    .font(.system(size: 9.5))
+                    .font(WalkmanFont.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
             
             Spacer()
         }
-        .padding(9)
+        .padding(10)
         .background(Color.white.opacity(0.035))
         .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
     }

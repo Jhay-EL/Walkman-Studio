@@ -8,11 +8,21 @@ public enum WalkmanTheme {
     public static let silverMuted = Color(red: 155 / 255, green: 160 / 255, blue: 172 / 255) // #9BA0AC Brushed Aluminum Grey
     public static let silverDark = Color(red: 95 / 255, green: 100 / 255, blue: 112 / 255) // #5F6470 Graphite Accent
     
-    // Direct Silver Aliases (Eliminates yellow/gold across the entire system)
-    public static let gold = silver
+    // Authentic Sony Hi-Res Audio Gold Palette
+    public static let hiResGold = Color(red: 232 / 255, green: 185 / 255, blue: 68 / 255) // #E8B944 Classic Sony Hi-Res Gold
+    public static let hiResGoldLight = Color(red: 248 / 255, green: 212 / 255, blue: 112 / 255) // #F8D470 Highlight
+    public static let hiResGoldDark = Color(red: 196 / 255, green: 148 / 255, blue: 38 / 255) // #C49426 Shadow
+    public static let hiResGoldGradient = LinearGradient(
+        colors: [hiResGoldLight, hiResGoldDark],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
+    // Direct Silver Aliases
+    public static let gold = hiResGold
     public static let brass = silverMuted
-    public static let goldLight = silverLight
-    public static let goldGlow = Color.clear // Zero glow
+    public static let goldLight = hiResGoldLight
+    public static let goldGlow = hiResGold.opacity(0.3)
 
     // Obsidian & Slate Surface Palette
     public static let obsidian = Color(red: 16 / 255, green: 17 / 255, blue: 20 / 255) // #101114 Deep matte body
@@ -42,6 +52,38 @@ public enum WalkmanTheme {
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
+}
+
+public enum WalkmanFont {
+    // Large & Section Headings
+    public static let title1 = Font.system(size: 22, weight: .bold)
+    public static let title2 = Font.system(size: 18, weight: .bold)
+    public static let title3 = Font.system(size: 15, weight: .semibold)
+    public static let headline = Font.system(size: 14, weight: .semibold)
+
+    // Primary Body Text (macOS standard 13pt)
+    public static let body = Font.system(size: 13, weight: .regular)
+    public static let bodyMedium = Font.system(size: 13, weight: .medium)
+    public static let bodyBold = Font.system(size: 13, weight: .semibold)
+
+    // Secondary & Callouts
+    public static let callout = Font.system(size: 12, weight: .regular)
+    public static let calloutMedium = Font.system(size: 12, weight: .medium)
+    public static let calloutBold = Font.system(size: 12, weight: .semibold)
+
+    // Subheadlines & Captions
+    public static let subheadline = Font.system(size: 11.5, weight: .regular)
+    public static let subheadlineMedium = Font.system(size: 11.5, weight: .medium)
+    public static let subheadlineBold = Font.system(size: 11.5, weight: .bold)
+    public static let sectionHeader = Font.system(size: 11, weight: .bold)
+
+    // Monospaced Audio Metadata & Timestamps
+    public static let mono = Font.system(size: 11.5, design: .monospaced)
+    public static let monoSmall = Font.system(size: 10.5, design: .monospaced)
+
+    // Compact Badges & Hardware Indicators
+    public static let badge = Font.system(size: 9.5, weight: .bold, design: .monospaced)
+    public static let pillCounter = Font.system(size: 10, weight: .bold, design: .rounded)
 }
 
 public struct LiquidGlassModifier: ViewModifier {

@@ -74,11 +74,11 @@ public struct CleanEjectSheet: View {
                 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(isFinished ? "Safe to Disconnect" : "Clean macOS Junk & Safe Eject")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(WalkmanFont.title2)
                         .foregroundStyle(.white)
                     
-                    Text("Complies with Sony NW-A55L FAT32/exFAT hardware rules")
-                        .font(.system(size: 10))
+                    Text("Complies with Sony Walkman FAT32/exFAT hardware rules")
+                        .font(WalkmanFont.subheadline)
                         .foregroundStyle(.secondary)
                 }
                 
@@ -89,7 +89,7 @@ public struct CleanEjectSheet: View {
                 // Volume Selection
                 VStack(alignment: .leading, spacing: 8) {
                     Text("SELECT VOLUMES TO EJECT")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(WalkmanFont.sectionHeader)
                         .foregroundStyle(.tertiary)
                     
                     Picker("", selection: $selectedDrivePath) {
@@ -99,6 +99,7 @@ public struct CleanEjectSheet: View {
                         }
                     }
                     .pickerStyle(.radioGroup)
+                    .font(WalkmanFont.body)
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -107,33 +108,33 @@ public struct CleanEjectSheet: View {
                 // Explanatory checklist
                 VStack(alignment: .leading, spacing: 8) {
                     Text("AUTOMATIC ACTIONS PERFORMED:")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(WalkmanFont.sectionHeader)
                         .foregroundStyle(.tertiary)
                     
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(WalkmanTheme.silver)
                         Text("Executes native macOS `dot_clean -m` to merge AppleDouble resource forks")
-                            .font(.system(size: 10))
+                            .font(WalkmanFont.callout)
                             .foregroundStyle(.secondary)
                     }
                     
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(WalkmanTheme.silver)
                         Text("Deletes hidden .DS_Store, .Spotlight-V100, .Trashes, and ._* ghost files")
-                            .font(.system(size: 10))
+                            .font(WalkmanFont.callout)
                             .foregroundStyle(.secondary)
                     }
                     
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(WalkmanTheme.silver)
                         Text("Unmounts safely via diskutil so device does not trigger corrupted filesystem errors")
-                            .font(.system(size: 10))
+                            .font(WalkmanFont.callout)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -152,30 +153,30 @@ public struct CleanEjectSheet: View {
                     }
                     
                     Text(statusMessage)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(WalkmanFont.bodyMedium)
                         .foregroundStyle(isFinished ? Color.green : .white)
                     
                     if isFinished {
-                        VStack(alignment: .leading, spacing: 6) {
+                        VStack(alignment: .leading, spacing: 8) {
                             HStack {
                                 Text("CLEANUP REPORT")
-                                    .font(.system(size: 9, weight: .bold))
+                                    .font(WalkmanFont.sectionHeader)
                                     .foregroundStyle(.tertiary)
                                 Spacer()
                                 Text("\(deletedFiles.count) Ghost Files Removed")
-                                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                    .font(WalkmanFont.monoSmall.weight(.bold))
                                     .foregroundStyle(WalkmanTheme.silverLight)
                             }
                             
                             ForEach(Array(unmountResults.keys), id: \.self) { driveName in
                                 HStack {
                                     Text(driveName)
-                                        .font(.system(size: 11, weight: .medium))
+                                        .font(WalkmanFont.bodyMedium)
                                         .foregroundStyle(.white)
                                     Spacer()
                                     let ok = unmountResults[driveName] ?? false
                                     Text(ok ? "Safely Unmounted" : "Failed to unmount")
-                                        .font(.system(size: 10, weight: .semibold))
+                                        .font(WalkmanFont.subheadlineMedium)
                                         .foregroundStyle(ok ? Color.green : Color.red)
                                 }
                             }
@@ -195,7 +196,7 @@ public struct CleanEjectSheet: View {
                     Button("Cancel") {
                         onDismiss()
                     }
-                    .font(.system(size: 11))
+                    .font(WalkmanFont.callout)
                     .foregroundStyle(.secondary)
                     .buttonStyle(.plain)
                     
@@ -204,9 +205,9 @@ public struct CleanEjectSheet: View {
                             Image(systemName: "trash.slash")
                             Text("Purge Junk & Eject")
                         }
-                        .font(.system(size: 11, weight: .bold))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
+                        .font(WalkmanFont.calloutBold)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
                         .background(WalkmanTheme.silverGradient)
                         .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                         .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -216,9 +217,9 @@ public struct CleanEjectSheet: View {
                     Button("Done") {
                         onDismiss()
                     }
-                    .font(.system(size: 11, weight: .bold))
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 7)
+                    .font(WalkmanFont.calloutBold)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
                     .background(WalkmanTheme.silverGradient)
                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -227,7 +228,7 @@ public struct CleanEjectSheet: View {
             }
         }
         .padding(20)
-        .frame(width: 480)
+        .frame(width: 500)
         .background(WalkmanTheme.background)
     }
 }

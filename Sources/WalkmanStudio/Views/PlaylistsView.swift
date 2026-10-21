@@ -115,14 +115,14 @@ public struct PlaylistsView: View {
         VStack(spacing: 16) {
             // Header / Status Banner
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 8) {
                         Text("Walkman .M3U8 Playlists")
-                            .font(.system(size: 14, weight: .bold))
+                            .font(WalkmanFont.title3)
                             .foregroundStyle(.white)
                         
                         Text("CRLF / Relative POSIX")
-                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .font(WalkmanFont.badge)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(Color.white.opacity(0.12))
@@ -131,7 +131,7 @@ public struct PlaylistsView: View {
                     }
                     
                     Text("Playlists stored in \(activeDrive?.name ?? "Drive")/MUSIC/ for instant hardware discovery")
-                        .font(.system(size: 10))
+                        .font(WalkmanFont.subheadline)
                         .foregroundStyle(.secondary)
                 }
                 
@@ -139,7 +139,7 @@ public struct PlaylistsView: View {
                 
                 if let banner = messageBanner {
                     Text(banner)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(WalkmanFont.subheadlineMedium)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
                         .background(Color.white.opacity(0.12))
@@ -152,9 +152,9 @@ public struct PlaylistsView: View {
                         Image(systemName: "plus")
                         Text("New Playlist")
                     }
-                    .font(.system(size: 11, weight: .semibold))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
+                    .font(WalkmanFont.calloutBold)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
                     .background(WalkmanTheme.silverGradient)
                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -169,7 +169,7 @@ public struct PlaylistsView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
                         Text("PLAYLISTS (\(playlists.count))")
-                            .font(.system(size: 9, weight: .bold))
+                            .font(WalkmanFont.sectionHeader)
                             .foregroundStyle(.tertiary)
                         Spacer()
                     }
@@ -179,18 +179,18 @@ public struct PlaylistsView: View {
                         HStack(spacing: 6) {
                             TextField("Playlist Name...", text: $newPlaylistName)
                                 .textFieldStyle(.plain)
-                                .font(.system(size: 11))
+                                .font(.system(size: 12.5))
                                 .padding(6)
                                 .background(WalkmanTheme.surface)
                                 .clipShape(RoundedRectangle(cornerRadius: 6))
                                 .onSubmit { createPlaylist() }
                             
                             Button("Save") { createPlaylist() }
-                                .font(.system(size: 10, weight: .bold))
+                                .font(WalkmanFont.calloutBold)
                                 .foregroundStyle(WalkmanTheme.silverLight)
                             
                             Button("Cancel") { isCreating = false }
-                                .font(.system(size: 10))
+                                .font(WalkmanFont.callout)
                                 .foregroundStyle(.secondary)
                         }
                         .padding(8)
@@ -201,13 +201,13 @@ public struct PlaylistsView: View {
                         VStack(spacing: 8) {
                             Spacer()
                             Image(systemName: "music.note.list")
-                                .font(.system(size: 26))
+                                .font(.system(size: 28))
                                 .foregroundStyle(.tertiary)
                             Text("No Playlists Found")
-                                .font(.system(size: 11, weight: .medium))
+                                .font(WalkmanFont.calloutMedium)
                                 .foregroundStyle(.secondary)
                             Text("Create one to organize your tracks")
-                                .font(.system(size: 9))
+                                .font(WalkmanFont.subheadline)
                                 .foregroundStyle(.tertiary)
                             Spacer()
                         }
@@ -219,16 +219,16 @@ public struct PlaylistsView: View {
                                     let isSel = selectedPlaylist?.id == pl.id
                                     HStack(spacing: 10) {
                                         Image(systemName: "list.bullet")
-                                            .font(.system(size: 11))
+                                            .font(.system(size: 12))
                                             .foregroundStyle(isSel ? WalkmanTheme.silverLight : .secondary)
                                         
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(pl.name)
-                                                .font(.system(size: 11, weight: isSel ? .semibold : .regular))
+                                                .font(isSel ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
                                                 .foregroundStyle(isSel ? .white : .primary)
                                             
                                             Text("\(pl.trackCount) tracks")
-                                                .font(.system(size: 9))
+                                                .font(WalkmanFont.subheadline)
                                                 .foregroundStyle(.secondary)
                                         }
                                         
@@ -236,7 +236,7 @@ public struct PlaylistsView: View {
                                         
                                         Button(action: { deletePlaylist(pl) }) {
                                             Image(systemName: "trash")
-                                                .font(.system(size: 10))
+                                                .font(.system(size: 11))
                                                 .foregroundStyle(.tertiary)
                                         }
                                         .buttonStyle(.plain)
@@ -270,13 +270,13 @@ public struct PlaylistsView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     if let pl = selectedPlaylist {
                         HStack {
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: 3) {
                                 Text(pl.name)
-                                    .font(.system(size: 14, weight: .bold))
+                                    .font(WalkmanFont.title3)
                                     .foregroundStyle(.white)
                                 
                                 Text("\(playlistTracks.count) tracks in sequence")
-                                    .font(.system(size: 10))
+                                    .font(WalkmanFont.callout)
                                     .foregroundStyle(.secondary)
                             }
                             
@@ -287,9 +287,9 @@ public struct PlaylistsView: View {
                                     Image(systemName: "plus.circle")
                                     Text("Add From Library")
                                 }
-                                .font(.system(size: 10, weight: .semibold))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
+                                .font(WalkmanFont.calloutMedium)
+                                .padding(.horizontal, 11)
+                                .padding(.vertical, 6)
                                 .background(WalkmanTheme.card)
                                 .foregroundStyle(WalkmanTheme.silverLight)
                                 .clipShape(RoundedRectangle(cornerRadius: 6))
@@ -301,9 +301,9 @@ public struct PlaylistsView: View {
                                     Image(systemName: "square.and.arrow.down")
                                     Text("Save Changes")
                                 }
-                                .font(.system(size: 10, weight: .semibold))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
+                                .font(WalkmanFont.calloutBold)
+                                .padding(.horizontal, 11)
+                                .padding(.vertical, 6)
                                 .background(WalkmanTheme.silverGradient)
                                 .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                                 .clipShape(RoundedRectangle(cornerRadius: 6))
@@ -317,13 +317,13 @@ public struct PlaylistsView: View {
                             VStack(spacing: 8) {
                                 Spacer()
                                 Image(systemName: "tray")
-                                    .font(.system(size: 28))
+                                    .font(.system(size: 32))
                                     .foregroundStyle(.tertiary)
                                 Text("This playlist is empty")
-                                    .font(.system(size: 12, weight: .medium))
+                                    .font(WalkmanFont.bodyMedium)
                                     .foregroundStyle(.secondary)
                                 Text("Click 'Add From Library' to populate this playlist")
-                                    .font(.system(size: 10))
+                                    .font(WalkmanFont.callout)
                                     .foregroundStyle(.tertiary)
                                 Spacer()
                             }
@@ -334,16 +334,16 @@ public struct PlaylistsView: View {
                                     ForEach(Array(playlistTracks.enumerated()), id: \.offset) { index, trackPath in
                                         HStack(spacing: 12) {
                                             Text(String(format: "%02d", index + 1))
-                                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                                .font(WalkmanFont.mono)
                                                 .foregroundStyle(WalkmanTheme.silverLight)
-                                                .frame(width: 24, alignment: .trailing)
+                                                .frame(width: 26, alignment: .trailing)
                                             
                                             Image(systemName: "music.note")
-                                                .font(.system(size: 10))
+                                                .font(.system(size: 12))
                                                 .foregroundStyle(.secondary)
                                             
                                             Text(trackPath)
-                                                .font(.system(size: 11, design: .monospaced))
+                                                .font(WalkmanFont.mono)
                                                 .foregroundStyle(.white)
                                                 .lineLimit(1)
                                             
@@ -356,7 +356,7 @@ public struct PlaylistsView: View {
                                                 }
                                             }) {
                                                 Image(systemName: "chevron.up")
-                                                    .font(.system(size: 9))
+                                                    .font(.system(size: 11))
                                                     .foregroundStyle(.secondary)
                                             }
                                             .buttonStyle(.plain)

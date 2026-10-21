@@ -63,27 +63,27 @@ public struct LibraryView: View {
                 // Search Field
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                     
                     TextField("Search title, artist, or album...", text: $searchQuery)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 11))
+                        .font(.system(size: 12.5))
                     
                     if !searchQuery.isEmpty {
                         Button(action: { searchQuery = "" }) {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 11))
+                                .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
                         }
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 6)
                 .background(Color.white.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
-                .frame(maxWidth: 280)
+                .frame(maxWidth: 290)
                 
                 // Format Filters
                 Picker("", selection: $formatFilter) {
@@ -93,7 +93,7 @@ public struct LibraryView: View {
                     Text("Hi-Res (>16bit)").tag("HI-RES")
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 280)
+                .frame(width: 290)
                 
                 Spacer()
                 
@@ -101,11 +101,11 @@ public struct LibraryView: View {
                     ProgressView()
                         .scaleEffect(0.7)
                     Text("Loading library...")
-                        .font(.system(size: 10))
+                        .font(WalkmanFont.subheadline)
                         .foregroundStyle(.secondary)
                 } else {
                     Text("\(filteredTracks.count.formatted()) tracks")
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(WalkmanFont.mono)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -120,21 +120,21 @@ public struct LibraryView: View {
                 VStack(spacing: 12) {
                     Spacer()
                     Image(systemName: "music.note.house")
-                        .font(.system(size: 36))
+                        .font(.system(size: 38))
                         .foregroundStyle(.tertiary)
                     Text("No Tracks on Selected Volume")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(WalkmanFont.title3)
                         .foregroundStyle(.secondary)
                     Text("Drag and drop audio files into Transfer & Convert to sync to your Walkman.")
-                        .font(.system(size: 11))
+                        .font(WalkmanFont.callout)
                         .foregroundStyle(.tertiary)
                     
                     Button("Go to Transfer Queue") {
                         onGoToTransfer()
                     }
-                    .font(.system(size: 11, weight: .medium))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
+                    .font(WalkmanFont.calloutMedium)
+                    .padding(.horizontal, 15)
+                    .padding(.vertical, 7)
                     .background(WalkmanTheme.silverGradient)
                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                     .clipShape(RoundedRectangle(cornerRadius: 6))
@@ -147,16 +147,16 @@ public struct LibraryView: View {
                 Table(filteredTracks, selection: $selectedTrackId, sortOrder: $sortOrder) {
                     TableColumn("#", value: \.trackNum) { track in
                         Text(track.trackNum.isEmpty ? "—" : track.trackNum)
-                            .font(.system(size: 11, design: .monospaced))
+                            .font(WalkmanFont.mono)
                             .foregroundStyle(.secondary)
                     }
-                    .width(min: 28, ideal: 36, max: 46)
+                    .width(min: 30, ideal: 38, max: 50)
                     
                     TableColumn("Title", value: \.title) { track in
                         let isCurrent = player.currentTrack?.id == track.id
                         let isPlayingThis = isCurrent && player.isPlaying
                         
-                        HStack(spacing: 8) {
+                        HStack(spacing: 9) {
                             Button(action: {
                                 if isPlayingThis {
                                     player.pause()
@@ -164,73 +164,73 @@ public struct LibraryView: View {
                                     player.play(track: track, in: filteredTracks)
                                 }
                             }) {
-                                TrackCoverThumbnail(track: track, size: 24, isPlaying: isPlayingThis)
+                                TrackCoverThumbnail(track: track, size: 28, isPlaying: isPlayingThis)
                             }
                             .buttonStyle(.plain)
                             .help(isPlayingThis ? "Pause" : "Play preview")
                             
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(track.title)
-                                    .font(.system(size: 11, weight: isPlayingThis ? .bold : .medium))
+                                    .font(isPlayingThis ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
                                     .foregroundStyle(isPlayingThis ? .white : .primary)
                                     .lineLimit(1)
                             }
                         }
                     }
-                    .width(min: 160, ideal: 240)
+                    .width(min: 170, ideal: 260)
                     
                     TableColumn("Artist", value: \.artist) { track in
                         Text(track.artist)
-                            .font(.system(size: 11))
+                            .font(WalkmanFont.callout)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
-                    .width(min: 100, ideal: 150)
+                    .width(min: 110, ideal: 160)
                     
                     TableColumn("Album", value: \.album) { track in
                         Text(track.album)
-                            .font(.system(size: 11))
+                            .font(WalkmanFont.callout)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
-                    .width(min: 110, ideal: 170)
+                    .width(min: 120, ideal: 180)
                     
                     TableColumn("Format", value: \.format) { track in
                         HStack(spacing: 4) {
                             Text(track.format)
-                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .font(WalkmanFont.badge)
                                 .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(isHiRes(track) ? Color.white.opacity(0.12) : Color.white.opacity(0.06))
-                                .foregroundStyle(isHiRes(track) ? WalkmanTheme.silverLight : .secondary)
+                                .padding(.vertical, 1.5)
+                                .background(isHiRes(track) ? WalkmanTheme.hiResGold.opacity(0.14) : Color.white.opacity(0.06))
+                                .foregroundStyle(isHiRes(track) ? WalkmanTheme.hiResGold : .secondary)
                                 .clipShape(RoundedRectangle(cornerRadius: 3))
                             
                             if isHiRes(track) {
                                 Text("Hi-Res")
-                                    .font(.system(size: 8, weight: .bold, design: .monospaced))
-                                    .padding(.horizontal, 3)
-                                    .padding(.vertical, 1)
-                                    .background(Color.white.opacity(0.18))
-                                    .foregroundStyle(WalkmanTheme.silverLight)
-                                    .clipShape(RoundedRectangle(cornerRadius: 2))
+                                    .font(WalkmanFont.badge)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1.5)
+                                    .background(WalkmanTheme.hiResGoldGradient)
+                                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                                    .clipShape(RoundedRectangle(cornerRadius: 2.5, style: .continuous))
                             }
                         }
                     }
-                    .width(min: 65, ideal: 85, max: 100)
+                    .width(min: 75, ideal: 95, max: 115)
                     
                     TableColumn("Duration", value: \.durationSeconds) { track in
                         Text(formatDuration(track.durationSeconds))
-                            .font(.system(size: 10, design: .monospaced))
+                            .font(WalkmanFont.mono)
                             .foregroundStyle(.secondary)
                     }
-                    .width(min: 55, ideal: 65, max: 80)
+                    .width(min: 60, ideal: 72, max: 90)
                     
                     TableColumn("Bitrate", value: \.bitrateKbps) { track in
                         Text(track.bitrateKbps > 0 ? "\(track.bitrateKbps)k" : "—")
-                            .font(.system(size: 10, design: .monospaced))
+                            .font(WalkmanFont.mono)
                             .foregroundStyle(.tertiary)
                     }
-                    .width(min: 55, ideal: 65, max: 80)
+                    .width(min: 60, ideal: 72, max: 90)
                 }
                 .contextMenu(forSelectionType: Track.ID.self) { selection in
                     if let firstId = selection.first, let track = tracks.first(where: { $0.id == firstId }) {

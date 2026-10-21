@@ -29,7 +29,7 @@ public struct TransferQueueView: View {
                 // Target Drive
                 VStack(alignment: .leading, spacing: 6) {
                     Text("DESTINATION DRIVE")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(WalkmanFont.sectionHeader)
                         .foregroundStyle(.tertiary)
 
                     Picker("", selection: $targetDriveId) {
@@ -41,17 +41,17 @@ public struct TransferQueueView: View {
                     .tint(WalkmanTheme.silver)
 
                     Text("Organized to /MUSIC/Artist/Album/")
-                        .font(.system(size: 9))
+                        .font(WalkmanFont.subheadline)
                         .foregroundStyle(.secondary)
                 }
-                .padding(12)
+                .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .liquidGlass(cornerRadius: 11)
 
                 // Transcode Preset
                 VStack(alignment: .leading, spacing: 6) {
                     Text("CONVERSION PRESET")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(WalkmanFont.sectionHeader)
                         .foregroundStyle(.tertiary)
 
                     Picker("", selection: $selectedPreset) {
@@ -64,17 +64,17 @@ public struct TransferQueueView: View {
                     .tint(WalkmanTheme.silver)
 
                     Text("Apple Silicon hardware acceleration")
-                        .font(.system(size: 9))
+                        .font(WalkmanFont.subheadline)
                         .foregroundStyle(.secondary)
                 }
-                .padding(12)
+                .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .liquidGlass(cornerRadius: 11)
 
                 // Start Action Button
                 VStack(alignment: .leading, spacing: 6) {
                     Text("BATCH QUEUE")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(WalkmanFont.sectionHeader)
                         .foregroundStyle(.tertiary)
 
                     Button(action: startBatchTransfer) {
@@ -87,7 +87,7 @@ public struct TransferQueueView: View {
                                     .font(.system(size: 11))
                             }
                             Text(isProcessing ? "Processing..." : "Start Transfer (\(queue.count))")
-                                .font(.system(size: 11, weight: .bold))
+                                .font(WalkmanFont.calloutBold)
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
@@ -99,10 +99,10 @@ public struct TransferQueueView: View {
                     .disabled(queue.isEmpty || isProcessing)
 
                     Text("\(queue.filter { $0.status == .success }.count) of \(queue.count) completed")
-                        .font(.system(size: 9, design: .monospaced))
+                        .font(WalkmanFont.monoSmall)
                         .foregroundStyle(.secondary)
                 }
-                .padding(12)
+                .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .liquidGlass(cornerRadius: 11)
             }
@@ -120,23 +120,23 @@ public struct TransferQueueView: View {
 
                 VStack(spacing: 8) {
                     Image(systemName: "arrow.down.doc.fill")
-                        .font(.system(size: 28))
+                        .font(.system(size: 32))
                         .foregroundStyle(WalkmanTheme.silver)
 
                     Text("Drag & Drop Audio Files or Folders from Finder")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(WalkmanFont.headline)
                         .foregroundStyle(.white)
 
                     Text("Supports FLAC, MP3, WAV, ALAC, M4A, AIFF, DSD")
-                        .font(.system(size: 10))
+                        .font(WalkmanFont.callout)
                         .foregroundStyle(.secondary)
 
                     Button(action: openFilePicker) {
                         Text("Browse Files...")
-                            .font(.system(size: 10, weight: .medium))
+                            .font(WalkmanFont.calloutMedium)
                             .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 5)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 6)
                             .background(WalkmanTheme.cardHover)
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                             .overlay(RoundedRectangle(cornerRadius: 6).stroke(WalkmanTheme.border, lineWidth: 1))
@@ -146,7 +146,7 @@ public struct TransferQueueView: View {
                 }
                 .padding(20)
             }
-            .frame(height: 140)
+            .frame(height: 145)
             .padding(.horizontal, 20)
             .onDrop(of: ["public.file-url"], isTargeted: $isTargeted) { providers in
                 handleDrop(providers: providers)
@@ -158,7 +158,7 @@ public struct TransferQueueView: View {
                 VStack(spacing: 0) {
                     HStack {
                         Text("Files in Queue (\(queue.count))")
-                            .font(.system(size: 11, weight: .bold))
+                            .font(WalkmanFont.headline)
                             .foregroundStyle(.white)
 
                         Spacer()
@@ -168,7 +168,7 @@ public struct TransferQueueView: View {
                                 Image(systemName: "trash")
                                 Text("Clear")
                             }
-                            .font(.system(size: 10))
+                            .font(WalkmanFont.callout)
                             .foregroundStyle(.secondary)
                         }
                         .buttonStyle(.plain)
@@ -202,10 +202,10 @@ public struct TransferQueueView: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.filename)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(WalkmanFont.bodyMedium)
                     .foregroundStyle(.white)
                 Text(item.sourceURL.path)
-                    .font(.system(size: 9, design: .monospaced))
+                    .font(WalkmanFont.monoSmall)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -215,33 +215,33 @@ public struct TransferQueueView: View {
             switch item.status {
             case .pending:
                 Text("Pending")
-                    .font(.system(size: 9))
+                    .font(WalkmanFont.badge)
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2.5)
                     .background(WalkmanTheme.card)
                     .clipShape(Capsule())
             case .converting:
-                HStack(spacing: 4) {
+                HStack(spacing: 5) {
                     ProgressView().scaleEffect(0.6)
                     Text("Converting...")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(WalkmanFont.badge)
                         .foregroundStyle(WalkmanTheme.silverLight)
                 }
             case .success:
-                HStack(spacing: 4) {
+                HStack(spacing: 5) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                     Text("Transferred")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(WalkmanFont.badge)
                         .foregroundStyle(.green)
                 }
             case .failed(let err):
-                HStack(spacing: 4) {
+                HStack(spacing: 5) {
                     Image(systemName: "exclamationmark.circle.fill")
                         .foregroundStyle(.red)
                     Text(err)
-                        .font(.system(size: 9))
+                        .font(WalkmanFont.subheadline)
                         .foregroundStyle(.red)
                 }
             }
@@ -250,7 +250,7 @@ public struct TransferQueueView: View {
                 queue.removeAll(where: { $0.id == item.id })
             }) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 9))
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .padding(4)
             }

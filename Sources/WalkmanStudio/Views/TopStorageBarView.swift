@@ -43,12 +43,12 @@ public struct TopStorageBarView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text("WALKMAN STUDIO")
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .font(WalkmanFont.bodyBold)
                             .foregroundStyle(.white)
 
-                        Text("NW-A55L")
-                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                            .padding(.horizontal, 5)
+                        Text("WALKMAN")
+                            .font(WalkmanFont.badge)
+                            .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(Color.white.opacity(0.12))
                             .foregroundStyle(WalkmanTheme.silverLight)
@@ -57,13 +57,13 @@ public struct TopStorageBarView: View {
 
                     HStack(spacing: 4) {
                         Text("Native Apple Silicon")
-                            .font(.system(size: 10))
+                            .font(WalkmanFont.subheadline)
                             .foregroundStyle(.secondary)
                         Text("•")
                             .font(.system(size: 8))
                             .foregroundStyle(.tertiary)
                         Text("Signature Edition")
-                            .font(.system(size: 10, weight: .medium))
+                            .font(WalkmanFont.subheadlineMedium)
                             .foregroundStyle(WalkmanTheme.silverMuted)
                     }
                 }
@@ -98,7 +98,7 @@ public struct TopStorageBarView: View {
                 // Rescan Button
                 Button(action: onRefresh) {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .rotationEffect(.degrees(isRefreshing ? 360 : 0))
                         .animation(isRefreshing ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: isRefreshing)
                         .padding(8)
@@ -116,14 +116,14 @@ public struct TopStorageBarView: View {
             Button(action: onOpenEject) {
                 HStack(spacing: 6) {
                     Image(systemName: "eject.circle.fill")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(WalkmanTheme.silver)
 
                     Text("Clean Junk & Safe Eject")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(WalkmanFont.calloutBold)
                         .foregroundStyle(WalkmanTheme.silverLight)
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 14)
                 .padding(.vertical, 7)
                 .background(WalkmanTheme.card)
                 .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
@@ -149,21 +149,21 @@ public struct TopStorageBarView: View {
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 8) {
                     Image(systemName: icon)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(isSelected ? WalkmanTheme.silverLight : .secondary)
 
                     Text(drive.name)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(WalkmanFont.bodyMedium)
                         .foregroundStyle(.white)
 
                     Spacer(minLength: 8)
 
                     HStack(spacing: 2) {
                         Text(formatBytes(drive.freeBytes))
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .font(WalkmanFont.monoSmall.weight(.bold))
                             .foregroundStyle(.white)
                         Text("/ \(formatBytes(drive.totalBytes)) free")
-                            .font(.system(size: 10, design: .monospaced))
+                            .font(WalkmanFont.monoSmall)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -200,7 +200,7 @@ public struct TopStorageBarView: View {
                 .fill(Color.secondary)
                 .frame(width: 5, height: 5)
             Text(title)
-                .font(.system(size: 10))
+                .font(WalkmanFont.subheadline)
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 10)
