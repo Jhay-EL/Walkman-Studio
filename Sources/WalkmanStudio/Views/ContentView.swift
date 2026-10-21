@@ -33,8 +33,18 @@ public struct ContentView: View {
     @State private var cachedRecentTracks: [Track] = []
     
     private var selectedTrack: Track? {
-        guard let id = selectedTrackId else { return player.currentTrack }
-        return tracks.first(where: { $0.id == id }) ?? player.currentTrack
+        // When music is playing or loaded on the music player, make sure the music details panel matches what is playing
+        if let playing = player.currentTrack {
+            if player.isPlaying || selectedTrackId == nil || selectedTrackId == playing.id {
+                return playing
+            }
+            if let id = selectedTrackId, let tr = tracks.first(where: { $0.id == id }) {
+                return tr
+            }
+            return playing
+        }
+        guard let id = selectedTrackId else { return nil }
+        return tracks.first(where: { $0.id == id })
     }
     
     private func refreshDrives() {
@@ -379,6 +389,9 @@ public struct ContentView: View {
                         TrackPreviewBar(
                             isInspectorPresented: showInspector,
                             onOpenInspector: {
+                                if let cur = player.currentTrack {
+                                    self.selectedTrackId = cur.id
+                                }
                                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                                     self.showInspector = true
                                 }
@@ -442,6 +455,11 @@ public struct ContentView: View {
         }
         .onReceive(heartbeatTimer) { _ in
             checkDrivesHeartbeat()
+        }
+        .onChange(of: player.currentTrack?.id) {
+            if let cur = player.currentTrack, player.isPlaying {
+                self.selectedTrackId = cur.id
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .showAboutWalkmanStudio)) { _ in
             self.showAboutSheet = true

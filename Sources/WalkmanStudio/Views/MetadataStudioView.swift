@@ -5,6 +5,8 @@ public struct MetadataStudioView: View {
     let track: Track?
     let onSaved: () -> Void
     
+    @ObservedObject private var player = AudioPlayerService.shared
+    
     @State private var title: String = ""
     @State private var artist: String = ""
     @State private var album: String = ""
@@ -270,6 +272,38 @@ public struct MetadataStudioView: View {
                             }
                             
                             Spacer()
+                            
+                            // Audio Player status & play/pause toggle
+                            let isThisPlaying = (player.currentTrack?.id == tr.id && player.isPlaying)
+                            Button(action: {
+                                if isThisPlaying {
+                                    player.pause()
+                                } else {
+                                    player.play(track: tr)
+                                }
+                            }) {
+                                HStack(spacing: 4.5) {
+                                    Image(systemName: isThisPlaying ? "pause.fill" : "play.fill")
+                                        .font(.system(size: 9, weight: .bold))
+                                    Text(isThisPlaying ? "Playing" : "Play")
+                                        .font(WalkmanFont.badge)
+                                }
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3.5)
+                                .background(
+                                    Group {
+                                        if isThisPlaying {
+                                            WalkmanTheme.silverGradient
+                                        } else {
+                                            Color.white.opacity(0.12)
+                                        }
+                                    }
+                                )
+                                .foregroundStyle(isThisPlaying ? Color(red: 20/255, green: 20/255, blue: 24/255) : .white)
+                                .clipShape(Capsule())
+                            }
+                            .buttonStyle(WalkmanSideActionButtonStyle(cornerRadius: 12))
+                            .help(isThisPlaying ? "Pause music player" : "Play this song on music player")
                         }
                     
                     // Album Artwork (Direct Image, No Background Container)
@@ -491,37 +525,42 @@ public struct MetadataStudioView: View {
                                 )
                             }
                         } else {
-                            HStack(spacing: 8) {
-                                if isFetchingLyrics {
-                                    HStack(spacing: 6) {
-                                        ProgressView()
-                                            .scaleEffect(0.65)
-                                            .frame(width: 14, height: 14)
-                                        Text("Fetching lyrics from internet...")
-                                            .font(WalkmanFont.calloutMedium)
-                                            .foregroundStyle(WalkmanTheme.silverLight)
+                            VStack(spacing: 8) {
+                                // Status container ("No lyrics on Walkman" / fetching / error)
+                                HStack(spacing: 8) {
+                                    if isFetchingLyrics {
+                                        HStack(spacing: 6) {
+                                            ProgressView()
+                                                .scaleEffect(0.65)
+                                                .frame(width: 14, height: 14)
+                                            Text("Fetching lyrics from internet...")
+                                                .font(WalkmanFont.calloutMedium)
+                                                .foregroundStyle(WalkmanTheme.silverLight)
+                                        }
+                                    } else if let err = lyricsErrorMessage {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "exclamationmark.circle.fill")
+                                                .font(.system(size: 14))
+                                                .foregroundStyle(.orange)
+                                            Text(err)
+                                                .font(WalkmanFont.calloutMedium)
+                                                .foregroundStyle(.orange)
+                                        }
+                                    } else {
+                                        Image(systemName: "music.mic")
+                                            .font(.system(size: 15))
+                                            .foregroundStyle(Color.secondary)
+                                        Text("No lyrics on Walkman")
+                                            .font(WalkmanFont.callout)
+                                            .foregroundStyle(.secondary)
                                     }
-                                } else if let err = lyricsErrorMessage {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "exclamationmark.circle.fill")
-                                            .font(.system(size: 14))
-                                            .foregroundStyle(.orange)
-                                        Text(err)
-                                            .font(WalkmanFont.calloutMedium)
-                                            .foregroundStyle(.orange)
-                                    }
-                                } else {
-                                    Image(systemName: "music.mic")
-                                        .font(.system(size: 15))
-                                        .foregroundStyle(Color.secondary)
-                                    Text("No lyrics on Walkman")
-                                        .font(WalkmanFont.callout)
-                                        .foregroundStyle(.secondary)
+                                    
+                                    Spacer()
                                 }
+                                .padding(10)
+                                .liquidGlass(cornerRadius: 8)
                                 
-                                Spacer()
-                                
-                                // Grab .LRC online from internet
+                                // "Add .LRC" Button OUTSIDE the container
                                 Button(action: {
                                     grabLyrics()
                                 }) {
@@ -530,17 +569,17 @@ public struct MetadataStudioView: View {
                                             ProgressView()
                                                 .scaleEffect(0.6)
                                                 .frame(width: 12, height: 12)
-                                            Text("Fetching...")
+                                            Text("Fetching lyrics...")
                                                 .font(WalkmanFont.calloutBold)
                                         } else {
                                             Image(systemName: "arrow.down.circle.fill")
-                                                .font(.system(size: 11, weight: .bold))
+                                                .font(.system(size: 12, weight: .bold))
                                             Text("Add .LRC")
                                                 .font(WalkmanFont.calloutBold)
                                         }
                                     }
-                                    .padding(.horizontal, 11)
-                                    .padding(.vertical, 5.5)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 7)
                                     .background(
                                         Group {
                                             if isFetchingLyrics {
@@ -552,14 +591,11 @@ public struct MetadataStudioView: View {
                                     )
                                     .foregroundStyle(isFetchingLyrics ? WalkmanTheme.silverLight : Color(red: 20/255, green: 20/255, blue: 24/255))
                                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                    .contentShape(Rectangle())
                                 }
-                                .buttonStyle(WalkmanSideActionButtonStyle(cornerRadius: 6))
+                                .buttonStyle(WalkmanSideActionButtonStyle(isFullWidth: true, cornerRadius: 6))
                                 .disabled(isFetchingLyrics)
                                 .help(isFetchingLyrics ? "Fetching lyrics from internet in progress..." : "Automatically grab synced lyrics from internet and add .lrc to Walkman")
                             }
-                            .padding(10)
-                            .liquidGlass(cornerRadius: 8)
                         }
                     }
                     
