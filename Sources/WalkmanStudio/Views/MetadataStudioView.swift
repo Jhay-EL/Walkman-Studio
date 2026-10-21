@@ -385,11 +385,17 @@ public struct MetadataStudioView: View {
                             
                             if lyrics != nil && !isEditingLyrics {
                                 Button(action: { grabLyrics() }) {
-                                    Image(systemName: "arrow.clockwise")
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(WalkmanTheme.silver)
-                                        .frame(width: 22, height: 22)
-                                        .contentShape(Rectangle())
+                                    if isFetchingLyrics {
+                                        ProgressView()
+                                            .scaleEffect(0.55)
+                                            .frame(width: 14, height: 14)
+                                    } else {
+                                        Image(systemName: "arrow.clockwise")
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(WalkmanTheme.silver)
+                                            .frame(width: 22, height: 22)
+                                            .contentShape(Rectangle())
+                                    }
                                 }
                                 .buttonStyle(WalkmanPressableButtonStyle())
                                 .disabled(isFetchingLyrics)
@@ -482,65 +488,98 @@ public struct MetadataStudioView: View {
                                 }
                             }
                         } else if let lyr = lyrics, !lyr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            ScrollView {
-                                Text(lyr)
-                                    .font(WalkmanFont.body)
-                                    .lineSpacing(4)
-                                    .foregroundStyle(.primary)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(10)
+                            VStack(spacing: 6) {
+                                if isFetchingLyrics {
+                                    HStack(spacing: 6) {
+                                        ProgressView()
+                                            .scaleEffect(0.6)
+                                            .frame(width: 14, height: 14)
+                                        Text("Fetching updated lyrics from internet...")
+                                            .font(WalkmanFont.monoSmall)
+                                            .foregroundStyle(WalkmanTheme.silverLight)
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.white.opacity(0.06))
+                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                                }
+
+                                ScrollView {
+                                    Text(lyr)
+                                        .font(WalkmanFont.body)
+                                        .lineSpacing(4)
+                                        .foregroundStyle(.primary)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(10)
+                                }
+                                .frame(maxHeight: 160)
+                                .background(Color.white.opacity(0.04))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
+                                        .allowsHitTesting(false)
+                                )
                             }
-                            .frame(maxHeight: 160)
-                            .background(Color.white.opacity(0.04))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
-                                    .allowsHitTesting(false)
-                            )
-                        } else if isFetchingLyrics {
-                            HStack(spacing: 9) {
-                                ProgressView()
-                                    .scaleEffect(0.7)
-                                    .frame(width: 16, height: 16)
-                                Text("Grabbing synced .LRC from internet...")
-                                    .font(WalkmanFont.callout)
-                                    .foregroundStyle(WalkmanTheme.silverLight)
-                                Spacer()
-                            }
-                            .padding(10)
-                            .liquidGlass(cornerRadius: 8)
                         } else {
                             HStack(spacing: 8) {
                                 Image(systemName: "music.mic")
                                     .font(.system(size: 15))
-                                    .foregroundStyle(.tertiary)
+                                    .foregroundStyle(isFetchingLyrics ? WalkmanTheme.silverLight : Color.secondary)
                                 
-                                Text("No lyrics on Walkman")
-                                    .font(WalkmanFont.callout)
-                                    .foregroundStyle(.secondary)
+                                if isFetchingLyrics {
+                                    HStack(spacing: 6) {
+                                        ProgressView()
+                                            .scaleEffect(0.65)
+                                            .frame(width: 14, height: 14)
+                                        Text("Fetching lyrics from internet...")
+                                            .font(WalkmanFont.calloutMedium)
+                                            .foregroundStyle(WalkmanTheme.silverLight)
+                                    }
+                                } else {
+                                    Text("No lyrics on Walkman")
+                                        .font(WalkmanFont.callout)
+                                        .foregroundStyle(.secondary)
+                                }
                                 
                                 Spacer()
                                 
                                 Button(action: {
                                     grabLyrics()
                                 }) {
-                                    HStack(spacing: 5) {
-                                        Image(systemName: "arrow.down.circle.fill")
-                                            .font(.system(size: 11, weight: .bold))
-                                        Text("Add .LRC")
-                                            .font(WalkmanFont.calloutBold)
+                                    HStack(spacing: 6) {
+                                        if isFetchingLyrics {
+                                            ProgressView()
+                                                .scaleEffect(0.6)
+                                                .frame(width: 12, height: 12)
+                                            Text("Fetching...")
+                                                .font(WalkmanFont.calloutBold)
+                                        } else {
+                                            Image(systemName: "arrow.down.circle.fill")
+                                                .font(.system(size: 11, weight: .bold))
+                                            Text("Add .LRC")
+                                                .font(WalkmanFont.calloutBold)
+                                        }
                                     }
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 5)
-                                    .background(WalkmanTheme.silverGradient)
-                                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                                    .background(
+                                        Group {
+                                            if isFetchingLyrics {
+                                                Color.white.opacity(0.12)
+                                            } else {
+                                                WalkmanTheme.silverGradient
+                                            }
+                                        }
+                                    )
+                                    .foregroundStyle(isFetchingLyrics ? WalkmanTheme.silverLight : Color(red: 20/255, green: 20/255, blue: 24/255))
                                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                                     .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                                 }
                                 .buttonStyle(WalkmanPressableButtonStyle())
                                 .disabled(isFetchingLyrics)
-                                .help("Automatically grab synced lyrics from internet and import .lrc to Walkman")
+                                .help(isFetchingLyrics ? "Fetching lyrics from internet in progress..." : "Automatically grab synced lyrics from internet and import .lrc to Walkman")
                             }
                             .padding(10)
                             .liquidGlass(cornerRadius: 8)
