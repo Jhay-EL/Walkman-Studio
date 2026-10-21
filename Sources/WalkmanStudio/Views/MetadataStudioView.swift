@@ -24,6 +24,7 @@ public struct MetadataStudioView: View {
     @State private var isEditingLyrics: Bool = false
     @State private var lyricsDraft: String = ""
     @State private var lyricsStatusMessage: String? = nil
+    @State private var lyricsErrorMessage: String? = nil
     @State private var isFetchingLyrics: Bool = false
     
     public init(track: Track?, onSaved: @escaping () -> Void) {
@@ -40,6 +41,8 @@ public struct MetadataStudioView: View {
         year = tr.year
         genre = tr.genre
         isEditingLyrics = false
+        isFetchingLyrics = false
+        lyricsErrorMessage = nil
         lyricsStatusMessage = nil
         
         let url = URL(fileURLWithPath: tr.fullPath)
@@ -91,11 +94,13 @@ public struct MetadataStudioView: View {
                 try AudioTagger.shared.deleteLyrics(fileURL: url)
                 self.lyrics = nil
                 self.isEditingLyrics = false
+                self.lyricsErrorMessage = nil
                 self.lyricsStatusMessage = "Removed .LRC from Walkman"
             } else {
                 try AudioTagger.shared.saveLyrics(fileURL: url, lyrics: trimmed)
                 self.lyrics = trimmed
                 self.isEditingLyrics = false
+                self.lyricsErrorMessage = nil
                 self.lyricsStatusMessage = "Saved .lrc file (Sony Walkman native)"
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
@@ -107,10 +112,12 @@ public struct MetadataStudioView: View {
     }
 
     private func grabLyrics() {
+        guard !isFetchingLyrics else { return }
         guard let tr = track else { return }
         
         withAnimation(.easeInOut(duration: 0.12)) {
             isFetchingLyrics = true
+            lyricsErrorMessage = nil
             lyricsStatusMessage = "Fetching .LRC online..."
         }
 
@@ -138,6 +145,7 @@ public struct MetadataStudioView: View {
                         self.lyricsDraft = result.lyrics
                         self.isEditingLyrics = false
                         self.isFetchingLyrics = false
+                        self.lyricsErrorMessage = nil
                         self.lyricsStatusMessage = result.synced ? "Synced .LRC added!" : "Added .LRC to Walkman!"
                     }
 
@@ -153,10 +161,16 @@ public struct MetadataStudioView: View {
                 await MainActor.run {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         self.isFetchingLyrics = false
+                        self.lyricsErrorMessage = "No lyrics found online"
                         self.lyricsStatusMessage = "No lyrics found online"
                     }
 
                     DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+                        if self.lyricsErrorMessage == "No lyrics found online" {
+                            withAnimation {
+                                self.lyricsErrorMessage = nil
+                            }
+                        }
                         if self.lyricsStatusMessage == "No lyrics found online" {
                             withAnimation {
                                 self.lyricsStatusMessage = nil
@@ -480,10 +494,6 @@ public struct MetadataStudioView: View {
                             }
                         } else {
                             HStack(spacing: 8) {
-                                Image(systemName: "music.mic")
-                                    .font(.system(size: 15))
-                                    .foregroundStyle(isFetchingLyrics ? WalkmanTheme.silverLight : Color.secondary)
-                                
                                 if isFetchingLyrics {
                                     HStack(spacing: 6) {
                                         ProgressView()
@@ -493,7 +503,19 @@ public struct MetadataStudioView: View {
                                             .font(WalkmanFont.calloutMedium)
                                             .foregroundStyle(WalkmanTheme.silverLight)
                                     }
+                                } else if let err = lyricsErrorMessage {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "exclamationmark.circle.fill")
+                                            .font(.system(size: 14))
+                                            .foregroundStyle(.orange)
+                                        Text(err)
+                                            .font(WalkmanFont.calloutMedium)
+                                            .foregroundStyle(.orange)
+                                    }
                                 } else {
+                                    Image(systemName: "music.mic")
+                                        .font(.system(size: 15))
+                                        .foregroundStyle(Color.secondary)
                                     Text("No lyrics on Walkman")
                                         .font(WalkmanFont.callout)
                                         .foregroundStyle(.secondary)
@@ -519,8 +541,8 @@ public struct MetadataStudioView: View {
                                                 .font(WalkmanFont.calloutBold)
                                         }
                                     }
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 5)
+                                    .padding(.horizontal, 11)
+                                    .padding(.vertical, 5.5)
                                     .background(
                                         Group {
                                             if isFetchingLyrics {
@@ -534,7 +556,7 @@ public struct MetadataStudioView: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                                     .contentShape(Rectangle())
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(WalkmanPressableButtonStyle())
                                 .disabled(isFetchingLyrics)
                                 .help(isFetchingLyrics ? "Fetching lyrics from internet in progress..." : "Automatically grab synced lyrics from internet and add .lrc to Walkman")
                             }
