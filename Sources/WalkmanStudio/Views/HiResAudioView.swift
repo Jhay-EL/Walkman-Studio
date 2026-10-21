@@ -32,6 +32,24 @@ public struct HiResAudioView: View {
         }
     }
     
+    private static let cachedLogoImage: NSImage? = {
+        if let bundleURL = Bundle.main.url(forResource: "hires_audio_logo", withExtension: "png"),
+           let img = NSImage(contentsOf: bundleURL) {
+            return img
+        }
+        if let bundleSvgURL = Bundle.main.url(forResource: "hires_audio_logo", withExtension: "svg"),
+           let img = NSImage(contentsOf: bundleSvgURL) {
+            return img
+        }
+        if let localImg = NSImage(contentsOfFile: "assets/hires_audio_logo.png") {
+            return localImg
+        }
+        if let localSvg = NSImage(contentsOfFile: "assets/hires_audio_logo.svg") {
+            return localSvg
+        }
+        return nil
+    }()
+
     private func formatDuration(_ seconds: Double) -> String {
         if seconds <= 0 { return "—" }
         let mins = Int(seconds) / 60
@@ -43,29 +61,43 @@ public struct HiResAudioView: View {
         VStack(spacing: 0) {
             // Header Banner
             HStack(spacing: 14) {
-                // Hi-Res Silver Badge
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(WalkmanTheme.silverGradient)
-                        .frame(width: 48, height: 48)
-                    
-                    VStack(spacing: 1) {
-                        Text("Hi-Res")
-                            .font(.system(size: 11, weight: .black, design: .monospaced))
-                            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                        Text("AUDIO")
-                            .font(.system(size: 8, weight: .bold, design: .rounded))
-                            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                // Official Japan Audio Society / Sony Hi-Res Audio Logo
+                if let logo = Self.cachedLogoImage {
+                    Image(nsImage: logo)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 44, height: 44)
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .stroke(Color.black.opacity(0.25), lineWidth: 0.5)
+                        )
+                        .shadow(color: Color.black.opacity(0.35), radius: 4, x: 0, y: 2)
+                } else {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color(red: 232/255, green: 185/255, blue: 68/255))
+                            .frame(width: 44, height: 44)
+                        
+                        VStack(spacing: 1) {
+                            Text("Hi-Res")
+                                .font(.system(size: 11, weight: .black, design: .serif))
+                                .foregroundStyle(Color.black)
+                            Text("AUDIO")
+                                .font(.system(size: 7.5, weight: .bold, design: .default))
+                                .tracking(0.5)
+                                .foregroundStyle(Color.black)
+                        }
                     }
                 }
                 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text("Hi-Res Studio Master Library")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(WalkmanFont.title2)
                         .foregroundStyle(.white)
                     
                     Text("Audiophile 24-bit / 96kHz+ lossless streams calibrated for Sony S-Master HX DAC.")
-                        .font(.system(size: 11))
+                        .font(WalkmanFont.callout)
                         .foregroundStyle(.secondary)
                 }
                 
@@ -80,15 +112,16 @@ public struct HiResAudioView: View {
                     }) {
                         HStack(spacing: 6) {
                             Image(systemName: "play.fill")
-                                .font(.system(size: 10))
+                                .font(.system(size: 11))
                             Text("Play Hi-Res Queue")
-                                .font(.system(size: 11, weight: .bold))
+                                .font(WalkmanFont.calloutBold)
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(WalkmanTheme.silverGradient)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(WalkmanTheme.hiResGoldGradient)
                         .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                         .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .shadow(color: WalkmanTheme.hiResGold.opacity(0.3), radius: 4, x: 0, y: 1)
                     }
                     .buttonStyle(.plain)
                 }
@@ -101,40 +134,40 @@ public struct HiResAudioView: View {
             HStack(spacing: 12) {
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                     
                     TextField("Search Hi-Res titles...", text: $searchQuery)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 11))
+                        .font(.system(size: 12.5))
                     
                     if !searchQuery.isEmpty {
                         Button(action: { searchQuery = "" }) {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 11))
+                                .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
                         }
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 6)
                 .background(Color.white.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
-                .frame(maxWidth: 280)
+                .frame(maxWidth: 290)
                 
                 Picker("", selection: $minBitsFilter) {
                     Text("24-bit Studio Masters").tag(24)
                     Text("All Hi-Res (>16-bit)").tag(16)
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 240)
+                .frame(width: 250)
                 
                 Spacer()
                 
                 Text("\(filteredTracks.count) Studio Master Tracks")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(WalkmanTheme.silverMuted)
+                    .font(WalkmanFont.mono)
+                    .foregroundStyle(WalkmanTheme.hiResGoldLight)
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
@@ -156,28 +189,32 @@ public struct HiResAudioView: View {
                                     player.play(track: track, in: filteredTracks)
                                 }
                             }) {
-                                TrackCoverThumbnail(track: track, size: 36, isPlaying: isPlayingThis)
+                                TrackCoverThumbnail(track: track, size: 38, isPlaying: isPlayingThis)
                             }
                             .buttonStyle(.plain)
                             
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: 2.5) {
                                 HStack(spacing: 6) {
                                     Text(track.title)
-                                        .font(.system(size: 12, weight: isPlayingThis ? .bold : .medium))
-                                        .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : .white)
+                                        .font(isPlayingThis ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
+                                        .foregroundStyle(isPlayingThis ? WalkmanTheme.hiResGoldLight : .white)
                                         .lineLimit(1)
                                     
                                     Text("\(track.bitsPerSample)-bit / \(track.sampleRate / 1000)kHz")
-                                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                        .padding(.horizontal, 4)
-                                        .padding(.vertical, 1)
-                                        .background(Color.white.opacity(0.12))
-                                        .foregroundStyle(WalkmanTheme.silverLight)
+                                        .font(WalkmanFont.badge)
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 1.5)
+                                        .background(WalkmanTheme.hiResGold.opacity(0.18))
+                                        .foregroundStyle(WalkmanTheme.hiResGoldLight)
+                                        .overlay(
+                                            Capsule()
+                                                .strokeBorder(WalkmanTheme.hiResGold.opacity(0.4), lineWidth: 0.6)
+                                        )
                                         .clipShape(Capsule())
                                 }
                                 
                                 Text("\(track.artist) — \(track.album)")
-                                    .font(.system(size: 10))
+                                    .font(WalkmanFont.subheadline)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
                             }
@@ -185,24 +222,24 @@ public struct HiResAudioView: View {
                             Spacer()
                             
                             Text("\(track.bitrateKbps) kbps")
-                                .font(.system(size: 10, design: .monospaced))
+                                .font(WalkmanFont.monoSmall)
                                 .foregroundStyle(.tertiary)
                             
                             Text(track.format)
-                                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 1)
+                                .font(WalkmanFont.badge)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1.5)
                                 .background(Color.white.opacity(0.10))
                                 .foregroundStyle(WalkmanTheme.silverLight)
                                 .clipShape(RoundedRectangle(cornerRadius: 3))
                             
                             Text(formatDuration(track.durationSeconds))
-                                .font(.system(size: 11, design: .monospaced))
+                                .font(WalkmanFont.mono)
                                 .foregroundStyle(.secondary)
-                                .frame(width: 44, alignment: .trailing)
+                                .frame(width: 46, alignment: .trailing)
                         }
                         .padding(.horizontal, 14)
-                        .padding(.vertical, 6)
+                        .padding(.vertical, 7)
                         .background(
                             RoundedRectangle(cornerRadius: 6)
                                 .fill(isPlayingThis ? WalkmanTheme.cardHover : Color.white.opacity(0.02))

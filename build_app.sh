@@ -31,6 +31,12 @@ fi
 if [ -f "$DIR/assets/walkman_device.png" ]; then
     cp "$DIR/assets/walkman_device.png" "$RESOURCES_DIR/walkman_device.png"
 fi
+if [ -f "$DIR/assets/hires_audio_logo.png" ]; then
+    cp "$DIR/assets/hires_audio_logo.png" "$RESOURCES_DIR/hires_audio_logo.png"
+fi
+if [ -f "$DIR/assets/hires_audio_logo.svg" ]; then
+    cp "$DIR/assets/hires_audio_logo.svg" "$RESOURCES_DIR/hires_audio_logo.svg"
+fi
 
 # Create Info.plist
 cat << 'EOF' > "$APP_BUNDLE/Contents/Info.plist"
