@@ -105,8 +105,11 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
         loadArtwork(for: track)
     }
 
-    public func play(track: Track, in queue: [Track] = []) {
+    public func play(track: Track, coverArt: NSImage? = nil, in queue: [Track] = []) {
         if currentTrack?.id == track.id {
+            if let cover = coverArt {
+                self.currentCoverArt = cover
+            }
             if !isPlaying {
                 player.play()
                 self.isPlaying = true
@@ -115,6 +118,9 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
         }
 
         prepare(track: track, in: queue, autoPlay: true)
+        if let cover = coverArt {
+            self.currentCoverArt = cover
+        }
     }
 
     public func pause() {

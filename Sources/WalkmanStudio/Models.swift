@@ -311,6 +311,7 @@ public struct ArtistItem: Identifiable, Hashable, Sendable {
 
 public enum TransferStatus: Equatable, Sendable {
     case pending
+    case optimizing
     case converting
     case success
     case failed(String)
@@ -322,10 +323,116 @@ public struct TransferItem: Identifiable, Sendable {
     public var filename: String { sourceURL.lastPathComponent }
     public var status: TransferStatus
 
-    public init(sourceURL: URL, status: TransferStatus = .pending) {
+    // Metadata Properties
+    public var title: String
+    public var artist: String
+    public var album: String
+    public var trackNumber: String
+    public var year: String
+    public var genre: String
+    public var durationSeconds: Double
+    public var bitrateKbps: Int
+    public var sampleRate: Int
+    public var bitsPerSample: Int
+    public var format: String
+    public var sizeBytes: Int64
+
+    // Artwork & Optimization
+    public var artworkData: Data?
+    public var isArtworkOptimized: Bool
+
+    // Lyrics
+    public var lyrics: String?
+    public var isLyricsSynced: Bool
+
+    // UI & In-Flight State
+    public var isFetchingOnline: Bool
+    public var isOptimizing: Bool
+    public var isExpanded: Bool
+
+    public init(
+        sourceURL: URL,
+        status: TransferStatus = .pending,
+        title: String = "",
+        artist: String = "",
+        album: String = "",
+        trackNumber: String = "1",
+        year: String = "",
+        genre: String = "",
+        durationSeconds: Double = 0,
+        bitrateKbps: Int = 0,
+        sampleRate: Int = 44100,
+        bitsPerSample: Int = 16,
+        format: String = "",
+        sizeBytes: Int64 = 0,
+        artworkData: Data? = nil,
+        isArtworkOptimized: Bool = false,
+        lyrics: String? = nil,
+        isLyricsSynced: Bool = false,
+        isFetchingOnline: Bool = false,
+        isOptimizing: Bool = false,
+        isExpanded: Bool = false
+    ) {
         self.id = UUID()
         self.sourceURL = sourceURL
         self.status = status
+        self.title = title
+        self.artist = artist
+        self.album = album
+        self.trackNumber = trackNumber
+        self.year = year
+        self.genre = genre
+        self.durationSeconds = durationSeconds
+        self.bitrateKbps = bitrateKbps
+        self.sampleRate = sampleRate
+        self.bitsPerSample = bitsPerSample
+        self.format = format.isEmpty ? sourceURL.pathExtension.uppercased() : format
+        self.sizeBytes = sizeBytes
+        self.artworkData = artworkData
+        self.isArtworkOptimized = isArtworkOptimized
+        self.lyrics = lyrics
+        self.isLyricsSynced = isLyricsSynced
+        self.isFetchingOnline = isFetchingOnline
+        self.isOptimizing = isOptimizing
+        self.isExpanded = isExpanded
+    }
+
+    /// Converts this item into a preview Track compatible with the audio player
+    public func toPreviewTrack() -> Track {
+        Track(
+            filename: filename,
+            relativePath: filename,
+            fullPath: sourceURL.path,
+            format: format.isEmpty ? sourceURL.pathExtension.uppercased() : format,
+            title: title.isEmpty ? sourceURL.deletingPathExtension().lastPathComponent : title,
+            artist: artist.isEmpty ? "Unknown Artist" : artist,
+            album: album.isEmpty ? "Unknown Album" : album,
+            trackNum: trackNumber,
+            year: year,
+            genre: genre,
+            durationSeconds: durationSeconds,
+            bitrateKbps: bitrateKbps,
+            sampleRate: sampleRate,
+            bitsPerSample: bitsPerSample,
+            hasArtwork: artworkData != nil,
+            sizeBytes: sizeBytes,
+            dateAdded: Date()
+        )
+    }
+
+    /// Indicates whether crucial metadata fields are missing
+    public var isMissingMetadata: Bool {
+        title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+        title.lowercased() == "unknown" ||
+        title.lowercased() == "unknown track" ||
+        title.lowercased() == "unknown title" ||
+        artist.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+        artist.lowercased() == "unknown artist" ||
+        artist.lowercased() == "unknown" ||
+        album.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+        album.lowercased() == "unknown album" ||
+        album.lowercased() == "unknown" ||
+        artworkData == nil
     }
 }
 

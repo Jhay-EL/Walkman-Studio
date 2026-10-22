@@ -2,6 +2,7 @@ import Foundation
 import AppKit
 import CoreGraphics
 import ImageIO
+import AVFoundation
 
 public final class AudioTagger: @unchecked Sendable {
     public static let shared = AudioTagger()
@@ -156,31 +157,44 @@ public final class AudioTagger: @unchecked Sendable {
         // Construct updated Vorbis Comments
         var newComments: [(String, String)] = []
 
-        let finTitle = title ?? existingComments["TITLE"]
-        if let t = finTitle, !t.isEmpty { newComments.append(("TITLE", t)) }
+        let rawCleanTitle = title.map { WalkmanEngine.sanitizeWalkmanText($0) }?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isTitleValid = rawCleanTitle != nil && !rawCleanTitle!.isEmpty && rawCleanTitle!.lowercased() != "unknown" && rawCleanTitle!.lowercased() != "unknown track" && rawCleanTitle!.lowercased() != "unknown title"
+        let finTitle = isTitleValid ? rawCleanTitle : (existingComments["TITLE"].map { WalkmanEngine.sanitizeWalkmanText($0) })
+        if let t = finTitle, !t.isEmpty, t.lowercased() != "unknown" { newComments.append(("TITLE", t)) }
 
-        let finArtist = artist ?? existingComments["ARTIST"]
+        let rawCleanArtist = artist.map { WalkmanEngine.sanitizeWalkmanText($0, stripExplicitMarkers: false) }?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let existingArtist = existingComments["ARTIST"] ?? existingComments["ALBUMARTIST"] ?? existingComments["ALBUM_ARTIST"]
+        let isArtistValid = rawCleanArtist != nil && !rawCleanArtist!.isEmpty && rawCleanArtist!.lowercased() != "unknown artist" && rawCleanArtist!.lowercased() != "unknown"
+        let finArtist = isArtistValid ? rawCleanArtist : (existingArtist.map { WalkmanEngine.sanitizeWalkmanText($0, stripExplicitMarkers: false) })
         if let a = finArtist, !a.isEmpty { newComments.append(("ARTIST", a)) }
 
-        let finAlbum = album ?? existingComments["ALBUM"]
+        let rawCleanAlbum = album.map { WalkmanEngine.sanitizeWalkmanText($0) }?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isAlbumValid = rawCleanAlbum != nil && !rawCleanAlbum!.isEmpty && rawCleanAlbum!.lowercased() != "unknown album" && rawCleanAlbum!.lowercased() != "unknown"
+        let finAlbum = isAlbumValid ? rawCleanAlbum : (existingComments["ALBUM"].map { WalkmanEngine.sanitizeWalkmanText($0) })
         if let al = finAlbum, !al.isEmpty { newComments.append(("ALBUM", al)) }
 
-        let finTrack = trackNumber ?? (existingComments["TRACKNUMBER"] ?? existingComments["TRACK"])
+        let cleanTrack = trackNumber?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finTrack = (cleanTrack != nil && !cleanTrack!.isEmpty) ? cleanTrack : (existingComments["TRACKNUMBER"] ?? existingComments["TRACK"])
         if let tr = finTrack, !tr.isEmpty { newComments.append(("TRACKNUMBER", tr)) }
 
-        let finYear: String? = (year != nil && !year!.isEmpty) ? year : (existingComments["DATE"] ?? existingComments["YEAR"])
+        let cleanYear = year?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finYear: String? = (cleanYear != nil && !cleanYear!.isEmpty) ? cleanYear : (existingComments["DATE"] ?? existingComments["YEAR"])
         if let y = finYear, !y.isEmpty {
             newComments.append(("DATE", y))
             newComments.append(("YEAR", y))
         }
 
-        let finGenre: String? = (genre != nil && !genre!.isEmpty) ? genre : existingComments["GENRE"]
+        let cleanGenre = genre?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finGenre: String? = (cleanGenre != nil && !cleanGenre!.isEmpty) ? cleanGenre : existingComments["GENRE"]
         if let g = finGenre, !g.isEmpty {
             newComments.append(("GENRE", g))
         }
 
         for (k, v) in existingOtherComments {
-            newComments.append((k, v))
+            let cleanVal = WalkmanEngine.sanitizeWalkmanText(v, stripExplicitMarkers: false)
+            if !cleanVal.isEmpty {
+                newComments.append((k, cleanVal))
+            }
         }
 
         var vorbisData = Data()
@@ -317,31 +331,58 @@ public final class AudioTagger: @unchecked Sendable {
 
         let audioStream = fileData.subdata(in: audioOffset..<fileData.count)
 
-        // 2. Build ID3v2.3 frames (UTF-16 encoding = 1)
+        // 2. Read existing tags to prevent wiping out data if nil/empty passed
+        let existingMeta = readMP3Metadata(fileURL: fileURL)
+        let rawCleanTitle = title.map { WalkmanEngine.sanitizeWalkmanText($0) }?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isTitleValid = rawCleanTitle != nil && !rawCleanTitle!.isEmpty && rawCleanTitle!.lowercased() != "unknown" && rawCleanTitle!.lowercased() != "unknown track" && rawCleanTitle!.lowercased() != "unknown title"
+        let finTitle = isTitleValid ? rawCleanTitle : existingMeta.map { WalkmanEngine.sanitizeWalkmanText($0.title) }
+
+        let rawCleanArtist = artist.map { WalkmanEngine.sanitizeWalkmanText($0, stripExplicitMarkers: false) }?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isArtistValid = rawCleanArtist != nil && !rawCleanArtist!.isEmpty && rawCleanArtist!.lowercased() != "unknown artist" && rawCleanArtist!.lowercased() != "unknown"
+        let finArtist = isArtistValid ? rawCleanArtist : existingMeta.map { WalkmanEngine.sanitizeWalkmanText($0.artist, stripExplicitMarkers: false) }
+
+        let rawCleanAlbum = album.map { WalkmanEngine.sanitizeWalkmanText($0) }?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isAlbumValid = rawCleanAlbum != nil && !rawCleanAlbum!.isEmpty && rawCleanAlbum!.lowercased() != "unknown album" && rawCleanAlbum!.lowercased() != "unknown"
+        let finAlbum = isAlbumValid ? rawCleanAlbum : existingMeta.map { WalkmanEngine.sanitizeWalkmanText($0.album) }
+
+        let cleanTrack = trackNumber?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finTrack = (cleanTrack != nil && !cleanTrack!.isEmpty) ? cleanTrack : existingMeta?.trackNumber
+
+        let cleanYear = year?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finYear = (cleanYear != nil && !cleanYear!.isEmpty) ? cleanYear : existingMeta?.year
+
+        let cleanGenre = genre?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finGenre = (cleanGenre != nil && !cleanGenre!.isEmpty) ? cleanGenre : existingMeta?.genre
+
+        // 3. Build ID3v2.3 frames (UTF-16 encoding = 1)
         var framesData = Data()
 
-        if let t = title, !t.isEmpty {
+        if let t = finTitle, !t.isEmpty, t.lowercased() != "unknown" {
             framesData.append(makeID3v23TextFrame(id: "TIT2", text: t))
         }
-        if let a = artist, !a.isEmpty {
+        if let a = finArtist, !a.isEmpty {
             framesData.append(makeID3v23TextFrame(id: "TPE1", text: a))
         }
-        if let al = album, !al.isEmpty {
+        if let al = finAlbum, !al.isEmpty {
             framesData.append(makeID3v23TextFrame(id: "TALB", text: al))
         }
-        if let tr = trackNumber, !tr.isEmpty {
+        if let tr = finTrack, !tr.isEmpty {
             framesData.append(makeID3v23TextFrame(id: "TRCK", text: tr))
         }
-        if let y = year, !y.isEmpty {
+        if let y = finYear, !y.isEmpty {
             framesData.append(makeID3v23TextFrame(id: "TYER", text: y))
             framesData.append(makeID3v23TextFrame(id: "TDRC", text: y))
         }
-        if let g = genre, !g.isEmpty {
+        if let g = finGenre, !g.isEmpty {
             framesData.append(makeID3v23TextFrame(id: "TCON", text: g))
         }
 
-        // 3. Embed Baseline RGB JPEG APIC frame
-        if let rawArt = coverArtData, let baselineJPEG = WalkmanEngine.shared.encodeBaselineRGBJPEG(data: rawArt) {
+        // 4. Embed Baseline RGB JPEG APIC frame
+        var effectiveArtData = coverArtData
+        if effectiveArtData == nil {
+            effectiveArtData = extractCoverArt(fileURL: fileURL)
+        }
+        if let rawArt = effectiveArtData, let baselineJPEG = WalkmanEngine.shared.encodeBaselineRGBJPEG(data: rawArt) {
             framesData.append(makeID3v23ApicFrame(imageData: baselineJPEG))
         }
 
@@ -367,12 +408,13 @@ public final class AudioTagger: @unchecked Sendable {
     }
 
     private func makeID3v23TextFrame(id: String, text: String) -> Data {
+        let cleanText = WalkmanEngine.sanitizeWalkmanText(text, stripExplicitMarkers: false)
         var frame = Data()
         frame.append(id.data(using: .ascii)!)
 
         var content = Data([0x01]) // 1 = UTF-16 with BOM
         content.append(contentsOf: [0xFF, 0xFE]) // UTF-16LE BOM
-        content.append(text.data(using: .utf16LittleEndian)!)
+        content.append(cleanText.data(using: .utf16LittleEndian)!)
 
         let size = UInt32(content.count)
         frame.append(contentsOf: [
@@ -495,14 +537,247 @@ public final class AudioTagger: @unchecked Sendable {
         return trimmed
     }
 
+    // -----------------------------------------------------------------------
+    // Path & Filename Heuristic Extractor
+    // -----------------------------------------------------------------------
+    public static func extractFromPath(url: URL) -> (artist: String, album: String, title: String) {
+        let stem = url.deletingPathExtension().lastPathComponent
+        var title = stem
+
+        if let regex = try? NSRegularExpression(pattern: #"^(\d+[-_])?\d+[\.\s\-_]+(.*)$"#, options: []),
+           let match = regex.firstMatch(in: stem, range: NSRange(location: 0, length: stem.utf16.count)) {
+            if let r2 = Range(match.range(at: 2), in: stem) {
+                let stripped = String(stem[r2]).trimmingCharacters(in: .whitespaces)
+                if !stripped.isEmpty {
+                    title = stripped
+                }
+            }
+        }
+
+        var candidateArtist = ""
+        if title.contains(" - ") {
+            let parts = title.components(separatedBy: " - ")
+            if parts.count >= 2 {
+                let p0 = parts[0].trimmingCharacters(in: .whitespaces)
+                let p1 = parts[1...].joined(separator: " - ").trimmingCharacters(in: .whitespaces)
+                let isP0Unknown = p0.isEmpty || p0.lowercased() == "unknown" || p0.lowercased() == "unknown artist"
+                let isP1Unknown = p1.isEmpty || p1.lowercased() == "unknown" || p1.lowercased() == "unknown track" || p1.lowercased() == "unknown title"
+
+                if !isP1Unknown && !isP0Unknown {
+                    candidateArtist = p0
+                    title = p1
+                } else if !isP1Unknown {
+                    title = p1
+                } else if !isP0Unknown {
+                    title = p0
+                }
+            }
+        }
+
+        let pathParts = url.deletingLastPathComponent().pathComponents
+        var dirArtist = ""
+        var dirAlbum = ""
+        let ignored: Set<String> = ["music", "downloads", "desktop", "documents", "media", "media.localized", "volumes", "users", "audio", "tmp"]
+
+        if pathParts.count >= 1 {
+            let cand = pathParts[pathParts.count - 1]
+            if !ignored.contains(cand.lowercased()) && cand.lowercased() != "unknown" && cand.lowercased() != "unknown album" {
+                dirAlbum = cand
+            }
+        }
+        if pathParts.count >= 2 {
+            let cand = pathParts[pathParts.count - 2]
+            if !ignored.contains(cand.lowercased()) && cand.lowercased() != "unknown" && cand.lowercased() != "unknown artist" {
+                dirArtist = cand
+            }
+        }
+
+        let finalArtist = !candidateArtist.isEmpty ? candidateArtist : dirArtist
+        return (
+            WalkmanEngine.sanitizeWalkmanText(finalArtist, stripExplicitMarkers: false),
+            WalkmanEngine.sanitizeWalkmanText(dirAlbum),
+            WalkmanEngine.sanitizeWalkmanText(title)
+        )
+    }
+
+    // -----------------------------------------------------------------------
+    // Universal Multi-Tiered Metadata Reader
+    // -----------------------------------------------------------------------
     public func readMetadata(fileURL: URL) -> AudioFileMetadata? {
         let ext = fileURL.pathExtension.lowercased()
+        var res: AudioFileMetadata? = nil
+
         if ext == "flac" {
-            return readFLACMetadata(fileURL: fileURL)
+            res = readFLACMetadata(fileURL: fileURL)
         } else if ext == "mp3" {
-            return readMP3Metadata(fileURL: fileURL)
+            res = readMP3Metadata(fileURL: fileURL)
         }
-        return nil
+
+        var m = res ?? AudioFileMetadata()
+
+        // Tier 2: AVFoundation parser (M4A, ALAC, AAC, WAV, and any missed FLAC/MP3)
+        if m.title.isEmpty || m.title.lowercased() == "unknown" || m.artist.isEmpty || m.artist.lowercased() == "unknown artist" || m.album.isEmpty || m.album.lowercased() == "unknown album" || (ext != "flac" && ext != "mp3") {
+            if let avMeta = readAVFoundationMetadata(fileURL: fileURL) {
+                if (m.title.isEmpty || m.title.lowercased() == "unknown") && !avMeta.title.isEmpty && avMeta.title.lowercased() != "unknown" { m.title = avMeta.title }
+                if (m.artist.isEmpty || m.artist.lowercased() == "unknown artist") && !avMeta.artist.isEmpty && avMeta.artist.lowercased() != "unknown artist" { m.artist = avMeta.artist }
+                if (m.album.isEmpty || m.album.lowercased() == "unknown album") && !avMeta.album.isEmpty && avMeta.album.lowercased() != "unknown album" { m.album = avMeta.album }
+                if m.trackNumber.isEmpty && !avMeta.trackNumber.isEmpty { m.trackNumber = avMeta.trackNumber }
+                if m.year.isEmpty && !avMeta.year.isEmpty { m.year = avMeta.year }
+                if m.genre.isEmpty && !avMeta.genre.isEmpty { m.genre = avMeta.genre }
+                if m.durationSeconds <= 0 { m.durationSeconds = avMeta.durationSeconds }
+                if !m.hasArtwork && avMeta.hasArtwork { m.hasArtwork = true }
+            }
+        }
+
+        // Tier 3: ffprobe parser (all missed fields including title)
+        if m.title.isEmpty || m.title.lowercased() == "unknown" || m.artist.isEmpty || m.artist.lowercased() == "unknown artist" || m.album.isEmpty || m.album.lowercased() == "unknown album" {
+            if let ffMeta = readFFprobeMetadata(fileURL: fileURL) {
+                if (m.title.isEmpty || m.title.lowercased() == "unknown") && !ffMeta.title.isEmpty && ffMeta.title.lowercased() != "unknown" { m.title = ffMeta.title }
+                if (m.artist.isEmpty || m.artist.lowercased() == "unknown artist") && !ffMeta.artist.isEmpty && ffMeta.artist.lowercased() != "unknown artist" { m.artist = ffMeta.artist }
+                if (m.album.isEmpty || m.album.lowercased() == "unknown album") && !ffMeta.album.isEmpty && ffMeta.album.lowercased() != "unknown album" { m.album = ffMeta.album }
+                if m.trackNumber.isEmpty && !ffMeta.trackNumber.isEmpty { m.trackNumber = ffMeta.trackNumber }
+                if m.year.isEmpty && !ffMeta.year.isEmpty { m.year = ffMeta.year }
+                if m.genre.isEmpty && !ffMeta.genre.isEmpty { m.genre = ffMeta.genre }
+                if m.durationSeconds <= 0 { m.durationSeconds = ffMeta.durationSeconds }
+                if m.bitrateKbps <= 0 { m.bitrateKbps = ffMeta.bitrateKbps }
+            }
+        }
+
+        // Tier 4: Directory & Filename Heuristics
+        if m.artist.isEmpty || m.artist.lowercased() == "unknown artist" || m.album.isEmpty || m.album.lowercased() == "unknown album" || m.title.isEmpty || m.title.lowercased() == "unknown" {
+            let heur = Self.extractFromPath(url: fileURL)
+            if (m.artist.isEmpty || m.artist.lowercased() == "unknown artist") && !heur.artist.isEmpty && heur.artist.lowercased() != "unknown artist" { m.artist = heur.artist }
+            if (m.album.isEmpty || m.album.lowercased() == "unknown album") && !heur.album.isEmpty && heur.album.lowercased() != "unknown album" { m.album = heur.album }
+            if (m.title.isEmpty || m.title.lowercased() == "unknown") && !heur.title.isEmpty && heur.title.lowercased() != "unknown" { m.title = heur.title }
+        }
+
+        m.title = WalkmanEngine.sanitizeWalkmanText(m.title)
+        m.artist = WalkmanEngine.sanitizeWalkmanText(m.artist, stripExplicitMarkers: false)
+        m.album = WalkmanEngine.sanitizeWalkmanText(m.album)
+
+        return m
+    }
+
+    public func readAVFoundationMetadata(fileURL: URL) -> AudioFileMetadata? {
+        let asset = AVURLAsset(url: fileURL)
+        var res = AudioFileMetadata()
+
+        let sem = DispatchSemaphore(value: 0)
+        Task {
+            if let duration = try? await asset.load(.duration) {
+                let sec = CMTimeGetSeconds(duration)
+                if !sec.isNaN && !sec.isInfinite {
+                    res.durationSeconds = sec
+                }
+            }
+
+            let common = try? await asset.load(.commonMetadata)
+            for item in common ?? [] {
+                if let k = item.commonKey {
+                    switch k {
+                    case .commonKeyTitle:
+                        res.title = (try? await item.load(.stringValue)) ?? res.title
+                    case .commonKeyArtist:
+                        res.artist = (try? await item.load(.stringValue)) ?? res.artist
+                    case .commonKeyAlbumName:
+                        res.album = (try? await item.load(.stringValue)) ?? res.album
+                    case .commonKeyArtwork:
+                        res.hasArtwork = true
+                    case .commonKeyCreationDate:
+                        let d = (try? await item.load(.stringValue)) ?? ""
+                        if d.count >= 4 && res.year.isEmpty { res.year = String(d.prefix(4)) }
+                    case .commonKeyType:
+                        res.genre = (try? await item.load(.stringValue)) ?? res.genre
+                    default:
+                        break
+                    }
+                }
+            }
+
+            if let formats = try? await asset.load(.availableMetadataFormats) {
+                for fmt in formats {
+                    if let items = try? await asset.loadMetadata(for: fmt) {
+                        for item in items {
+                            let k = ((item.commonKey?.rawValue) ?? (item.key as? String) ?? "").lowercased()
+                            let val = ((try? await item.load(.stringValue)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !val.isEmpty else { continue }
+
+                            if res.title.isEmpty && (k.contains("title") || k.contains("tit2") || k == "©nam") {
+                                res.title = val
+                            }
+                            if res.artist.isEmpty && (k.contains("artist") || k.contains("tpe1") || k.contains("tpe2") || k == "©art" || k == "aart") {
+                                res.artist = val
+                            }
+                            if res.album.isEmpty && (k.contains("album") || k.contains("talb") || k == "©alb") {
+                                res.album = val
+                            }
+                            if res.trackNumber.isEmpty && (k.contains("track") || k.contains("trck") || k == "trkn") {
+                                res.trackNumber = val
+                            }
+                            if res.year.isEmpty && (k.contains("date") || k.contains("year") || k.contains("tyer") || k.contains("tdrc") || k == "©day") {
+                                let digits = val.filter { $0.isNumber }
+                                if digits.count >= 4 { res.year = String(digits.prefix(4)) }
+                            }
+                            if res.genre.isEmpty && (k.contains("genre") || k.contains("tcon") || k == "©gen") {
+                                res.genre = val
+                            }
+                            if !res.hasArtwork && (k.contains("art") || k.contains("apic") || k == "covr") {
+                                res.hasArtwork = true
+                            }
+                        }
+                    }
+                }
+            }
+            sem.signal()
+        }
+        _ = sem.wait(timeout: .now() + 2.0)
+        return res
+    }
+
+    public func readFFprobeMetadata(fileURL: URL) -> AudioFileMetadata? {
+        let ffprobePath = FileManager.default.fileExists(atPath: "/opt/homebrew/bin/ffprobe") ? "/opt/homebrew/bin/ffprobe" : "/usr/local/bin/ffprobe"
+        guard FileManager.default.fileExists(atPath: ffprobePath) else { return nil }
+
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: ffprobePath)
+        p.arguments = ["-v", "quiet", "-print_format", "json", "-show_format", fileURL.path]
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        try? p.run()
+        p.waitUntilExit()
+
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let format = json["format"] as? [String: Any],
+              let tags = format["tags"] as? [String: Any] else {
+            return nil
+        }
+
+        var res = AudioFileMetadata()
+        var lowerTags: [String: String] = [:]
+        for (k, v) in tags {
+            if let str = v as? String {
+                lowerTags[k.lowercased()] = str.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+
+        res.title = lowerTags["title"] ?? ""
+        res.artist = lowerTags["artist"] ?? (lowerTags["album_artist"] ?? (lowerTags["albumartist"] ?? ""))
+        res.album = lowerTags["album"] ?? ""
+        res.trackNumber = lowerTags["track"] ?? (lowerTags["tracknumber"] ?? "")
+        let rawDate = lowerTags["date"] ?? (lowerTags["year"] ?? "")
+        let digits = rawDate.filter { $0.isNumber }
+        if digits.count >= 4 { res.year = String(digits.prefix(4)) }
+        res.genre = lowerTags["genre"] ?? ""
+
+        if let durStr = format["duration"] as? String, let d = Double(durStr) {
+            res.durationSeconds = d
+        }
+        if let brStr = format["bit_rate"] as? String, let br = Int(brStr) {
+            res.bitrateKbps = br / 1000
+        }
+
+        return res
     }
 
     public func readFLACMetadata(fileURL: URL) -> AudioFileMetadata? {
@@ -555,11 +830,21 @@ public final class AudioTagger: @unchecked Sendable {
                                 if parts.count >= 2 {
                                     let k = parts[0].trimmingCharacters(in: .whitespaces).uppercased()
                                     let v = parts[1...].joined(separator: "=").trimmingCharacters(in: .whitespacesAndNewlines)
-                                    if k == "TITLE" { res.title = v }
-                                    else if k == "ARTIST" { res.artist = v }
-                                    else if k == "ALBUM" { res.album = v }
-                                    else if k == "TRACKNUMBER" || k == "TRACK" { res.trackNumber = v }
-                                    else if (k == "DATE" || k == "YEAR" || k == "ORIGINALDATE" || k == "ORIGINALYEAR" || k == "ORIGINAL_DATE" || k == "RELEASEDATE" || k == "RELEASE_DATE") && res.year.isEmpty {
+                                    if k == "TITLE" {
+                                        res.title = v
+                                    } else if k == "ARTIST" {
+                                        if res.artist.isEmpty {
+                                            res.artist = v
+                                        } else if !res.artist.contains(v) {
+                                            res.artist += "; \(v)"
+                                        }
+                                    } else if (k == "ALBUMARTIST" || k == "ALBUM_ARTIST") && res.artist.isEmpty {
+                                        res.artist = v
+                                    } else if k == "ALBUM" {
+                                        res.album = v
+                                    } else if k == "TRACKNUMBER" || k == "TRACK" {
+                                        res.trackNumber = v
+                                    } else if (k == "DATE" || k == "YEAR" || k == "ORIGINALDATE" || k == "ORIGINALYEAR" || k == "ORIGINAL_DATE" || k == "RELEASEDATE" || k == "RELEASE_DATE") && res.year.isEmpty {
                                         res.year = AudioTagger.extractYearString(v)
                                     } else if k == "GENRE" {
                                         let normalized = AudioTagger.normalizeGenre(v)
@@ -599,52 +884,122 @@ public final class AudioTagger: @unchecked Sendable {
 
         if header[0] == 0x49 && header[1] == 0x44 && header[2] == 0x33 {
             let version = header[3]
+            let flags = header[5]
             let tagSize = (Int(header[6]) << 21) | (Int(header[7]) << 14) | (Int(header[8]) << 7) | Int(header[9])
             audioOffset = 10 + tagSize
 
             if let tagData = try? handle.read(upToCount: tagSize) {
                 var offset = 0
-                while offset + 10 <= tagData.count {
-                    let idData = tagData.subdata(in: offset..<offset+4)
-                    guard let frameID = String(data: idData, encoding: .ascii), frameID.allSatisfy({ $0.isLetter || $0.isNumber }) else {
-                        break
-                    }
-                    let fSize: Int
+
+                // Skip extended header if present (bit 6 of flags = 0x40)
+                if (flags & 0x40) != 0 && tagData.count >= 4 {
                     if version == 4 {
-                        fSize = (Int(tagData[offset+4]) << 21) | (Int(tagData[offset+5]) << 14) | (Int(tagData[offset+6]) << 7) | Int(tagData[offset+7])
-                    } else {
-                        fSize = (Int(tagData[offset+4]) << 24) | (Int(tagData[offset+5]) << 16) | (Int(tagData[offset+6]) << 8) | Int(tagData[offset+7])
+                        let extSize = (Int(tagData[0]) << 21) | (Int(tagData[1]) << 14) | (Int(tagData[2]) << 7) | Int(tagData[3])
+                        offset = max(4, extSize)
+                    } else if version == 3 {
+                        let extSize = (Int(tagData[0]) << 24) | (Int(tagData[1]) << 16) | (Int(tagData[2]) << 8) | Int(tagData[3])
+                        offset = max(4, extSize + 4)
                     }
-                    offset += 10
-                    guard offset + fSize <= tagData.count else { break }
-                    let frameContent = tagData.subdata(in: offset..<offset+fSize)
-                    offset += fSize
+                }
 
-                    if frameID == "APIC" || frameID == "PIC" {
-                        res.hasArtwork = true
-                    } else if frameID.hasPrefix("T") && frameContent.count > 1 {
-                        let enc = frameContent[0]
-                        let payload = frameContent.subdata(in: 1..<frameContent.count)
-                        let text: String?
-                        if enc == 0 { text = String(data: payload, encoding: .isoLatin1) }
-                        else if enc == 1 { text = String(data: payload, encoding: .utf16) }
-                        else if enc == 2 { text = String(data: payload, encoding: .utf16BigEndian) }
-                        else { text = String(data: payload, encoding: .utf8) }
+                if version == 2 {
+                    // ID3v2.2 (3-byte ID, 3-byte size, 6-byte header)
+                    while offset + 6 <= tagData.count {
+                        let idData = tagData.subdata(in: offset..<offset+3)
+                        guard let frameID = String(data: idData, encoding: .ascii), frameID.allSatisfy({ $0.isLetter || $0.isNumber }) else {
+                            break
+                        }
+                        let fSize = (Int(tagData[offset+3]) << 16) | (Int(tagData[offset+4]) << 8) | Int(tagData[offset+5])
+                        offset += 6
+                        guard offset + fSize <= tagData.count else { break }
+                        let frameContent = tagData.subdata(in: offset..<offset+fSize)
+                        offset += fSize
 
-                        let val = (text ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "\0 \t\n\r"))
-                        if !val.isEmpty {
-                            if frameID == "TIT2" || frameID == "TT2" { res.title = val }
-                            else if frameID == "TPE1" || frameID == "TP1" { res.artist = val }
-                            else if frameID == "TALB" || frameID == "TAL" { res.album = val }
-                            else if frameID == "TRCK" || frameID == "TRK" { res.trackNumber = val }
-                            else if (frameID == "TYER" || frameID == "TYE" || frameID == "TDRC") && res.year.isEmpty {
-                                res.year = AudioTagger.extractYearString(val)
-                            } else if (frameID == "TCON" || frameID == "TCO") && res.genre.isEmpty {
-                                res.genre = AudioTagger.normalizeGenre(val)
+                        if frameID == "PIC" {
+                            res.hasArtwork = true
+                        } else if frameID.hasPrefix("T") && frameContent.count > 1 {
+                            let enc = frameContent[0]
+                            let payload = frameContent.subdata(in: 1..<frameContent.count)
+                            let text: String?
+                            if enc == 0 { text = String(data: payload, encoding: .isoLatin1) }
+                            else if enc == 1 { text = String(data: payload, encoding: .utf16) }
+                            else if enc == 2 { text = String(data: payload, encoding: .utf16BigEndian) }
+                            else { text = String(data: payload, encoding: .utf8) }
+
+                            let val = (text ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "\0 \t\n\r"))
+                            if !val.isEmpty {
+                                if frameID == "TT2" { res.title = val }
+                                else if frameID == "TP1" { res.artist = val }
+                                else if frameID == "TP2" && res.artist.isEmpty { res.artist = val }
+                                else if frameID == "TAL" { res.album = val }
+                                else if frameID == "TRK" { res.trackNumber = val }
+                                else if frameID == "TYE" && res.year.isEmpty { res.year = AudioTagger.extractYearString(val) }
+                                else if frameID == "TCO" && res.genre.isEmpty { res.genre = AudioTagger.normalizeGenre(val) }
+                            }
+                        }
+                    }
+                } else {
+                    // ID3v2.3 / ID3v2.4 (4-byte ID, 4-byte size, 10-byte header)
+                    while offset + 10 <= tagData.count {
+                        let idData = tagData.subdata(in: offset..<offset+4)
+                        guard let frameID = String(data: idData, encoding: .ascii), frameID.allSatisfy({ $0.isLetter || $0.isNumber }) else {
+                            break
+                        }
+                        let fSize: Int
+                        if version == 4 {
+                            fSize = (Int(tagData[offset+4]) << 21) | (Int(tagData[offset+5]) << 14) | (Int(tagData[offset+6]) << 7) | Int(tagData[offset+7])
+                        } else {
+                            fSize = (Int(tagData[offset+4]) << 24) | (Int(tagData[offset+5]) << 16) | (Int(tagData[offset+6]) << 8) | Int(tagData[offset+7])
+                        }
+                        offset += 10
+                        guard offset + fSize <= tagData.count else { break }
+                        let frameContent = tagData.subdata(in: offset..<offset+fSize)
+                        offset += fSize
+
+                        if frameID == "APIC" || frameID == "PIC" {
+                            res.hasArtwork = true
+                        } else if frameID.hasPrefix("T") && frameContent.count > 1 {
+                            let enc = frameContent[0]
+                            let payload = frameContent.subdata(in: 1..<frameContent.count)
+                            let text: String?
+                            if enc == 0 { text = String(data: payload, encoding: .isoLatin1) }
+                            else if enc == 1 { text = String(data: payload, encoding: .utf16) }
+                            else if enc == 2 { text = String(data: payload, encoding: .utf16BigEndian) }
+                            else { text = String(data: payload, encoding: .utf8) }
+
+                            let val = (text ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "\0 \t\n\r"))
+                            if !val.isEmpty {
+                                if frameID == "TIT2" || frameID == "TT2" { res.title = val }
+                                else if frameID == "TPE1" || frameID == "TP1" { res.artist = val }
+                                else if frameID == "TPE2" && res.artist.isEmpty { res.artist = val }
+                                else if frameID == "TALB" || frameID == "TAL" { res.album = val }
+                                else if frameID == "TRCK" || frameID == "TRK" { res.trackNumber = val }
+                                else if (frameID == "TYER" || frameID == "TYE" || frameID == "TDRC") && res.year.isEmpty {
+                                    res.year = AudioTagger.extractYearString(val)
+                                } else if (frameID == "TCON" || frameID == "TCO") && res.genre.isEmpty {
+                                    res.genre = AudioTagger.normalizeGenre(val)
+                                }
                             }
                         }
                     }
                 }
+            }
+        }
+
+        // ID3v1 Fallback at EOF (last 128 bytes)
+        if (res.title.isEmpty || res.artist.isEmpty || res.album.isEmpty) && fileSize >= 128 {
+            try? handle.seek(toOffset: UInt64(fileSize - 128))
+            if let id3v1 = try? handle.read(upToCount: 128), id3v1.count == 128,
+               id3v1[0] == 0x54 && id3v1[1] == 0x41 && id3v1[2] == 0x47 {
+                let v1Title = String(data: id3v1.subdata(in: 3..<33), encoding: .isoLatin1)?.trimmingCharacters(in: CharacterSet(charactersIn: "\0 ")) ?? ""
+                let v1Artist = String(data: id3v1.subdata(in: 33..<63), encoding: .isoLatin1)?.trimmingCharacters(in: CharacterSet(charactersIn: "\0 ")) ?? ""
+                let v1Album = String(data: id3v1.subdata(in: 63..<93), encoding: .isoLatin1)?.trimmingCharacters(in: CharacterSet(charactersIn: "\0 ")) ?? ""
+                let v1Year = String(data: id3v1.subdata(in: 93..<97), encoding: .isoLatin1)?.trimmingCharacters(in: CharacterSet(charactersIn: "\0 ")) ?? ""
+
+                if res.title.isEmpty && !v1Title.isEmpty { res.title = v1Title }
+                if res.artist.isEmpty && !v1Artist.isEmpty { res.artist = v1Artist }
+                if res.album.isEmpty && !v1Album.isEmpty { res.album = v1Album }
+                if res.year.isEmpty && !v1Year.isEmpty { res.year = v1Year }
             }
         }
 
@@ -698,6 +1053,18 @@ public final class AudioTagger: @unchecked Sendable {
                         fullTag.append(tagData)
                         artData = extractMP3Apic(data: fullTag)
                     }
+                }
+            }
+        }
+
+        // Fallback to AVURLAsset artwork (M4A, ALAC, WAV, MP4, MP3 fallback)
+        if artData == nil {
+            let asset = AVURLAsset(url: fileURL)
+            let metadata = asset.metadata
+            for item in metadata {
+                if item.commonKey == .commonKeyArtwork, let data = item.dataValue {
+                    artData = data
+                    break
                 }
             }
         }

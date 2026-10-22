@@ -66,7 +66,7 @@ struct WalkmanStudioApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .frame(minWidth: 1060, minHeight: 680)
+                .frame(minWidth: 780, minHeight: 520)
                 .background(WindowConfigurator())
         }
         .windowToolbarStyle(.unified(showsTitle: false))

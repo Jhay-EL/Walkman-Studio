@@ -64,31 +64,73 @@ public struct PlaylistsView: View {
         }
     }
     
+    private func normalizeKey(_ path: String) -> String {
+        var s = path.replacingOccurrences(of: "\\", with: "/")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/ \t\r\n"))
+            .lowercased()
+        while s.hasPrefix("./") {
+            s = String(s.dropFirst(2)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        }
+        if s.hasPrefix("music/") {
+            s = String(s.dropFirst(6)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        }
+        return s
+    }
+    
     private var normalizedTrackLookup: [String: Track] {
         var dict: [String: Track] = [:]
         for track in libraryTracks {
-            let key = track.relativePath.replacingOccurrences(of: "\\", with: "/").trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+            let key = normalizeKey(track.relativePath)
             dict[key] = track
+            let fn = (track.filename as NSString).lastPathComponent.lowercased()
+            if dict[fn] == nil {
+                dict[fn] = track
+            }
         }
         return dict
     }
     
     private func resolvedTrack(for path: String) -> Track? {
-        let key = path.replacingOccurrences(of: "\\", with: "/").trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
-        return normalizedTrackLookup[key]
+        let key = normalizeKey(path)
+        if let tr = normalizedTrackLookup[key] {
+            return tr
+        }
+        let fn = (path as NSString).lastPathComponent.lowercased()
+        return normalizedTrackLookup[fn]
     }
     
     private func persistPlaylistChanges(newTracks: [String]) {
         guard let drive = activeDrive, let playlist = selectedPlaylist else { return }
         self.playlistTracks = newTracks
         self.isSaving = true
-        let musicURL = URL(fileURLWithPath: drive.musicDir)
+        
+        // Write back to the exact directory where the playlist lives (e.g. /Volumes/SD_CARD/MUSIC/)
+        let musicURL: URL
+        if !playlist.fullPath.isEmpty {
+            musicURL = URL(fileURLWithPath: playlist.fullPath).deletingLastPathComponent()
+        } else {
+            musicURL = URL(fileURLWithPath: drive.musicDir)
+        }
+        
         let filenameToSave = playlist.filename.isEmpty ? playlist.name : playlist.filename
+        
+        // Build metadata lookup table mapping normalized relative path and filename to (duration, title, artist)
+        var metaLookup: [String: (duration: Int, title: String, artist: String)] = [:]
+        for t in libraryTracks {
+            let key = normalizeKey(t.relativePath)
+            metaLookup[key] = (duration: Int(t.durationSeconds), title: t.title, artist: t.artist)
+            let fn = (t.filename as NSString).lastPathComponent.lowercased()
+            if metaLookup[fn] == nil {
+                metaLookup[fn] = (duration: Int(t.durationSeconds), title: t.title, artist: t.artist)
+            }
+        }
+        
         do {
             let savedURL = try WalkmanEngine.shared.writePlaylist(
                 musicDir: musicURL,
                 name: filenameToSave,
-                relativeTracks: newTracks
+                relativeTracks: newTracks,
+                trackMetadataLookup: metaLookup
             )
             self.isSaving = false
             if let idx = playlists.firstIndex(where: { $0.id == playlist.id }) {
@@ -121,8 +163,8 @@ public struct PlaylistsView: View {
     private func sortTracksByTitle(ascending: Bool) {
         let lookup = normalizedTrackLookup
         let sorted = playlistTracks.sorted { p1, p2 in
-            let k1 = p1.replacingOccurrences(of: "\\", with: "/").trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
-            let k2 = p2.replacingOccurrences(of: "\\", with: "/").trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+            let k1 = normalizeKey(p1)
+            let k2 = normalizeKey(p2)
             let t1 = lookup[k1]?.title.trimmingCharacters(in: .whitespacesAndNewlines)
             let t2 = lookup[k2]?.title.trimmingCharacters(in: .whitespacesAndNewlines)
             let name1 = (t1?.isEmpty == false ? t1! : (p1 as NSString).lastPathComponent)
@@ -136,8 +178,8 @@ public struct PlaylistsView: View {
     private func sortTracksByArtist(ascending: Bool) {
         let lookup = normalizedTrackLookup
         let sorted = playlistTracks.sorted { p1, p2 in
-            let k1 = p1.replacingOccurrences(of: "\\", with: "/").trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
-            let k2 = p2.replacingOccurrences(of: "\\", with: "/").trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+            let k1 = normalizeKey(p1)
+            let k2 = normalizeKey(p2)
             let a1 = lookup[k1]?.artist.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let a2 = lookup[k2]?.artist.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let cmp = a1.localizedStandardCompare(a2)
@@ -154,8 +196,8 @@ public struct PlaylistsView: View {
     private func sortTracksByAlbum() {
         let lookup = normalizedTrackLookup
         let sorted = playlistTracks.sorted { p1, p2 in
-            let k1 = p1.replacingOccurrences(of: "\\", with: "/").trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
-            let k2 = p2.replacingOccurrences(of: "\\", with: "/").trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+            let k1 = normalizeKey(p1)
+            let k2 = normalizeKey(p2)
             let alb1 = lookup[k1]?.album.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let alb2 = lookup[k2]?.album.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let cmpAlb = alb1.localizedStandardCompare(alb2)
@@ -1035,6 +1077,27 @@ private struct AddTracksModal: View {
     @State private var cachedAlbums: [ModalAlbumItem] = []
     @State private var cachedArtists: [ModalArtistItem] = []
     
+    private func normalizeTrackKey(_ path: String) -> String {
+        var s = path.replacingOccurrences(of: "\\", with: "/")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/ \t\r\n"))
+            .lowercased()
+        while s.hasPrefix("./") {
+            s = String(s.dropFirst(2)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        }
+        if s.hasPrefix("music/") {
+            s = String(s.dropFirst(6)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        }
+        return s
+    }
+    
+    private var normalizedExistingSet: Set<String> {
+        Set(existingPlaylistPaths.map { normalizeTrackKey($0) })
+    }
+    
+    private func isTrackInPlaylist(_ track: Track) -> Bool {
+        normalizedExistingSet.contains(normalizeTrackKey(track.relativePath))
+    }
+    
     private func isHiRes(_ track: Track) -> Bool {
         return track.bitsPerSample > 16 || track.sampleRate > 48000
     }
@@ -1089,7 +1152,7 @@ private struct AddTracksModal: View {
     private var filteredTracks: [Track] {
         let q = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return tracks.filter { tr in
-            if hideExisting && existingPlaylistPaths.contains(tr.relativePath) {
+            if hideExisting && isTrackInPlaylist(tr) {
                 return false
             }
             if formatFilter == "HI-RES" {
@@ -1112,7 +1175,7 @@ private struct AddTracksModal: View {
         let q = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return cachedAlbums.compactMap { alb in
             let matchingTracks = alb.tracks.filter { tr in
-                if hideExisting && existingPlaylistPaths.contains(tr.relativePath) {
+                if hideExisting && isTrackInPlaylist(tr) {
                     return false
                 }
                 if formatFilter == "HI-RES" {
@@ -1138,7 +1201,7 @@ private struct AddTracksModal: View {
         let q = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return cachedArtists.compactMap { art in
             let matchingTracks = art.tracks.filter { tr in
-                if hideExisting && existingPlaylistPaths.contains(tr.relativePath) {
+                if hideExisting && isTrackInPlaylist(tr) {
                     return false
                 }
                 if formatFilter == "HI-RES" {
@@ -1346,7 +1409,7 @@ private struct AddTracksModal: View {
                             LazyVStack(spacing: 4) {
                                 ForEach(filteredTracks) { tr in
                                     let isSel = selectedTrackPaths.contains(tr.relativePath)
-                                    let isInPlaylist = existingPlaylistPaths.contains(tr.relativePath)
+                                    let isInPlaylist = isTrackInPlaylist(tr)
                                     let isCurrent = player.currentTrack?.relativePath == tr.relativePath
                                     let isPlayingThis = isCurrent && player.isPlaying
                                     

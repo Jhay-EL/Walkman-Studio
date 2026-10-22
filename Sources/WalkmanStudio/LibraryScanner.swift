@@ -97,14 +97,19 @@ public final class LibraryScanner: @unchecked Sendable {
                             let effectiveAdded = dateAddedSec > 0 ? dateAddedSec : mtime
                             let dateAdded = Date(timeIntervalSince1970: effectiveAdded > 0 ? effectiveAdded : CFAbsoluteTimeGetCurrent() + 978307200.0)
 
+                            let cleanTitle = WalkmanEngine.sanitizeWalkmanText(title)
+                            let cleanArtist = WalkmanEngine.sanitizeWalkmanText(artist, stripExplicitMarkers: false)
+                            let cleanAlbum = WalkmanEngine.sanitizeWalkmanText(album)
+                            let fallbackTitle = WalkmanEngine.sanitizeWalkmanText(URL(fileURLWithPath: fPath).deletingPathExtension().lastPathComponent)
+
                             let tr = Track(
                                 filename: URL(fileURLWithPath: fPath).lastPathComponent,
                                 relativePath: relPath,
                                 fullPath: fPath,
                                 format: fmt,
-                                title: title.isEmpty ? URL(fileURLWithPath: fPath).deletingPathExtension().lastPathComponent : title,
-                                artist: artist,
-                                album: album,
+                                title: cleanTitle.isEmpty ? (fallbackTitle.isEmpty ? "Unknown Track" : fallbackTitle) : cleanTitle,
+                                artist: cleanArtist.isEmpty ? "Unknown Artist" : cleanArtist,
+                                album: cleanAlbum.isEmpty ? "Unknown Album" : cleanAlbum,
                                 trackNum: trackNum.trimmingCharacters(in: CharacterSet(charactersIn: " '\"")),
                                 year: year,
                                 genre: genre,
@@ -326,14 +331,17 @@ public final class LibraryScanner: @unchecked Sendable {
         }
 
         if (ext == "flac" || ext == "mp3"), let info = AudioTagger.shared.readMetadata(fileURL: URL(fileURLWithPath: path)) {
+            let effTitle = WalkmanEngine.sanitizeWalkmanText(info.title.isEmpty ? defTitle : info.title)
+            let effArtist = WalkmanEngine.sanitizeWalkmanText(info.artist.isEmpty ? defArtist : info.artist, stripExplicitMarkers: false)
+            let effAlbum = WalkmanEngine.sanitizeWalkmanText(info.album.isEmpty ? defAlbum : info.album)
             return Track(
                 filename: URL(fileURLWithPath: path).lastPathComponent,
                 relativePath: relPath,
                 fullPath: path,
                 format: ext.uppercased(),
-                title: info.title.isEmpty ? defTitle : info.title,
-                artist: info.artist.isEmpty ? defArtist : info.artist,
-                album: info.album.isEmpty ? defAlbum : info.album,
+                title: effTitle.isEmpty ? "Unknown Track" : effTitle,
+                artist: effArtist.isEmpty ? "Unknown Artist" : effArtist,
+                album: effAlbum.isEmpty ? "Unknown Album" : effAlbum,
                 trackNum: info.trackNumber.isEmpty ? defTrackNum : info.trackNumber,
                 year: info.year,
                 genre: info.genre,
@@ -347,14 +355,18 @@ public final class LibraryScanner: @unchecked Sendable {
             )
         }
 
+        let cleanDefTitle = WalkmanEngine.sanitizeWalkmanText(defTitle)
+        let cleanDefArtist = WalkmanEngine.sanitizeWalkmanText(defArtist, stripExplicitMarkers: false)
+        let cleanDefAlbum = WalkmanEngine.sanitizeWalkmanText(defAlbum)
+
         return Track(
             filename: URL(fileURLWithPath: path).lastPathComponent,
             relativePath: relPath,
             fullPath: path,
             format: ext.uppercased(),
-            title: defTitle,
-            artist: defArtist,
-            album: defAlbum,
+            title: cleanDefTitle.isEmpty ? "Unknown Track" : cleanDefTitle,
+            artist: cleanDefArtist.isEmpty ? "Unknown Artist" : cleanDefArtist,
+            album: cleanDefAlbum.isEmpty ? "Unknown Album" : cleanDefAlbum,
             trackNum: defTrackNum,
             year: "",
             genre: "",

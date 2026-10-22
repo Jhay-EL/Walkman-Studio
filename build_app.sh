@@ -75,4 +75,8 @@ EOF
 # Create PkgInfo
 echo -n "APPL????" > "$APP_BUNDLE/Contents/PkgInfo"
 
+# Ad-hoc sign app bundle for local execution
+echo "Signing $APP_BUNDLE..."
+codesign --force --deep --sign - "$APP_BUNDLE"
+
 echo "Successfully built $APP_BUNDLE"

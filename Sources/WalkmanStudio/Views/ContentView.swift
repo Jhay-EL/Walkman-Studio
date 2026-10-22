@@ -304,6 +304,7 @@ public struct ContentView: View {
                                 DeviceOverviewView(
                                     drives: drives,
                                     tracks: tracks,
+                                    precomputedStats: (albums: libraryStats.albums, artists: libraryStats.artists, hiRes: libraryStats.hiRes),
                                     onNavigateToTab: { tab in selectedTab = tab },
                                     onOpenEject: { showEjectSheet = true },
                                     onRefresh: { refreshDrives() },
@@ -384,6 +385,7 @@ public struct ContentView: View {
                                 .padding(14)
                             }
                         }
+                        .clipped()
                         
                         // Audio Preview & Playback Bar
                         TrackPreviewBar(
