@@ -52,8 +52,9 @@ Sony Walkman non-Android digital audio players deliver exceptional audio fidelit
 
 ### Synchronized Lyrics Manager (.LRC & Embedded USLT)
 * Detects and displays companion **`.lrc`** synchronized lyrics files—the native lyrics standard supported by Sony Walkman players.
+* **Automated Online Lyrics Fetching (LRCLIB API):** Queries the open-source **[LRCLIB](https://lrclib.net)** API (`/api/get` and `/api/search`) to automatically retrieve and generate timestamp-accurate synchronized `.lrc` companion files matched by track title, artist, album, and duration (with fallback to **[Lyrics.ovh](https://lyrics.ovh)**).
 * Reads embedded ID3 `USLT` (Unsynchronized lyrics) frames.
-* Built-in lyrics editor: paste or write lyrics and save them directly as `.lrc` companion files alongside your tracks for instant on-screen display during Walkman playback.
+* Built-in lyrics editor: paste, edit, or fetch lyrics and save them directly as `.lrc` companion files alongside your tracks for instant on-screen display during Walkman playback.
 
 ### Batch Audio Transcoding & Transfer Queue (FFmpeg)
 * Drag-and-drop batch transfer queue supporting multiple audio formats.
@@ -212,6 +213,7 @@ Walkman-Studio/
 │       ├── Theme.swift                   # Brushed Silver & Dark Obsidian palette
 │       ├── WalkmanEngine.swift           # Hardware rules, statvfs, ImageIO Baseline JPEG
 │       ├── WalkmanDeviceDetector.swift   # XML hardware capability inspector
+│       ├── LyricsService.swift           # LRCLIB & Lyrics.ovh synchronized lyrics engine
 │       ├── AudioTagger.swift             # ID3v2.3 binary writer, lyrics & artwork parser
 │       ├── AudioPlayerService.swift      # Streaming audio preview engine
 │       ├── CoverArtCache.swift           # Asynchronous image & thumbnail cache
@@ -255,6 +257,7 @@ Distributed under the **MIT License**. See `LICENSE` for details.
 ## Acknowledgments
 
 * Dedicated to the **Sony Walkman** audiophile community.
+* Synchronized `.lrc` lyrics fetching powered by the community-driven **[LRCLIB](https://lrclib.net)** API.
 
 ---
 
