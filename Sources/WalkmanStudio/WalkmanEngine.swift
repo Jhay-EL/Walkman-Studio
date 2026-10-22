@@ -208,60 +208,16 @@ public final class WalkmanEngine: @unchecked Sendable {
             if norm.lowercased().hasPrefix("music/") {
                 norm = String(norm.dropFirst(6)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             }
+            norm = norm.precomposedStringWithCanonicalMapping
             if norm.isEmpty { continue }
 
-            let key = norm.lowercased()
-            let fn = (norm as NSString).lastPathComponent.lowercased()
-            let meta = trackMetadataLookup[key] ?? trackMetadataLookup[fn]
-            
-            // Fallback: if not in lookup, check if file exists directly under musicDir
-            var fileMeta: (duration: Int, title: String, artist: String)? = nil
-            if meta == nil {
-                let fileOnDisk = musicDir.appendingPathComponent(norm)
-                if FileManager.default.fileExists(atPath: fileOnDisk.path),
-                   let tag = AudioTagger.shared.readMetadata(fileURL: fileOnDisk) {
-                    fileMeta = (duration: Int(tag.durationSeconds), title: tag.title, artist: tag.artist)
-                }
-            }
-
-            let dur = meta?.duration ?? fileMeta?.duration ?? -1
-            let rawTitle = meta?.title ?? fileMeta?.title ?? ""
-            let cleanTitle = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-            let rawArtist = meta?.artist ?? fileMeta?.artist ?? ""
-            let cleanArtist = rawArtist.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            let fallbackTitle = ((norm as NSString).lastPathComponent as NSString).deletingPathExtension
-            let finalTitle = cleanTitle.isEmpty ? fallbackTitle : cleanTitle
-
-            let displayString: String
-            if !cleanArtist.isEmpty && !finalTitle.lowercased().hasPrefix(cleanArtist.lowercased()) {
-                displayString = "\(cleanArtist) - \(finalTitle)"
-            } else {
-                displayString = finalTitle
-            }
-
-            // Non-Android Sony Walkman OS and Sony Music Center format:
-            // #EXTINF:<duration_seconds>,<Artist> - <Title>
-            let extInfLine: String
-            if dur > 0 {
-                extInfLine = "#EXTINF:\(dur),\(displayString)"
-            } else if !displayString.isEmpty {
-                extInfLine = "#EXTINF:-1,\(displayString)"
-            } else {
-                extInfLine = "#EXTINF:,"
-            }
-            lines.append(extInfLine)
-
-            // Hardware Constraint: Non-Android Sony Walkman OS uses Windows backslashes (\)
-            // for filesystem relative resolution from the MUSIC directory
-            let backslashPath = norm.replacingOccurrences(of: "/", with: "\\")
-            lines.append(backslashPath)
+            // Hardware Constraint 5: Sony Walkman NW-A55 Linux RTOS expects relative POSIX paths
+            // using forward slashes (/) relative to the /MUSIC/ directory, never Windows backslashes (\).
+            lines.append(norm)
         }
 
-        // Sony Walkman expects UTF-8 with BOM (\u{FEFF}) and CRLF (\r\n) line terminators
-        let bomHeader = "\u{FEFF}"
-        let body = lines.joined(separator: "\r\n") + "\r\n"
-        let fullContent = bomHeader + body
+        // Hardware Constraint 5: Strict UTF-8 without BOM and CRLF (\r\n) line terminators
+        let fullContent = lines.joined(separator: "\r\n") + "\r\n"
 
         guard let data = fullContent.data(using: .utf8) else {
             throw NSError(
@@ -358,6 +314,7 @@ public final class WalkmanEngine: @unchecked Sendable {
             if posix.lowercased().hasPrefix("music/") {
                 posix = String(posix.dropFirst(6)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             }
+            posix = posix.precomposedStringWithCanonicalMapping
 
             if !posix.isEmpty {
                 results.append(PlaylistTrackInfo(
