@@ -99,7 +99,11 @@ public struct PlaylistsView: View {
         return normalizedTrackLookup[fn]
     }
     
-    private func persistPlaylistChanges(newTracks: [String]) {
+    private func saveCurrentPlaylist() {
+        persistPlaylistChanges(newTracks: playlistTracks, isManualSave: true)
+    }
+    
+    private func persistPlaylistChanges(newTracks: [String], isManualSave: Bool = false) {
         guard let drive = activeDrive, let playlist = selectedPlaylist else { return }
         self.playlistTracks = newTracks
         self.isSaving = true
@@ -145,17 +149,21 @@ public struct PlaylistsView: View {
                 selectedPlaylist = updated
             }
             withAnimation {
-                messageBanner = "Saved to Walkman (\(newTracks.count) \(newTracks.count == 1 ? "track" : "tracks"))"
+                if isManualSave {
+                    messageBanner = "✓ Saved '\(filenameToSave)' to Walkman (\(newTracks.count) \(newTracks.count == 1 ? "track" : "tracks"))"
+                } else {
+                    messageBanner = "Saved to Walkman (\(newTracks.count) \(newTracks.count == 1 ? "track" : "tracks"))"
+                }
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                if self.messageBanner?.hasPrefix("Saved to Walkman") == true {
+            DispatchQueue.main.asyncAfter(deadline: .now() + (isManualSave ? 4 : 3)) {
+                if self.messageBanner?.contains("Saved") == true {
                     withAnimation { self.messageBanner = nil }
                 }
             }
         } catch {
             self.isSaving = false
             withAnimation {
-                messageBanner = "Auto-save error: \(error.localizedDescription)"
+                messageBanner = "Save error: \(error.localizedDescription)"
             }
         }
     }
@@ -768,6 +776,26 @@ public struct PlaylistsView: View {
                                     Text("Add From Library")
                                 }
                                 .font(WalkmanFont.calloutMedium)
+                                .padding(.horizontal, 11)
+                                .padding(.vertical, 6)
+                                .background(WalkmanTheme.card)
+                                .foregroundStyle(WalkmanTheme.silverLight)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                            }
+                            .buttonStyle(.plain)
+                            
+                            // Save to Walkman Button
+                            Button(action: { saveCurrentPlaylist() }) {
+                                HStack(spacing: 5) {
+                                    if isSaving {
+                                        ProgressView()
+                                            .controlSize(.mini)
+                                    } else {
+                                        Image(systemName: "square.and.arrow.down.fill")
+                                    }
+                                    Text(isSaving ? "Saving..." : "Save to Walkman")
+                                }
+                                .font(WalkmanFont.calloutBold)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 6)
                                 .background(WalkmanTheme.silverGradient)
@@ -775,6 +803,9 @@ public struct PlaylistsView: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 6))
                             }
                             .buttonStyle(.plain)
+                            .keyboardShortcut("s", modifiers: .command)
+                            .disabled(isSaving || activeDrive == nil)
+                            .help("Save playlist changes with CRLF line endings to Walkman (⌘S)")
                         }
                         .padding(.horizontal, 4)
                         
