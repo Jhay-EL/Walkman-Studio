@@ -7,6 +7,7 @@ public struct TopStorageBarView: View {
     let onRefresh: () -> Void
     let onOpenEject: () -> Void
     let isRefreshing: Bool
+    var isEjecting: Bool = false
 
     private func formatBytes(_ bytes: Int64) -> String {
         if bytes <= 0 { return "0 GB" }
@@ -112,16 +113,25 @@ public struct TopStorageBarView: View {
 
             Spacer()
 
-            // 1-Click Clean Junk & Safe Eject
+            // 1-Click Eject & Clean
             Button(action: onOpenEject) {
                 HStack(spacing: 6) {
-                    Image(systemName: "eject.circle.fill")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(WalkmanTheme.silver)
+                    if isEjecting {
+                        ProgressView()
+                            .controlSize(.small)
+                            .scaleEffect(0.7)
+                        Text("Ejecting...")
+                            .font(WalkmanFont.calloutBold)
+                            .foregroundStyle(WalkmanTheme.silverLight)
+                    } else {
+                        Image(systemName: "eject.circle.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(WalkmanTheme.silver)
 
-                    Text("Clean Junk & Safe Eject")
-                        .font(WalkmanFont.calloutBold)
-                        .foregroundStyle(WalkmanTheme.silverLight)
+                        Text("Eject")
+                            .font(WalkmanFont.calloutBold)
+                            .foregroundStyle(WalkmanTheme.silverLight)
+                    }
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 7)
@@ -133,9 +143,9 @@ public struct TopStorageBarView: View {
                 )
             }
             .buttonStyle(.plain)
-            .disabled(activeDrive == nil)
-            .opacity(activeDrive == nil ? 0.4 : 1.0)
-            .help("Run dot_clean -m, purge macOS ghost files, and safely unmount")
+            .disabled(activeDrive == nil || isEjecting)
+            .opacity((activeDrive == nil || isEjecting) ? 0.4 : 1.0)
+            .help("Run dot_clean -m, purge macOS ghost files, and safely unmount Walkman")
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 10)

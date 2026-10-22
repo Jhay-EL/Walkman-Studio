@@ -416,4 +416,16 @@ public final class LibraryScanner: @unchecked Sendable {
             sqlite3_finalize(stmt)
         }
     }
+
+    public func removeFromCache(fullPath: String) {
+        guard let db = getDB() else { return }
+        defer { sqlite3_close(db) }
+        let sql = "DELETE FROM tracks_cache WHERE full_path = ?;"
+        var stmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+            sqlite3_bind_text(stmt, 1, (fullPath as NSString).utf8String, -1, nil)
+            sqlite3_step(stmt)
+            sqlite3_finalize(stmt)
+        }
+    }
 }

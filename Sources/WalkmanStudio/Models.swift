@@ -295,6 +295,12 @@ public struct AlbumItem: Identifiable, Hashable, Sendable {
     public var isHiRes: Bool {
         tracks.contains { $0.bitsPerSample > 16 || $0.sampleRate > 48000 }
     }
+    public var latestDateAdded: Date {
+        tracks.map(\.dateAdded).max() ?? Date.distantPast
+    }
+    public var primaryFormat: String {
+        tracks.first?.format ?? "FLAC"
+    }
 }
 
 public struct ArtistItem: Identifiable, Hashable, Sendable {

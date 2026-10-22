@@ -1,26 +1,56 @@
 import SwiftUI
 import AppKit
 
+public enum AlbumSortOption: String, CaseIterable, Identifiable {
+    case recentlyAdded = "Recently Added"
+    case nameAsc = "Album Name (A–Z)"
+    case nameDesc = "Album Name (Z–A)"
+    case artistAsc = "Artist (A–Z)"
+    case yearDesc = "Release Year (Newest)"
+    case yearAsc = "Release Year (Oldest)"
+    case trackCountDesc = "Track Count (Most)"
+    
+    public var id: String { rawValue }
+    
+    public var icon: String {
+        switch self {
+        case .recentlyAdded: return "clock.arrow.circlepath"
+        case .nameAsc: return "arrow.up.circle"
+        case .nameDesc: return "arrow.down.circle"
+        case .artistAsc: return "music.mic"
+        case .yearDesc, .yearAsc: return "calendar"
+        case .trackCountDesc: return "list.number"
+        }
+    }
+}
+
 public struct AlbumsView: View {
     let tracks: [Track]
     let precomputedAlbums: [AlbumItem]?
     let onSelectTrack: (Track) -> Void
+    var onDeleteAlbum: ((AlbumItem) -> Void)? = nil
+    var onDeleteTrack: ((Track) -> Void)? = nil
     
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var selectedAlbum: AlbumItem? = nil
     @State private var searchQuery: String = ""
+    @State private var sortOption: AlbumSortOption = .recentlyAdded
+    @State private var formatFilter: String = "ALL"
+    @State private var cachedAlbums: [AlbumItem] = []
     
     public init(
         tracks: [Track],
         precomputedAlbums: [AlbumItem]? = nil,
-        onSelectTrack: @escaping (Track) -> Void
+        onSelectTrack: @escaping (Track) -> Void,
+        onDeleteAlbum: ((AlbumItem) -> Void)? = nil,
+        onDeleteTrack: ((Track) -> Void)? = nil
     ) {
         self.tracks = tracks
         self.precomputedAlbums = precomputedAlbums
         self.onSelectTrack = onSelectTrack
+        self.onDeleteAlbum = onDeleteAlbum
+        self.onDeleteTrack = onDeleteTrack
     }
-    
-    @State private var cachedAlbums: [AlbumItem] = []
     
     private var albums: [AlbumItem] {
         if let pre = precomputedAlbums, !pre.isEmpty { return pre }
@@ -97,11 +127,54 @@ public struct AlbumsView: View {
         return list.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
     
-    private var filteredAlbums: [AlbumItem] {
+    private var filteredAndSortedAlbums: [AlbumItem] {
         let q = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if q.isEmpty { return albums }
-        return albums.filter {
-            $0.name.lowercased().contains(q) || $0.artist.lowercased().contains(q)
+        let filtered = albums.filter { alb in
+            if !q.isEmpty {
+                let matchesQuery = alb.name.lowercased().contains(q) || alb.artist.lowercased().contains(q)
+                if !matchesQuery { return false }
+            }
+            if formatFilter == "HI-RES" {
+                return alb.isHiRes
+            } else if formatFilter == "FLAC" {
+                return alb.tracks.contains { $0.format == "FLAC" }
+            } else if formatFilter == "MP3" {
+                return alb.tracks.contains { $0.format == "MP3" }
+            }
+            return true
+        }
+        
+        return filtered.sorted { a, b in
+            switch sortOption {
+            case .nameAsc:
+                return a.name.localizedStandardCompare(b.name) == .orderedAscending
+            case .nameDesc:
+                return a.name.localizedStandardCompare(b.name) == .orderedDescending
+            case .recentlyAdded:
+                if a.latestDateAdded != b.latestDateAdded {
+                    return a.latestDateAdded > b.latestDateAdded
+                }
+                return a.name.localizedStandardCompare(b.name) == .orderedAscending
+            case .artistAsc:
+                let cmp = a.artist.localizedStandardCompare(b.artist)
+                if cmp != .orderedSame { return cmp == .orderedAscending }
+                return a.name.localizedStandardCompare(b.name) == .orderedAscending
+            case .yearDesc:
+                let yA = Int(a.year) ?? 0
+                let yB = Int(b.year) ?? 0
+                if yA != yB { return yA > yB }
+                return a.name.localizedStandardCompare(b.name) == .orderedAscending
+            case .yearAsc:
+                let yA = Int(a.year) ?? 9999
+                let yB = Int(b.year) ?? 9999
+                if yA != yB { return yA < yB }
+                return a.name.localizedStandardCompare(b.name) == .orderedAscending
+            case .trackCountDesc:
+                if a.trackCount != b.trackCount {
+                    return a.trackCount > b.trackCount
+                }
+                return a.name.localizedStandardCompare(b.name) == .orderedAscending
+            }
         }
     }
     
@@ -112,13 +185,21 @@ public struct AlbumsView: View {
                 AlbumDetailView(
                     album: album,
                     onBack: { selectedAlbum = nil },
-                    onSelectTrack: onSelectTrack
+                    onSelectTrack: onSelectTrack,
+                    onDeleteAlbum: {
+                        selectedAlbum = nil
+                        onDeleteAlbum?(album)
+                    },
+                    onDeleteTrack: { tr in
+                        onDeleteTrack?(tr)
+                    }
                 )
             } else {
                 // Albums Grid View
                 VStack(spacing: 0) {
                     // Header Bar
-                    HStack(spacing: 12) {
+                    HStack(spacing: 10) {
+                        // Search Field
                         HStack(spacing: 6) {
                             Image(systemName: "magnifyingglass")
                                 .font(.system(size: 12))
@@ -141,11 +222,47 @@ public struct AlbumsView: View {
                         .padding(.vertical, 6)
                         .background(Color.white.opacity(0.06))
                         .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .frame(maxWidth: 290)
+                        .frame(maxWidth: 240)
+                        
+                        // Sort Menu Dropdown
+                        Menu {
+                            Picker("Sort By", selection: $sortOption) {
+                                ForEach(AlbumSortOption.allCases) { opt in
+                                    Label(opt.rawValue, systemImage: opt.icon).tag(opt)
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: sortOption.icon)
+                                    .font(.system(size: 11))
+                                Text(sortOption.rawValue)
+                                    .font(WalkmanFont.calloutMedium)
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 6)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .foregroundStyle(WalkmanTheme.silverLight)
+                        }
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
+                        
+                        // Format Filter Chips
+                        Picker("", selection: $formatFilter) {
+                            Text("All").tag("ALL")
+                            Text("Hi-Res").tag("HI-RES")
+                            Text("FLAC").tag("FLAC")
+                            Text("MP3").tag("MP3")
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 220)
                         
                         Spacer()
                         
-                        Text("\(filteredAlbums.count.formatted()) Albums")
+                        Text("\(filteredAndSortedAlbums.count.formatted()) Albums")
                             .font(WalkmanFont.mono)
                             .foregroundStyle(.secondary)
                     }
@@ -155,17 +272,45 @@ public struct AlbumsView: View {
                     Divider()
                         .overlay(Color.white.opacity(0.06))
                     
-                    ScrollView {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 190), spacing: 18)], spacing: 22) {
-                            ForEach(filteredAlbums) { alb in
-                                AlbumGridCard(album: alb) {
-                                    selectedAlbum = alb
+                    if filteredAndSortedAlbums.isEmpty {
+                        VStack(spacing: 12) {
+                            Spacer()
+                            Image(systemName: "square.stack")
+                                .font(.system(size: 38))
+                                .foregroundStyle(.tertiary)
+                            Text(searchQuery.isEmpty ? "No Albums Found" : "No Albums Matching \"\(searchQuery)\"")
+                                .font(WalkmanFont.title3)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        ScrollView {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 190), spacing: 18)], spacing: 22) {
+                                ForEach(filteredAndSortedAlbums) { alb in
+                                    AlbumGridCard(
+                                        album: alb,
+                                        onOpen: { selectedAlbum = alb },
+                                        onInspectAlbum: {
+                                            if let rep = alb.representativeTrack {
+                                                onSelectTrack(rep)
+                                            }
+                                        },
+                                        onDeleteAlbum: {
+                                            onDeleteAlbum?(alb)
+                                        }
+                                    )
                                 }
                             }
+                            .padding(20)
                         }
-                        .padding(20)
                     }
                 }
+            }
+        }
+        .onChange(of: tracks) {
+            if let sel = selectedAlbum, !tracks.contains(where: { $0.album.lowercased() == sel.name.lowercased() }) {
+                selectedAlbum = nil
             }
         }
         .task(id: tracks.count) {
@@ -182,6 +327,10 @@ public struct AlbumsView: View {
 private struct AlbumGridCard: View {
     let album: AlbumItem
     let onOpen: () -> Void
+    var onInspectAlbum: (() -> Void)? = nil
+    var onDeleteAlbum: (() -> Void)? = nil
+    
+    @ObservedObject private var player = AudioPlayerService.shared
     
     var body: some View {
         Button(action: onOpen) {
@@ -242,6 +391,45 @@ private struct AlbumGridCard: View {
             }
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button(action: onOpen) {
+                Label("View Album Details", systemImage: "music.note.list")
+            }
+            
+            Button {
+                if let first = album.tracks.first {
+                    player.play(track: first, in: album.tracks)
+                }
+            } label: {
+                Label("Play Album", systemImage: "play.fill")
+            }
+            
+            Divider()
+            
+            Button {
+                onInspectAlbum?()
+            } label: {
+                Label("Inspect Album Metadata (Get Info)", systemImage: "info.circle")
+            }
+            
+            if let rep = album.representativeTrack {
+                Button {
+                    let dir = URL(fileURLWithPath: rep.fullPath).deletingLastPathComponent().path
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(dir, forType: .string)
+                } label: {
+                    Label("Copy Album Folder Path", systemImage: "doc.on.doc")
+                }
+            }
+            
+            Divider()
+            
+            Button(role: .destructive) {
+                onDeleteAlbum?()
+            } label: {
+                Label("Delete Album from Device", systemImage: "trash")
+            }
+        }
     }
 }
 
@@ -249,6 +437,8 @@ private struct AlbumDetailView: View {
     let album: AlbumItem
     let onBack: () -> Void
     let onSelectTrack: (Track) -> Void
+    var onDeleteAlbum: (() -> Void)? = nil
+    var onDeleteTrack: ((Track) -> Void)? = nil
     
     @ObservedObject private var player = AudioPlayerService.shared
     
@@ -331,25 +521,61 @@ private struct AlbumDetailView: View {
                             .foregroundStyle(.secondary)
                             .padding(.top, 2)
                             
-                            // Play Album Button
-                            Button(action: {
-                                if let first = album.tracks.first {
-                                    player.play(track: first, in: album.tracks)
+                            // Action Buttons
+                            HStack(spacing: 8) {
+                                Button(action: {
+                                    if let first = album.tracks.first {
+                                        player.play(track: first, in: album.tracks)
+                                    }
+                                }) {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "play.fill")
+                                            .font(.system(size: 11))
+                                        Text("Play Album")
+                                            .font(WalkmanFont.calloutBold)
+                                    }
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 7)
+                                    .background(WalkmanTheme.silverGradient)
+                                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                                 }
-                            }) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "play.fill")
-                                        .font(.system(size: 11))
-                                    Text("Play Album")
-                                        .font(WalkmanFont.calloutBold)
+                                .buttonStyle(.plain)
+                                
+                                if let rep = album.representativeTrack {
+                                    Button(action: { onSelectTrack(rep) }) {
+                                        HStack(spacing: 5) {
+                                            Image(systemName: "info.circle")
+                                                .font(.system(size: 11))
+                                            Text("Get Info")
+                                                .font(WalkmanFont.calloutMedium)
+                                        }
+                                        .padding(.horizontal, 11)
+                                        .padding(.vertical, 7)
+                                        .background(Color.white.opacity(0.08))
+                                        .foregroundStyle(WalkmanTheme.silverLight)
+                                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help("Inspect album metadata and cover artwork")
                                 }
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 7)
-                                .background(WalkmanTheme.silverGradient)
-                                .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                
+                                Button(action: { onDeleteAlbum?() }) {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: "trash")
+                                            .font(.system(size: 11))
+                                        Text("Delete Album")
+                                            .font(WalkmanFont.calloutMedium)
+                                    }
+                                    .padding(.horizontal, 11)
+                                    .padding(.vertical, 7)
+                                    .background(Color.red.opacity(0.16))
+                                    .foregroundStyle(Color(red: 255/255, green: 110/255, blue: 100/255))
+                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                                .help("Delete album and all its tracks from Walkman without confirmation")
                             }
-                            .buttonStyle(.plain)
                             .padding(.top, 6)
                         }
                         
@@ -445,6 +671,25 @@ private struct AlbumDetailView: View {
                                     player.pause()
                                 } else {
                                     player.play(track: track, in: album.tracks)
+                                }
+                            }
+                            .contextMenu {
+                                Button("Inspect Metadata & Specs") {
+                                    onSelectTrack(track)
+                                }
+                                Button("Play Track") {
+                                    player.play(track: track, in: album.tracks)
+                                }
+                                Divider()
+                                Button("Copy Path") {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(track.fullPath, forType: .string)
+                                }
+                                Divider()
+                                Button(role: .destructive) {
+                                    onDeleteTrack?(track)
+                                } label: {
+                                    Label("Delete from Device", systemImage: "trash")
                                 }
                             }
                         }

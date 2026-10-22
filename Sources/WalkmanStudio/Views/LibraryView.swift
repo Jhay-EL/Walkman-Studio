@@ -7,6 +7,7 @@ public struct LibraryView: View {
     @Binding var selectedTrackId: String?
     let onInspectTrack: (Track) -> Void
     let onGoToTransfer: () -> Void
+    var onDeleteTrack: ((Track) -> Void)? = nil
     
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var formatFilter: String = "ALL"
@@ -19,13 +20,15 @@ public struct LibraryView: View {
         isLoading: Bool,
         selectedTrackId: Binding<String?>,
         onInspectTrack: @escaping (Track) -> Void,
-        onGoToTransfer: @escaping () -> Void
+        onGoToTransfer: @escaping () -> Void,
+        onDeleteTrack: ((Track) -> Void)? = nil
     ) {
         self.tracks = tracks
         self.isLoading = isLoading
         self._selectedTrackId = selectedTrackId
         self.onInspectTrack = onInspectTrack
         self.onGoToTransfer = onGoToTransfer
+        self.onDeleteTrack = onDeleteTrack
     }
     
     private var visibleTracks: [Track] {
@@ -264,6 +267,23 @@ public struct LibraryView: View {
                         Button("Copy Path") {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(track.fullPath, forType: .string)
+                        }
+                        
+                        Divider()
+                        
+                        Button(role: .destructive) {
+                            let targets = tracks.filter { selection.contains($0.id) }
+                            let toDelete = targets.isEmpty ? [track] : targets
+                            let idsToDelete = Set(toDelete.map { $0.id })
+                            displayedTracks.removeAll(where: { idsToDelete.contains($0.id) })
+                            if let sel = selectedTrackId, idsToDelete.contains(sel) {
+                                selectedTrackId = nil
+                            }
+                            for tr in toDelete {
+                                onDeleteTrack?(tr)
+                            }
+                        } label: {
+                            Label(selection.count > 1 ? "Delete \(selection.count) Songs from Device" : "Delete from Device", systemImage: "trash")
                         }
                     }
                 } primaryAction: { selection in

@@ -43,6 +43,8 @@ public struct MetadataStudioView: View {
     
     private func loadTrack() {
         guard let tr = track else {
+            autoSaveTask?.cancel()
+            autoSaveTask = nil
             currentTrackId = nil
             return
         }

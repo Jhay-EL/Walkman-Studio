@@ -11,7 +11,7 @@ public struct ContentView: View {
     @State private var selectedTab: NavigationTab = .overview
     @State private var selectedTrackId: String?
     @State private var showInspector: Bool = false
-    @State private var showEjectSheet: Bool = false
+    @State private var isEjecting: Bool = false
     @State private var queueCount: Int = 0
     @State private var deviceInfo: WalkmanDeviceInfo? = nil
     @State private var showAboutSheet: Bool = false
@@ -61,7 +61,7 @@ public struct ContentView: View {
             self.cachedRecentTracks = []
             self.libraryStats = (0, 0, 0, 0)
             self.selectedTrackId = nil
-            self.showEjectSheet = false
+            self.isEjecting = false
             AudioPlayerService.shared.stopAndClear()
         } else {
             if let current = activeDrive, detected.contains(where: { $0.mountPoint == current.mountPoint }) {
@@ -82,6 +82,21 @@ public struct ContentView: View {
         
         isRefreshingDrives = false
         refreshLibrary()
+    }
+    
+    private func performCleanAndEject() {
+        guard !drives.isEmpty, !isEjecting else { return }
+        isEjecting = true
+        AudioPlayerService.shared.stopAndClear()
+        
+        let drivesToEject = drives
+        Task {
+            let _ = await WalkmanEngine.shared.cleanAndEject(drives: drivesToEject)
+            await MainActor.run {
+                self.isEjecting = false
+                self.refreshDrives()
+            }
+        }
     }
     
     private func refreshLibrary() {
@@ -135,6 +150,121 @@ public struct ContentView: View {
                 self.cachedRecentTracks = precomputedRecent
                 self.libraryStats = stats
                 self.isScanning = false
+            }
+        }
+    }
+    
+    private func deleteTrackFromDevice(_ track: Track) {
+        // 1. If currently playing, stop playback immediately
+        if player.currentTrack?.id == track.id {
+            player.stopAndClear()
+        }
+        player.currentQueue.removeAll(where: { $0.id == track.id })
+        
+        // 2. Clear selection if it matches the deleted track
+        if selectedTrackId == track.id {
+            selectedTrackId = nil
+        }
+        
+        // 3. Immediately update UI state (optimistic removal)
+        self.tracks.removeAll(where: { $0.id == track.id })
+        self.cachedRecentTracks.removeAll(where: { $0.id == track.id })
+        self.cachedAlbums = AlbumsView.buildAlbums(from: self.tracks)
+        self.cachedArtists = ArtistsView.buildArtists(from: self.tracks)
+        
+        var albumSet = Set<String>()
+        var artistSet = Set<String>()
+        var hiRes = 0
+        let thirtyDaysAgo = Date().addingTimeInterval(-30 * 86400)
+        var recentCount = 0
+        for tr in self.tracks {
+            let alb = tr.album.trimmingCharacters(in: .whitespacesAndNewlines)
+            let cleanAlb = alb.isEmpty ? "Unknown Album" : alb
+            let art = tr.primaryArtist.trimmingCharacters(in: .whitespacesAndNewlines)
+            albumSet.insert(cleanAlb.lowercased())
+            if !art.isEmpty { artistSet.insert(art) }
+            if tr.bitsPerSample > 16 || tr.sampleRate > 48000 { hiRes += 1 }
+            if tr.dateAdded >= thirtyDaysAgo { recentCount += 1 }
+        }
+        if recentCount == 0 && !self.tracks.isEmpty {
+            recentCount = min(50, self.tracks.count)
+        }
+        self.libraryStats = (albumSet.count, artistSet.count, hiRes, recentCount)
+        
+        // 4. Physical deletion on device in background
+        Task {
+            await WalkmanEngine.shared.deleteTrackFile(atPath: track.fullPath)
+            CoverArtCache.shared.invalidate(forFullPath: track.fullPath, artist: track.primaryArtist, album: track.album)
+            LibraryScanner.shared.removeFromCache(fullPath: track.fullPath)
+            
+            await MainActor.run {
+                // Refresh drive free/used space metrics for top storage bar
+                let detected = WalkmanEngine.shared.detectDrives()
+                self.drives = detected
+                self.deviceInfo = WalkmanDeviceDetector.shared.detect(drives: detected)
+                if let current = self.activeDrive, let updated = detected.first(where: { $0.mountPoint == current.mountPoint }) {
+                    self.activeDrive = updated
+                }
+            }
+        }
+    }
+
+    private func deleteAlbumFromDevice(_ album: AlbumItem) {
+        let albumTracks = album.tracks
+        let trackIds = Set(albumTracks.map { $0.id })
+        
+        // 1. If currently playing a track in this album, stop playback immediately
+        if let current = player.currentTrack, trackIds.contains(current.id) {
+            player.stopAndClear()
+        }
+        player.currentQueue.removeAll(where: { trackIds.contains($0.id) })
+        
+        // 2. Clear selection if it belongs to this album
+        if let sel = selectedTrackId, trackIds.contains(sel) {
+            selectedTrackId = nil
+        }
+        
+        // 3. Immediately update UI state (optimistic removal)
+        self.tracks.removeAll(where: { trackIds.contains($0.id) })
+        self.cachedRecentTracks.removeAll(where: { trackIds.contains($0.id) })
+        self.cachedAlbums = AlbumsView.buildAlbums(from: self.tracks)
+        self.cachedArtists = ArtistsView.buildArtists(from: self.tracks)
+        
+        var albumSet = Set<String>()
+        var artistSet = Set<String>()
+        var hiRes = 0
+        let thirtyDaysAgo = Date().addingTimeInterval(-30 * 86400)
+        var recentCount = 0
+        for tr in self.tracks {
+            let alb = tr.album.trimmingCharacters(in: .whitespacesAndNewlines)
+            let cleanAlb = alb.isEmpty ? "Unknown Album" : alb
+            let art = tr.primaryArtist.trimmingCharacters(in: .whitespacesAndNewlines)
+            albumSet.insert(cleanAlb.lowercased())
+            if !art.isEmpty { artistSet.insert(art) }
+            if tr.bitsPerSample > 16 || tr.sampleRate > 48000 { hiRes += 1 }
+            if tr.dateAdded >= thirtyDaysAgo { recentCount += 1 }
+        }
+        if recentCount == 0 && !self.tracks.isEmpty {
+            recentCount = min(50, self.tracks.count)
+        }
+        self.libraryStats = (albumSet.count, artistSet.count, hiRes, recentCount)
+        
+        // 4. Physical deletion on device in background
+        Task {
+            await WalkmanEngine.shared.deleteAlbum(tracks: albumTracks)
+            for tr in albumTracks {
+                CoverArtCache.shared.invalidate(forFullPath: tr.fullPath, artist: tr.primaryArtist, album: tr.album)
+                LibraryScanner.shared.removeFromCache(fullPath: tr.fullPath)
+            }
+            
+            await MainActor.run {
+                // Refresh drive free/used space metrics for top storage bar
+                let detected = WalkmanEngine.shared.detectDrives()
+                self.drives = detected
+                self.deviceInfo = WalkmanDeviceDetector.shared.detect(drives: detected)
+                if let current = self.activeDrive, let updated = detected.first(where: { $0.mountPoint == current.mountPoint }) {
+                    self.activeDrive = updated
+                }
             }
         }
     }
@@ -324,13 +454,19 @@ public struct ContentView: View {
                             case .overview:
                                 DeviceOverviewView(
                                     drives: drives,
+                                    activeDrive: activeDrive,
                                     tracks: tracks,
                                     precomputedStats: (albums: libraryStats.albums, artists: libraryStats.artists, hiRes: libraryStats.hiRes),
                                     onNavigateToTab: { tab in selectedTab = tab },
-                                    onOpenEject: { showEjectSheet = true },
+                                    onOpenEject: { performCleanAndEject() },
                                     onRefresh: { refreshDrives() },
+                                    onSelectDrive: { drive in
+                                        activeDrive = drive
+                                        refreshLibrary()
+                                    },
                                     deviceInfo: deviceInfo,
-                                    onOpenAbout: { self.showAboutSheet = true }
+                                    onOpenAbout: { self.showAboutSheet = true },
+                                    isEjecting: isEjecting
                                 )
                                 
                             case .library:
@@ -344,6 +480,9 @@ public struct ContentView: View {
                                     },
                                     onGoToTransfer: {
                                         self.selectedTab = .transfer
+                                    },
+                                    onDeleteTrack: { track in
+                                        deleteTrackFromDevice(track)
                                     }
                                 )
                                 
@@ -358,6 +497,9 @@ public struct ContentView: View {
                                     },
                                     onGoToTransfer: {
                                         self.selectedTab = .transfer
+                                    },
+                                    onDeleteTrack: { track in
+                                        deleteTrackFromDevice(track)
                                     }
                                 )
                                 
@@ -368,6 +510,12 @@ public struct ContentView: View {
                                     onSelectTrack: { track in
                                         self.selectedTrackId = track.id
                                         self.showInspector = true
+                                    },
+                                    onDeleteAlbum: { album in
+                                        deleteAlbumFromDevice(album)
+                                    },
+                                    onDeleteTrack: { track in
+                                        deleteTrackFromDevice(track)
                                     }
                                 )
                                 
@@ -403,6 +551,7 @@ public struct ContentView: View {
                                     activeDrive: activeDrive,
                                     libraryTracks: tracks
                                 )
+                                .id(activeDrive?.mountPoint ?? "no_drive")
                                 .padding(14)
                             }
                         }
@@ -441,9 +590,15 @@ public struct ContentView: View {
                         
                         // Safe Eject (only shown if a device is connected)
                         if !drives.isEmpty {
-                            Button(action: { showEjectSheet = true }) {
-                                Label("Eject", systemImage: "eject.circle")
+                            Button(action: { performCleanAndEject() }) {
+                                if isEjecting {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                } else {
+                                    Label("Eject", systemImage: "eject.circle")
+                                }
                             }
+                            .disabled(isEjecting)
                             .help("Clean macOS junk files and safely unmount Walkman")
                         }
                         
@@ -486,13 +641,6 @@ public struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .showAboutWalkmanStudio)) { _ in
             self.showAboutSheet = true
-        }
-        .sheet(isPresented: $showEjectSheet) {
-            CleanEjectSheet(
-                drives: drives,
-                onEjectComplete: { refreshDrives() },
-                onDismiss: { showEjectSheet = false }
-            )
         }
         .sheet(isPresented: $showAboutSheet) {
             AboutWalkmanStudioView(

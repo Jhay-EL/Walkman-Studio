@@ -2,13 +2,16 @@ import SwiftUI
 
 public struct DeviceOverviewView: View {
     let drives: [WalkmanDrive]
+    var activeDrive: WalkmanDrive? = nil
     let tracks: [Track]
     var precomputedStats: (albums: Int, artists: Int, hiRes: Int)? = nil
     let onNavigateToTab: (NavigationTab) -> Void
     let onOpenEject: () -> Void
     let onRefresh: () -> Void
+    var onSelectDrive: ((WalkmanDrive) -> Void)? = nil
     var deviceInfo: WalkmanDeviceInfo? = nil
     var onOpenAbout: (() -> Void)? = nil
+    var isEjecting: Bool = false
     
     @State private var stats: (albums: Int, artists: Int, hiRes: Int) = (0, 0, 0)
     
@@ -227,8 +230,15 @@ public struct DeviceOverviewView: View {
     private var cleanEjectButton: some View {
         Button(action: onOpenEject) {
             HStack(spacing: 5) {
-                Image(systemName: "eject.circle.fill")
-                Text("Clean Junk & Eject")
+                if isEjecting {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.7)
+                    Text("Ejecting...")
+                } else {
+                    Image(systemName: "eject.circle.fill")
+                    Text("Eject")
+                }
             }
             .font(WalkmanFont.calloutBold)
             .padding(.horizontal, 12)
@@ -238,6 +248,8 @@ public struct DeviceOverviewView: View {
             .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
         .buttonStyle(.plain)
+        .disabled(isEjecting)
+        .help("Clean macOS ghost files and safely unmount Walkman")
     }
     
     private func statItem(title: String, icon: String, color: Color) -> some View {
@@ -281,6 +293,7 @@ public struct DeviceOverviewView: View {
     private var internalDriveCard: some View {
         Group {
             if let d = internalDrive {
+                let isSelected = activeDrive?.mountPoint == d.mountPoint
                 StorageDriveCard(
                     title: "Internal WALKMAN",
                     subtitle: "/Volumes/\(d.name)",
@@ -289,7 +302,9 @@ public struct DeviceOverviewView: View {
                     freeBytes: d.freeBytes,
                     totalBytes: d.totalBytes,
                     percentUsed: d.percentUsed,
-                    formatBytes: formatBytes
+                    formatBytes: formatBytes,
+                    isSelected: isSelected,
+                    onSelect: { onSelectDrive?(d) }
                 )
             } else {
                 StorageDriveCard(
@@ -300,7 +315,9 @@ public struct DeviceOverviewView: View {
                     freeBytes: 0,
                     totalBytes: 0,
                     percentUsed: 0,
-                    formatBytes: formatBytes
+                    formatBytes: formatBytes,
+                    isSelected: false,
+                    onSelect: nil
                 )
             }
         }
@@ -309,6 +326,7 @@ public struct DeviceOverviewView: View {
     private var microsdDriveCard: some View {
         Group {
             if let d = microsdDrive {
+                let isSelected = activeDrive?.mountPoint == d.mountPoint
                 StorageDriveCard(
                     title: "MicroSD Expansion",
                     subtitle: "/Volumes/\(d.name)",
@@ -317,7 +335,9 @@ public struct DeviceOverviewView: View {
                     freeBytes: d.freeBytes,
                     totalBytes: d.totalBytes,
                     percentUsed: d.percentUsed,
-                    formatBytes: formatBytes
+                    formatBytes: formatBytes,
+                    isSelected: isSelected,
+                    onSelect: { onSelectDrive?(d) }
                 )
             } else {
                 StorageDriveCard(
@@ -328,7 +348,9 @@ public struct DeviceOverviewView: View {
                     freeBytes: 0,
                     totalBytes: 0,
                     percentUsed: 0,
-                    formatBytes: formatBytes
+                    formatBytes: formatBytes,
+                    isSelected: false,
+                    onSelect: nil
                 )
             }
         }
@@ -495,65 +517,111 @@ private struct StorageDriveCard: View {
     let totalBytes: Int64
     let percentUsed: Double
     let formatBytes: (Int64) -> String
+    var isSelected: Bool = false
+    var onSelect: (() -> Void)? = nil
+    
+    @State private var isHovered = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 15))
-                    .foregroundStyle(WalkmanTheme.silverMuted)
-                    .frame(width: 20)
+        Button(action: {
+            onSelect?()
+        }) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: icon)
+                        .font(.system(size: 15))
+                        .foregroundStyle(isSelected ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
+                        .frame(width: 20)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 7) {
+                            Text(title)
+                                .font(WalkmanFont.headline)
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                            
+                            if isSelected {
+                                HStack(spacing: 4) {
+                                    Circle()
+                                        .fill(WalkmanTheme.silverLight)
+                                        .frame(width: 5, height: 5)
+                                    Text("Selected")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundStyle(WalkmanTheme.silverLight)
+                                }
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 2.5)
+                                .background(WalkmanTheme.silver.opacity(0.18))
+                                .clipShape(Capsule())
+                                .overlay(
+                                    Capsule()
+                                        .stroke(WalkmanTheme.silver.opacity(0.45), lineWidth: 0.8)
+                                )
+                            }
+                        }
+                        
+                        Text(subtitle)
+                            .font(WalkmanFont.monoSmall)
+                            .foregroundStyle(isSelected ? WalkmanTheme.silverLight.opacity(0.75) : .secondary)
+                            .lineLimit(1)
+                    }
+                    
+                    Spacer(minLength: 4)
+                    
+                    Text(String(format: "%.1f%%", percentUsed))
+                        .font(WalkmanFont.monoSmall.weight(.bold))
+                        .foregroundStyle(percentUsed > 95 ? Color.orange : (isSelected ? .white : WalkmanTheme.silver))
+                }
                 
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title)
-                        .font(WalkmanFont.headline)
+                // Progress Bar
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(Color.white.opacity(0.08))
+                            .frame(height: 7)
+                        
+                        Capsule()
+                            .fill(isSelected ? WalkmanTheme.silverGradient : WalkmanTheme.storageGradient)
+                            .frame(width: max(4, geo.size.width * CGFloat(min(1.0, percentUsed / 100.0))), height: 7)
+                    }
+                }
+                .frame(height: 7)
+                
+                // Numbers
+                HStack {
+                    Text("\(formatBytes(usedBytes)) Used")
+                        .font(WalkmanFont.subheadlineMedium)
+                        .foregroundStyle(isSelected ? .white.opacity(0.85) : .secondary)
+                        .lineLimit(1)
+                    
+                    Spacer(minLength: 4)
+                    
+                    Text("\(formatBytes(freeBytes)) Available")
+                        .font(WalkmanFont.subheadlineMedium)
                         .foregroundStyle(.white)
                         .lineLimit(1)
-                    Text(subtitle)
-                        .font(WalkmanFont.monoSmall)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                
-                Spacer(minLength: 4)
-                
-                Text(String(format: "%.1f%%", percentUsed))
-                    .font(WalkmanFont.monoSmall.weight(.bold))
-                    .foregroundStyle(percentUsed > 95 ? Color.orange : WalkmanTheme.silver)
-            }
-            
-            // Progress Bar
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color.white.opacity(0.08))
-                        .frame(height: 7)
-                    
-                    Capsule()
-                        .fill(WalkmanTheme.storageGradient)
-                        .frame(width: max(4, geo.size.width * CGFloat(min(1.0, percentUsed / 100.0))), height: 7)
                 }
             }
-            .frame(height: 7)
-            
-            // Numbers
-            HStack {
-                Text("\(formatBytes(usedBytes)) Used")
-                    .font(WalkmanFont.subheadlineMedium)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                
-                Spacer(minLength: 4)
-                
-                Text("\(formatBytes(freeBytes)) Available")
-                    .font(WalkmanFont.subheadlineMedium)
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-            }
+            .padding(12)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(isSelected ? Color.white.opacity(0.04) : Color.clear)
+            )
+            .liquidGlass(cornerRadius: 12, borderOpacity: isSelected ? 0.75 : 0.35)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(
+                        isSelected ? WalkmanTheme.silverLight.opacity(0.65) : (isHovered && onSelect != nil ? Color.white.opacity(0.15) : Color.clear),
+                        lineWidth: isSelected ? 1.5 : 1
+                    )
+            )
+            .contentShape(Rectangle())
         }
-        .padding(12)
-        .frame(maxWidth: .infinity)
-        .liquidGlass(cornerRadius: 12)
+        .buttonStyle(.plain)
+        .disabled(onSelect == nil)
+        .onHover { isHovered = $0 }
+        .animation(.easeInOut(duration: 0.15), value: isSelected)
     }
 }
 

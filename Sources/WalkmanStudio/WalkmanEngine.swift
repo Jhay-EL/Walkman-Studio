@@ -458,6 +458,19 @@ public final class WalkmanEngine: @unchecked Sendable {
         }
     }
 
+    public func cleanAndEject(drives: [WalkmanDrive]) async -> (deleted: [String], unmountResults: [String: Bool]) {
+        var allDeleted: [String] = []
+        var results: [String: Bool] = [:]
+        for drive in drives {
+            let cleanResult = await cleanGhostFiles(mountPoint: drive.mountPoint)
+            allDeleted.append(contentsOf: cleanResult.deleted)
+            sync()
+            let unmountResult = await unmountDrive(mountPoint: drive.mountPoint)
+            results[drive.name] = unmountResult.success
+        }
+        return (allDeleted, results)
+    }
+
     // -----------------------------------------------------------------------
     // Drive Detection (Strict Supported Sony Walkman Verification)
     // -----------------------------------------------------------------------
@@ -686,5 +699,142 @@ public final class WalkmanEngine: @unchecked Sendable {
             try? FileManager.default.removeItem(at: dotfileURL)
         }
         sync()
+    }
+
+    // -----------------------------------------------------------------------
+    // Track Deletion on Device (Without Confirmation)
+    // -----------------------------------------------------------------------
+    @discardableResult
+    public func deleteTrackFile(atPath path: String) async -> Bool {
+        let fileManager = FileManager.default
+        let fileURL = URL(fileURLWithPath: path)
+        var success = true
+        
+        // 1. Delete the primary audio file
+        if fileManager.fileExists(atPath: path) {
+            try? fileManager.setAttributes([.posixPermissions: 0o777], ofItemAtPath: path)
+            do {
+                try fileManager.removeItem(at: fileURL)
+            } catch {
+                NSLog("[WalkmanEngine] Failed to delete audio file at \(path): \(error)")
+                success = false
+            }
+        }
+        
+        // 2. Delete paired companion .lrc / .LRC lyrics file if present
+        let lrcURL = fileURL.deletingPathExtension().appendingPathExtension("lrc")
+        if fileManager.fileExists(atPath: lrcURL.path) {
+            try? fileManager.setAttributes([.posixPermissions: 0o777], ofItemAtPath: lrcURL.path)
+            try? fileManager.removeItem(at: lrcURL)
+        }
+        let upperLrcURL = fileURL.deletingPathExtension().appendingPathExtension("LRC")
+        if fileManager.fileExists(atPath: upperLrcURL.path) {
+            try? fileManager.setAttributes([.posixPermissions: 0o777], ofItemAtPath: upperLrcURL.path)
+            try? fileManager.removeItem(at: upperLrcURL)
+        }
+        
+        // 3. Delete AppleDouble ._ ghost files created by macOS
+        let audioDotfile = fileURL.deletingLastPathComponent().appendingPathComponent("._" + fileURL.lastPathComponent)
+        try? fileManager.removeItem(at: audioDotfile)
+        
+        let lrcDotfile = lrcURL.deletingLastPathComponent().appendingPathComponent("._" + lrcURL.lastPathComponent)
+        try? fileManager.removeItem(at: lrcDotfile)
+        
+        // 4. Clean empty parent folders under /MUSIC/ (Album / Artist directories)
+        var parent = fileURL.deletingLastPathComponent()
+        while parent.path != "/" && parent.lastPathComponent.uppercased() != "MUSIC" && parent.path.uppercased().contains("/MUSIC/") {
+            guard let contents = try? fileManager.contentsOfDirectory(atPath: parent.path) else { break }
+            let nonHidden = contents.filter { !$0.hasPrefix(".") && !$0.hasPrefix("._") }
+            if nonHidden.isEmpty {
+                for item in contents {
+                    try? fileManager.removeItem(at: parent.appendingPathComponent(item))
+                }
+                try? fileManager.removeItem(at: parent)
+                parent = parent.deletingLastPathComponent()
+            } else {
+                break
+            }
+        }
+        
+        sync()
+        return success
+    }
+
+    // -----------------------------------------------------------------------
+    // Album Deletion on Device (Without Confirmation)
+    // -----------------------------------------------------------------------
+    @discardableResult
+    public func deleteAlbum(tracks albumTracks: [Track]) async -> Bool {
+        guard !albumTracks.isEmpty else { return false }
+        let fileManager = FileManager.default
+        var allSuccess = true
+        var affectedDirs = Set<URL>()
+        
+        for track in albumTracks {
+            let path = track.fullPath
+            let fileURL = URL(fileURLWithPath: path)
+            affectedDirs.insert(fileURL.deletingLastPathComponent())
+            
+            // 1. Delete primary audio file
+            if fileManager.fileExists(atPath: path) {
+                try? fileManager.setAttributes([.posixPermissions: 0o777], ofItemAtPath: path)
+                do {
+                    try fileManager.removeItem(at: fileURL)
+                } catch {
+                    NSLog("[WalkmanEngine] Failed to delete audio file at \(path): \(error)")
+                    allSuccess = false
+                }
+            }
+            
+            // 2. Delete paired companion .lrc / .LRC lyrics file if present
+            let lrcURL = fileURL.deletingPathExtension().appendingPathExtension("lrc")
+            if fileManager.fileExists(atPath: lrcURL.path) {
+                try? fileManager.setAttributes([.posixPermissions: 0o777], ofItemAtPath: lrcURL.path)
+                try? fileManager.removeItem(at: lrcURL)
+            }
+            let upperLrcURL = fileURL.deletingPathExtension().appendingPathExtension("LRC")
+            if fileManager.fileExists(atPath: upperLrcURL.path) {
+                try? fileManager.setAttributes([.posixPermissions: 0o777], ofItemAtPath: upperLrcURL.path)
+                try? fileManager.removeItem(at: upperLrcURL)
+            }
+            
+            // 3. Delete AppleDouble ._ ghost files created by macOS
+            let audioDotfile = fileURL.deletingLastPathComponent().appendingPathComponent("._" + fileURL.lastPathComponent)
+            try? fileManager.removeItem(at: audioDotfile)
+            
+            let lrcDotfile = lrcURL.deletingLastPathComponent().appendingPathComponent("._" + lrcURL.lastPathComponent)
+            try? fileManager.removeItem(at: lrcDotfile)
+        }
+        
+        // 4. Clean up album folders and artwork if no other audio files remain in them
+        let audioExts: Set<String> = ["flac", "mp3", "m4a", "alac", "wav", "aif", "aiff", "dsf", "dff", "ape", "wma"]
+        for dir in affectedDirs {
+            guard dir.path != "/" && dir.lastPathComponent.uppercased() != "MUSIC" && dir.path.uppercased().contains("/MUSIC/") else { continue }
+            guard let contents = try? fileManager.contentsOfDirectory(atPath: dir.path) else { continue }
+            let remainingAudio = contents.filter { audioExts.contains(URL(fileURLWithPath: $0).pathExtension.lowercased()) }
+            if remainingAudio.isEmpty {
+                // Remove folder artwork, ghost files, and the album directory itself
+                try? fileManager.removeItem(at: dir)
+                
+                // Also check if parent Artist folder is now empty
+                var parent = dir.deletingLastPathComponent()
+                while parent.path != "/" && parent.lastPathComponent.uppercased() != "MUSIC" && parent.path.uppercased().contains("/MUSIC/") {
+                    guard let parentContents = try? fileManager.contentsOfDirectory(atPath: parent.path) else { break }
+                    let nonHidden = parentContents.filter { !$0.hasPrefix(".") && !$0.hasPrefix("._") }
+                    if nonHidden.isEmpty {
+                        for item in parentContents {
+                            try? fileManager.removeItem(at: parent.appendingPathComponent(item))
+                        }
+                        try? fileManager.removeItem(at: parent)
+                        parent = parent.deletingLastPathComponent()
+                    } else {
+                        break
+                    }
+                }
+            }
+        }
+        
+        sync()
+        return allSuccess
     }
 }
