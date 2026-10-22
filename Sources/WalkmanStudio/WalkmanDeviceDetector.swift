@@ -225,6 +225,131 @@ public final class WalkmanDeviceDetector: Sendable {
     // -------------------------------------------------------------------------
     // Accurate Detection from Hardware Volumes
     // -------------------------------------------------------------------------
+    public struct VolumeInspectionResult: Sendable {
+        public let isWalkman: Bool
+        public let isSupported: Bool
+        public let isInternal: Bool
+        public let isMicroSD: Bool
+        public let modelRaw: String?
+        public let vendor: String?
+        public let rawXml: String?
+    }
+    
+    /// Checks whether a model identifier belongs to a supported non-Android Sony Walkman DAP
+    public static func isSupportedModel(modelRaw: String) -> Bool {
+        let clean = modelRaw.uppercased().replacingOccurrences(of: "-", with: "").replacingOccurrences(of: " ", with: "")
+        
+        // Unsupported Android models (use Android MTP, not non-Android USB mass storage)
+        let unsupportedAndroid = ["A100", "A105", "A106", "A300", "A306", "A307", "ZX500", "ZX507", "ZX700", "ZX707", "WM1AM2", "WM1ZM2"]
+        for token in unsupportedAndroid {
+            if clean.contains(token) {
+                return false
+            }
+        }
+        
+        // Supported Non-Android Sony DAP series tokens
+        let supported = [
+            "A50", "A55", "A56", "A57",
+            "A40", "A45", "A46", "A47",
+            "A30", "A35", "A36", "A37",
+            "A20", "A25", "A27",
+            "A10", "A15", "A17",
+            "A800", "A820", "A840", "A860",
+            "ZX300", "ZX100",
+            "WM1", "WM1A", "WM1Z",
+            "WS620", "WS623", "WS625",
+            "WS410", "WS413", "WS414",
+            "E390", "E393", "E394", "E395",
+            "S310", "S313", "S315",
+            "B180", "B183"
+        ]
+        
+        for token in supported {
+            if clean.contains(token) {
+                return true
+            }
+        }
+        
+        return false
+    }
+
+    /// Inspects a mounted volume URL for authentic Sony Walkman hardware signatures
+    public static func inspectVolume(at volumeURL: URL) -> VolumeInspectionResult? {
+        let primaryXml = volumeURL.appendingPathComponent("default-capability.xml")
+        let secondaryXml = volumeURL.appendingPathComponent("DEFAULT-CAPABILITY.XML")
+        
+        let xmlURL = FileManager.default.fileExists(atPath: primaryXml.path) ? primaryXml :
+            (FileManager.default.fileExists(atPath: secondaryXml.path) ? secondaryXml : nil)
+            
+        if let url = xmlURL,
+           let data = try? Data(contentsOf: url),
+           let xml = String(data: data, encoding: .isoLatin1) ?? String(data: data, encoding: .utf8) {
+            
+            let vendor = extractXmlTag(tag: "vendor", from: xml)
+            let classType = extractXmlTag(tag: "class", from: xml)
+            let modelRaw = extractXmlTag(tag: "model", from: xml)
+            let storageType = extractXmlTag(tag: "type", from: xml)?.uppercased()
+            
+            let vendorIsSony = vendor?.lowercased().contains("sony") ?? false
+            let classIsWalkman = classType?.uppercased().contains("WALKMAN") ?? false
+            let modelIsWalkman = modelRaw?.uppercased().contains("NW") ?? false
+            
+            guard vendorIsSony || classIsWalkman || modelIsWalkman else {
+                return nil
+            }
+            
+            let model = modelRaw ?? "NW-A50Series"
+            let supported = isSupportedModel(modelRaw: model)
+            let isInternal = (storageType == "INTERNAL") || (!volumeURL.lastPathComponent.uppercased().contains("SD") && storageType != "CARD")
+            let isMicroSD = (storageType == "CARD") || volumeURL.lastPathComponent.uppercased().contains("SD")
+            
+            return VolumeInspectionResult(
+                isWalkman: true,
+                isSupported: supported,
+                isInternal: isInternal,
+                isMicroSD: isMicroSD,
+                modelRaw: model,
+                vendor: vendor,
+                rawXml: xml
+            )
+        }
+        
+        // No XML: check for hardware signature files
+        let volName = volumeURL.lastPathComponent.uppercased()
+        let hasDevIcon = FileManager.default.fileExists(atPath: volumeURL.appendingPathComponent("DevIcon.fil").path)
+        let hasSonyCardInd = FileManager.default.fileExists(atPath: volumeURL.appendingPathComponent("Sony_Card.IND").path)
+            || FileManager.default.fileExists(atPath: volumeURL.appendingPathComponent("SONY_CARD.IND").path)
+        let hasMusicDir = FileManager.default.fileExists(atPath: volumeURL.appendingPathComponent("MUSIC").path)
+        
+        // Internal heuristic: Volume name contains "WALKMAN" or starts with "NW-"
+        if (volName.contains("WALKMAN") || volName.hasPrefix("NW-")) && (hasDevIcon || hasMusicDir) {
+            return VolumeInspectionResult(
+                isWalkman: true,
+                isSupported: true,
+                isInternal: true,
+                isMicroSD: false,
+                modelRaw: volName,
+                vendor: "Sony Corporation",
+                rawXml: nil
+            )
+        }
+        
+        // MicroSD heuristic: has Sony_Card.IND or (DevIcon.fil with MUSIC folder)
+        if hasSonyCardInd || (hasDevIcon && hasMusicDir) {
+            return VolumeInspectionResult(
+                isWalkman: true,
+                isSupported: true,
+                isInternal: false,
+                isMicroSD: true,
+                modelRaw: nil,
+                vendor: "Sony Corporation",
+                rawXml: nil
+            )
+        }
+        
+        return nil
+    }
+
     public func detect(drives: [WalkmanDrive]) -> WalkmanDeviceInfo? {
         guard !drives.isEmpty else { return nil }
         
@@ -263,12 +388,12 @@ public final class WalkmanDeviceDetector: Sendable {
     }
     
     private func parseCapabilityXml(xml: String, internalCapacityGb: Double, hasCfw: Bool) -> WalkmanDeviceInfo {
-        let modelRaw = extractXmlTag(tag: "model", from: xml) ?? "NW-A50Series"
-        let marketingName = extractXmlTag(tag: "marketingname", from: xml) ?? "WALKMAN \(modelRaw)"
-        let vendor = extractXmlTag(tag: "vendor", from: xml) ?? "Sony Corporation"
-        let firmwareVersion = extractXmlTag(tag: "firmwareversion", from: xml) ?? "1.02"
-        let width = extractXmlTag(tag: "width", from: xml) ?? "800"
-        let height = extractXmlTag(tag: "height", from: xml) ?? "480"
+        let modelRaw = Self.extractXmlTag(tag: "model", from: xml) ?? "NW-A50Series"
+        let marketingName = Self.extractXmlTag(tag: "marketingname", from: xml) ?? "WALKMAN \(modelRaw)"
+        let vendor = Self.extractXmlTag(tag: "vendor", from: xml) ?? "Sony Corporation"
+        let firmwareVersion = Self.extractXmlTag(tag: "firmwareversion", from: xml) ?? "1.02"
+        let width = Self.extractXmlTag(tag: "width", from: xml) ?? "800"
+        let height = Self.extractXmlTag(tag: "height", from: xml) ?? "480"
         let resolution = "\(width)x\(height)"
         
         // Extract supported audio formats
@@ -411,11 +536,14 @@ public final class WalkmanDeviceDetector: Sendable {
         )
     }
     
-    private func extractXmlTag(tag: String, from xml: String) -> String? {
-        guard let start = xml.range(of: "<\(tag)>")?.upperBound,
-              let end = xml.range(of: "</\(tag)>", range: start..<xml.endIndex)?.lowerBound else {
-            return nil
+    public static func extractXmlTag(tag: String, from xml: String) -> String? {
+        let pattern = "(?i)<\(tag)(?:\\s+[^>]*)?>([\\s\\S]*?)</\(tag)>"
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
+        let range = NSRange(xml.startIndex..., in: xml)
+        if let match = regex.firstMatch(in: xml, options: [], range: range),
+           let r = Range(match.range(at: 1), in: xml) {
+            return String(xml[r]).trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        return String(xml[start..<end]).trimmingCharacters(in: .whitespacesAndNewlines)
+        return nil
     }
 }

@@ -6,6 +6,8 @@ import AppKit
 public final class WalkmanEngine: @unchecked Sendable {
     public static let shared = WalkmanEngine()
 
+    public private(set) var lastUnsupportedModel: String? = nil
+
     private let ffmpegPath: String = {
         let homebrew = "/opt/homebrew/bin/ffmpeg"
         if FileManager.default.fileExists(atPath: homebrew) {
@@ -457,13 +459,21 @@ public final class WalkmanEngine: @unchecked Sendable {
     }
 
     // -----------------------------------------------------------------------
-    // Drive Detection (Exact Darwin statvfs)
+    // Drive Detection (Strict Supported Sony Walkman Verification)
     // -----------------------------------------------------------------------
     public func detectDrives() -> [WalkmanDrive] {
         var drives: [WalkmanDrive] = []
+        lastUnsupportedModel = nil
         let volumesURL = URL(fileURLWithPath: "/Volumes")
 
-        guard let contents = try? FileManager.default.contentsOfDirectory(at: volumesURL, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) else {
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+            at: volumesURL,
+            includingPropertiesForKeys: [
+                .volumeIsReadOnlyKey,
+                .volumeIsRemovableKey
+            ],
+            options: [.skipsHiddenFiles]
+        ) else {
             return []
         }
 
@@ -471,66 +481,121 @@ public final class WalkmanEngine: @unchecked Sendable {
         stat("/", &rootStat)
 
         let systemVolumes: Set<String> = ["MACINTOSH HD", "RECOVERY", "PREBOOT", "VM", "UPDATE"]
-        let candidates = contents.filter { url in
-            let name = url.lastPathComponent.uppercased()
-            return !systemVolumes.contains(name) && !name.hasSuffix(".DMG")
-        }
 
-        let hasInternal = candidates.contains { url in
-            let n = url.lastPathComponent.uppercased()
-            return n.contains("WALKMAN") && !n.contains("SD")
-        }
+        // Phase 1: Filter out system volumes, DMGs, non-FAT32/exFAT, and read-only filesystems
+        var candidates: [(url: URL, path: String, name: String, statv: statvfs)] = []
+        for volURL in contents {
+            let name = volURL.lastPathComponent.uppercased()
+            if systemVolumes.contains(name) || name.hasSuffix(".DMG") {
+                continue
+            }
 
-        for volURL in candidates {
             let path = volURL.path
-            
-            // Verify this path is a distinct mounted filesystem and not a lingering folder on the root disk
             var volStat = stat()
             if stat(path, &volStat) != 0 || volStat.st_dev == rootStat.st_dev {
                 continue
             }
 
-            let volName = volURL.lastPathComponent.uppercased()
+            // Exclusively FAT32 (msdos) or ExFAT - Sony OS non-Android players never use HFS+/APFS/NTFS
+            var sfs = statfs()
+            guard statfs(path, &sfs) == 0 else { continue }
+            let fstype = withUnsafePointer(to: &sfs.f_fstypename, {
+                $0.withMemoryRebound(to: CChar.self, capacity: Int(MFSTYPENAMELEN)) { String(cString: $0).lowercased() }
+            })
+            guard fstype == "msdos" || fstype == "exfat" else {
+                continue
+            }
 
-            let isInternal = volName.contains("WALKMAN") && (!volName.contains("SD") && !volName.contains("MICROSD"))
-            let sonyCardExists = FileManager.default.fileExists(atPath: volURL.appendingPathComponent("Sony_Card.IND").path)
-                || FileManager.default.fileExists(atPath: volURL.appendingPathComponent("SONY_CARD.IND").path)
-                || (volName.contains("SD") && volName.contains("CARD"))
-            let musicExists = FileManager.default.fileExists(atPath: volURL.appendingPathComponent("MUSIC").path)
-            let cfwExists = FileManager.default.fileExists(atPath: volURL.appendingPathComponent("CFW").path)
+            // Must be writable (read-only DMGs, ISOs, and protected volumes are rejected)
+            let res = try? volURL.resourceValues(forKeys: [.volumeIsReadOnlyKey])
+            if res?.volumeIsReadOnly == true {
+                continue
+            }
 
-            let isSecondarySD = hasInternal && !isInternal
+            var statv = statvfs()
+            guard statvfs(path, &statv) == 0 else { continue }
+            let blockSize = Int64(statv.f_frsize)
+            let totalBytes = blockSize * Int64(statv.f_blocks)
+            guard totalBytes > 0 else { continue }
 
-            if isInternal || musicExists || cfwExists || sonyCardExists || isSecondarySD {
-                var stat = statvfs()
-                if statvfs(path, &stat) == 0 {
-                    let blockSize = Int64(stat.f_frsize)
-                    let totalBytes = blockSize * Int64(stat.f_blocks)
-                    guard totalBytes > 0 else { continue }
-                    
-                    let freeBytes = blockSize * Int64(stat.f_bavail)
-                    let usedBytes = totalBytes - freeBytes
-                    let percentUsed = totalBytes > 0 ? (Double(usedBytes) / Double(totalBytes)) * 100.0 : 0.0
+            candidates.append((volURL, path, volURL.lastPathComponent, statv))
+        }
 
-                    let displayName = isInternal ? volURL.lastPathComponent : "\(volURL.lastPathComponent) (MicroSD)"
-                    let dType: DriveType = isInternal ? .internal : .microsd
+        // Phase 2: Check each candidate against authentic Walkman hardware signatures
+        var internalCandidate: (url: URL, path: String, name: String, statv: statvfs)? = nil
+        var microsdCandidate: (url: URL, path: String, name: String, statv: statvfs)? = nil
 
-                    drives.append(WalkmanDrive(
-                        name: displayName,
-                        mountPoint: path,
-                        type: dType,
-                        totalBytes: totalBytes,
-                        usedBytes: usedBytes,
-                        freeBytes: freeBytes,
-                        percentUsed: percentUsed,
-                        hasCfw: cfwExists,
-                        musicDir: volURL.appendingPathComponent("MUSIC").path
-                    ))
+        for cand in candidates {
+            if let insp = WalkmanDeviceDetector.inspectVolume(at: cand.url), insp.isWalkman {
+                guard insp.isSupported else {
+                    lastUnsupportedModel = insp.modelRaw ?? "Unsupported Android Walkman"
+                    continue
+                }
+
+                if insp.isInternal {
+                    if internalCandidate == nil {
+                        internalCandidate = cand
+                    }
+                } else if insp.isMicroSD {
+                    if microsdCandidate == nil {
+                        microsdCandidate = cand
+                    }
                 }
             }
         }
 
-        return drives.sorted { $0.type == .internal && $1.type != .internal }
+        // Phase 3: If an internal Walkman is connected, check for companion MicroSD card
+        // formatted as SD_CARD or MEMORY_CARD with a MUSIC/ directory
+        if internalCandidate != nil && microsdCandidate == nil {
+            for cand in candidates where cand.url.path != internalCandidate?.url.path {
+                let upperName = cand.name.uppercased()
+                let isSdNamed = upperName == "SD_CARD" || upperName.contains("SD_CARD") || upperName.contains("MEMORY_CARD") || upperName.contains("SONY_CARD")
+                let hasMusic = FileManager.default.fileExists(atPath: cand.url.appendingPathComponent("MUSIC").path)
+                if isSdNamed && hasMusic {
+                    microsdCandidate = cand
+                    break
+                }
+            }
+        }
+
+        // Phase 4: Construct WalkmanDrive models for verified drives only
+        func makeDrive(cand: (url: URL, path: String, name: String, statv: statvfs), type: DriveType) -> WalkmanDrive {
+            let blockSize = Int64(cand.statv.f_frsize)
+            let totalBytes = blockSize * Int64(cand.statv.f_blocks)
+            let freeBytes = blockSize * Int64(cand.statv.f_bavail)
+            let usedBytes = totalBytes - freeBytes
+            let percentUsed = totalBytes > 0 ? (Double(usedBytes) / Double(totalBytes)) * 100.0 : 0.0
+            let cfwExists = FileManager.default.fileExists(atPath: cand.url.appendingPathComponent("CFW").path)
+            
+            let displayName: String
+            if type == .internal {
+                displayName = cand.name
+            } else {
+                displayName = cand.name.contains("(MicroSD)") ? cand.name : "\(cand.name) (MicroSD)"
+            }
+
+            return WalkmanDrive(
+                name: displayName,
+                mountPoint: cand.path,
+                type: type,
+                totalBytes: totalBytes,
+                usedBytes: usedBytes,
+                freeBytes: freeBytes,
+                percentUsed: percentUsed,
+                hasCfw: cfwExists,
+                musicDir: cand.url.appendingPathComponent("MUSIC").path
+            )
+        }
+
+        if let intDrive = internalCandidate {
+            drives.append(makeDrive(cand: intDrive, type: .internal))
+        }
+
+        if let sdDrive = microsdCandidate {
+            drives.append(makeDrive(cand: sdDrive, type: .microsd))
+        }
+
+        return drives
     }
 
     // -----------------------------------------------------------------------

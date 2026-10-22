@@ -203,6 +203,27 @@ public struct ContentView: View {
                             .frame(maxWidth: 440)
                     }
                     
+                    if let unsupported = WalkmanEngine.shared.lastUnsupportedModel {
+                        VStack(spacing: 5) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(WalkmanTheme.hiResGold)
+                                Text("Unsupported Model: \(unsupported)")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.white)
+                            }
+                            Text("Walkman Studio is designed exclusively for non-Android Sony OS Walkmans. Android-based Walkmans use MTP and are not supported.")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .frame(maxWidth: 440)
+                    }
+                    
                     Button(action: refreshDrives) {
                         HStack(spacing: 6) {
                             Image(systemName: "arrow.clockwise")
