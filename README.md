@@ -15,9 +15,9 @@
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License" />
 </p>
 
-A dedicated native macOS desktop application built specifically for managing the **Sony Walkman NW-A55 / NW-A55L** and other non-Android Sony Walkman digital audio players. It automates dual-drive library management, strict hardware-compliant metadata tagging, Baseline RGB JPEG artwork conversion, `.LRC` synchronized lyrics syncing, batch FFmpeg audio transcoding, `.M3U8` CRLF playlist creation, and macOS dotfile purging.
+A dedicated native macOS desktop application built specifically for managing non-Android Sony Walkman digital audio players. It automates dual-drive library management, strict hardware-compliant metadata tagging, Baseline RGB JPEG artwork conversion, `.LRC` synchronized lyrics syncing, batch FFmpeg audio transcoding, `.M3U8` CRLF playlist creation, and macOS dotfile purging.
 
-Walkman Studio focuses strictly on safe, non-destructive music library management and conversion with **zero firmware risk**.
+Walkman Studio focuses strictly on safe, non-destructive music library management and conversion.
 
 <p align="center">
   <img src="assets/sc/01_device_overview.png" alt="Walkman Studio Interface" width="100%" />
@@ -33,7 +33,6 @@ Sony Walkman non-Android digital audio players deliver exceptional audio fidelit
 2. **Database Builder Freezes:** Modern tagging software defaults to `ID3v2.4`. The Walkman requires strict `ID3v2.3` with `UTF-16` encoding; newer ID3v2.4 tags cause the Walkman's library database scan to hang or freeze indefinitely.
 3. **Ghost Files / Duplicate Corrupted Tracks:** macOS automatically writes hidden `._*` AppleDouble resource forks, `.DS_Store`, and `.Spotlight-V100` files to FAT32 and exFAT volumes. On the Walkman, these shadow files appear as duplicate, unplayable, greyed-out tracks.
 4. **Dual Storage Routing:** Walkman players operate with two distinct storage partitions (Internal Flash + MicroSD Expansion), requiring proper file path routing and relative CRLF playlist formatting.
-5. **No Risk of Device Bricking:** All custom firmware (CFW) DSP register manipulation has been removed from Walkman Studio, ensuring 100% hardware safety and focusing strictly on reliable music library management.
 
 **Walkman Studio automatically eliminates all of these issues.**
 
@@ -43,7 +42,7 @@ Sony Walkman non-Android digital audio players deliver exceptional audio fidelit
 
 ### Automated Baseline RGB JPEG Artwork Engine
 * Automatically inspects and converts album artwork to strict **Baseline RGB JPEG** format ($\le 800\times 800$ resolution).
-* Strips progressive scan passes, alpha channels, and CMYK color spaces that crash or freeze the Walkman NW-A55 display engine.
+* Strips progressive scan passes, alpha channels, and CMYK color spaces that crash or freeze the Walkman display engine.
 * Instant drag-and-drop cover art validator with real-time hardware compliance status.
 
 ### Strict ID3v2.3 (UTF-16) & FLAC Metadata Tagger
@@ -52,7 +51,7 @@ Sony Walkman non-Android digital audio players deliver exceptional audio fidelit
 * Direct editing of Title, Artist, Album, Track Number, Year, and Genre with one-click atomic saving.
 
 ### Synchronized Lyrics Manager (.LRC & Embedded USLT)
-* Detects and displays companion **`.lrc`** synchronized lyrics files—the native lyrics standard supported by the Sony NW-A55.
+* Detects and displays companion **`.lrc`** synchronized lyrics files—the native lyrics standard supported by Sony Walkman players.
 * Reads embedded ID3 `USLT` (Unsynchronized lyrics) frames.
 * Built-in lyrics editor: paste or write lyrics and save them directly as `.lrc` companion files alongside your tracks for instant on-screen display during Walkman playback.
 
@@ -163,7 +162,7 @@ Walkman Studio is designed **exclusively for non-Android Sony Walkman DAPs** run
 
 * **Mac:** Apple Silicon Mac (M1, M2, M3, M4 or newer).
 * **OS:** macOS 14.0 (Sonoma) or newer.
-* **Hardware:** Any non-Android Sony Walkman DAP (NW-A55, NW-A50, NW-ZX, NW-WM1 series).
+* **Hardware:** Any non-Android Sony Walkman DAP (NW-A, NW-ZX, NW-WM1, NW-WS series).
 * **Cable:** Sony WM-PORT to USB cable (or model-specific USB cable).
 * **Optional:** Homebrew FFmpeg (`brew install ffmpeg`) for audio format transcoding.
 
@@ -203,7 +202,7 @@ Walkman-Studio/
 ├── assets/
 │   ├── icon.png                          # High-resolution application icon
 │   ├── AppIcon.icns                      # macOS icon bundle (16x16 to 1024x1024)
-│   ├── walkman_device.png                # Sony Walkman NW-A55 hardware artwork
+│   ├── walkman_device.png                # Sony Walkman hardware artwork
 │   ├── walkman_device_cropped.png        # Cropped device preview icon
 │   └── sc/                               # High-resolution application screenshots
 ├── Sources/
