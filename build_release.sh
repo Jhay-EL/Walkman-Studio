@@ -4,7 +4,7 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
-VERSION="2.0.0"
+VERSION="2.0.1"
 DIST_DIR="$DIR/dist"
 
 echo "=== Building Walkman Studio v$VERSION Release Artifacts ==="
@@ -40,53 +40,77 @@ echo "Generating SHA256 checksums..."
 cd "$DIST_DIR"
 shasum -a 256 "$ZIP_NAME" "$DMG_NAME" > SHA256SUMS.txt
 
-# 5. Generate Release Notes
+# 5. Generate Release Notes (Markdown & HTML)
 cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.md"
-# Walkman Studio v2.0.0
+# Walkman Studio v2.0.1
 
-A high-performance, native macOS manager and hardware optimization suite designed exclusively for non-Android Sony Walkman DAPs (NW-A55, NW-A50, NW-A40 series).
-
----
-
-## What's New in v2.0.0
-
-### 🚀 Supercharged "Transfer & Convert" Tab
-* **In-Line Audio Preview Playback**: Preview audio tracks directly in the transfer queue with playback controls, scrub bar, waveform visualization, and real-time audio format specifications.
-* **Universal Multi-Strategy Tag Extraction**: High-fidelity metadata preservation across FLAC Vorbis comments (including `ALBUMARTIST`, `ALBUM_ARTIST`, multiple artists, track/year), ID3v2.2 / ID3v2.3 / ID3v2.4 with extended header skipping, and native macOS `AVURLAsset` / CoreAudio fallbacks.
-* **Auto-Routing to Walkman Album Directories**: Automatically creates `/MUSIC/<Artist>/<Album>/<NN - Title>.<ext>` folder structures, completely resolving "Unknown Artist" and "Unknown Album" issues.
-* **Non-Destructive Tag Writing**: Safely writes Sony Walkman-compliant metadata without ever overwriting existing embedded tags with blank values.
-* **Online Metadata & Artwork Fetching**: Cleans noisy file names (removes `[Official Video]`, `(Remastered)`, track prefixes) and queries Apple iTunes & Deezer APIs for missing tags and original 800×800 artwork with zero API keys required.
-* **Baseline RGB JPEG Optimizer**: Enforces Sony Walkman hardware compliance (Baseline RGB JPEG, $\le 800\times 800$ px at 92% quality) to eliminate device database freezes and blank artwork tiles.
-* **Synchronized Companion Lyrics (.LRC)**: Automatically searches and downloads synchronized `.lrc` lyrics from LRCLIB/Lyrics.ovh, saving paired timestamped lyrics alongside the audio file.
-* **Extended Conversion Presets**:
-  * *Optimize Metadata Only (Direct Pass-Through)*: 100% bit-perfect audio passthrough with strict Sony ID3v2.3 / Vorbis tagging and companion files.
-  * Lossless FLAC (16-bit / 44.1kHz up to 24-bit / 192kHz).
-  * MP3 (320 kbps, 256 kbps, VBR V0).
-  * Apple & PCM Audio (AAC 320/256 kbps, ALAC 16-bit, WAV 16-bit PCM).
-  * Optional EBU R128 loudness leveling (`-af loudnorm`).
-
-### 📱 Responsive Layout & UI Sizing
-* **Responsive Hardware Options Toolbar**: Automatically adapts from a single-line horizontal bar on wide displays into a clean, un-cramped list on compact screens.
-* **Responsive Device Overview**: Dynamic reflow for the Hero Device Card, vertical stacking for Internal and MicroSD drive storage meters, and compact action card rows.
-* **Symmetrical Top Navigation Cards**: Mathematical 3-column width distribution via `GeometryReader` ensuring identical width and height across all window sizes.
-* **Zero-Lag Window Resizing**: Precomputed library statistics running on background tasks, delivering a fluid 120 FPS window resizing experience on Apple Silicon.
-
-### 🧹 Native macOS Junk & Shadow File Purging
-* Automatic merging and cleaning of AppleDouble fork files (`._*`, `.DS_Store`, `com.apple.TextEncoding`) to ensure pristine Walkman FAT32/exFAT databases.
-* Clean and safe hardware ejection directly from the app.
+This update resolves the issue where importing explicit songs caused them to be renamed or displayed as "Unknown" on Sony Walkman devices, alongside hardware optimizations and stability fixes.
 
 ---
 
-## Installation & Requirements
+### Bug Fixes & Hardware Optimizations
 
-* **Operating System**: macOS Sonoma (14.0) or later.
-* **Architecture**: Apple Silicon (M1, M2, M3, M4).
-* **Supported Devices**: Sony Walkman NW-A55, NW-A55L, NW-A56, NW-A57, NW-A50 Series, NW-A40 Series, NW-A30 Series, NW-ZX300, and non-Android Linux-based Walkman DAPs.
+* **Explicit Song "Unknown" Display Fix**: Resolved an issue where explicit badges (such as 4-byte UTF-8 symbols like `🅴` and suffix markers like `[Explicit]`) triggered the Sony Walkman RTOS media parser fault, causing songs to be renamed or displayed as "Unknown".
+* **Basic Multilingual Plane (BMP) Tag Sanitization**: Automatically strips non-BMP Unicode characters and variation selectors across Vorbis comments, ID3v2 frames, and filenames while preserving foreign language characters, accents, and umlauts.
+* **Non-Destructive Tag Writing**: Embedded tags are preserved when transferring music, preventing accidental overwriting with blank or unknown values.
+* **Native M3U8 Playlist Sync**: Formats playlists with UTF-8 BOM and CRLF line endings in `/MUSIC/` for native recognition on Sony Walkman players.
+* **Responsive Window Optimization**: Layout reflows smoothly when resized to compact dimensions with zero frame drops.
 
-### Installation Steps
-1. Download **`Walkman-Studio-2.0.0-arm64.dmg`** below.
+---
+
+### Core Features
+
+* **Direct Music Transfer**: Automatically routes tracks into the standard `/MUSIC/<Artist>/<Album>/` folder structure.
+* **In-Line Audio Preview**: Listen to tracks with waveform scrubbing and audio specs before transferring.
+* **Baseline RGB JPEG Cover Art**: Enforces the 800x800 Baseline RGB JPEG standard to prevent device crashes and blank artwork tiles.
+* **Online Metadata & Artwork Enrichment**: Automatic retrieval of missing tags and high-resolution cover art via iTunes and Deezer.
+* **Synchronized Lyrics (.LRC)**: Automatically pairs timestamped lyrics with audio tracks.
+* **macOS Junk File Purging**: Strips `._*` AppleDouble shadow files and extended attributes before safe ejection.
+
+---
+
+### Installation
+1. Download **`Walkman-Studio-2.0.1-arm64.dmg`** below.
 2. Open the disk image and drag **Walkman Studio** into your **Applications** folder.
-3. Connect your Sony Walkman via USB Mass Storage mode and launch Walkman Studio!
+3. Connect your Sony Walkman in USB Mass Storage mode and launch Walkman Studio.
+EOF
+
+cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
+<h1>Walkman Studio v2.0.1</h1>
+
+<p>This update resolves the issue where importing explicit songs caused them to be renamed or displayed as "Unknown" on Sony Walkman devices, alongside hardware optimizations and stability fixes.</p>
+
+<hr>
+
+<h2>Bug Fixes &amp; Hardware Optimizations</h2>
+<ul>
+  <li><strong>Explicit Song "Unknown" Display Fix:</strong> Resolved an issue where explicit badges (such as 4-byte UTF-8 symbols like <code>&#x1F174;</code> and suffix markers like <code>[Explicit]</code>) triggered the Sony Walkman RTOS media parser fault, causing songs to be renamed or displayed as "Unknown".</li>
+  <li><strong>Basic Multilingual Plane (BMP) Tag Sanitization:</strong> Automatically strips non-BMP Unicode characters and variation selectors across Vorbis comments, ID3v2 frames, and filenames while preserving foreign language characters, accents, and umlauts.</li>
+  <li><strong>Non-Destructive Tag Writing:</strong> Embedded tags are preserved when transferring music, preventing accidental overwriting with blank or unknown values.</li>
+  <li><strong>Native M3U8 Playlist Sync:</strong> Formats playlists with UTF-8 BOM and CRLF line endings in <code>/MUSIC/</code> for native recognition on Sony Walkman players.</li>
+  <li><strong>Responsive Window Optimization:</strong> Layout reflows smoothly when resized to compact dimensions with zero frame drops.</li>
+</ul>
+
+<hr>
+
+<h2>Core Features</h2>
+<ul>
+  <li><strong>Direct Music Transfer:</strong> Automatically routes tracks into the standard <code>/MUSIC/&lt;Artist&gt;/&lt;Album&gt;/</code> folder structure.</li>
+  <li><strong>In-Line Audio Preview:</strong> Listen to tracks with waveform scrubbing and audio specs before transferring.</li>
+  <li><strong>Baseline RGB JPEG Cover Art:</strong> Enforces the 800&times;800 Baseline RGB JPEG standard to prevent device crashes and blank artwork tiles.</li>
+  <li><strong>Online Metadata &amp; Artwork Enrichment:</strong> Automatic retrieval of missing tags and high-resolution cover art via iTunes and Deezer.</li>
+  <li><strong>Synchronized Lyrics (.LRC):</strong> Automatically pairs timestamped lyrics with audio tracks.</li>
+  <li><strong>macOS Junk File Purging:</strong> Strips <code>._*</code> AppleDouble shadow files and extended attributes before safe ejection.</li>
+</ul>
+
+<hr>
+
+<h2>Installation</h2>
+<ol>
+  <li>Download <code>Walkman-Studio-2.0.1-arm64.dmg</code> below.</li>
+  <li>Open the disk image and drag <strong>Walkman Studio</strong> into your <strong>Applications</strong> folder.</li>
+  <li>Connect your Sony Walkman in USB Mass Storage mode and launch Walkman Studio.</li>
+</ol>
 EOF
 
 echo ""
