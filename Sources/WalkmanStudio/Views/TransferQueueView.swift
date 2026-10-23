@@ -396,13 +396,15 @@ public struct TransferQueueView: View {
                                 title: ".LRC Lyrics",
                                 icon: "quote.bubble",
                                 isOn: $fetchLyrics,
-                                help: "Auto-downloads synchronized .lrc lyrics alongside music on Walkman"
+                                help: targetMode == .learning ? "Disabled in Language Study mode (lyrics are not needed for audiobooks or podcasts)" : "Auto-downloads synchronized .lrc lyrics alongside music on Walkman",
+                                disabled: targetMode == .learning
                             )
                             toggleChip(
                                 title: "Auto-Tags",
                                 icon: "sparkles",
                                 isOn: $autoFetchMetadata,
-                                help: "Auto-queries iTunes & Deezer for missing tags & high-res artwork"
+                                help: targetMode == .learning ? "Disabled in Language Study mode (preserves original chapter titles & author info)" : "Auto-queries iTunes & Deezer for missing tags & high-res artwork",
+                                disabled: targetMode == .learning
                             )
                             toggleChip(
                                 title: "folder.jpg",
@@ -550,6 +552,7 @@ public struct TransferQueueView: View {
                                         isThisPlaying: player.isPlaying && player.currentTrack?.id == queue[idx].sourceURL.path,
                                         destinationExtension: destinationExtension(for: queue[idx].sourceURL),
                                         rootFolderName: targetMode.rootFolderName,
+                                        isLearningMode: targetMode == .learning,
                                         onTogglePlay: { togglePreviewPlayback(for: queue[idx]) },
                                         onPickArtwork: { pickCustomArtwork(for: queue[idx].id) },
                                         onOptimize: { optimizeSingleTrack(queue[idx]) },
@@ -680,15 +683,16 @@ public struct TransferQueueView: View {
     // HARDWARE TOGGLE CAPSULE CHIP
     // -------------------------------------------------------------------------
     private func toggleChip(title: String, icon: String, isOn: Binding<Bool>, help: String, disabled: Bool = false) -> some View {
-        Button(action: { isOn.wrappedValue.toggle() }) {
+        let isEffectivelyOn = !disabled && isOn.wrappedValue
+        return Button(action: { isOn.wrappedValue.toggle() }) {
             HStack(spacing: 5) {
-                Image(systemName: isOn.wrappedValue ? "\(icon).fill" : icon)
+                Image(systemName: isEffectivelyOn ? "\(icon).fill" : icon)
                     .font(.system(size: 10))
-                    .foregroundStyle(isOn.wrappedValue ? WalkmanTheme.silverLight : .secondary)
+                    .foregroundStyle(isEffectivelyOn ? WalkmanTheme.silverLight : .secondary)
                 Text(title)
                     .font(WalkmanFont.subheadlineMedium)
-                    .foregroundStyle(isOn.wrappedValue ? .white : .secondary)
-                if isOn.wrappedValue {
+                    .foregroundStyle(isEffectivelyOn ? .white : .secondary)
+                if isEffectivelyOn {
                     Image(systemName: "checkmark")
                         .font(.system(size: 8, weight: .bold))
                         .foregroundStyle(WalkmanTheme.silverLight)
@@ -696,11 +700,11 @@ public struct TransferQueueView: View {
             }
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
-            .background(isOn.wrappedValue ? Color.white.opacity(0.12) : Color.white.opacity(0.04))
+            .background(isEffectivelyOn ? Color.white.opacity(0.12) : Color.white.opacity(0.04))
             .clipShape(Capsule())
             .overlay(
                 Capsule()
-                    .stroke(isOn.wrappedValue ? WalkmanTheme.silver.opacity(0.4) : Color.white.opacity(0.08), lineWidth: 1)
+                    .stroke(isEffectivelyOn ? WalkmanTheme.silver.opacity(0.4) : Color.white.opacity(0.08), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -714,47 +718,49 @@ public struct TransferQueueView: View {
     // -------------------------------------------------------------------------
     private var batchToolbarButtons: some View {
         HStack(spacing: 6) {
-            Button(action: batchOptimizeAll) {
-                HStack(spacing: 4) {
-                    if isBatchOptimizing {
-                        ProgressView().scaleEffect(0.55).frame(width: 12, height: 12)
-                    } else {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 10))
+            if targetMode != .learning {
+                Button(action: batchOptimizeAll) {
+                    HStack(spacing: 4) {
+                        if isBatchOptimizing {
+                            ProgressView().scaleEffect(0.55).frame(width: 12, height: 12)
+                        } else {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 10))
+                        }
+                        Text(isBatchOptimizing ? "Optimizing..." : "Optimize All")
+                            .font(WalkmanFont.subheadlineMedium)
                     }
-                    Text(isBatchOptimizing ? "Optimizing..." : "Optimize All")
-                        .font(WalkmanFont.subheadlineMedium)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(Color.white.opacity(0.07))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.12), lineWidth: 1))
                 }
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
-                .background(Color.white.opacity(0.07))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.12), lineWidth: 1))
-            }
-            .buttonStyle(.plain)
-            .disabled(isBatchOptimizing || isProcessing)
-            .help("Fetches missing metadata and optimizes cover artwork to Baseline RGB JPEG for all tracks")
+                .buttonStyle(.plain)
+                .disabled(isBatchOptimizing || isProcessing)
+                .help("Fetches missing metadata and optimizes cover artwork to Baseline RGB JPEG for all tracks")
 
-            Button(action: batchFetchAllLyrics) {
-                HStack(spacing: 4) {
-                    if isBatchFetchingLyrics {
-                        ProgressView().scaleEffect(0.55).frame(width: 12, height: 12)
-                    } else {
-                        Image(systemName: "quote.bubble.fill")
-                            .font(.system(size: 10))
+                Button(action: batchFetchAllLyrics) {
+                    HStack(spacing: 4) {
+                        if isBatchFetchingLyrics {
+                            ProgressView().scaleEffect(0.55).frame(width: 12, height: 12)
+                        } else {
+                            Image(systemName: "quote.bubble.fill")
+                                .font(.system(size: 10))
+                        }
+                        Text(isBatchFetchingLyrics ? "Fetching..." : "Fetch Lyrics")
+                            .font(WalkmanFont.subheadlineMedium)
                     }
-                    Text(isBatchFetchingLyrics ? "Fetching..." : "Fetch Lyrics")
-                        .font(WalkmanFont.subheadlineMedium)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(Color.white.opacity(0.07))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.12), lineWidth: 1))
                 }
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
-                .background(Color.white.opacity(0.07))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.12), lineWidth: 1))
+                .buttonStyle(.plain)
+                .disabled(isBatchFetchingLyrics || isProcessing)
+                .help("Fetches synchronized .LRC lyrics for all tracks in the queue")
             }
-            .buttonStyle(.plain)
-            .disabled(isBatchFetchingLyrics || isProcessing)
-            .help("Fetches synchronized .LRC lyrics for all tracks in the queue")
 
             Button(action: { queue.removeAll() }) {
                 HStack(spacing: 4) {
@@ -953,9 +959,9 @@ public struct TransferQueueView: View {
                     self.queue[idx].lyrics = existingLyrics
                     self.queue[idx].isLyricsSynced = existingLyrics?.contains("[0") == true
 
-                    if self.autoFetchMetadata && self.queue[idx].isMissingMetadata {
+                    if self.targetMode != .learning && self.autoFetchMetadata && self.queue[idx].isMissingMetadata {
                         self.optimizeSingleTrack(self.queue[idx])
-                    } else if self.fetchLyrics && self.queue[idx].lyrics == nil {
+                    } else if self.targetMode != .learning && self.fetchLyrics && self.queue[idx].lyrics == nil {
                         self.fetchLyricsForTrack(self.queue[idx])
                     }
                 }
@@ -1334,7 +1340,7 @@ public struct TransferQueueView: View {
                     }
 
                     // 3. Companion .LRC Lyrics / Transcript Writing
-                    if fetchLyrics, let lyr = queue[i].lyrics, !lyr.isEmpty {
+                    if targetMode != .learning && fetchLyrics, let lyr = queue[i].lyrics, !lyr.isEmpty {
                         try? WalkmanEngine.shared.writeCompanionLyrics(destinationAudioURL: dest, lyrics: lyr)
                     }
 
@@ -1406,6 +1412,7 @@ private struct QueueItemRow: View {
     let isThisPlaying: Bool
     let destinationExtension: String
     var rootFolderName: String = "MUSIC"
+    var isLearningMode: Bool = false
     let onTogglePlay: () -> Void
     let onPickArtwork: () -> Void
     let onOptimize: () -> Void
@@ -1639,7 +1646,7 @@ private struct QueueItemRow: View {
 
                 // Row Action Buttons
                 HStack(spacing: 4) {
-                    if item.isMissingMetadata {
+                    if !isLearningMode && item.isMissingMetadata {
                         Button(action: onOptimize) {
                             Image(systemName: "sparkles")
                                 .font(.system(size: 10))
@@ -1717,11 +1724,13 @@ private struct QueueItemRow: View {
                 Label(isThisPlaying ? "Pause Preview" : "Play Preview", systemImage: isThisPlaying ? "pause.fill" : "play.fill")
             }
             Divider()
-            Button(action: onOptimize) {
-                Label("Fetch Online Tags & Cover Art", systemImage: "sparkles")
-            }
-            Button(action: onFetchLyrics) {
-                Label("Fetch Synchronized Lyrics (.LRC)", systemImage: "quote.bubble")
+            if !isLearningMode {
+                Button(action: onOptimize) {
+                    Label("Fetch Online Tags & Cover Art", systemImage: "sparkles")
+                }
+                Button(action: onFetchLyrics) {
+                    Label("Fetch Synchronized Lyrics (.LRC)", systemImage: "quote.bubble")
+                }
             }
             Button(action: onPickArtwork) {
                 Label("Choose Custom Album Art...", systemImage: "photo")
