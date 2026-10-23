@@ -9,13 +9,14 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Platform-macOS%2014%2B%20(Apple%20Silicon)-black?style=for-the-badge&logo=apple" alt="macOS" />
+  <img src="https://img.shields.io/badge/Release-v2.0.3-brightgreen?style=for-the-badge" alt="Release v2.0.3" />
+  <img src="https://img.shields.io/badge/Platform-macOS%2014%2B%20(Apple%20Silicon%20%26%20Intel)-black?style=for-the-badge&logo=apple" alt="macOS" />
   <img src="https://img.shields.io/badge/Language-Swift%205.9%2B-orange?style=for-the-badge&logo=swift" alt="Swift" />
-  <img src="https://img.shields.io/badge/Architecture-Non--Android%20Sony%20OS-blue?style=for-the-badge" alt="Non-Android Sony OS" />
+  <img src="https://img.shields.io/badge/Architecture-Universal%20(arm64%20%2F%20x86__64)-blue?style=for-the-badge" alt="Universal Architecture" />
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License" />
 </p>
 
-A dedicated native macOS desktop application built specifically for managing non-Android Sony Walkman digital audio players. It automates dual-drive library management, strict hardware-compliant metadata tagging, Baseline RGB JPEG artwork conversion, `.LRC` synchronized lyrics syncing, batch FFmpeg audio transcoding, `.M3U8` CRLF playlist creation, and macOS dotfile purging.
+A dedicated native macOS desktop application built specifically for managing non-Android Sony Walkman digital audio players on both **Apple Silicon** (M1, M2, M3, M4) and **Intel-based MacBooks & Macs** (Core i5, i7, i9, Xeon). It automates dual-drive library management, strict hardware-compliant metadata tagging, Baseline RGB JPEG artwork conversion, `.LRC` synchronized lyrics syncing, batch FFmpeg audio transcoding, `.M3U8` CRLF playlist creation, and macOS dotfile purging.
 
 Walkman Studio focuses strictly on safe, non-destructive music library management and conversion.
 
@@ -27,7 +28,7 @@ Walkman Studio focuses strictly on safe, non-destructive music library managemen
 
 ## The Problem Walkman Studio Solves
 
-Sony Walkman non-Android digital audio players deliver exceptional audio fidelity via their hardware **S-Master HX** DAC/amplifier, but connecting them to modern Apple Silicon Macs presents major challenges:
+Sony Walkman non-Android digital audio players deliver exceptional audio fidelity via their hardware **S-Master HX** DAC/amplifier, but connecting them to modern Apple Silicon or Intel-based Macs presents major challenges:
 
 1. **Cover Art Rejections:** The Walkman display engine cannot decode Progressive JPEGs or CMYK color spaces. Embedded progressive album covers result in blank/black tiles or corrupted artwork on the device screen.
 2. **Database Builder Freezes:** Modern tagging software defaults to `ID3v2.4`. The Walkman requires strict `ID3v2.3` with `UTF-16` encoding; newer ID3v2.4 tags cause the Walkman's library database scan to hang or freeze indefinitely.
@@ -85,6 +86,24 @@ Sony Walkman non-Android digital audio players deliver exceptional audio fidelit
 * **Artists (Discography Browser):** Master-detail view grouping tracks by artist and album.
 * **Hi-Res Audio (Studio Masters):** Filtered view exclusively displaying **24-bit / 96kHz+** lossless FLAC tracks calibrated for the S-Master HX DAC.
 * Sub-second library indexing: scans 7,000+ tracks over USB 2.0 in ~0.25 seconds without UI lag.
+
+### Standalone Popup Song & Album Metadata Editors
+* **Song Metadata Editor Popup:** Right-click any music track in any view (Library, Albums, Artists, Recently Added, Hi-Res) to launch an enlarged, dedicated Song Metadata Editor modal. Includes full tag editing, synchronized lyrics view/fetcher, and real-time artwork replacement.
+* **Album Metadata Editor Popup:** Right-click any album card in the Albums tab to edit album title, artist, year, and genre across all tracks simultaneously. Automatically writes compliant artwork to all tracks and folder art, and provides tracklist auto-numbering (`1..N` or zero-padded `01..N`) with interactive reordering.
+* **Ergonomic 50% Enlarged Modal Layout:** Spacious two-column editing layout with comfortable button spacing and responsive controls designed for detailed cataloging.
+
+### Cover Art Extraction & Direct Mac Export
+* **One-Click Export to Mac:** Right-click any song or album to extract embedded cover art or companion images and save them directly to your Mac as high-resolution JPEG files.
+* **Native macOS Save Panel:** Uses native macOS `NSSavePanel` with suggested naming (`Artist - Album Cover.jpg`) and automatically reveals the saved artwork in Finder.
+
+### Language Study & Audiobooks (/LEARNING) Mode
+* **Dedicated Learning Root:** Manages language lessons, podcasts, and audiobooks under `/LEARNING/` on the Walkman filesystem.
+* **Distraction-Free Transfer Queue:** Automatically disables unnecessary `.LRC Lyrics` and `Auto-Tags` buttons in Language Study mode, protecting chapter names and author tags from being overwritten by music databases.
+* **Automated M3U8 Playlist Generation:** Auto-creates chapter-by-chapter playlists for seamless playback navigation on your Walkman.
+
+### Native Universal Binary (Apple Silicon & Intel Mac)
+* **Zero Rosetta Dependency:** Native ARM64 compilation for Apple Silicon (M1, M2, M3, M4) alongside full 64-bit Intel (`x86_64`) compilation for legacy and current Intel MacBooks, MacBook Pros, MacBook Airs, iMacs, and Mac Pros.
+* **Flexible Packages:** Distributed as dedicated standalone `.dmg` packages for Apple Silicon and Intel, as well as an all-in-one Universal 2 `.dmg`.
 
 ### Modern macOS Design UI Language
 * Fully adopts macOS Sonoma / Sequoia design guidelines with a unified transparent title bar and seamless split dividers.
@@ -159,10 +178,29 @@ Walkman Studio is designed **exclusively for non-Android Sony Walkman DAPs** run
 
 ---
 
+## Downloads & Releases (v2.0.3)
+
+Pre-built `.dmg` disk images and `.zip` standalone archives are available for all modern Mac hardware:
+
+| Package | Architecture | Supported Mac Models | Download Link |
+| :--- | :--- | :--- | :--- |
+| **Apple Silicon DMG** | `arm64` | MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4) | [Walkman-Studio-2.0.3-arm64.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v2.0.3/Walkman-Studio-2.0.3-arm64.dmg) |
+| **Intel Mac DMG** | `x86_64` | Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac mini, Mac Pro | [Walkman-Studio-2.0.3-intel.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v2.0.3/Walkman-Studio-2.0.3-intel.dmg) |
+| **Universal 2 DMG** | `arm64` + `x86_64` | Universal package running natively on all Macs (macOS 14.0+) | [Walkman-Studio-2.0.3-universal.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v2.0.3/Walkman-Studio-2.0.3-universal.dmg) |
+
+> [!TIP]
+> **Which one should I choose?**
+> * If your Mac has an Apple Silicon chip (M1, M2, M3, or M4), download the **arm64.dmg** for the smallest download size and peak native performance.
+> * If your Mac has an Intel Core i5, i7, i9, or Xeon processor, download the **intel.dmg**.
+> * If you want a single file that runs on both platforms, download the **universal.dmg**.
+
+---
+
 ## Requirements
 
-* **Mac:** Apple Silicon Mac (M1, M2, M3, M4 or newer).
+* **Mac:** Apple Silicon Mac (M1, M2, M3, M4 or newer) **or** Intel-based MacBook / Mac (Core i5, i7, i9, Xeon).
 * **OS:** macOS 14.0 (Sonoma) or newer.
+* **Architecture:** Native binaries available for Apple Silicon (`arm64`), Intel (`x86_64`), or Universal 2.
 * **Hardware:** Any non-Android Sony Walkman DAP (NW-A, NW-ZX, NW-WM1, NW-WS series).
 * **Cable:** Sony WM-PORT to USB cable (or model-specific USB cable).
 * **Optional:** Homebrew FFmpeg (`brew install ffmpeg`) for audio format transcoding.

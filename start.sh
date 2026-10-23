@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Sony Walkman Studio (macOS Native Apple Silicon) - Startup Script
+# Sony Walkman Studio (macOS Native Apple Silicon & Intel) - Startup Script
 # ==============================================================================
 
 set -e
@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 echo "================================================================="
-echo "   Sony Walkman Studio - Native macOS (Apple Silicon)"
+echo "   Sony Walkman Studio - Native macOS (Apple Silicon & Intel)"
 echo "   Liquid Glass UI & S-Master HX Hardware Integration"
 echo "================================================================="
 

@@ -4,21 +4,37 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
-echo "Building native Swift release binary for Apple Silicon..."
-swift build -c release
+ARCH="${1:-universal}"
+VERSION="2.0.3"
+BUILD_NUM="203"
 
 APP_NAME="Walkman Studio"
 APP_BUNDLE="$DIR/$APP_NAME.app"
 MACOS_DIR="$APP_BUNDLE/Contents/MacOS"
 RESOURCES_DIR="$APP_BUNDLE/Contents/Resources"
 
-echo "Packaging $APP_BUNDLE..."
+echo "Packaging $APP_BUNDLE (Architecture: $ARCH)..."
 rm -rf "$APP_BUNDLE"
 mkdir -p "$MACOS_DIR"
 mkdir -p "$RESOURCES_DIR"
+mkdir -p "$DIR/.build/bin"
 
-# Copy binary
-cp "$DIR/.build/release/WalkmanStudio" "$MACOS_DIR/WalkmanStudio"
+if [ "$ARCH" = "universal" ]; then
+    echo "Building native Swift release binary for Universal (Apple Silicon arm64 + Intel x86_64)..."
+    swift build -c release --triple arm64-apple-macosx
+    cp "$DIR/.build/out/Products/Release/WalkmanStudio" "$DIR/.build/bin/WalkmanStudio-arm64"
+    swift build -c release --triple x86_64-apple-macosx
+    cp "$DIR/.build/out/Products/Release/WalkmanStudio" "$DIR/.build/bin/WalkmanStudio-x86_64"
+    lipo -create -output "$MACOS_DIR/WalkmanStudio" "$DIR/.build/bin/WalkmanStudio-arm64" "$DIR/.build/bin/WalkmanStudio-x86_64"
+elif [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "intel" ]; then
+    echo "Building native Swift release binary for Intel x86_64..."
+    swift build -c release --triple x86_64-apple-macosx
+    cp "$DIR/.build/out/Products/Release/WalkmanStudio" "$MACOS_DIR/WalkmanStudio"
+else
+    echo "Building native Swift release binary for Apple Silicon arm64..."
+    swift build -c release --triple arm64-apple-macosx
+    cp "$DIR/.build/out/Products/Release/WalkmanStudio" "$MACOS_DIR/WalkmanStudio"
+fi
 chmod +x "$MACOS_DIR/WalkmanStudio"
 
 # Copy App Icon & Device Assets
@@ -57,9 +73,9 @@ cat << 'EOF' > "$APP_BUNDLE/Contents/Info.plist"
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>2.0.2</string>
+    <string>2.0.3</string>
     <key>CFBundleVersion</key>
-    <string>202</string>
+    <string>203</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>NSHighResolutionCapable</key>

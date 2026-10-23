@@ -4,96 +4,193 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
-VERSION="2.0.2"
+VERSION="2.0.3"
 DIST_DIR="$DIR/dist"
+APP_NAME="Walkman Studio"
+APP_BUNDLE="$DIR/$APP_NAME.app"
 
-echo "=== Building Walkman Studio v$VERSION Release Artifacts ==="
-
-# 1. Build release app bundle
-./build_app.sh
-
-APP_BUNDLE="$DIR/Walkman Studio.app"
-if [ ! -d "$APP_BUNDLE" ]; then
-    echo "Error: App bundle $APP_BUNDLE does not exist!"
-    exit 1
-fi
+echo "=== Building Walkman Studio v$VERSION Release Artifacts (Apple Silicon & Intel) ==="
 
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
 
-# 2. Package .zip distribution
-ZIP_NAME="Walkman-Studio-${VERSION}-arm64.zip"
-echo "Packaging $ZIP_NAME..."
-ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" "$DIST_DIR/$ZIP_NAME"
+package_dist() {
+    local ARCH="$1"
+    local SUFFIX="$2"
+    echo ""
+    echo "=========================================================="
+    echo " Building & Packaging for $ARCH ($SUFFIX)..."
+    echo "=========================================================="
+    
+    ./build_app.sh "$ARCH"
+    
+    if [ ! -d "$APP_BUNDLE" ]; then
+        echo "Error: App bundle $APP_BUNDLE does not exist!"
+        exit 1
+    fi
+    
+    local ZIP_NAME="Walkman-Studio-${VERSION}-${SUFFIX}.zip"
+    echo "Packaging $ZIP_NAME..."
+    ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" "$DIST_DIR/$ZIP_NAME"
+    
+    local DMG_NAME="Walkman-Studio-${VERSION}-${SUFFIX}.dmg"
+    echo "Packaging $DMG_NAME..."
+    local DMG_TEMP_DIR="$(mktemp -d /tmp/walkman-dmg-XXXXXX)"
+    cp -R "$APP_BUNDLE" "$DMG_TEMP_DIR/"
+    ln -s /Applications "$DMG_TEMP_DIR/Applications"
+    hdiutil create -volname "Walkman Studio" -srcfolder "$DMG_TEMP_DIR" -ov -format UDZO "$DIST_DIR/$DMG_NAME"
+    rm -rf "$DMG_TEMP_DIR"
+}
 
-# 3. Package .dmg installer
-DMG_NAME="Walkman-Studio-${VERSION}-arm64.dmg"
-echo "Packaging $DMG_NAME..."
-DMG_TEMP_DIR="$(mktemp -d /tmp/walkman-dmg-XXXXXX)"
-cp -R "$APP_BUNDLE" "$DMG_TEMP_DIR/"
-ln -s /Applications "$DMG_TEMP_DIR/Applications"
-hdiutil create -volname "Walkman Studio" -srcfolder "$DMG_TEMP_DIR" -ov -format UDZO "$DIST_DIR/$DMG_NAME"
-rm -rf "$DMG_TEMP_DIR"
+# 1. Package Apple Silicon (arm64) distribution
+package_dist "arm64" "arm64"
+
+# 2. Package Intel-based Mac (x86_64) distribution
+package_dist "x86_64" "intel"
+
+# 3. Package Universal Binary (arm64 + x86_64) distribution
+package_dist "universal" "universal"
 
 # 4. Generate SHA256 Checksums
+echo ""
 echo "Generating SHA256 checksums..."
 cd "$DIST_DIR"
-shasum -a 256 "$ZIP_NAME" "$DMG_NAME" > SHA256SUMS.txt
+shasum -a 256 *.zip *.dmg > SHA256SUMS.txt
 
 # 5. Generate Release Notes (Markdown & HTML)
 cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.md"
-# Walkman Studio v2.0.2
+# Walkman Studio v2.0.3
 
-This update introduces dedicated Language Study (語学学習) mode support for podcasts and audiobooks, instant on-device song & album deletion without confirmation, flexible album sorting, and a redesigned Transfer & Convert interface.
+Walkman Studio v2.0.3 brings native **Intel-based MacBook and Mac support (`x86_64`)**, alongside Apple Silicon (`arm64`), standalone popup **Song and Album Metadata Editors**, full **Cover Art Extraction & Export to Mac**, and streamlined **Language Study & Audiobooks (`/LEARNING`)** workflows.
 
 ---
 
-## New Features & Hardware Optimizations
+## What's New in v2.0.3
 
-* **Language Study (`/LEARNING/`) Mode:** Directly transfer audiobooks, podcasts, and language lessons to the Sony Walkman's dedicated `/LEARNING/` system directory with automatic classification under the `"Language Learning"` genre.
-* **Hardware 5-View Optimization:** Spoken-word audio is fully formatted and indexed across all 5 Walkman hardware screens (Album with 800×800 Baseline RGB JPEG artwork & `folder.jpg`, Artist grouping, All Songs chronological sorting, auto-generated M3U8 Playlists in `/LEARNING/`, and chronologically ordered Recent Transfers via staggered `mtime` timestamps).
-* **Auto-Remux `.m4b` Audiobooks:** Automatically remuxes `.m4b` audiobook files into `.m4a` containers with lossless audio and full metadata, ensuring immediate playback on Walkman firmware without external tools.
-* **Speech-Optimized Presets:** Added dedicated voice conversion presets including `MP3 128 kbps Spoken Word`, `MP3 192 kbps Voice Master`, and `AAC 128 kbps Spoken Audio` for crisp voice clarity and compact storage.
-* **Instant On-Device Deletion:** Right-click any track in the **All Songs** tab or any album in the **Albums** tab to delete it directly from the Walkman hardware without confirmation dialogs.
-* **Album Sorting & Management:** Sort albums by Recently Added, Album Name (A–Z / Z–A), Artist Name, Track Count, and Release Year, with instant album inspection.
-* **Redesigned Transfer & Convert Deck:** Streamlined 3-column control deck with Target Volume switcher, Library Mode toggle (`/MUSIC` vs `/LEARNING`), and responsive queue item cards with real-time audio specs.
-* **Explicit "Save to Walkman" & Playlist Sync:** Formats playlists with strict POSIX paths, NFC Unicode normalization, and CRLF line endings, paired with a tactile **Save to Walkman** button and `⌘S` keyboard shortcut.
-* **Multi-Directory USB Scanner:** High-speed library scanner now concurrently indexes both `/MUSIC` and `/LEARNING` directories over USB, with full metadata support for `.m4b` and `.aac` files.
+### 🖥️ Native Intel-based MacBook & Mac Support
+* **Multi-Architecture Support:** Walkman Studio now runs natively on both **Intel-based Macs (Core i5, i7, i9, Xeon)** and **Apple Silicon Macs (M1, M2, M3, M4)**.
+* **Dedicated & Universal DMGs:** Available as dedicated `.dmg` installers for Apple Silicon (`arm64`), Intel (`intel`), and an all-in-one Universal binary (`universal`).
+
+### 🎵 Standalone Popup Song Metadata Editor
+* **Right-Click Metadata Editor:** Right-click any track in the **Library**, **Albums**, **Artists**, **Recently Added**, or **Hi-Res Audio** views to open the full Song Metadata Editor popup window.
+* **Integrated Lyrics Editor:** Edit synchronized `.LRC` or plain text lyrics in a dedicated editor pane, or fetch them automatically from online databases.
+* **Artwork Replacement & Compliance:** Inspect, replace, and validate album cover art against the Sony Walkman 800×800 Baseline RGB JPEG standard.
+* **50% Enlarged Layout:** Two-column responsive layout optimized for comfortable editing with spacious fields and high-resolution artwork preview.
+
+### 💿 Standalone Popup Album Metadata Editor
+* **Album-Wide Tagging:** Edit album title, album artist, release year, and genre across all tracks simultaneously.
+* **Batch Artwork Writing:** Automatically embeds compliant Baseline RGB JPEG artwork into every track in the album and updates `folder.jpg` and `cover.jpg` in the album folder.
+* **Tracklist Auto-Numbering & Reordering:** Auto-number tracks (`1..N`), pad numbers with leading zeros (`01..N`), and reorder tracks with interactive up/down controls.
+* **Ergonomic Window:** Expanded 50% larger with comfortable button spacing and balanced bottom action bar.
+
+### 🖼️ Cover Art Extraction & Direct Mac Export
+* **Extract & Save to Mac:** Extract embedded artwork (or companion folder art) from any song or album and save it directly onto your Mac via a native macOS `NSSavePanel` dialog.
+* **Finder Reveal:** Automatically highlights the exported `Artist - Album Cover.jpg` file in Finder upon completion.
+* **Universal Access:** Export cover art from right-click context menus anywhere in the app, or from the right sidebar and popup editor sheets.
+
+### 📚 Language Study & Audiobooks (`/LEARNING`) Polish
+* **Distraction-Free Controls:** Automatically disables `.LRC Lyrics` and `Auto-Tags` buttons in Language Study mode, preventing unwanted music tag lookups from overwriting audiobook chapter titles and author names.
+* **Automatic M3U8 Playlist Sync:** Transferred audiobooks and podcast episodes automatically generate ready-to-play `.m3u8` playlists inside `/LEARNING/`.
+
+---
+
+## Downloads
+
+| Installer | Architecture | Target System |
+| :--- | :--- | :--- |
+| **`Walkman-Studio-2.0.3-arm64.dmg`** | Apple Silicon (`arm64`) | MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4) |
+| **`Walkman-Studio-2.0.3-intel.dmg`** | Intel (`x86_64`) | Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac Pro |
+| **`Walkman-Studio-2.0.3-universal.dmg`** | Universal 2 (`arm64` + `x86_64`) | Universal package running natively on all Macs (macOS 14.0+) |
 
 ---
 
 ## Installation
 
-1. Download `Walkman-Studio-2.0.2-arm64.dmg` below.
+1. Download the `.dmg` corresponding to your Mac architecture above.
 2. Open the disk image and drag **Walkman Studio** into your **Applications** folder.
 3. Connect your Sony Walkman in USB Mass Storage mode and launch Walkman Studio.
 EOF
 
 cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
-<h1>Walkman Studio v2.0.2</h1>
+<h1>Walkman Studio v2.0.3</h1>
 
-<p>This update introduces dedicated Language Study (語学学習) mode support for podcasts and audiobooks, instant on-device song &amp; album deletion without confirmation, flexible album sorting, and a redesigned Transfer &amp; Convert interface.</p>
+<p>Walkman Studio v2.0.3 brings native <strong>Intel-based MacBook and Mac support (<code>x86_64</code>)</strong>, alongside Apple Silicon (<code>arm64</code>), standalone popup <strong>Song and Album Metadata Editors</strong>, full <strong>Cover Art Extraction &amp; Export to Mac</strong>, and streamlined <strong>Language Study &amp; Audiobooks (<code>/LEARNING</code>)</strong> workflows.</p>
 
 <hr>
 
-<h2>New Features &amp; Hardware Optimizations</h2>
+<h2>What's New in v2.0.3</h2>
+
+<h3>🖥️ Native Intel-based MacBook &amp; Mac Support</h3>
 <ul>
-  <li><strong>Language Study (<code>/LEARNING/</code>) Mode:</strong> Directly transfer audiobooks, podcasts, and language lessons to the Sony Walkman's dedicated <code>/LEARNING/</code> system directory with automatic classification under the <code>"Language Learning"</code> genre.</li>
-  <li><strong>Hardware 5-View Optimization:</strong> Spoken-word audio is fully formatted and indexed across all 5 Walkman hardware screens (Album with 800&times;800 Baseline RGB JPEG artwork &amp; <code>folder.jpg</code>, Artist grouping, All Songs chronological sorting, auto-generated M3U8 Playlists in <code>/LEARNING/</code>, and chronologically ordered Recent Transfers via staggered <code>mtime</code> timestamps).</li>
-  <li><strong>Auto-Remux <code>.m4b</code> Audiobooks:</strong> Automatically remuxes <code>.m4b</code> audiobook files into <code>.m4a</code> containers with lossless audio and full metadata, ensuring immediate playback on Walkman firmware without external tools.</li>
-  <li><strong>Speech-Optimized Presets:</strong> Added dedicated voice conversion presets including <code>MP3 128 kbps Spoken Word</code>, <code>MP3 192 kbps Voice Master</code>, and <code>AAC 128 kbps Spoken Audio</code> for crisp voice clarity and compact storage.</li>
-  <li><strong>Instant On-Device Deletion:</strong> Right-click any track in the <strong>All Songs</strong> tab or any album in the <strong>Albums</strong> tab to delete it directly from the Walkman hardware without confirmation dialogs.</li>
-  <li><strong>Album Sorting &amp; Management:</strong> Sort albums by Recently Added, Album Name (A&ndash;Z / Z&ndash;A), Artist Name, Track Count, and Release Year, with instant album inspection.</li>
-  <li><strong>Redesigned Transfer &amp; Convert Deck:</strong> Streamlined 3-column control deck with Target Volume switcher, Library Mode toggle (<code>/MUSIC</code> vs <code>/LEARNING</code>), and responsive queue item cards with real-time audio specs.</li>
-  <li><strong>Explicit "Save to Walkman" &amp; Playlist Sync:</strong> Formats playlists with strict POSIX paths, NFC Unicode normalization, and CRLF line endings, paired with a tactile <strong>Save to Walkman</strong> button and <code>&#x2318;S</code> keyboard shortcut.</li>
-  <li><strong>Multi-Directory USB Scanner:</strong> High-speed library scanner now concurrently indexes both <code>/MUSIC</code> and <code>/LEARNING</code> directories over USB, with full metadata support for <code>.m4b</code> and <code>.aac</code> files.</li>
+  <li><strong>Multi-Architecture Support:</strong> Walkman Studio now runs natively on both <strong>Intel-based Macs (Core i5, i7, i9, Xeon)</strong> and <strong>Apple Silicon Macs (M1, M2, M3, M4)</strong>.</li>
+  <li><strong>Dedicated &amp; Universal DMGs:</strong> Available as dedicated <code>.dmg</code> installers for Apple Silicon (<code>arm64</code>), Intel (<code>intel</code>), and an all-in-one Universal binary (<code>universal</code>).</li>
 </ul>
+
+<h3>🎵 Standalone Popup Song Metadata Editor</h3>
+<ul>
+  <li><strong>Right-Click Metadata Editor:</strong> Right-click any track in the <strong>Library</strong>, <strong>Albums</strong>, <strong>Artists</strong>, <strong>Recently Added</strong>, or <strong>Hi-Res Audio</strong> views to open the full Song Metadata Editor popup window.</li>
+  <li><strong>Integrated Lyrics Editor:</strong> Edit synchronized <code>.LRC</code> or plain text lyrics in a dedicated editor pane, or fetch them automatically from online databases.</li>
+  <li><strong>Artwork Replacement &amp; Compliance:</strong> Inspect, replace, and validate album cover art against the Sony Walkman 800&times;800 Baseline RGB JPEG standard.</li>
+  <li><strong>50% Enlarged Layout:</strong> Two-column responsive layout optimized for comfortable editing with spacious fields and high-resolution artwork preview.</li>
+</ul>
+
+<h3>💿 Standalone Popup Album Metadata Editor</h3>
+<ul>
+  <li><strong>Album-Wide Tagging:</strong> Edit album title, album artist, release year, and genre across all tracks simultaneously.</li>
+  <li><strong>Batch Artwork Writing:</strong> Automatically embeds compliant Baseline RGB JPEG artwork into every track in the album and updates <code>folder.jpg</code> and <code>cover.jpg</code> in the album folder.</li>
+  <li><strong>Tracklist Auto-Numbering &amp; Reordering:</strong> Auto-number tracks (<code>1..N</code>), pad numbers with leading zeros (<code>01..N</code>), and reorder tracks with interactive up/down controls.</li>
+  <li><strong>Ergonomic Window:</strong> Expanded 50% larger with comfortable button spacing and balanced bottom action bar.</li>
+</ul>
+
+<h3>🖼️ Cover Art Extraction &amp; Direct Mac Export</h3>
+<ul>
+  <li><strong>Extract &amp; Save to Mac:</strong> Extract embedded artwork (or companion folder art) from any song or album and save it directly onto your Mac via a native macOS <code>NSSavePanel</code> dialog.</li>
+  <li><strong>Finder Reveal:</strong> Automatically highlights the exported <code>Artist - Album Cover.jpg</code> file in Finder upon completion.</li>
+  <li><strong>Universal Access:</strong> Export cover art from right-click context menus anywhere in the app, or from the right sidebar and popup editor sheets.</li>
+</ul>
+
+<h3>📚 Language Study &amp; Audiobooks (<code>/LEARNING</code>) Polish</h3>
+<ul>
+  <li><strong>Distraction-Free Controls:</strong> Automatically disables <code>.LRC Lyrics</code> and <code>Auto-Tags</code> buttons in Language Study mode, preventing unwanted music tag lookups from overwriting audiobook chapter titles and author names.</li>
+  <li><strong>Automatic M3U8 Playlist Sync:</strong> Transferred audiobooks and podcast episodes automatically generate ready-to-play <code>.m3u8</code> playlists inside <code>/LEARNING/</code>.</li>
+</ul>
+
+<hr>
+
+<h2>Downloads</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Installer</th>
+      <th>Architecture</th>
+      <th>Target System</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong><code>Walkman-Studio-2.0.3-arm64.dmg</code></strong></td>
+      <td>Apple Silicon (<code>arm64</code>)</td>
+      <td>MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4)</td>
+    </tr>
+    <tr>
+      <td><strong><code>Walkman-Studio-2.0.3-intel.dmg</code></strong></td>
+      <td>Intel (<code>x86_64</code>)</td>
+      <td>Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac Pro</td>
+    </tr>
+    <tr>
+      <td><strong><code>Walkman-Studio-2.0.3-universal.dmg</code></strong></td>
+      <td>Universal 2 (<code>arm64</code> + <code>x86_64</code>)</td>
+      <td>Universal package running natively on all Macs (macOS 14.0+)</td>
+    </tr>
+  </tbody>
+</table>
 
 <hr>
 
 <h2>Installation</h2>
 <ol>
-  <li>Download <code>Walkman-Studio-2.0.2-arm64.dmg</code> below.</li>
+  <li>Download the <code>.dmg</code> corresponding to your Mac architecture above.</li>
   <li>Open the disk image and drag <strong>Walkman Studio</strong> into your <strong>Applications</strong> folder.</li>
   <li>Connect your Sony Walkman in USB Mass Storage mode and launch Walkman Studio.</li>
 </ol>
