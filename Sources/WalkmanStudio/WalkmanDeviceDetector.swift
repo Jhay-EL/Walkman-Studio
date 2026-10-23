@@ -273,6 +273,45 @@ public final class WalkmanDeviceDetector: Sendable {
         return false
     }
 
+    /// Returns the asset file identifier for the corresponding Walkman hardware image
+    public static func iconKey(for modelString: String?) -> String {
+        guard let raw = modelString?.uppercased().replacingOccurrences(of: "-", with: "").replacingOccurrences(of: " ", with: "") else {
+            return "nw-a50"
+        }
+        
+        if raw.contains("WM1Z") {
+            return "nw-wm1z"
+        } else if raw.contains("WM1") {
+            return "nw-wm1a"
+        } else if raw.contains("ZX300") {
+            return "nw-zx300"
+        } else if raw.contains("ZX100") {
+            return "nw-zx100"
+        } else if raw.contains("A50") || raw.contains("A55") || raw.contains("A56") || raw.contains("A57") {
+            return "nw-a50"
+        } else if raw.contains("A40") || raw.contains("A45") || raw.contains("A46") || raw.contains("A47") {
+            return "nw-a40"
+        } else if raw.contains("A30") || raw.contains("A35") || raw.contains("A36") || raw.contains("A37") {
+            return "nw-a30"
+        } else if raw.contains("A20") || raw.contains("A25") || raw.contains("A27") {
+            return "nw-a20"
+        } else if raw.contains("A10") || raw.contains("A15") || raw.contains("A17") {
+            return "nw-a10"
+        } else if raw.contains("WS620") || raw.contains("WS623") || raw.contains("WS625") {
+            return "nw-ws620"
+        } else if raw.contains("WS410") || raw.contains("WS413") || raw.contains("WS414") {
+            return "nw-ws410"
+        } else if raw.contains("E390") || raw.contains("E393") || raw.contains("E394") || raw.contains("E395") {
+            return "nw-e390"
+        } else if raw.contains("S310") || raw.contains("S313") || raw.contains("S315") {
+            return "nw-s310"
+        } else if raw.contains("B180") || raw.contains("B183") {
+            return "nw-b180"
+        } else {
+            return "nw-a50"
+        }
+    }
+
     /// Inspects a mounted volume URL for authentic Sony Walkman hardware signatures
     public static func inspectVolume(at volumeURL: URL) -> VolumeInspectionResult? {
         let primaryXml = volumeURL.appendingPathComponent("default-capability.xml")

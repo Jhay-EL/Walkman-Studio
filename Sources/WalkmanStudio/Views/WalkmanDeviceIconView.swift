@@ -4,18 +4,69 @@ import AppKit
 public struct WalkmanDeviceIconView: View {
     var size: CGFloat = 64
     var mountPoint: String? = nil
+    var modelName: String? = nil
+    var deviceInfo: WalkmanDeviceInfo? = nil
     var hasBackground: Bool = true
     
     @State private var loadedImage: NSImage? = nil
     
-    public init(size: CGFloat = 64, mountPoint: String? = nil, hasBackground: Bool = true) {
+    public init(
+        size: CGFloat = 64,
+        mountPoint: String? = nil,
+        modelName: String? = nil,
+        deviceInfo: WalkmanDeviceInfo? = nil,
+        hasBackground: Bool = true
+    ) {
         self.size = size
         self.mountPoint = mountPoint
+        self.modelName = modelName
+        self.deviceInfo = deviceInfo
         self.hasBackground = hasBackground
     }
     
     private func loadIcon() -> NSImage? {
-        // 1. Try mountPoint/DevIcon.fil
+        // 1. Resolve model string
+        var resolvedModel: String? = modelName ?? deviceInfo?.modelRaw ?? deviceInfo?.specificModel ?? deviceInfo?.displayName
+        
+        // If not explicitly provided, try to extract model from mountPoint default-capability.xml
+        if resolvedModel == nil, let mp = mountPoint {
+            let primaryXml = URL(fileURLWithPath: mp).appendingPathComponent("default-capability.xml")
+            let secondaryXml = URL(fileURLWithPath: mp).appendingPathComponent("DEFAULT-CAPABILITY.XML")
+            let xmlPath = FileManager.default.fileExists(atPath: primaryXml.path) ? primaryXml :
+                (FileManager.default.fileExists(atPath: secondaryXml.path) ? secondaryXml : nil)
+            
+            if let p = xmlPath, let data = try? Data(contentsOf: p),
+               let xml = String(data: data, encoding: .isoLatin1) ?? String(data: data, encoding: .utf8),
+               let model = WalkmanDeviceDetector.extractXmlTag(tag: "model", from: xml) {
+                resolvedModel = model
+            }
+        }
+        
+        let key = WalkmanDeviceDetector.iconKey(for: resolvedModel)
+        
+        // 2. Try Model-Specific Asset from App Bundle
+        if let res = Bundle.main.url(forResource: key, withExtension: "png", subdirectory: "devices"),
+           let img = NSImage(contentsOf: res) {
+            return img
+        }
+        if let res = Bundle.main.url(forResource: key, withExtension: "png"),
+           let img = NSImage(contentsOf: res) {
+            return img
+        }
+        
+        // 3. Try Relative Workspace path (for dev/testing)
+        for relPath in [
+            "assets/devices/\(key).png",
+            "assets/devices/\(key).PNG",
+            "assets/devices/\(key.uppercased()).png"
+        ] {
+            if FileManager.default.fileExists(atPath: relPath),
+               let img = NSImage(contentsOfFile: relPath) {
+                return img
+            }
+        }
+        
+        // 4. Fallback to mountPoint/DevIcon.fil (Sony official icon on device)
         if let mp = mountPoint {
             let filURL = URL(fileURLWithPath: mp).appendingPathComponent("DevIcon.fil")
             if FileManager.default.fileExists(atPath: filURL.path),
@@ -24,14 +75,7 @@ public struct WalkmanDeviceIconView: View {
             }
         }
         
-        // 2. Try default /Volumes/WALKMAN/DevIcon.fil
-        let defaultWalkman = "/Volumes/WALKMAN/DevIcon.fil"
-        if FileManager.default.fileExists(atPath: defaultWalkman),
-           let img = NSImage(contentsOfFile: defaultWalkman) {
-            return img
-        }
-        
-        // 3. Try App Bundle Resources
+        // 5. Fallback to default assets/walkman_device_cropped.png or walkman_device.png
         if let res = Bundle.main.url(forResource: "walkman_device_cropped", withExtension: "png"),
            let img = NSImage(contentsOf: res) {
             return img
@@ -40,8 +84,6 @@ public struct WalkmanDeviceIconView: View {
            let img = NSImage(contentsOf: res) {
             return img
         }
-        
-        // 4. Try Relative Path from workspace
         for path in ["assets/walkman_device_cropped.png", "assets/walkman_device.png"] {
             if FileManager.default.fileExists(atPath: path),
                let img = NSImage(contentsOfFile: path) {
@@ -76,6 +118,12 @@ public struct WalkmanDeviceIconView: View {
             self.loadedImage = loadIcon()
         }
         .onChange(of: mountPoint) {
+            self.loadedImage = loadIcon()
+        }
+        .onChange(of: modelName) {
+            self.loadedImage = loadIcon()
+        }
+        .onChange(of: deviceInfo?.modelRaw) {
             self.loadedImage = loadIcon()
         }
     }

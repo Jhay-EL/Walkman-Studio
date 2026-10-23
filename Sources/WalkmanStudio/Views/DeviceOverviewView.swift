@@ -100,7 +100,8 @@ public struct DeviceOverviewView: View {
                 HStack(alignment: .top, spacing: isSmallest ? 10 : 12) {
                     WalkmanDeviceIconView(
                         size: isSmallest ? 44 : (isNarrow ? 52 : 60),
-                        mountPoint: internalDrive?.mountPoint ?? drives.first?.mountPoint
+                        mountPoint: internalDrive?.mountPoint ?? drives.first?.mountPoint,
+                        deviceInfo: deviceInfo
                     )
                     
                     VStack(alignment: .leading, spacing: 3) {
@@ -175,7 +176,8 @@ public struct DeviceOverviewView: View {
             HStack(spacing: 16) {
                 WalkmanDeviceIconView(
                     size: 64,
-                    mountPoint: internalDrive?.mountPoint ?? drives.first?.mountPoint
+                    mountPoint: internalDrive?.mountPoint ?? drives.first?.mountPoint,
+                    deviceInfo: deviceInfo
                 )
                 
                 VStack(alignment: .leading, spacing: 4) {

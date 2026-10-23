@@ -41,6 +41,11 @@ chmod +x "$MACOS_DIR/WalkmanStudio"
 if [ -f "$DIR/assets/AppIcon.icns" ]; then
     cp "$DIR/assets/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
 fi
+if [ -d "$DIR/assets/devices" ]; then
+    mkdir -p "$RESOURCES_DIR/devices"
+    cp -R "$DIR/assets/devices/"* "$RESOURCES_DIR/devices/"
+    cp "$DIR/assets/devices/"*.png "$RESOURCES_DIR/" 2>/dev/null || true
+fi
 if [ -f "$DIR/assets/walkman_device_cropped.png" ]; then
     cp "$DIR/assets/walkman_device_cropped.png" "$RESOURCES_DIR/walkman_device_cropped.png"
 fi
