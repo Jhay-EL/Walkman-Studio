@@ -44,6 +44,17 @@ public final class AudioTagger: @unchecked Sendable {
                 genre: genre,
                 coverArtData: coverArtData
             )
+        } else if ext == "m4a" || ext == "m4b" || ext == "alac" || ext == "aac" || ext == "mp4" {
+            try writeM4AMetadata(
+                fileURL: fileURL,
+                title: title,
+                artist: artist,
+                album: album,
+                trackNumber: trackNumber,
+                year: year,
+                genre: genre,
+                coverArtData: coverArtData
+            )
         } else {
             throw NSError(domain: "WalkmanStudio", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unsupported audio format for metadata tagging: .\(ext)"])
         }
@@ -598,6 +609,84 @@ public final class AudioTagger: @unchecked Sendable {
             WalkmanEngine.sanitizeWalkmanText(dirAlbum),
             WalkmanEngine.sanitizeWalkmanText(title)
         )
+    }
+
+    // -----------------------------------------------------------------------
+    // Hardware Constraint: M4A / AAC / ALAC iTunes MPEG-4 Tagging
+    // -----------------------------------------------------------------------
+    public func writeM4AMetadata(
+        fileURL: URL,
+        title: String?,
+        artist: String?,
+        album: String?,
+        trackNumber: String?,
+        year: String?,
+        genre: String?,
+        coverArtData: Data?
+    ) throws {
+        let ffmpegPath = FileManager.default.fileExists(atPath: "/opt/homebrew/bin/ffmpeg") ? "/opt/homebrew/bin/ffmpeg" : "/usr/local/bin/ffmpeg"
+        guard FileManager.default.fileExists(atPath: ffmpegPath) else {
+            throw NSError(domain: "AudioTagger", code: 1, userInfo: [NSLocalizedDescriptionKey: "ffmpeg binary not found for M4A tagging"])
+        }
+
+        let tempOutputDir = fileURL.deletingLastPathComponent()
+        let tempOutputFile = tempOutputDir.appendingPathComponent(".tmp_tag_\(UUID().uuidString).m4a")
+        var tempCoverURL: URL? = nil
+
+        var args = ["-y", "-i", fileURL.path]
+
+        if let art = coverArtData, !art.isEmpty {
+            let coverFile = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("cover_\(UUID().uuidString).jpg")
+            try art.write(to: coverFile)
+            tempCoverURL = coverFile
+            args.append(contentsOf: ["-i", coverFile.path, "-map", "0:a", "-map", "1:v", "-c:a", "copy", "-c:v", "copy", "-disposition:v:0", "attached_pic"])
+        } else {
+            args.append(contentsOf: ["-map", "0:a", "-c:a", "copy"])
+        }
+
+        if let t = title, !t.isEmpty {
+            args.append(contentsOf: ["-metadata", "title=\(t)"])
+        }
+        if let a = artist, !a.isEmpty {
+            args.append(contentsOf: ["-metadata", "artist=\(a)", "-metadata", "album_artist=\(a)"])
+        }
+        if let alb = album, !alb.isEmpty {
+            args.append(contentsOf: ["-metadata", "album=\(alb)"])
+        }
+        if let trk = trackNumber, !trk.isEmpty {
+            args.append(contentsOf: ["-metadata", "track=\(trk)"])
+        }
+        if let y = year, !y.isEmpty {
+            args.append(contentsOf: ["-metadata", "date=\(y)"])
+        }
+        if let g = genre, !g.isEmpty {
+            args.append(contentsOf: ["-metadata", "genre=\(g)"])
+        }
+
+        args.append(tempOutputFile.path)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: ffmpegPath)
+        process.arguments = args
+        let pipe = Pipe()
+        process.standardError = pipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        if let cURL = tempCoverURL {
+            try? FileManager.default.removeItem(at: cURL)
+        }
+
+        if process.terminationStatus != 0 {
+            try? FileManager.default.removeItem(at: tempOutputFile)
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let err = String(data: data, encoding: .utf8) ?? "Unknown FFmpeg error"
+            throw NSError(domain: "AudioTagger", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: "Failed to write M4A metadata: \(err)"])
+        }
+
+        try? FileManager.default.removeItem(at: fileURL)
+        try FileManager.default.moveItem(at: tempOutputFile, to: fileURL)
     }
 
     // -----------------------------------------------------------------------

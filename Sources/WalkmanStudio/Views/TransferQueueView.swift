@@ -8,6 +8,7 @@ public struct TransferQueueView: View {
     let onTransferComplete: () -> Void
 
     @State private var targetDriveId: String = ""
+    @State private var targetMode: TransferTargetMode = .music
     @State private var selectedPreset: String = "copy_optimize"
     @State private var queue: [TransferItem] = []
     @State private var isProcessing: Bool = false
@@ -73,7 +74,102 @@ public struct TransferQueueView: View {
 
     public var body: some View {
         ZStack {
-            VStack(spacing: 12) {
+            VStack(spacing: 10) {
+                // -------------------------------------------------------------
+                // PANEL 0: DESTINATION MODE SELECTOR (Music vs Language Study)
+                // -------------------------------------------------------------
+                HStack(spacing: 10) {
+                    HStack(spacing: 3) {
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.15)) {
+                                targetMode = .music
+                            }
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "music.note")
+                                    .font(.system(size: 11, weight: .semibold))
+                                Text("Music Library (/MUSIC)")
+                                    .font(WalkmanFont.calloutBold)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(targetMode == .music ? Color.white.opacity(0.14) : Color.clear)
+                            )
+                            .foregroundStyle(targetMode == .music ? .white : .secondary)
+                        }
+                        .buttonStyle(.plain)
+
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.15)) {
+                                targetMode = .learning
+                                if selectedPreset == "flac_16" || selectedPreset == "flac_24_96" {
+                                    selectedPreset = "copy_optimize"
+                                }
+                            }
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "character.book.closed.fill")
+                                    .font(.system(size: 11, weight: .semibold))
+                                Text("Language Study & Audiobooks (/LEARNING)")
+                                    .font(WalkmanFont.calloutBold)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(targetMode == .learning ? WalkmanTheme.hiResGold.opacity(0.2) : Color.clear)
+                            )
+                            .foregroundStyle(targetMode == .learning ? WalkmanTheme.hiResGold : .secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(3)
+                    .background(Color.white.opacity(0.04))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                    )
+
+                    Spacer()
+
+                    // Informational pill based on selected mode
+                    if targetMode == .learning {
+                        HStack(spacing: 5) {
+                            Image(systemName: "bolt.fill")
+                                .font(.system(size: 9))
+                                .foregroundStyle(WalkmanTheme.hiResGold)
+                            Text("DPC Speed (0.5x–2.0x) • A-B Repeat • Quick Replay (3s/10s)")
+                                .font(WalkmanFont.monoSmall)
+                                .foregroundStyle(WalkmanTheme.hiResGold.opacity(0.95))
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(WalkmanTheme.hiResGold.opacity(0.12))
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule().stroke(WalkmanTheme.hiResGold.opacity(0.25), lineWidth: 0.8)
+                        )
+                    } else {
+                        HStack(spacing: 5) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 9))
+                                .foregroundStyle(WalkmanTheme.silverMuted)
+                            Text("Standard Walkman Library • Playlists • Hi-Res Audio")
+                                .font(WalkmanFont.monoSmall)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.white.opacity(0.04))
+                        .clipShape(Capsule())
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+
                 // -------------------------------------------------------------
                 // PANEL 1: CONFIGURATION CONTROL DECK (EQUAL-WIDTH CARDS)
                 // -------------------------------------------------------------
@@ -86,12 +182,12 @@ public struct TransferQueueView: View {
                         // Card 1: Target Destination Drive
                         VStack(alignment: .leading, spacing: 5) {
                             HStack(spacing: 5) {
-                                Image(systemName: "hifispeaker.fill")
+                                Image(systemName: targetMode == .learning ? "character.book.closed.fill" : "hifispeaker.fill")
                                     .font(.system(size: 10))
-                                    .foregroundStyle(WalkmanTheme.silverMuted)
-                                Text("DESTINATION DRIVE")
+                                    .foregroundStyle(targetMode == .learning ? WalkmanTheme.hiResGold : WalkmanTheme.silverMuted)
+                                Text(targetMode == .learning ? "TARGET: /LEARNING" : "DESTINATION DRIVE")
                                     .font(WalkmanFont.sectionHeader)
-                                    .foregroundStyle(.tertiary)
+                                    .foregroundStyle(targetMode == .learning ? WalkmanTheme.hiResGold.opacity(0.9) : Color.white.opacity(0.4))
                             }
 
                             Picker("", selection: $targetDriveId) {
@@ -149,6 +245,12 @@ public struct TransferQueueView: View {
                                 Section("Pass-Through & Optimization") {
                                     Text("Optimize Metadata Only (Direct Copy)").tag("copy_optimize")
                                     Text("Direct Copy (Raw Passthrough)").tag("copy_raw")
+                                }
+
+                                Section("Podcasts, Audiobooks & Voice (Speech Optimized)") {
+                                    Text("MP3 128 kbps Spoken Word (Compact Size)").tag("mp3_128")
+                                    Text("MP3 192 kbps Voice Master (High Clarity)").tag("mp3_192")
+                                    Text("AAC 128 kbps Spoken Audio (M4A)").tag("aac_128")
                                 }
 
                                 Section("Lossless FLAC (Sony S-Master HX)") {
@@ -447,6 +549,7 @@ public struct TransferQueueView: View {
                                         item: $queue[idx],
                                         isThisPlaying: player.isPlaying && player.currentTrack?.id == queue[idx].sourceURL.path,
                                         destinationExtension: destinationExtension(for: queue[idx].sourceURL),
+                                        rootFolderName: targetMode.rootFolderName,
                                         onTogglePlay: { togglePreviewPlayback(for: queue[idx]) },
                                         onPickArtwork: { pickCustomArtwork(for: queue[idx].id) },
                                         onOptimize: { optimizeSingleTrack(queue[idx]) },
@@ -484,7 +587,7 @@ public struct TransferQueueView: View {
                             .font(WalkmanFont.title2)
                             .foregroundStyle(.white)
 
-                        Text("Supports FLAC, MP3, WAV, ALAC, M4A, AIFF, DSD • Auto-indexes tags & art")
+                        Text("Supports FLAC, MP3, M4A, M4B, WAV, ALAC, AAC, DSD • Auto-indexes tags & art")
                             .font(WalkmanFont.callout)
                             .foregroundStyle(.secondary)
                     }
@@ -527,11 +630,13 @@ public struct TransferQueueView: View {
                 }
 
                 VStack(spacing: 5) {
-                    Text("Drag & Drop Audio Files or Folders")
+                    Text(targetMode == .learning ? "Drag & Drop Podcasts, Audiobooks, or Audio Files" : "Drag & Drop Audio Files or Folders")
                         .font(WalkmanFont.title3)
                         .foregroundStyle(.white)
 
-                    Text("Drop songs or entire albums from Finder to convert, optimize Baseline RGB artwork, sync lyrics, and copy to Walkman.")
+                    Text(targetMode == .learning
+                         ? "Drop podcast episodes or audiobooks (.m4b, .mp3, .m4a) to transfer directly to Walkman Language Study mode with DPC speed control, A-B Repeat, and Quick Replay."
+                         : "Drop songs or entire albums from Finder to convert, optimize Baseline RGB artwork, sync lyrics, and copy to Walkman.")
                         .font(WalkmanFont.callout)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -539,7 +644,7 @@ public struct TransferQueueView: View {
                 }
 
                 HStack(spacing: 6) {
-                    ForEach(["FLAC", "MP3", "WAV", "ALAC", "M4A", "AIFF", "DSD"], id: \.self) { fmt in
+                    ForEach(["FLAC", "MP3", "M4A", "M4B (Audiobook)", "WAV", "ALAC", "AAC", "DSD"], id: \.self) { fmt in
                         Text(fmt)
                             .font(WalkmanFont.badge)
                             .padding(.horizontal, 6)
@@ -679,6 +784,12 @@ public struct TransferQueueView: View {
             return "Direct copy • Strict tags & Baseline JPEG"
         case "copy_raw":
             return "Pass-through copy • Unmodified file copy"
+        case "mp3_128":
+            return "Optimized for speech, podcasts & audiobooks • Compact size"
+        case "mp3_192":
+            return "High clarity spoken word for podcasts & audiobooks"
+        case "aac_128":
+            return "Efficient AAC spoken word audio for audiobooks"
         case "flac_16":
             return "CD Quality FLAC 16-bit / 44.1kHz"
         case "flac_24_48":
@@ -709,12 +820,14 @@ public struct TransferQueueView: View {
     private func destinationExtension(for sourceURL: URL) -> String {
         switch selectedPreset {
         case "copy_optimize", "copy_raw":
-            return sourceURL.pathExtension.lowercased()
+            let ext = sourceURL.pathExtension.lowercased()
+            if ext == "m4b" { return "m4a" } // Remux .m4b audiobooks into .m4a for Walkman hardware playback
+            return ext
         case "flac_16", "flac_24_48", "flac_24_96", "flac_24", "flac_24_192":
             return "flac"
-        case "mp3_320", "mp3_256", "mp3_v0":
+        case "mp3_320", "mp3_256", "mp3_v0", "mp3_192", "mp3_128":
             return "mp3"
-        case "aac_320", "aac_256", "alac_16":
+        case "aac_320", "aac_256", "aac_128", "alac_16":
             return "m4a"
         case "wav_16":
             return "wav"
@@ -748,7 +861,10 @@ public struct TransferQueueView: View {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = true
         panel.canChooseFiles = true
-        panel.allowedContentTypes = [.audio]
+        var types: [UTType] = [.audio]
+        if let m4bType = UTType(filenameExtension: "m4b") { types.append(m4bType) }
+        if let flacType = UTType(filenameExtension: "flac") { types.append(flacType) }
+        panel.allowedContentTypes = types
 
         if panel.runModal() == .OK {
             for url in panel.urls {
@@ -764,7 +880,7 @@ public struct TransferQueueView: View {
                 if let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: nil) {
                     for case let fileURL as URL in enumerator {
                         let ext = fileURL.pathExtension.lowercased()
-                        if ["flac", "mp3", "m4a", "wav", "aac", "alac", "aiff", "dsf", "dff"].contains(ext) {
+                        if ["flac", "mp3", "m4a", "m4b", "wav", "aac", "alac", "aiff", "dsf", "dff", "wma", "ogg", "opus"].contains(ext) {
                             enqueueSingleFile(fileURL)
                         }
                     }
@@ -1037,7 +1153,9 @@ public struct TransferQueueView: View {
         isProcessing = true
 
         Task {
-            let musicDir = URL(fileURLWithPath: target.musicDir)
+            let targetRootDir = targetMode == .learning
+                ? URL(fileURLWithPath: target.learningDir)
+                : URL(fileURLWithPath: target.musicDir)
 
             for i in 0..<queue.count {
                 guard queue[i].status == .pending else { continue }
@@ -1129,7 +1247,7 @@ public struct TransferQueueView: View {
                 let ext = destinationExtension(for: src)
 
                 let dest = WalkmanEngine.shared.targetTrackURL(
-                    musicRoot: musicDir,
+                    musicRoot: targetRootDir,
                     artist: cleanArtist,
                     album: cleanAlbum,
                     trackNum: trackNum,
@@ -1172,16 +1290,31 @@ public struct TransferQueueView: View {
                         }
 
                         let destExt = dest.pathExtension.lowercased()
-                        if destExt == "flac" || destExt == "mp3" {
+                        if destExt == "flac" || destExt == "mp3" || destExt == "m4a" || destExt == "alac" || destExt == "mp4" {
                             let rawTitle = WalkmanEngine.sanitizeWalkmanText(queue[i].title).trimmingCharacters(in: .whitespacesAndNewlines)
                             let tagTitle = (rawTitle.isEmpty || rawTitle.lowercased() == "unknown" || rawTitle.lowercased() == "unknown track" || rawTitle.lowercased() == "unknown title") ? cleanTitle : rawTitle
                             let rawArtist = WalkmanEngine.sanitizeWalkmanText(queue[i].artist, stripExplicitMarkers: false).trimmingCharacters(in: .whitespacesAndNewlines)
                             let tagArtist = (rawArtist.isEmpty || rawArtist.lowercased() == "unknown artist" || rawArtist.lowercased() == "unknown") ? (cleanArtist.lowercased() == "unknown artist" ? nil : cleanArtist) : rawArtist
                             let rawAlbum = WalkmanEngine.sanitizeWalkmanText(queue[i].album).trimmingCharacters(in: .whitespacesAndNewlines)
                             let tagAlbum = (rawAlbum.isEmpty || rawAlbum.lowercased() == "unknown album" || rawAlbum.lowercased() == "unknown") ? (cleanAlbum.lowercased() == "unknown album" ? nil : cleanAlbum) : rawAlbum
-                            let tagTrackNum = queue[i].trackNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+                            
+                            let rawTrackNum = queue[i].trackNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+                            let tagTrackNum = (!rawTrackNum.isEmpty && rawTrackNum != "0") ? rawTrackNum : trackNum
                             let tagYear = queue[i].year.trimmingCharacters(in: .whitespacesAndNewlines)
-                            let tagGenre = queue[i].genre.trimmingCharacters(in: .whitespacesAndNewlines)
+                            
+                            // Category Optimization: Set "Language Learning" genre for Walkman firmware classification
+                            let rawGenre = queue[i].genre.trimmingCharacters(in: .whitespacesAndNewlines)
+                            let tagGenre: String?
+                            if targetMode == .learning {
+                                let lowerG = rawGenre.lowercased()
+                                if lowerG.contains("audiobook") || lowerG.contains("podcast") || lowerG.contains("speech") {
+                                    tagGenre = rawGenre
+                                } else {
+                                    tagGenre = "Language Learning"
+                                }
+                            } else {
+                                tagGenre = rawGenre.isEmpty ? nil : rawGenre
+                            }
 
                             do {
                                 try AudioTagger.shared.writeMetadata(
@@ -1191,7 +1324,7 @@ public struct TransferQueueView: View {
                                     album: tagAlbum?.isEmpty == true ? nil : tagAlbum,
                                     trackNumber: tagTrackNum.isEmpty ? nil : tagTrackNum,
                                     year: tagYear.isEmpty ? nil : tagYear,
-                                    genre: tagGenre.isEmpty ? nil : tagGenre,
+                                    genre: tagGenre,
                                     coverArtData: finalArtData
                                 )
                             } catch {
@@ -1200,13 +1333,13 @@ public struct TransferQueueView: View {
                         }
                     }
 
-                    // 3. Companion .LRC Lyrics Writing
+                    // 3. Companion .LRC Lyrics / Transcript Writing
                     if fetchLyrics, let lyr = queue[i].lyrics, !lyr.isEmpty {
                         try? WalkmanEngine.shared.writeCompanionLyrics(destinationAudioURL: dest, lyrics: lyr)
                     }
 
-                    // 4. Save folder.jpg and cover.jpg in Album Folder
-                    if saveFolderJpg, let art = queue[i].artworkData {
+                    // 4. Save folder.jpg and cover.jpg in Album Folder for Walkman Album browser
+                    if (saveFolderJpg || targetMode == .learning), let art = queue[i].artworkData {
                         try? WalkmanEngine.shared.writeAlbumFolderArtwork(albumDirectoryURL: albumDir, artworkData: art)
                     }
 
@@ -1215,11 +1348,47 @@ public struct TransferQueueView: View {
                     removexattr(cPath, "com.apple.TextEncoding", 0)
                     let dotfile = albumDir.appendingPathComponent("._" + dest.lastPathComponent)
                     try? FileManager.default.removeItem(at: dotfile)
+                    
+                    // 6. Recent Transfers Optimization: Stagger file modification timestamp
+                    // so the Walkman hardware SQLite database lists them at the top of "Recent Transfers"
+                    // in sequential chronological chapter order
+                    let transferTimestamp = Date().addingTimeInterval(Double(i) * 0.2)
+                    try? FileManager.default.setAttributes([
+                        .modificationDate: transferTimestamp,
+                        .creationDate: transferTimestamp
+                    ], ofItemAtPath: dest.path)
+                    
                     sync()
 
                     queue[i].status = .success
                 } catch {
                     queue[i].status = .failed(error.localizedDescription)
+                }
+            }
+
+            // 7. Playlists Optimization: Generate Language Study M3U8 Playlist
+            // Groups transferred files by album/series into /LEARNING/{Album}.m3u8 so the Walkman's
+            // "Language Study -> Playlists" screen immediately displays the complete playable playlist!
+            if targetMode == .learning {
+                var albumGroups: [String: [String]] = [:]
+                for itm in queue where itm.status == .success {
+                    let cArtist = WalkmanEngine.shared.sanitizeFilename(itm.artist.isEmpty ? "Unknown Artist" : itm.artist)
+                    let cAlbum = WalkmanEngine.shared.sanitizeFilename(itm.album.isEmpty ? "Unknown Album" : itm.album)
+                    let ext = destinationExtension(for: itm.sourceURL)
+                    let tInt = Int(itm.trackNumber.components(separatedBy: "/").first ?? "1") ?? 1
+                    let trackPrefix = String(format: "%02d", tInt)
+                    let cTitle = WalkmanEngine.shared.sanitizeFilename(itm.title.isEmpty ? itm.sourceURL.deletingPathExtension().lastPathComponent : itm.title)
+                    let filename = "\(trackPrefix) - \(cTitle).\(ext)"
+                    let relPath = "\(cArtist)/\(cAlbum)/\(filename)"
+                    albumGroups[cAlbum, default: []].append(relPath)
+                }
+                
+                for (albumName, relTracks) in albumGroups {
+                    _ = try? WalkmanEngine.shared.writePlaylist(
+                        musicDir: targetRootDir,
+                        name: albumName,
+                        relativeTracks: relTracks
+                    )
                 }
             }
 
@@ -1236,6 +1405,7 @@ private struct QueueItemRow: View {
     @Binding var item: TransferItem
     let isThisPlaying: Bool
     let destinationExtension: String
+    var rootFolderName: String = "MUSIC"
     let onTogglePlay: () -> Void
     let onPickArtwork: () -> Void
     let onOptimize: () -> Void
@@ -1385,7 +1555,7 @@ private struct QueueItemRow: View {
                             let cleanTitle = WalkmanEngine.shared.sanitizeFilename(item.title.isEmpty ? item.sourceURL.deletingPathExtension().lastPathComponent : item.title)
                             let tInt = Int(item.trackNumber.components(separatedBy: "/").first ?? "1") ?? 1
                             let trackPrefix = String(format: "%02d", tInt)
-                            Text("/MUSIC/\(cleanArtist)/\(cleanAlbum)/\(trackPrefix) - \(cleanTitle).\(destinationExtension)")
+                            Text("/\(rootFolderName)/\(cleanArtist)/\(cleanAlbum)/\(trackPrefix) - \(cleanTitle).\(destinationExtension)")
                                 .font(WalkmanFont.monoSmall)
                                 .lineLimit(1)
                                 .truncationMode(.middle)

@@ -39,24 +39,27 @@ public struct PlaylistsView: View {
         }
         
         let musicURL = URL(fileURLWithPath: drive.musicDir)
-        guard let contents = try? FileManager.default.contentsOfDirectory(at: musicURL, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) else {
-            playlists = []
-            selectedPlaylist = nil
-            playlistTracks = []
-            return
+        let learningURL = URL(fileURLWithPath: drive.learningDir)
+        var searchDirs = [musicURL]
+        if FileManager.default.fileExists(atPath: learningURL.path) {
+            searchDirs.append(learningURL)
         }
         
         var list: [Playlist] = []
-        for fileURL in contents where fileURL.pathExtension.lowercased() == "m3u8" || fileURL.pathExtension.lowercased() == "m3u" {
-            let tracks = WalkmanEngine.shared.readPlaylist(at: fileURL)
-            let p = Playlist(
-                name: fileURL.deletingPathExtension().lastPathComponent,
-                filename: fileURL.lastPathComponent,
-                trackCount: tracks.count,
-                tracks: tracks,
-                fullPath: fileURL.path
-            )
-            list.append(p)
+        for dir in searchDirs {
+            if let contents = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) {
+                for fileURL in contents where fileURL.pathExtension.lowercased() == "m3u8" || fileURL.pathExtension.lowercased() == "m3u" {
+                    let tracks = WalkmanEngine.shared.readPlaylist(at: fileURL)
+                    let p = Playlist(
+                        name: fileURL.deletingPathExtension().lastPathComponent,
+                        filename: fileURL.lastPathComponent,
+                        trackCount: tracks.count,
+                        tracks: tracks,
+                        fullPath: fileURL.path
+                    )
+                    list.append(p)
+                }
+            }
         }
         
         let sortedList = list.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
@@ -86,6 +89,8 @@ public struct PlaylistsView: View {
         }
         if s.hasPrefix("music/") {
             s = String(s.dropFirst(6)).trimmingCharacters(in: slashChars)
+        } else if s.hasPrefix("learning/") {
+            s = String(s.dropFirst(9)).trimmingCharacters(in: slashChars)
         }
         return s
     }
@@ -440,7 +445,7 @@ public struct PlaylistsView: View {
                             }
                         }
                         
-                        Text("Playlists stored in \(activeDrive?.name ?? "Drive")/MUSIC/ for instant hardware discovery")
+                        Text("Playlists stored in \(activeDrive?.name ?? "Drive")/MUSIC/ and /LEARNING/ for instant hardware discovery")
                             .font(WalkmanFont.subheadline)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -588,15 +593,27 @@ public struct PlaylistsView: View {
                                         )
                                     } else {
                                         HStack(spacing: 10) {
-                                            Image(systemName: "list.bullet")
+                                            Image(systemName: pl.isLanguageStudy ? "character.book.closed.fill" : "list.bullet")
                                                 .font(.system(size: 12))
-                                                .foregroundStyle(isSel ? WalkmanTheme.silverLight : .secondary)
+                                                .foregroundStyle(isSel ? WalkmanTheme.silverLight : (pl.isLanguageStudy ? WalkmanTheme.silverMuted : .secondary))
                                             
                                             VStack(alignment: .leading, spacing: 2) {
-                                                Text(pl.name)
-                                                    .font(isSel ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
-                                                    .foregroundStyle(isSel ? .white : .primary)
-                                                    .lineLimit(1)
+                                                HStack(spacing: 4) {
+                                                    Text(pl.name)
+                                                        .font(isSel ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
+                                                        .foregroundStyle(isSel ? .white : .primary)
+                                                        .lineLimit(1)
+                                                    
+                                                    if pl.isLanguageStudy {
+                                                        Text("LEARNING")
+                                                            .font(.system(size: 8, weight: .bold))
+                                                            .foregroundStyle(WalkmanTheme.silverLight)
+                                                            .padding(.horizontal, 4)
+                                                            .padding(.vertical, 1)
+                                                            .background(WalkmanTheme.cardHover)
+                                                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                                                    }
+                                                }
                                                 
                                                 Text("\(pl.trackCount) tracks")
                                                     .font(WalkmanFont.subheadline)

@@ -209,6 +209,8 @@ public final class WalkmanEngine: @unchecked Sendable {
             }
             if norm.lowercased().hasPrefix("music/") {
                 norm = String(norm.dropFirst(6)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            } else if norm.lowercased().hasPrefix("learning/") {
+                norm = String(norm.dropFirst(9)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             }
             norm = norm.precomposedStringWithCanonicalMapping
             if norm.isEmpty { continue }
@@ -629,6 +631,12 @@ public final class WalkmanEngine: @unchecked Sendable {
         switch preset {
         case "copy", "copy_optimize", "copy_raw":
             args.append(contentsOf: ["-c:a", "copy"])
+        case "mp3_128":
+            args.append(contentsOf: ["-c:a", "libmp3lame", "-b:a", "128k", "-id3v2_version", "3"])
+        case "mp3_192":
+            args.append(contentsOf: ["-c:a", "libmp3lame", "-b:a", "192k", "-id3v2_version", "3"])
+        case "aac_128":
+            args.append(contentsOf: ["-c:a", "aac", "-b:a", "128k"])
         case "flac_16":
             args.append(contentsOf: ["-c:a", "flac", "-sample_fmt", "s16", "-ar", "44100"])
         case "flac_24_48":

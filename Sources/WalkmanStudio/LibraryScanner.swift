@@ -6,7 +6,7 @@ public final class LibraryScanner: @unchecked Sendable {
     private init() {}
 
     private let supportedExts: Set<String> = [
-        "flac", "mp3", "m4a", "alac", "wav", "aif", "aiff", "dsf", "dff", "ape", "wma"
+        "flac", "mp3", "m4a", "m4b", "aac", "alac", "wav", "aif", "aiff", "dsf", "dff", "ape", "wma"
     ]
 
     private let dbPath: String = {
@@ -47,11 +47,22 @@ public final class LibraryScanner: @unchecked Sendable {
         return db
     }
 
-    public func scan(musicDir: URL) async -> (tracks: [Track], albums: [String], artists: [String]) {
+    public func scan(musicDir: URL, additionalDirs: [URL] = []) async -> (tracks: [Track], albums: [String], artists: [String]) {
+        var allDirs: [URL] = [musicDir]
+        for dir in additionalDirs {
+            if !allDirs.contains(dir) {
+                allDirs.append(dir)
+            }
+        }
+        return await scan(directories: allDirs)
+    }
+
+    public func scan(directories: [URL]) async -> (tracks: [Track], albums: [String], artists: [String]) {
         return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async { [self] in
                 let fileManager = FileManager.default
-                guard fileManager.fileExists(atPath: musicDir.path) else {
+                let validDirs = directories.filter { fileManager.fileExists(atPath: $0.path) }
+                guard !validDirs.isEmpty else {
                     continuation.resume(returning: ([], [], []))
                     return
                 }
@@ -70,60 +81,62 @@ public final class LibraryScanner: @unchecked Sendable {
                     FROM tracks_cache
                     WHERE full_path LIKE ?;
                     """
-                    var stmt: OpaquePointer?
-                    let searchPrefix = "\(musicDir.path)/%"
-                    if sqlite3_prepare_v2(db, query, -1, &stmt, nil) == SQLITE_OK {
-                        sqlite3_bind_text(stmt, 1, (searchPrefix as NSString).utf8String, -1, nil)
-                        while sqlite3_step(stmt) == SQLITE_ROW {
-                            let fPath = String(cString: sqlite3_column_text(stmt, 0))
-                            let mtime = sqlite3_column_double(stmt, 1)
-                            let size = sqlite3_column_int64(stmt, 2)
-                            cachedMtimes[fPath] = mtime
-                            cachedSizes[fPath] = size
-                            let fmt = String(cString: sqlite3_column_text(stmt, 3))
-                            let title = sqlite3_column_text(stmt, 4).map { String(cString: $0) } ?? ""
-                            let artist = sqlite3_column_text(stmt, 5).map { String(cString: $0) } ?? "Unknown Artist"
-                            let album = sqlite3_column_text(stmt, 6).map { String(cString: $0) } ?? "Unknown Album"
-                            let trackNum = sqlite3_column_text(stmt, 7).map { String(cString: $0) } ?? ""
-                            let year = sqlite3_column_text(stmt, 8).map { String(cString: $0) } ?? ""
-                            let genre = sqlite3_column_text(stmt, 9).map { String(cString: $0) } ?? ""
-                            let duration = sqlite3_column_double(stmt, 10)
-                            let bitrate = Int(sqlite3_column_int(stmt, 11))
-                            let sampleRate = Int(sqlite3_column_int(stmt, 12))
-                            let bitsPerSample = Int(sqlite3_column_int(stmt, 13))
-                            let hasArt = sqlite3_column_int(stmt, 14) != 0
-                            let relPath = sqlite3_column_text(stmt, 15).map { String(cString: $0) } ?? URL(fileURLWithPath: fPath).lastPathComponent
-                            let dateAddedSec = sqlite3_column_double(stmt, 16)
-                            let effectiveAdded = dateAddedSec > 0 ? dateAddedSec : mtime
-                            let dateAdded = Date(timeIntervalSince1970: effectiveAdded > 0 ? effectiveAdded : CFAbsoluteTimeGetCurrent() + 978307200.0)
+                    for dir in validDirs {
+                        var stmt: OpaquePointer?
+                        let searchPrefix = "\(dir.path)/%"
+                        if sqlite3_prepare_v2(db, query, -1, &stmt, nil) == SQLITE_OK {
+                            sqlite3_bind_text(stmt, 1, (searchPrefix as NSString).utf8String, -1, nil)
+                            while sqlite3_step(stmt) == SQLITE_ROW {
+                                let fPath = String(cString: sqlite3_column_text(stmt, 0))
+                                let mtime = sqlite3_column_double(stmt, 1)
+                                let size = sqlite3_column_int64(stmt, 2)
+                                cachedMtimes[fPath] = mtime
+                                cachedSizes[fPath] = size
+                                let fmt = String(cString: sqlite3_column_text(stmt, 3))
+                                let title = sqlite3_column_text(stmt, 4).map { String(cString: $0) } ?? ""
+                                let artist = sqlite3_column_text(stmt, 5).map { String(cString: $0) } ?? "Unknown Artist"
+                                let album = sqlite3_column_text(stmt, 6).map { String(cString: $0) } ?? "Unknown Album"
+                                let trackNum = sqlite3_column_text(stmt, 7).map { String(cString: $0) } ?? ""
+                                let year = sqlite3_column_text(stmt, 8).map { String(cString: $0) } ?? ""
+                                let genre = sqlite3_column_text(stmt, 9).map { String(cString: $0) } ?? ""
+                                let duration = sqlite3_column_double(stmt, 10)
+                                let bitrate = Int(sqlite3_column_int(stmt, 11))
+                                let sampleRate = Int(sqlite3_column_int(stmt, 12))
+                                let bitsPerSample = Int(sqlite3_column_int(stmt, 13))
+                                let hasArt = sqlite3_column_int(stmt, 14) != 0
+                                let relPath = sqlite3_column_text(stmt, 15).map { String(cString: $0) } ?? URL(fileURLWithPath: fPath).lastPathComponent
+                                let dateAddedSec = sqlite3_column_double(stmt, 16)
+                                let effectiveAdded = dateAddedSec > 0 ? dateAddedSec : mtime
+                                let dateAdded = Date(timeIntervalSince1970: effectiveAdded > 0 ? effectiveAdded : CFAbsoluteTimeGetCurrent() + 978307200.0)
 
-                            let cleanTitle = WalkmanEngine.sanitizeWalkmanText(title)
-                            let cleanArtist = WalkmanEngine.sanitizeWalkmanText(artist, stripExplicitMarkers: false)
-                            let cleanAlbum = WalkmanEngine.sanitizeWalkmanText(album)
-                            let fallbackTitle = WalkmanEngine.sanitizeWalkmanText(URL(fileURLWithPath: fPath).deletingPathExtension().lastPathComponent)
+                                let cleanTitle = WalkmanEngine.sanitizeWalkmanText(title)
+                                let cleanArtist = WalkmanEngine.sanitizeWalkmanText(artist, stripExplicitMarkers: false)
+                                let cleanAlbum = WalkmanEngine.sanitizeWalkmanText(album)
+                                let fallbackTitle = WalkmanEngine.sanitizeWalkmanText(URL(fileURLWithPath: fPath).deletingPathExtension().lastPathComponent)
 
-                            let tr = Track(
-                                filename: URL(fileURLWithPath: fPath).lastPathComponent,
-                                relativePath: relPath,
-                                fullPath: fPath,
-                                format: fmt,
-                                title: cleanTitle.isEmpty ? (fallbackTitle.isEmpty ? "Unknown Track" : fallbackTitle) : cleanTitle,
-                                artist: cleanArtist.isEmpty ? "Unknown Artist" : cleanArtist,
-                                album: cleanAlbum.isEmpty ? "Unknown Album" : cleanAlbum,
-                                trackNum: trackNum.trimmingCharacters(in: CharacterSet(charactersIn: " '\"")),
-                                year: year,
-                                genre: genre,
-                                durationSeconds: duration,
-                                bitrateKbps: bitrate,
-                                sampleRate: sampleRate,
-                                bitsPerSample: bitsPerSample,
-                                hasArtwork: hasArt,
-                                sizeBytes: size,
-                                dateAdded: dateAdded
-                            )
-                            cachedTracks[fPath] = tr
+                                let tr = Track(
+                                    filename: URL(fileURLWithPath: fPath).lastPathComponent,
+                                    relativePath: relPath,
+                                    fullPath: fPath,
+                                    format: fmt,
+                                    title: cleanTitle.isEmpty ? (fallbackTitle.isEmpty ? "Unknown Track" : fallbackTitle) : cleanTitle,
+                                    artist: cleanArtist.isEmpty ? "Unknown Artist" : cleanArtist,
+                                    album: cleanAlbum.isEmpty ? "Unknown Album" : cleanAlbum,
+                                    trackNum: trackNum.trimmingCharacters(in: CharacterSet(charactersIn: " '\"")),
+                                    year: year,
+                                    genre: genre,
+                                    durationSeconds: duration,
+                                    bitrateKbps: bitrate,
+                                    sampleRate: sampleRate,
+                                    bitsPerSample: bitsPerSample,
+                                    hasArtwork: hasArt,
+                                    sizeBytes: size,
+                                    dateAdded: dateAdded
+                                )
+                                cachedTracks[fPath] = tr
+                            }
+                            sqlite3_finalize(stmt)
                         }
-                        sqlite3_finalize(stmt)
                     }
                     sqlite3_close(db)
                 }
@@ -133,46 +146,48 @@ public final class LibraryScanner: @unchecked Sendable {
                 var pendingEnrichment: [(path: String, size: Int64, mtime: Double, relPath: String, ext: String)] = []
                 var repairedRows: [(fullPath: String, year: String, genre: String)] = []
 
-                if let enumerator = fileManager.enumerator(
-                    at: musicDir,
-                    includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey],
-                    options: [.skipsPackageDescendants]
-                ) {
-                    for case let fileURL as URL in enumerator {
-                        let filename = fileURL.lastPathComponent
-                        if filename.hasPrefix("._") || filename.hasPrefix(".") { continue }
+                for scanDir in validDirs {
+                    if let enumerator = fileManager.enumerator(
+                        at: scanDir,
+                        includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey],
+                        options: [.skipsPackageDescendants]
+                    ) {
+                        for case let fileURL as URL in enumerator {
+                            let filename = fileURL.lastPathComponent
+                            if filename.hasPrefix("._") || filename.hasPrefix(".") { continue }
 
-                        let ext = fileURL.pathExtension.lowercased()
-                        guard self.supportedExts.contains(ext) else { continue }
+                            let ext = fileURL.pathExtension.lowercased()
+                            guard self.supportedExts.contains(ext) else { continue }
 
-                        let fullPath = fileURL.path
-                        let rValues = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
-                        let curMtime = rValues?.contentModificationDate?.timeIntervalSince1970 ?? 0
-                        let curSize = Int64(rValues?.fileSize ?? 0)
-                        let cachedMtime = cachedMtimes[fullPath] ?? 0
-                        let cachedSize = cachedSizes[fullPath] ?? 0
+                            let fullPath = fileURL.path
+                            let rValues = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+                            let curMtime = rValues?.contentModificationDate?.timeIntervalSince1970 ?? 0
+                            let curSize = Int64(rValues?.fileSize ?? 0)
+                            let cachedMtime = cachedMtimes[fullPath] ?? 0
+                            let cachedSize = cachedSizes[fullPath] ?? 0
 
-                        if let cached = cachedTracks[fullPath], cached.durationSeconds > 0,
-                           abs(cachedMtime - curMtime) < 1.0, cachedSize == curSize {
-                            // Fast-enrich cached track if missing year or genre (e.g. from legacy scanner)
-                            if (cached.year.isEmpty || cached.genre.isEmpty), (ext == "flac" || ext == "mp3") {
-                                if let meta = AudioTagger.shared.readMetadata(fileURL: fileURL), (!meta.year.isEmpty || !meta.genre.isEmpty) {
-                                    var updatedTrack = cached
-                                    if updatedTrack.year.isEmpty && !meta.year.isEmpty { updatedTrack.year = meta.year }
-                                    if updatedTrack.genre.isEmpty && !meta.genre.isEmpty { updatedTrack.genre = meta.genre }
-                                    finalTracks.append(updatedTrack)
-                                    artistsSet.insert(updatedTrack.artist)
-                                    albumsSet.insert("\(updatedTrack.artist) - \(updatedTrack.album)")
-                                    repairedRows.append((fullPath, updatedTrack.year, updatedTrack.genre))
-                                    continue
+                            if let cached = cachedTracks[fullPath], cached.durationSeconds > 0,
+                               abs(cachedMtime - curMtime) < 1.0, cachedSize == curSize {
+                                // Fast-enrich cached track if missing year or genre (e.g. from legacy scanner)
+                                if (cached.year.isEmpty || cached.genre.isEmpty) {
+                                    if let meta = AudioTagger.shared.readMetadata(fileURL: fileURL), (!meta.year.isEmpty || !meta.genre.isEmpty) {
+                                        var updatedTrack = cached
+                                        if updatedTrack.year.isEmpty && !meta.year.isEmpty { updatedTrack.year = meta.year }
+                                        if updatedTrack.genre.isEmpty && !meta.genre.isEmpty { updatedTrack.genre = meta.genre }
+                                        finalTracks.append(updatedTrack)
+                                        artistsSet.insert(updatedTrack.artist)
+                                        albumsSet.insert("\(updatedTrack.artist) - \(updatedTrack.album)")
+                                        repairedRows.append((fullPath, updatedTrack.year, updatedTrack.genre))
+                                        continue
+                                    }
                                 }
+                                finalTracks.append(cached)
+                                artistsSet.insert(cached.artist)
+                                albumsSet.insert("\(cached.artist) - \(cached.album)")
+                            } else {
+                                let relPath = fullPath.replacingOccurrences(of: scanDir.path, with: "").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                                pendingEnrichment.append((fullPath, curSize, curMtime, relPath, ext))
                             }
-                            finalTracks.append(cached)
-                            artistsSet.insert(cached.artist)
-                            albumsSet.insert("\(cached.artist) - \(cached.album)")
-                        } else {
-                            let relPath = fullPath.replacingOccurrences(of: musicDir.path, with: "").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-                            pendingEnrichment.append((fullPath, curSize, curMtime, relPath, ext))
                         }
                     }
                 }
@@ -330,7 +345,7 @@ public final class LibraryScanner: @unchecked Sendable {
             }
         }
 
-        if (ext == "flac" || ext == "mp3"), let info = AudioTagger.shared.readMetadata(fileURL: URL(fileURLWithPath: path)) {
+        if let info = AudioTagger.shared.readMetadata(fileURL: URL(fileURLWithPath: path)) {
             let effTitle = WalkmanEngine.sanitizeWalkmanText(info.title.isEmpty ? defTitle : info.title)
             let effArtist = WalkmanEngine.sanitizeWalkmanText(info.artist.isEmpty ? defArtist : info.artist, stripExplicitMarkers: false)
             let effAlbum = WalkmanEngine.sanitizeWalkmanText(info.album.isEmpty ? defAlbum : info.album)

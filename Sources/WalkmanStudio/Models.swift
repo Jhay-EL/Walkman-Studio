@@ -17,6 +17,10 @@ public struct WalkmanDrive: Identifiable, Hashable, Sendable {
     public let hasCfw: Bool
     public let musicDir: String
 
+    public var learningDir: String {
+        URL(fileURLWithPath: mountPoint).appendingPathComponent("LEARNING").path
+    }
+
     public init(name: String, mountPoint: String, type: DriveType, totalBytes: Int64, usedBytes: Int64, freeBytes: Int64, percentUsed: Double, hasCfw: Bool, musicDir: String) {
         self.name = name
         self.mountPoint = mountPoint
@@ -27,6 +31,34 @@ public struct WalkmanDrive: Identifiable, Hashable, Sendable {
         self.percentUsed = percentUsed
         self.hasCfw = hasCfw
         self.musicDir = musicDir
+    }
+}
+
+public enum TransferTargetMode: String, CaseIterable, Identifiable, Sendable {
+    case music = "music"
+    case learning = "learning"
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .music: return "Music Library"
+        case .learning: return "Language Study & Audiobooks"
+        }
+    }
+
+    public var rootFolderName: String {
+        switch self {
+        case .music: return "MUSIC"
+        case .learning: return "LEARNING"
+        }
+    }
+
+    public var icon: String {
+        switch self {
+        case .music: return "music.note"
+        case .learning: return "character.book.closed.fill"
+        }
     }
 }
 
@@ -93,6 +125,15 @@ extension Track {
     /// Extracts the primary artist name, stripping guest/featured artists (e.g. "6CycleMind, Ebe Dancel" -> "6CycleMind").
     public var primaryArtist: String {
         Track.parsePrimaryAndFeaturedArtist(from: artist).primary
+    }
+
+    /// Whether this track belongs to Language Study mode (/LEARNING/ or language/audiobook/podcast genre)
+    public var isLanguageStudy: Bool {
+        fullPath.contains("/LEARNING/") ||
+        genre.localizedCaseInsensitiveContains("language") ||
+        genre.localizedCaseInsensitiveContains("audiobook") ||
+        genre.localizedCaseInsensitiveContains("podcast") ||
+        genre.localizedCaseInsensitiveContains("learning")
     }
 
     /// Extracts any featured or guest artists if present.
@@ -239,6 +280,10 @@ public struct Playlist: Identifiable, Hashable, Sendable {
     public let trackCount: Int
     public var tracks: [String]
     public let fullPath: String
+
+    public var isLanguageStudy: Bool {
+        fullPath.contains("/LEARNING/")
+    }
 }
 
 public struct WalkmanDeviceInfo: Sendable, Hashable, Codable {
@@ -301,6 +346,9 @@ public struct AlbumItem: Identifiable, Hashable, Sendable {
     public var primaryFormat: String {
         tracks.first?.format ?? "FLAC"
     }
+    public var isLanguageStudy: Bool {
+        tracks.contains(where: \.isLanguageStudy)
+    }
 }
 
 public struct ArtistItem: Identifiable, Hashable, Sendable {
@@ -312,6 +360,9 @@ public struct ArtistItem: Identifiable, Hashable, Sendable {
     public let tracks: [Track]
     public var representativeTrack: Track? {
         tracks.first(where: { $0.hasArtwork }) ?? tracks.first
+    }
+    public var isLanguageStudy: Bool {
+        tracks.contains(where: \.isLanguageStudy)
     }
 }
 

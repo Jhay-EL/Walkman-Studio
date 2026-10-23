@@ -4,7 +4,7 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
-VERSION="2.0.1"
+VERSION="2.0.2"
 DIST_DIR="$DIR/dist"
 
 echo "=== Building Walkman Studio v$VERSION Release Artifacts ==="
@@ -42,72 +42,58 @@ shasum -a 256 "$ZIP_NAME" "$DMG_NAME" > SHA256SUMS.txt
 
 # 5. Generate Release Notes (Markdown & HTML)
 cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.md"
-# Walkman Studio v2.0.1
+# Walkman Studio v2.0.2
 
-This update resolves the issue where importing explicit songs caused them to be renamed or displayed as "Unknown" on Sony Walkman devices, alongside hardware optimizations and stability fixes.
-
----
-
-### Bug Fixes & Hardware Optimizations
-
-* **Explicit Song "Unknown" Display Fix**: Resolved an issue where explicit badges (such as 4-byte UTF-8 symbols like `🅴` and suffix markers like `[Explicit]`) triggered the Sony Walkman RTOS media parser fault, causing songs to be renamed or displayed as "Unknown".
-* **Basic Multilingual Plane (BMP) Tag Sanitization**: Automatically strips non-BMP Unicode characters and variation selectors across Vorbis comments, ID3v2 frames, and filenames while preserving foreign language characters, accents, and umlauts.
-* **Non-Destructive Tag Writing**: Embedded tags are preserved when transferring music, preventing accidental overwriting with blank or unknown values.
-* **Native M3U8 Playlist Sync**: Formats playlists with UTF-8 BOM and CRLF line endings in `/MUSIC/` for native recognition on Sony Walkman players.
-* **Responsive Window Optimization**: Layout reflows smoothly when resized to compact dimensions with zero frame drops.
+This update introduces dedicated Language Study (語学学習) mode support for podcasts and audiobooks, instant on-device song & album deletion without confirmation, flexible album sorting, and a redesigned Transfer & Convert interface.
 
 ---
 
-### Core Features
+## New Features & Hardware Optimizations
 
-* **Direct Music Transfer**: Automatically routes tracks into the standard `/MUSIC/<Artist>/<Album>/` folder structure.
-* **In-Line Audio Preview**: Listen to tracks with waveform scrubbing and audio specs before transferring.
-* **Baseline RGB JPEG Cover Art**: Enforces the 800x800 Baseline RGB JPEG standard to prevent device crashes and blank artwork tiles.
-* **Online Metadata & Artwork Enrichment**: Automatic retrieval of missing tags and high-resolution cover art via iTunes and Deezer.
-* **Synchronized Lyrics (.LRC)**: Automatically pairs timestamped lyrics with audio tracks.
-* **macOS Junk File Purging**: Strips `._*` AppleDouble shadow files and extended attributes before safe ejection.
+* **Language Study (`/LEARNING/`) Mode:** Directly transfer audiobooks, podcasts, and language lessons to the Sony Walkman's dedicated `/LEARNING/` system directory with automatic classification under the `"Language Learning"` genre.
+* **Hardware 5-View Optimization:** Spoken-word audio is fully formatted and indexed across all 5 Walkman hardware screens (Album with 800×800 Baseline RGB JPEG artwork & `folder.jpg`, Artist grouping, All Songs chronological sorting, auto-generated M3U8 Playlists in `/LEARNING/`, and chronologically ordered Recent Transfers via staggered `mtime` timestamps).
+* **Auto-Remux `.m4b` Audiobooks:** Automatically remuxes `.m4b` audiobook files into `.m4a` containers with lossless audio and full metadata, ensuring immediate playback on Walkman firmware without external tools.
+* **Speech-Optimized Presets:** Added dedicated voice conversion presets including `MP3 128 kbps Spoken Word`, `MP3 192 kbps Voice Master`, and `AAC 128 kbps Spoken Audio` for crisp voice clarity and compact storage.
+* **Instant On-Device Deletion:** Right-click any track in the **All Songs** tab or any album in the **Albums** tab to delete it directly from the Walkman hardware without confirmation dialogs.
+* **Album Sorting & Management:** Sort albums by Recently Added, Album Name (A–Z / Z–A), Artist Name, Track Count, and Release Year, with instant album inspection.
+* **Redesigned Transfer & Convert Deck:** Streamlined 3-column control deck with Target Volume switcher, Library Mode toggle (`/MUSIC` vs `/LEARNING`), and responsive queue item cards with real-time audio specs.
+* **Explicit "Save to Walkman" & Playlist Sync:** Formats playlists with strict POSIX paths, NFC Unicode normalization, and CRLF line endings, paired with a tactile **Save to Walkman** button and `⌘S` keyboard shortcut.
+* **Multi-Directory USB Scanner:** High-speed library scanner now concurrently indexes both `/MUSIC` and `/LEARNING` directories over USB, with full metadata support for `.m4b` and `.aac` files.
 
 ---
 
-### Installation
-1. Download **`Walkman-Studio-2.0.1-arm64.dmg`** below.
+## Installation
+
+1. Download `Walkman-Studio-2.0.2-arm64.dmg` below.
 2. Open the disk image and drag **Walkman Studio** into your **Applications** folder.
 3. Connect your Sony Walkman in USB Mass Storage mode and launch Walkman Studio.
 EOF
 
 cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
-<h1>Walkman Studio v2.0.1</h1>
+<h1>Walkman Studio v2.0.2</h1>
 
-<p>This update resolves the issue where importing explicit songs caused them to be renamed or displayed as "Unknown" on Sony Walkman devices, alongside hardware optimizations and stability fixes.</p>
-
-<hr>
-
-<h2>Bug Fixes &amp; Hardware Optimizations</h2>
-<ul>
-  <li><strong>Explicit Song "Unknown" Display Fix:</strong> Resolved an issue where explicit badges (such as 4-byte UTF-8 symbols like <code>&#x1F174;</code> and suffix markers like <code>[Explicit]</code>) triggered the Sony Walkman RTOS media parser fault, causing songs to be renamed or displayed as "Unknown".</li>
-  <li><strong>Basic Multilingual Plane (BMP) Tag Sanitization:</strong> Automatically strips non-BMP Unicode characters and variation selectors across Vorbis comments, ID3v2 frames, and filenames while preserving foreign language characters, accents, and umlauts.</li>
-  <li><strong>Non-Destructive Tag Writing:</strong> Embedded tags are preserved when transferring music, preventing accidental overwriting with blank or unknown values.</li>
-  <li><strong>Native M3U8 Playlist Sync:</strong> Formats playlists with UTF-8 BOM and CRLF line endings in <code>/MUSIC/</code> for native recognition on Sony Walkman players.</li>
-  <li><strong>Responsive Window Optimization:</strong> Layout reflows smoothly when resized to compact dimensions with zero frame drops.</li>
-</ul>
+<p>This update introduces dedicated Language Study (語学学習) mode support for podcasts and audiobooks, instant on-device song &amp; album deletion without confirmation, flexible album sorting, and a redesigned Transfer &amp; Convert interface.</p>
 
 <hr>
 
-<h2>Core Features</h2>
+<h2>New Features &amp; Hardware Optimizations</h2>
 <ul>
-  <li><strong>Direct Music Transfer:</strong> Automatically routes tracks into the standard <code>/MUSIC/&lt;Artist&gt;/&lt;Album&gt;/</code> folder structure.</li>
-  <li><strong>In-Line Audio Preview:</strong> Listen to tracks with waveform scrubbing and audio specs before transferring.</li>
-  <li><strong>Baseline RGB JPEG Cover Art:</strong> Enforces the 800&times;800 Baseline RGB JPEG standard to prevent device crashes and blank artwork tiles.</li>
-  <li><strong>Online Metadata &amp; Artwork Enrichment:</strong> Automatic retrieval of missing tags and high-resolution cover art via iTunes and Deezer.</li>
-  <li><strong>Synchronized Lyrics (.LRC):</strong> Automatically pairs timestamped lyrics with audio tracks.</li>
-  <li><strong>macOS Junk File Purging:</strong> Strips <code>._*</code> AppleDouble shadow files and extended attributes before safe ejection.</li>
+  <li><strong>Language Study (<code>/LEARNING/</code>) Mode:</strong> Directly transfer audiobooks, podcasts, and language lessons to the Sony Walkman's dedicated <code>/LEARNING/</code> system directory with automatic classification under the <code>"Language Learning"</code> genre.</li>
+  <li><strong>Hardware 5-View Optimization:</strong> Spoken-word audio is fully formatted and indexed across all 5 Walkman hardware screens (Album with 800&times;800 Baseline RGB JPEG artwork &amp; <code>folder.jpg</code>, Artist grouping, All Songs chronological sorting, auto-generated M3U8 Playlists in <code>/LEARNING/</code>, and chronologically ordered Recent Transfers via staggered <code>mtime</code> timestamps).</li>
+  <li><strong>Auto-Remux <code>.m4b</code> Audiobooks:</strong> Automatically remuxes <code>.m4b</code> audiobook files into <code>.m4a</code> containers with lossless audio and full metadata, ensuring immediate playback on Walkman firmware without external tools.</li>
+  <li><strong>Speech-Optimized Presets:</strong> Added dedicated voice conversion presets including <code>MP3 128 kbps Spoken Word</code>, <code>MP3 192 kbps Voice Master</code>, and <code>AAC 128 kbps Spoken Audio</code> for crisp voice clarity and compact storage.</li>
+  <li><strong>Instant On-Device Deletion:</strong> Right-click any track in the <strong>All Songs</strong> tab or any album in the <strong>Albums</strong> tab to delete it directly from the Walkman hardware without confirmation dialogs.</li>
+  <li><strong>Album Sorting &amp; Management:</strong> Sort albums by Recently Added, Album Name (A&ndash;Z / Z&ndash;A), Artist Name, Track Count, and Release Year, with instant album inspection.</li>
+  <li><strong>Redesigned Transfer &amp; Convert Deck:</strong> Streamlined 3-column control deck with Target Volume switcher, Library Mode toggle (<code>/MUSIC</code> vs <code>/LEARNING</code>), and responsive queue item cards with real-time audio specs.</li>
+  <li><strong>Explicit "Save to Walkman" &amp; Playlist Sync:</strong> Formats playlists with strict POSIX paths, NFC Unicode normalization, and CRLF line endings, paired with a tactile <strong>Save to Walkman</strong> button and <code>&#x2318;S</code> keyboard shortcut.</li>
+  <li><strong>Multi-Directory USB Scanner:</strong> High-speed library scanner now concurrently indexes both <code>/MUSIC</code> and <code>/LEARNING</code> directories over USB, with full metadata support for <code>.m4b</code> and <code>.aac</code> files.</li>
 </ul>
 
 <hr>
 
 <h2>Installation</h2>
 <ol>
-  <li>Download <code>Walkman-Studio-2.0.1-arm64.dmg</code> below.</li>
+  <li>Download <code>Walkman-Studio-2.0.2-arm64.dmg</code> below.</li>
   <li>Open the disk image and drag <strong>Walkman Studio</strong> into your <strong>Applications</strong> folder.</li>
   <li>Connect your Sony Walkman in USB Mass Storage mode and launch Walkman Studio.</li>
 </ol>
