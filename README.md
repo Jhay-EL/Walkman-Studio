@@ -70,6 +70,17 @@ Sony Walkman non-Android digital audio players deliver exceptional audio fidelit
 * Creates and edits playlists stored in `/MUSIC/`.
 * Enforces relative POSIX paths (`Artist/Album/Track.flac`) and strict **CRLF** (`\r\n`) line endings required by Sony Walkman firmware for playlist recognition.
 
+### Walkman Backup & Restore Studio
+* **Multi-Cloud & Local Storage Destinations:** One-click backup and restore directly through **Google Drive**, **Microsoft OneDrive**, **iCloud Drive**, connected **External USB / SD Drives**, or **Local Mac Storage** (`~/Music/Walkman Studio Backups`).
+* **Flexible Backup Scopes:**
+  * **Full Library:** Safeguard entire `/MUSIC` and `/LEARNING` directories including all albums, tracks, companion `.LRC` synchronized lyrics, artwork, and `.M3U8` playlists.
+  * **Playlists Scope:** Back up `.M3U8` playlists along with all referenced music tracks and lyrics.
+  * **Language Study Scope:** Back up the entire `/LEARNING/` folder (courses, audiobooks, podcasts, chapter playlists).
+  * **Selected Albums:** Manually select specific albums to back up via an interactive album picker with artwork and search.
+  * **Selected Tracks:** Manually choose individual songs to back up.
+* **Slow High-Security Cryptographic Encryption (AES-256-GCM):** Optional cryptographic packaging with **PBKDF2-HMAC-SHA256** (100,000 rounds) key derivation and **AES-256-GCM** authenticated stream cipher. Stream hashing across large FLAC audio files ensures tamper-proof, zero-knowledge privacy across cloud storage.
+* **Safe Walkman Restoration:** Seamlessly restores backups into any selected connected Walkman partition (Internal Flash or MicroSD Card), automatically validating capacity, reconstructing clean directory hierarchies, purging macOS AppleDouble ghost files (`dot_clean -m`), and refreshing the Walkman library database.
+
 ### Dual-Drive Detection & Storage Manager
 * Automatically detects both the **Internal Flash** (`/Volumes/WALKMAN`) and **MicroSD Card** (`/Volumes/SD_CARD`).
 * Direct Darwin kernel `statvfs` integration providing exact byte counts, used storage, and remaining capacity.
@@ -82,15 +93,34 @@ Sony Walkman non-Android digital audio players deliver exceptional audio fidelit
 
 ### High-Performance Library Browser
 * **All Songs (Table View):** Multi-column sortable table (`#`, `Title`, `Artist`, `Album`, `Format`, `Duration`, `Bitrate`) with search filtering and instant playback.
+* **Recently Added:** Auto-updating smart view displaying tracks added to the Walkman within the last 30 days, sorted chronologically with date-added badges.
 * **Albums (Artwork Grid):** Visual album browser with cover art caching, year indicators, track counts, and an Album Detail drill-down view.
 * **Artists (Discography Browser):** Master-detail view grouping tracks by artist and album.
 * **Hi-Res Audio (Studio Masters):** Filtered view exclusively displaying **24-bit / 96kHz+** lossless FLAC tracks calibrated for the S-Master HX DAC.
 * Sub-second library indexing: scans 7,000+ tracks over USB 2.0 in ~0.25 seconds without UI lag.
 
+### Cross-Drive Duplicate Music Detection Engine
+* **Cross-Storage Comparison (Internal Flash vs. MicroSD Card):** Simultaneously inspects both `/Volumes/WALKMAN` (internal storage) and `/Volumes/SD_CARD` (microSD card) to identify identical songs duplicated across partitions, as well as redundant copies on the same storage volume.
+* **Intelligent Audio Tag & Duration Matching:** Groups duplicate candidates using normalized title and primary artist matching (stripping boilerplate video noise while preserving distinct versions like Acoustic, Live, Remix, Instrumental) combined with $\pm 4.0$s duration clustering to prevent false positives.
+* **Storage Reclaim Metric:** Displays exact recoverable storage (e.g. 13.2 GB recoverable) and counts total duplicate groups, cross-drive conflicts, and quality discrepancies.
+* **Category Filtering:** Filter by `All Duplicates`, `Cross-Drive Conflicts`, `Quality Discrepancy` (e.g. FLAC vs MP3), or `Same Storage`.
+* **Smart "Keep Best Quality" & "Keep on SD Card":** One-click resolution preserves the highest resolution audio file (24-bit/96kHz Hi-Res FLAC over lossy MP3) and safely purges the lower quality copy along with companion `.lrc` lyrics and AppleDouble `._` ghost files. For cross-drive matches of equal quality, automatically prioritizes keeping the MicroSD card copy to save precious Walkman internal flash storage.
+* **Audition & Safe Deletion:** Play and audition any duplicate copy right in the app, reveal files in Finder, edit metadata, or delete individual copies with native confirmation dialogs.
+
 ### Standalone Popup Song & Album Metadata Editors
 * **Song Metadata Editor Popup:** Right-click any music track in any view (Library, Albums, Artists, Recently Added, Hi-Res) to launch an enlarged, dedicated Song Metadata Editor modal. Includes full tag editing, synchronized lyrics view/fetcher, and real-time artwork replacement.
 * **Album Metadata Editor Popup:** Right-click any album card in the Albums tab to edit album title, artist, year, and genre across all tracks simultaneously. Automatically writes compliant artwork to all tracks and folder art, and provides tracklist auto-numbering (`1..N` or zero-padded `01..N`) with interactive reordering.
 * **Ergonomic 50% Enlarged Modal Layout:** Spacious two-column editing layout with comfortable button spacing and responsive controls designed for detailed cataloging.
+
+### Interactive Trim & Cut Audio Studio
+* **One-Click Right-Click Launch:** Right-click any track in any library view (All Songs, Albums, Artists, Recently Added, Hi-Res Audio, or Song Metadata Editor) and choose **"Trim & Cut..."** to launch the dedicated popup audio studio.
+* **Trim (Keep Selection) & Cut (Remove Selection) Modes:** Flexibly keep only the selected time range or cut out unwanted sections (intros, dialogue, applause) with automatic seamless audio splicing.
+* **High-Fidelity Waveform Visualizer:** Real-time visual waveform scrubber with draggable start and end markers, live playhead cursor, and time ruler.
+* **Audition & Spliced Preview:** Audition the exact edit before processing—Trim preview plays the selected range, while Cut preview plays smoothly with the cut region automatically skipped. Continuous looping is supported.
+* **Precise Boundary Steppers:** Millisecond-accurate fine-tuning buttons (`-5s`, `-1s`, `-0.1s`, `+0.1s`, `+1s`, `+5s`), quick "Set to 0:00" and "Set to End" buttons, and one-click "Use Playhead" markers.
+* **Audio Channel Routing & Inversion:** Invert Left & Right stereo channels (channel swap), downmix to Mono, force 2-channel Stereo, isolate Left or Right channel to both ears, or flip phase 180°.
+* **Smooth Transitions & Gain:** Configurable smooth Fade-In and Fade-Out curves to prevent pops/clicks, plus audio gain adjustment (-6dB to +6dB).
+* **Flexible Output & Walkman Tag Preservation:** Choose between safe in-place file overwrite, saving as a new copy (`[Trimmed]`), or exporting anywhere on your Mac via `NSSavePanel`, with full preservation of ID3v2.3/Vorbis tags and Baseline RGB JPEG cover art.
 
 ### Cover Art Extraction & Direct Mac Export
 * **One-Click Export to Mac:** Right-click any song or album to extract embedded cover art or companion images and save them directly to your Mac as high-resolution JPEG files.
@@ -241,6 +271,10 @@ Walkman-Studio/
 ├── assets/
 │   ├── icon.png                          # High-resolution application icon
 │   ├── AppIcon.icns                      # macOS icon bundle (16x16 to 1024x1024)
+│   ├── devices/                          # Hardware artwork for all supported Walkman models
+│   │   ├── nw-a50.png, nw-a40.png, nw-a30.png, nw-a20.png, nw-a10.png
+│   │   ├── nw-zx300.png, nw-zx100.png, nw-wm1a.png, nw-wm1z.png
+│   │   └── nw-ws410.png, nw-ws620.png, nw-e390.png, nw-s310.png, nw-b180.png
 │   ├── walkman_device.png                # Sony Walkman hardware artwork
 │   ├── walkman_device_cropped.png        # Cropped device preview icon
 │   └── sc/                               # High-resolution application screenshots
