@@ -5,6 +5,7 @@ public struct HiResAudioView: View {
     let tracks: [Track]
     let onSelectTrack: (Track) -> Void
     var onEditTrack: ((Track) -> Void)? = nil
+    var onTrimCutTrack: ((Track) -> Void)? = nil
     
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var searchQuery: String = ""
@@ -13,11 +14,13 @@ public struct HiResAudioView: View {
     public init(
         tracks: [Track],
         onSelectTrack: @escaping (Track) -> Void,
-        onEditTrack: ((Track) -> Void)? = nil
+        onEditTrack: ((Track) -> Void)? = nil,
+        onTrimCutTrack: ((Track) -> Void)? = nil
     ) {
         self.tracks = tracks
         self.onSelectTrack = onSelectTrack
         self.onEditTrack = onEditTrack
+        self.onTrimCutTrack = onTrimCutTrack
     }
     
     private var hiResTracks: [Track] {
@@ -268,6 +271,11 @@ public struct HiResAudioView: View {
                                 onEditTrack?(track)
                             } label: {
                                 Label("Edit Song Metadata...", systemImage: "square.and.pencil")
+                            }
+                            Button {
+                                onTrimCutTrack?(track)
+                            } label: {
+                                Label("Trim & Cut...", systemImage: "scissors")
                             }
                             Button {
                                 ArtworkExportService.exportArtwork(for: track)

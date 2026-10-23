@@ -6,6 +6,7 @@ public struct ArtistsView: View {
     let precomputedArtists: [ArtistItem]?
     let onSelectTrack: (Track) -> Void
     var onEditTrack: ((Track) -> Void)? = nil
+    var onTrimCutTrack: ((Track) -> Void)? = nil
     
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var selectedArtistName: String? = nil
@@ -15,12 +16,14 @@ public struct ArtistsView: View {
         tracks: [Track],
         precomputedArtists: [ArtistItem]? = nil,
         onSelectTrack: @escaping (Track) -> Void,
-        onEditTrack: ((Track) -> Void)? = nil
+        onEditTrack: ((Track) -> Void)? = nil,
+        onTrimCutTrack: ((Track) -> Void)? = nil
     ) {
         self.tracks = tracks
         self.precomputedArtists = precomputedArtists
         self.onSelectTrack = onSelectTrack
         self.onEditTrack = onEditTrack
+        self.onTrimCutTrack = onTrimCutTrack
     }
     
     @State private var cachedArtists: [ArtistItem] = []
@@ -389,6 +392,11 @@ public struct ArtistsView: View {
                                                 onEditTrack?(track)
                                             } label: {
                                                 Label("Edit Song Metadata...", systemImage: "square.and.pencil")
+                                            }
+                                            Button {
+                                                onTrimCutTrack?(track)
+                                            } label: {
+                                                Label("Trim & Cut...", systemImage: "scissors")
                                             }
                                             Button {
                                                 ArtworkExportService.exportArtwork(for: track)

@@ -9,6 +9,7 @@ public struct LibraryView: View {
     let onGoToTransfer: () -> Void
     var onDeleteTrack: ((Track) -> Void)? = nil
     var onEditTrack: ((Track) -> Void)? = nil
+    var onTrimCutTrack: ((Track) -> Void)? = nil
     
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var formatFilter: String = "ALL"
@@ -23,7 +24,8 @@ public struct LibraryView: View {
         onInspectTrack: @escaping (Track) -> Void,
         onGoToTransfer: @escaping () -> Void,
         onDeleteTrack: ((Track) -> Void)? = nil,
-        onEditTrack: ((Track) -> Void)? = nil
+        onEditTrack: ((Track) -> Void)? = nil,
+        onTrimCutTrack: ((Track) -> Void)? = nil
     ) {
         self.tracks = tracks
         self.isLoading = isLoading
@@ -32,6 +34,7 @@ public struct LibraryView: View {
         self.onGoToTransfer = onGoToTransfer
         self.onDeleteTrack = onDeleteTrack
         self.onEditTrack = onEditTrack
+        self.onTrimCutTrack = onTrimCutTrack
     }
     
     private var visibleTracks: [Track] {
@@ -277,6 +280,12 @@ public struct LibraryView: View {
                             onEditTrack?(track)
                         } label: {
                             Label("Edit Song Metadata...", systemImage: "square.and.pencil")
+                        }
+                        
+                        Button {
+                            onTrimCutTrack?(track)
+                        } label: {
+                            Label("Trim & Cut...", systemImage: "scissors")
                         }
                         
                         Button {

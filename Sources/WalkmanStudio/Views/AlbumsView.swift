@@ -30,6 +30,7 @@ public struct AlbumsView: View {
     let onSelectTrack: (Track) -> Void
     var onEditAlbum: ((AlbumItem) -> Void)? = nil
     var onEditTrack: ((Track) -> Void)? = nil
+    var onTrimCutTrack: ((Track) -> Void)? = nil
     var onDeleteAlbum: ((AlbumItem) -> Void)? = nil
     var onDeleteTrack: ((Track) -> Void)? = nil
     
@@ -46,6 +47,7 @@ public struct AlbumsView: View {
         onSelectTrack: @escaping (Track) -> Void,
         onEditAlbum: ((AlbumItem) -> Void)? = nil,
         onEditTrack: ((Track) -> Void)? = nil,
+        onTrimCutTrack: ((Track) -> Void)? = nil,
         onDeleteAlbum: ((AlbumItem) -> Void)? = nil,
         onDeleteTrack: ((Track) -> Void)? = nil
     ) {
@@ -54,6 +56,7 @@ public struct AlbumsView: View {
         self.onSelectTrack = onSelectTrack
         self.onEditAlbum = onEditAlbum
         self.onEditTrack = onEditTrack
+        self.onTrimCutTrack = onTrimCutTrack
         self.onDeleteAlbum = onDeleteAlbum
         self.onDeleteTrack = onDeleteTrack
     }
@@ -199,6 +202,9 @@ public struct AlbumsView: View {
                     },
                     onEditTrack: { tr in
                         onEditTrack?(tr)
+                    },
+                    onTrimCutTrack: { tr in
+                        onTrimCutTrack?(tr)
                     },
                     onDeleteAlbum: {
                         selectedAlbum = nil
@@ -484,6 +490,7 @@ private struct AlbumDetailView: View {
     let onSelectTrack: (Track) -> Void
     var onEditAlbum: (() -> Void)? = nil
     var onEditTrack: ((Track) -> Void)? = nil
+    var onTrimCutTrack: ((Track) -> Void)? = nil
     var onDeleteAlbum: (() -> Void)? = nil
     var onDeleteTrack: ((Track) -> Void)? = nil
     
@@ -794,6 +801,11 @@ private struct AlbumDetailView: View {
                                     onEditTrack?(track)
                                 } label: {
                                     Label("Edit Song Metadata...", systemImage: "square.and.pencil")
+                                }
+                                Button {
+                                    onTrimCutTrack?(track)
+                                } label: {
+                                    Label("Trim & Cut...", systemImage: "scissors")
                                 }
                                 Button {
                                     ArtworkExportService.exportArtwork(for: track)

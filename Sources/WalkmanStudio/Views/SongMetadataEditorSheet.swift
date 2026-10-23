@@ -57,6 +57,7 @@ public struct SongMetadataEditorSheet: View {
     @State private var statusMessage: String? = nil
     @State private var isError: Bool = false
     @State private var isFetchingOnlineInfo: Bool = false
+    @State private var showTrimCutSheet: Bool = false
     
     public init(track: Track, onSaved: @escaping () -> Void, onDismiss: @escaping () -> Void) {
         self.track = track
@@ -471,6 +472,22 @@ public struct SongMetadataEditorSheet: View {
                     .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
+
+                Button(action: { showTrimCutSheet = true }) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "scissors")
+                            .font(.system(size: 10, weight: .bold))
+                        Text("Trim & Cut...")
+                            .font(WalkmanFont.calloutMedium)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(LinearGradient(colors: [Color.white.opacity(0.12), Color.white.opacity(0.08)], startPoint: .top, endPoint: .bottom))
+                    .foregroundStyle(.white)
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .help("Open Trim & Cut Audio Studio for this track")
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
@@ -572,6 +589,18 @@ public struct SongMetadataEditorSheet: View {
         }
         .frame(minWidth: 960, idealWidth: 1050, maxWidth: 1180, minHeight: 820, idealHeight: 880, maxHeight: 1020)
         .background(WalkmanTheme.background.ignoresSafeArea())
+        .sheet(isPresented: $showTrimCutSheet) {
+            TrimAndCutSheet(
+                track: track,
+                onSaved: {
+                    onSaved()
+                    onDismiss()
+                },
+                onDismiss: {
+                    showTrimCutSheet = false
+                }
+            )
+        }
         .onAppear {
             loadInitialData()
         }

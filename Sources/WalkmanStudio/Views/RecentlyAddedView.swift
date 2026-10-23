@@ -25,6 +25,7 @@ public struct RecentlyAddedView: View {
     let onGoToTransfer: () -> Void
     var onDeleteTrack: ((Track) -> Void)? = nil
     var onEditTrack: ((Track) -> Void)? = nil
+    var onTrimCutTrack: ((Track) -> Void)? = nil
     
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var searchQuery: String = ""
@@ -50,7 +51,8 @@ public struct RecentlyAddedView: View {
         onInspectTrack: @escaping (Track) -> Void,
         onGoToTransfer: @escaping () -> Void,
         onDeleteTrack: ((Track) -> Void)? = nil,
-        onEditTrack: ((Track) -> Void)? = nil
+        onEditTrack: ((Track) -> Void)? = nil,
+        onTrimCutTrack: ((Track) -> Void)? = nil
     ) {
         self.tracks = tracks
         self.isLoading = isLoading
@@ -59,6 +61,7 @@ public struct RecentlyAddedView: View {
         self.onGoToTransfer = onGoToTransfer
         self.onDeleteTrack = onDeleteTrack
         self.onEditTrack = onEditTrack
+        self.onTrimCutTrack = onTrimCutTrack
     }
     
     private static let relativeFormatter: RelativeDateTimeFormatter = {
@@ -416,6 +419,11 @@ public struct RecentlyAddedView: View {
                             onEditTrack?(item.track)
                         } label: {
                             Label("Edit Song Metadata...", systemImage: "square.and.pencil")
+                        }
+                        Button {
+                            onTrimCutTrack?(item.track)
+                        } label: {
+                            Label("Trim & Cut...", systemImage: "scissors")
                         }
                         Button {
                             ArtworkExportService.exportArtwork(for: item.track)
