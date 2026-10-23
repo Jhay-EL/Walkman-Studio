@@ -28,6 +28,8 @@ public struct AlbumsView: View {
     let tracks: [Track]
     let precomputedAlbums: [AlbumItem]?
     let onSelectTrack: (Track) -> Void
+    var onEditAlbum: ((AlbumItem) -> Void)? = nil
+    var onEditTrack: ((Track) -> Void)? = nil
     var onDeleteAlbum: ((AlbumItem) -> Void)? = nil
     var onDeleteTrack: ((Track) -> Void)? = nil
     
@@ -42,12 +44,16 @@ public struct AlbumsView: View {
         tracks: [Track],
         precomputedAlbums: [AlbumItem]? = nil,
         onSelectTrack: @escaping (Track) -> Void,
+        onEditAlbum: ((AlbumItem) -> Void)? = nil,
+        onEditTrack: ((Track) -> Void)? = nil,
         onDeleteAlbum: ((AlbumItem) -> Void)? = nil,
         onDeleteTrack: ((Track) -> Void)? = nil
     ) {
         self.tracks = tracks
         self.precomputedAlbums = precomputedAlbums
         self.onSelectTrack = onSelectTrack
+        self.onEditAlbum = onEditAlbum
+        self.onEditTrack = onEditTrack
         self.onDeleteAlbum = onDeleteAlbum
         self.onDeleteTrack = onDeleteTrack
     }
@@ -136,6 +142,8 @@ public struct AlbumsView: View {
             }
             if formatFilter == "HI-RES" {
                 return alb.isHiRes
+            } else if formatFilter == "LEARNING" {
+                return alb.isLanguageStudy
             } else if formatFilter == "FLAC" {
                 return alb.tracks.contains { $0.format == "FLAC" }
             } else if formatFilter == "MP3" {
@@ -186,6 +194,12 @@ public struct AlbumsView: View {
                     album: album,
                     onBack: { selectedAlbum = nil },
                     onSelectTrack: onSelectTrack,
+                    onEditAlbum: {
+                        onEditAlbum?(album)
+                    },
+                    onEditTrack: { tr in
+                        onEditTrack?(tr)
+                    },
                     onDeleteAlbum: {
                         selectedAlbum = nil
                         onDeleteAlbum?(album)
@@ -253,12 +267,13 @@ public struct AlbumsView: View {
                         // Format Filter Chips
                         Picker("", selection: $formatFilter) {
                             Text("All").tag("ALL")
+                            Text("Learning").tag("LEARNING")
                             Text("Hi-Res").tag("HI-RES")
                             Text("FLAC").tag("FLAC")
                             Text("MP3").tag("MP3")
                         }
                         .pickerStyle(.segmented)
-                        .frame(width: 220)
+                        .frame(width: 280)
                         
                         Spacer()
                         
@@ -296,6 +311,9 @@ public struct AlbumsView: View {
                                                 onSelectTrack(rep)
                                             }
                                         },
+                                        onEditAlbum: {
+                                            onEditAlbum?(alb)
+                                        },
                                         onDeleteAlbum: {
                                             onDeleteAlbum?(alb)
                                         }
@@ -328,6 +346,7 @@ private struct AlbumGridCard: View {
     let album: AlbumItem
     let onOpen: () -> Void
     var onInspectAlbum: (() -> Void)? = nil
+    var onEditAlbum: (() -> Void)? = nil
     var onDeleteAlbum: (() -> Void)? = nil
     
     @ObservedObject private var player = AudioPlayerService.shared
@@ -363,6 +382,20 @@ private struct AlbumGridCard: View {
                             .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
                             .shadow(color: Color.black.opacity(0.4), radius: 2)
                             .padding(6)
+                    } else if album.isLanguageStudy {
+                        HStack(spacing: 3) {
+                            Image(systemName: "character.book.closed.fill")
+                                .font(.system(size: 8))
+                            Text("Learning")
+                        }
+                        .font(WalkmanFont.badge)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(WalkmanTheme.silverGradient)
+                        .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                        .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+                        .shadow(color: Color.black.opacity(0.4), radius: 2)
+                        .padding(6)
                     }
                 }
                 
@@ -407,9 +440,15 @@ private struct AlbumGridCard: View {
             Divider()
             
             Button {
+                onEditAlbum?()
+            } label: {
+                Label("Edit Album Metadata...", systemImage: "square.and.pencil")
+            }
+            
+            Button {
                 onInspectAlbum?()
             } label: {
-                Label("Inspect Album Metadata (Get Info)", systemImage: "info.circle")
+                Label("Inspect in Sidebar", systemImage: "sidebar.trailing")
             }
             
             if let rep = album.representativeTrack {
@@ -437,6 +476,8 @@ private struct AlbumDetailView: View {
     let album: AlbumItem
     let onBack: () -> Void
     let onSelectTrack: (Track) -> Void
+    var onEditAlbum: (() -> Void)? = nil
+    var onEditTrack: ((Track) -> Void)? = nil
     var onDeleteAlbum: (() -> Void)? = nil
     var onDeleteTrack: ((Track) -> Void)? = nil
     
@@ -501,6 +542,18 @@ private struct AlbumDetailView: View {
                                         .background(WalkmanTheme.hiResGoldGradient)
                                         .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                                         .clipShape(Capsule())
+                                } else if album.isLanguageStudy {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "character.book.closed.fill")
+                                            .font(.system(size: 9))
+                                        Text("Language Study")
+                                    }
+                                    .font(WalkmanFont.badge)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2.5)
+                                    .background(WalkmanTheme.silverGradient)
+                                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                                    .clipShape(Capsule())
                                 }
                             }
                             
@@ -542,6 +595,22 @@ private struct AlbumDetailView: View {
                                 }
                                 .buttonStyle(.plain)
                                 
+                                Button(action: { onEditAlbum?() }) {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: "square.and.pencil")
+                                            .font(.system(size: 11))
+                                        Text("Edit Album")
+                                            .font(WalkmanFont.calloutMedium)
+                                    }
+                                    .padding(.horizontal, 11)
+                                    .padding(.vertical, 7)
+                                    .background(Color.white.opacity(0.08))
+                                    .foregroundStyle(WalkmanTheme.silverLight)
+                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                                .help("Edit album artwork, tags, and track numbers in a popup window")
+                                
                                 if let rep = album.representativeTrack {
                                     Button(action: { onSelectTrack(rep) }) {
                                         HStack(spacing: 5) {
@@ -557,7 +626,7 @@ private struct AlbumDetailView: View {
                                         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                                     }
                                     .buttonStyle(.plain)
-                                    .help("Inspect album metadata and cover artwork")
+                                    .help("Inspect album metadata and cover artwork in sidebar")
                                 }
                                 
                                 Button(action: { onDeleteAlbum?() }) {
@@ -583,6 +652,22 @@ private struct AlbumDetailView: View {
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 10)
+                    .contextMenu {
+                        Button {
+                            onEditAlbum?()
+                        } label: {
+                            Label("Edit Album Metadata...", systemImage: "square.and.pencil")
+                        }
+                        if let rep = album.representativeTrack {
+                            Button {
+                                let dir = URL(fileURLWithPath: rep.fullPath).deletingLastPathComponent().path
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(dir, forType: .string)
+                            } label: {
+                                Label("Copy Album Folder Path", systemImage: "doc.on.doc")
+                            }
+                        }
+                    }
                     
                     // Album Tracks List
                     VStack(spacing: 2) {
@@ -674,11 +759,17 @@ private struct AlbumDetailView: View {
                                 }
                             }
                             .contextMenu {
-                                Button("Inspect Metadata & Specs") {
-                                    onSelectTrack(track)
-                                }
                                 Button("Play Track") {
                                     player.play(track: track, in: album.tracks)
+                                }
+                                Divider()
+                                Button {
+                                    onEditTrack?(track)
+                                } label: {
+                                    Label("Edit Song Metadata...", systemImage: "square.and.pencil")
+                                }
+                                Button("Inspect in Sidebar") {
+                                    onSelectTrack(track)
                                 }
                                 Divider()
                                 Button("Copy Path") {

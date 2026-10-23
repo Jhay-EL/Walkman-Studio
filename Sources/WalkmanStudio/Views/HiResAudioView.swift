@@ -4,14 +4,20 @@ import AppKit
 public struct HiResAudioView: View {
     let tracks: [Track]
     let onSelectTrack: (Track) -> Void
+    var onEditTrack: ((Track) -> Void)? = nil
     
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var searchQuery: String = ""
     @State private var minBitsFilter: Int = 24
     
-    public init(tracks: [Track], onSelectTrack: @escaping (Track) -> Void) {
+    public init(
+        tracks: [Track],
+        onSelectTrack: @escaping (Track) -> Void,
+        onEditTrack: ((Track) -> Void)? = nil
+    ) {
         self.tracks = tracks
         self.onSelectTrack = onSelectTrack
+        self.onEditTrack = onEditTrack
     }
     
     private var hiResTracks: [Track] {
@@ -251,6 +257,25 @@ public struct HiResAudioView: View {
                                 player.pause()
                             } else {
                                 player.play(track: track, in: filteredTracks)
+                            }
+                        }
+                        .contextMenu {
+                            Button("Play Track") {
+                                player.play(track: track, in: filteredTracks)
+                            }
+                            Divider()
+                            Button {
+                                onEditTrack?(track)
+                            } label: {
+                                Label("Edit Song Metadata...", systemImage: "square.and.pencil")
+                            }
+                            Button("Inspect in Sidebar") {
+                                onSelectTrack(track)
+                            }
+                            Divider()
+                            Button("Copy Path") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(track.fullPath, forType: .string)
                             }
                         }
                     }

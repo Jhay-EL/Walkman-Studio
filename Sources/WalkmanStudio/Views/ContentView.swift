@@ -15,6 +15,8 @@ public struct ContentView: View {
     @State private var queueCount: Int = 0
     @State private var deviceInfo: WalkmanDeviceInfo? = nil
     @State private var showAboutSheet: Bool = false
+    @State private var trackToEdit: Track? = nil
+    @State private var albumToEdit: AlbumItem? = nil
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     
     @ObservedObject private var player = AudioPlayerService.shared
@@ -113,7 +115,12 @@ public struct ContentView: View {
         isScanning = true
         let expectedMount = drive.mountPoint
         Task {
-            let result = await LibraryScanner.shared.scan(musicDir: URL(fileURLWithPath: drive.musicDir))
+            var scanDirs: [URL] = [URL(fileURLWithPath: drive.musicDir)]
+            let learningURL = URL(fileURLWithPath: drive.learningDir)
+            if FileManager.default.fileExists(atPath: learningURL.path) {
+                scanDirs.append(learningURL)
+            }
+            let result = await LibraryScanner.shared.scan(directories: scanDirs)
             
             // Precompute library statistics and models off the main thread once
             let (stats, precomputedArtists, precomputedAlbums, precomputedRecent) = await Task.detached(priority: .userInitiated) {
@@ -483,6 +490,9 @@ public struct ContentView: View {
                                     },
                                     onDeleteTrack: { track in
                                         deleteTrackFromDevice(track)
+                                    },
+                                    onEditTrack: { track in
+                                        self.trackToEdit = track
                                     }
                                 )
                                 
@@ -500,6 +510,9 @@ public struct ContentView: View {
                                     },
                                     onDeleteTrack: { track in
                                         deleteTrackFromDevice(track)
+                                    },
+                                    onEditTrack: { track in
+                                        self.trackToEdit = track
                                     }
                                 )
                                 
@@ -510,6 +523,12 @@ public struct ContentView: View {
                                     onSelectTrack: { track in
                                         self.selectedTrackId = track.id
                                         self.showInspector = true
+                                    },
+                                    onEditAlbum: { album in
+                                        self.albumToEdit = album
+                                    },
+                                    onEditTrack: { track in
+                                        self.trackToEdit = track
                                     },
                                     onDeleteAlbum: { album in
                                         deleteAlbumFromDevice(album)
@@ -526,6 +545,9 @@ public struct ContentView: View {
                                     onSelectTrack: { track in
                                         self.selectedTrackId = track.id
                                         self.showInspector = true
+                                    },
+                                    onEditTrack: { track in
+                                        self.trackToEdit = track
                                     }
                                 )
                                 
@@ -535,6 +557,9 @@ public struct ContentView: View {
                                     onSelectTrack: { track in
                                         self.selectedTrackId = track.id
                                         self.showInspector = true
+                                    },
+                                    onEditTrack: { track in
+                                        self.trackToEdit = track
                                     }
                                 )
                                 
@@ -646,6 +671,28 @@ public struct ContentView: View {
             AboutWalkmanStudioView(
                 currentDeviceInfo: deviceInfo,
                 onDismiss: { showAboutSheet = false }
+            )
+        }
+        .sheet(item: $trackToEdit) { track in
+            SongMetadataEditorSheet(
+                track: track,
+                onSaved: {
+                    refreshLibrary()
+                },
+                onDismiss: {
+                    trackToEdit = nil
+                }
+            )
+        }
+        .sheet(item: $albumToEdit) { album in
+            AlbumMetadataEditorSheet(
+                album: album,
+                onSaved: {
+                    refreshLibrary()
+                },
+                onDismiss: {
+                    albumToEdit = nil
+                }
             )
         }
     }

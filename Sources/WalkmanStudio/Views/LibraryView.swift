@@ -8,6 +8,7 @@ public struct LibraryView: View {
     let onInspectTrack: (Track) -> Void
     let onGoToTransfer: () -> Void
     var onDeleteTrack: ((Track) -> Void)? = nil
+    var onEditTrack: ((Track) -> Void)? = nil
     
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var formatFilter: String = "ALL"
@@ -21,7 +22,8 @@ public struct LibraryView: View {
         selectedTrackId: Binding<String?>,
         onInspectTrack: @escaping (Track) -> Void,
         onGoToTransfer: @escaping () -> Void,
-        onDeleteTrack: ((Track) -> Void)? = nil
+        onDeleteTrack: ((Track) -> Void)? = nil,
+        onEditTrack: ((Track) -> Void)? = nil
     ) {
         self.tracks = tracks
         self.isLoading = isLoading
@@ -29,6 +31,7 @@ public struct LibraryView: View {
         self.onInspectTrack = onInspectTrack
         self.onGoToTransfer = onGoToTransfer
         self.onDeleteTrack = onDeleteTrack
+        self.onEditTrack = onEditTrack
     }
     
     private var visibleTracks: [Track] {
@@ -52,6 +55,7 @@ public struct LibraryView: View {
             
             if formatFilter == "ALL" { return true }
             if formatFilter == "HI-RES" { return track.bitsPerSample > 16 || track.sampleRate > 48000 }
+            if formatFilter == "LEARNING" { return track.isLanguageStudy }
             return track.format == formatFilter
         }
         self.displayedTracks = filtered.sorted(using: activeSort)
@@ -102,10 +106,12 @@ public struct LibraryView: View {
                     Text("All Formats").tag("ALL")
                     Text("FLAC").tag("FLAC")
                     Text("MP3").tag("MP3")
-                    Text("Hi-Res (>16bit)").tag("HI-RES")
+                    Text("M4A").tag("M4A")
+                    Text("Language Study").tag("LEARNING")
+                    Text("Hi-Res").tag("HI-RES")
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 290)
+                .frame(width: 440)
                 
                 Spacer()
                 
@@ -182,10 +188,19 @@ public struct LibraryView: View {
                             .help(isPlayingThis ? "Pause" : "Play preview")
                             
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(track.title)
-                                    .font(isPlayingThis ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
-                                    .foregroundStyle(isPlayingThis ? .white : .primary)
-                                    .lineLimit(1)
+                                HStack(spacing: 5) {
+                                    Text(track.title)
+                                        .font(isPlayingThis ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
+                                        .foregroundStyle(isPlayingThis ? .white : .primary)
+                                        .lineLimit(1)
+                                    
+                                    if track.isLanguageStudy {
+                                        Image(systemName: "character.book.closed.fill")
+                                            .font(.system(size: 9))
+                                            .foregroundStyle(WalkmanTheme.silverLight)
+                                            .help("Language Study & Audiobooks (/LEARNING/)")
+                                    }
+                                }
                             }
                         }
                     }
@@ -258,7 +273,13 @@ public struct LibraryView: View {
                         
                         Divider()
                         
-                        Button("Inspect & Edit Metadata (Get Info)") {
+                        Button {
+                            onEditTrack?(track)
+                        } label: {
+                            Label("Edit Song Metadata...", systemImage: "square.and.pencil")
+                        }
+                        
+                        Button("Inspect in Sidebar") {
                             onInspectTrack(track)
                         }
                         

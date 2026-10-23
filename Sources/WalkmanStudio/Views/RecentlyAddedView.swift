@@ -24,6 +24,7 @@ public struct RecentlyAddedView: View {
     let onInspectTrack: (Track) -> Void
     let onGoToTransfer: () -> Void
     var onDeleteTrack: ((Track) -> Void)? = nil
+    var onEditTrack: ((Track) -> Void)? = nil
     
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var searchQuery: String = ""
@@ -48,7 +49,8 @@ public struct RecentlyAddedView: View {
         selectedTrackId: Binding<String?>,
         onInspectTrack: @escaping (Track) -> Void,
         onGoToTransfer: @escaping () -> Void,
-        onDeleteTrack: ((Track) -> Void)? = nil
+        onDeleteTrack: ((Track) -> Void)? = nil,
+        onEditTrack: ((Track) -> Void)? = nil
     ) {
         self.tracks = tracks
         self.isLoading = isLoading
@@ -56,6 +58,7 @@ public struct RecentlyAddedView: View {
         self.onInspectTrack = onInspectTrack
         self.onGoToTransfer = onGoToTransfer
         self.onDeleteTrack = onDeleteTrack
+        self.onEditTrack = onEditTrack
     }
     
     private static let relativeFormatter: RelativeDateTimeFormatter = {
@@ -107,6 +110,8 @@ public struct RecentlyAddedView: View {
             // Format filter
             if formatFilter == "HI-RES" {
                 if track.bitsPerSample <= 16 && track.sampleRate <= 48000 { return false }
+            } else if formatFilter == "LEARNING" {
+                if !track.isLanguageStudy { return false }
             } else if formatFilter != "ALL" {
                 if track.format != formatFilter { return false }
             }
@@ -250,10 +255,12 @@ public struct RecentlyAddedView: View {
                     Text("All Formats").tag("ALL")
                     Text("FLAC").tag("FLAC")
                     Text("MP3").tag("MP3")
+                    Text("M4A").tag("M4A")
+                    Text("Language Study").tag("LEARNING")
                     Text("Hi-Res").tag("HI-RES")
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 240)
+                .frame(width: 440)
                 
                 Spacer()
                 
@@ -327,10 +334,19 @@ public struct RecentlyAddedView: View {
                             .help(isPlayingThis ? "Pause" : "Play preview")
                             
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(track.title)
-                                    .font(isPlayingThis ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
-                                    .foregroundStyle(isPlayingThis ? .white : .primary)
-                                    .lineLimit(1)
+                                HStack(spacing: 5) {
+                                    Text(track.title)
+                                        .font(isPlayingThis ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
+                                        .foregroundStyle(isPlayingThis ? .white : .primary)
+                                        .lineLimit(1)
+                                    
+                                    if track.isLanguageStudy {
+                                        Image(systemName: "character.book.closed.fill")
+                                            .font(.system(size: 9))
+                                            .foregroundStyle(WalkmanTheme.silverLight)
+                                            .help("Language Study & Audiobooks (/LEARNING/)")
+                                    }
+                                }
                             }
                         }
                     }
@@ -392,11 +408,17 @@ public struct RecentlyAddedView: View {
                 }
                 .contextMenu(forSelectionType: RankedTrack.ID.self) { items in
                     if let id = items.first, let item = displayedTracks.first(where: { $0.id == id }) {
-                        Button("Inspect Metadata & Specs") {
-                            onInspectTrack(item.track)
-                        }
                         Button("Play") {
                             player.play(track: item.track, in: currentPlaybackQueue)
+                        }
+                        Divider()
+                        Button {
+                            onEditTrack?(item.track)
+                        } label: {
+                            Label("Edit Song Metadata...", systemImage: "square.and.pencil")
+                        }
+                        Button("Inspect in Sidebar") {
+                            onInspectTrack(item.track)
                         }
                         Divider()
                         Button(role: .destructive) {

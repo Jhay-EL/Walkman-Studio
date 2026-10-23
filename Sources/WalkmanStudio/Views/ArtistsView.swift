@@ -5,6 +5,7 @@ public struct ArtistsView: View {
     let tracks: [Track]
     let precomputedArtists: [ArtistItem]?
     let onSelectTrack: (Track) -> Void
+    var onEditTrack: ((Track) -> Void)? = nil
     
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var selectedArtistName: String? = nil
@@ -13,11 +14,13 @@ public struct ArtistsView: View {
     public init(
         tracks: [Track],
         precomputedArtists: [ArtistItem]? = nil,
-        onSelectTrack: @escaping (Track) -> Void
+        onSelectTrack: @escaping (Track) -> Void,
+        onEditTrack: ((Track) -> Void)? = nil
     ) {
         self.tracks = tracks
         self.precomputedArtists = precomputedArtists
         self.onSelectTrack = onSelectTrack
+        self.onEditTrack = onEditTrack
     }
     
     @State private var cachedArtists: [ArtistItem] = []
@@ -367,6 +370,25 @@ public struct ArtistsView: View {
                                                 player.pause()
                                             } else {
                                                 player.play(track: track, in: alb.tracks)
+                                            }
+                                        }
+                                        .contextMenu {
+                                            Button("Play Track") {
+                                                player.play(track: track, in: alb.tracks)
+                                            }
+                                            Divider()
+                                            Button {
+                                                onEditTrack?(track)
+                                            } label: {
+                                                Label("Edit Song Metadata...", systemImage: "square.and.pencil")
+                                            }
+                                            Button("Inspect in Sidebar") {
+                                                onSelectTrack(track)
+                                            }
+                                            Divider()
+                                            Button("Copy Path") {
+                                                NSPasteboard.general.clearContents()
+                                                NSPasteboard.general.setString(track.fullPath, forType: .string)
                                             }
                                         }
                                     }
