@@ -417,6 +417,11 @@ public struct RecentlyAddedView: View {
                         } label: {
                             Label("Edit Song Metadata...", systemImage: "square.and.pencil")
                         }
+                        Button {
+                            ArtworkExportService.exportArtwork(for: item.track)
+                        } label: {
+                            Label("Export Cover Art to Mac...", systemImage: "square.and.arrow.down")
+                        }
                         Button("Inspect in Sidebar") {
                             onInspectTrack(item.track)
                         }

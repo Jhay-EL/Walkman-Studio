@@ -269,6 +269,11 @@ public struct HiResAudioView: View {
                             } label: {
                                 Label("Edit Song Metadata...", systemImage: "square.and.pencil")
                             }
+                            Button {
+                                ArtworkExportService.exportArtwork(for: track)
+                            } label: {
+                                Label("Export Cover Art to Mac...", systemImage: "square.and.arrow.down")
+                            }
                             Button("Inspect in Sidebar") {
                                 onSelectTrack(track)
                             }

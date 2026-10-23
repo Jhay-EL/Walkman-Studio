@@ -135,6 +135,14 @@ public struct MetadataStudioView: View {
         }
     }
     
+    private func exportArtworkToMac() {
+        guard let tr = track else { return }
+        let cleanArtist = WalkmanEngine.shared.sanitizeFilename(artist.isEmpty ? (tr.artist.isEmpty ? "Unknown Artist" : tr.artist) : artist)
+        let cleanAlbum = WalkmanEngine.shared.sanitizeFilename(album.isEmpty ? (tr.album.isEmpty ? tr.title : tr.album) : album)
+        let suggestedName = "\(cleanArtist) - \(cleanAlbum) Cover.jpg"
+        ArtworkExportService.exportCustomArtwork(data: coverData, image: coverImage, suggestedFilename: suggestedName)
+    }
+    
     private func saveLyrics() {
         guard let tr = track else { return }
         let url = URL(fileURLWithPath: tr.fullPath)
@@ -456,16 +464,47 @@ public struct MetadataStudioView: View {
                             return true
                         }
                         .help("Click or drag-and-drop to choose album cover art")
+                        .contextMenu {
+                            if coverImage != nil || coverData != nil {
+                                Button(action: exportArtworkToMac) {
+                                    Label("Export Cover Art to Mac...", systemImage: "square.and.arrow.down")
+                                }
+                                Divider()
+                            }
+                            Button(action: selectArtworkFile) {
+                                Label("Choose Artwork...", systemImage: "photo")
+                            }
+                        }
                         
-                        // Artwork Compliance Status
-                        if let st = validationStatus {
-                            HStack(spacing: 6) {
+                        // Artwork Compliance Status & Export
+                        HStack(spacing: 6) {
+                            if let st = validationStatus {
                                 Image(systemName: st.valid ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                                     .foregroundStyle(st.valid ? Color.green : Color.orange)
                                 Text(st.message)
                                     .font(WalkmanFont.monoSmall)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
+                            }
+                            
+                            Spacer()
+                            
+                            if coverImage != nil || coverData != nil {
+                                Button(action: exportArtworkToMac) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "square.and.arrow.down")
+                                            .font(.system(size: 10))
+                                        Text("Export")
+                                            .font(WalkmanFont.monoSmall)
+                                    }
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2.5)
+                                    .background(Color.white.opacity(0.08))
+                                    .foregroundStyle(WalkmanTheme.silverLight)
+                                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                                }
+                                .buttonStyle(.plain)
+                                .help("Export artwork to Mac...")
                             }
                         }
                     }

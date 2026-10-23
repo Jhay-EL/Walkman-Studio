@@ -289,6 +289,14 @@ public struct ArtistsView: View {
                                     
                                     Spacer()
                                 }
+                                .contentShape(Rectangle())
+                                .contextMenu {
+                                    Button {
+                                        ArtworkExportService.exportArtwork(for: alb)
+                                    } label: {
+                                        Label("Export Album Artwork to Mac...", systemImage: "square.and.arrow.down")
+                                    }
+                                }
                                 
                                 // Album Track Rows
                                 VStack(spacing: 2) {
@@ -381,6 +389,11 @@ public struct ArtistsView: View {
                                                 onEditTrack?(track)
                                             } label: {
                                                 Label("Edit Song Metadata...", systemImage: "square.and.pencil")
+                                            }
+                                            Button {
+                                                ArtworkExportService.exportArtwork(for: track)
+                                            } label: {
+                                                Label("Export Cover Art to Mac...", systemImage: "square.and.arrow.down")
                                             }
                                             Button("Inspect in Sidebar") {
                                                 onSelectTrack(track)

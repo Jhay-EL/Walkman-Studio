@@ -446,6 +446,12 @@ private struct AlbumGridCard: View {
             }
             
             Button {
+                ArtworkExportService.exportArtwork(for: album)
+            } label: {
+                Label("Export Album Artwork to Mac...", systemImage: "square.and.arrow.down")
+            }
+            
+            Button {
                 onInspectAlbum?()
             } label: {
                 Label("Inspect in Sidebar", systemImage: "sidebar.trailing")
@@ -611,6 +617,22 @@ private struct AlbumDetailView: View {
                                 .buttonStyle(.plain)
                                 .help("Edit album artwork, tags, and track numbers in a popup window")
                                 
+                                Button(action: { ArtworkExportService.exportArtwork(for: album) }) {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: "square.and.arrow.down")
+                                            .font(.system(size: 11))
+                                        Text("Export Artwork")
+                                            .font(WalkmanFont.calloutMedium)
+                                    }
+                                    .padding(.horizontal, 11)
+                                    .padding(.vertical, 7)
+                                    .background(Color.white.opacity(0.08))
+                                    .foregroundStyle(WalkmanTheme.silverLight)
+                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                                .help("Extract and save album cover art onto your Mac")
+                                
                                 if let rep = album.representativeTrack {
                                     Button(action: { onSelectTrack(rep) }) {
                                         HStack(spacing: 5) {
@@ -657,6 +679,11 @@ private struct AlbumDetailView: View {
                             onEditAlbum?()
                         } label: {
                             Label("Edit Album Metadata...", systemImage: "square.and.pencil")
+                        }
+                        Button {
+                            ArtworkExportService.exportArtwork(for: album)
+                        } label: {
+                            Label("Export Album Artwork to Mac...", systemImage: "square.and.arrow.down")
                         }
                         if let rep = album.representativeTrack {
                             Button {
@@ -767,6 +794,11 @@ private struct AlbumDetailView: View {
                                     onEditTrack?(track)
                                 } label: {
                                     Label("Edit Song Metadata...", systemImage: "square.and.pencil")
+                                }
+                                Button {
+                                    ArtworkExportService.exportArtwork(for: track)
+                                } label: {
+                                    Label("Export Cover Art to Mac...", systemImage: "square.and.arrow.down")
                                 }
                                 Button("Inspect in Sidebar") {
                                     onSelectTrack(track)

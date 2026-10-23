@@ -138,6 +138,13 @@ public struct SongMetadataEditorSheet: View {
         self.isCoverArtModified = false
     }
     
+    private func exportArtworkToMac() {
+        let cleanArtist = artist.isEmpty ? track.artist : artist
+        let cleanAlbum = album.isEmpty ? track.album : album
+        let defaultName = "\(cleanArtist) - \(cleanAlbum) Cover.jpg"
+        ArtworkExportService.exportCustomArtwork(data: coverData, image: coverImage, suggestedFilename: defaultName)
+    }
+    
     private func fetchOnlineArtwork() {
         guard !isFetchingOnlineArt else { return }
         isFetchingOnlineArt = true
@@ -714,6 +721,12 @@ public struct SongMetadataEditorSheet: View {
                     }
                     .help("Click or drag-and-drop to choose album cover art")
                     .contextMenu {
+                        if coverImage != nil || coverData != nil {
+                            Button(action: exportArtworkToMac) {
+                                Label("Export Cover Art to Mac...", systemImage: "square.and.arrow.down")
+                            }
+                            Divider()
+                        }
                         Button(action: selectArtworkFile) {
                             Label("Choose Image File...", systemImage: "folder")
                         }
@@ -795,6 +808,24 @@ public struct SongMetadataEditorSheet: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(isFetchingOnlineArt)
+                        
+                        if coverImage != nil || coverData != nil {
+                            Button(action: exportArtworkToMac) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "square.and.arrow.down")
+                                        .font(.system(size: 11))
+                                    Text("Export Cover Art to Mac...")
+                                }
+                                .font(WalkmanFont.calloutMedium)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .background(Color.white.opacity(0.08))
+                                .foregroundStyle(WalkmanTheme.silverLight)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                            }
+                            .buttonStyle(.plain)
+                            .help("Export and save this cover art image file to your Mac")
+                        }
                         
                         if coverImage != nil {
                             Button(action: removeArtwork) {
