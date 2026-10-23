@@ -7,8 +7,10 @@ public enum NavigationTab: String, CaseIterable, Identifiable, Hashable {
     case albums = "Albums"
     case artists = "Artists"
     case hiRes = "Hi-Res Audio"
+    case duplicates = "Duplicates"
     case transfer = "Transfer & Convert"
     case playlists = "Playlists (.M3U8)"
+    case backupRestore = "Backup & Restore"
 
     public var id: String { rawValue }
 
@@ -20,8 +22,10 @@ public enum NavigationTab: String, CaseIterable, Identifiable, Hashable {
         case .albums: return "square.stack"
         case .artists: return "music.mic"
         case .hiRes: return "waveform.badge.magnifyingglass"
+        case .duplicates: return "doc.on.doc"
         case .transfer: return "arrow.up.arrow.down.circle"
         case .playlists: return "list.bullet.rectangle"
+        case .backupRestore: return "arrow.triangle.2.circlepath.circle"
         }
     }
 }
@@ -34,6 +38,7 @@ public struct SidebarView: View {
     var albumCount: Int = 0
     var artistCount: Int = 0
     var hiResCount: Int = 0
+    var duplicateCount: Int = 0
     let queueCount: Int
     var deviceInfo: WalkmanDeviceInfo? = nil
     var activeDrive: WalkmanDrive? = nil
@@ -103,6 +108,14 @@ public struct SidebarView: View {
                     icon: "waveform.badge.magnifyingglass",
                     badge: hiResCount > 0 ? "\(hiResCount.formatted())" : nil
                 )
+
+                SidebarRow(
+                    tab: .duplicates,
+                    selectedTab: $selectedTab,
+                    title: "Duplicates",
+                    icon: "doc.on.doc",
+                    badge: duplicateCount > 0 ? "\(duplicateCount.formatted())" : nil
+                )
             }
 
             // TOOLS Section
@@ -120,6 +133,14 @@ public struct SidebarView: View {
                     selectedTab: $selectedTab,
                     title: "Playlists (.M3U8)",
                     icon: "list.bullet.rectangle",
+                    badge: nil
+                )
+
+                SidebarRow(
+                    tab: .backupRestore,
+                    selectedTab: $selectedTab,
+                    title: "Backup & Restore",
+                    icon: "arrow.triangle.2.circlepath.circle",
                     badge: nil
                 )
             }

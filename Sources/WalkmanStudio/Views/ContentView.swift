@@ -16,6 +16,7 @@ public struct ContentView: View {
     @State private var deviceInfo: WalkmanDeviceInfo? = nil
     @State private var showAboutSheet: Bool = false
     @State private var trackToEdit: Track? = nil
+    @State private var trackToTrimCut: Track? = nil
     @State private var albumToEdit: AlbumItem? = nil
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     
@@ -33,6 +34,7 @@ public struct ContentView: View {
     @State private var cachedArtists: [ArtistItem] = []
     @State private var cachedAlbums: [AlbumItem] = []
     @State private var cachedRecentTracks: [Track] = []
+    @State private var duplicateGroupCount: Int = 0
     
     private var selectedTrack: Track? {
         // When music is playing or loaded on the music player, make sure the music details panel matches what is playing
@@ -62,6 +64,7 @@ public struct ContentView: View {
             self.cachedAlbums = []
             self.cachedRecentTracks = []
             self.libraryStats = (0, 0, 0, 0)
+            self.duplicateGroupCount = 0
             self.selectedTrackId = nil
             self.isEjecting = false
             AudioPlayerService.shared.stopAndClear()
@@ -157,6 +160,14 @@ public struct ContentView: View {
                 self.cachedRecentTracks = precomputedRecent
                 self.libraryStats = stats
                 self.isScanning = false
+            }
+
+            let allDrives = self.drives
+            Task {
+                let groups = await DuplicateFinderService.shared.scanForDuplicates(drives: allDrives)
+                await MainActor.run {
+                    self.duplicateGroupCount = groups.count
+                }
             }
         }
     }
@@ -397,6 +408,7 @@ public struct ContentView: View {
                     WalkmanDeviceIconView(
                         size: 84,
                         mountPoint: activeDrive?.mountPoint,
+                        deviceInfo: deviceInfo,
                         hasBackground: false
                     )
                     
@@ -439,6 +451,7 @@ public struct ContentView: View {
                         albumCount: libraryStats.albums,
                         artistCount: libraryStats.artists,
                         hiResCount: libraryStats.hiRes,
+                        duplicateCount: duplicateGroupCount,
                         queueCount: queueCount,
                         deviceInfo: deviceInfo,
                         activeDrive: activeDrive,
@@ -493,6 +506,9 @@ public struct ContentView: View {
                                     },
                                     onEditTrack: { track in
                                         self.trackToEdit = track
+                                    },
+                                    onTrimCutTrack: { track in
+                                        self.trackToTrimCut = track
                                     }
                                 )
                                 
@@ -513,6 +529,9 @@ public struct ContentView: View {
                                     },
                                     onEditTrack: { track in
                                         self.trackToEdit = track
+                                    },
+                                    onTrimCutTrack: { track in
+                                        self.trackToTrimCut = track
                                     }
                                 )
                                 
@@ -529,6 +548,9 @@ public struct ContentView: View {
                                     },
                                     onEditTrack: { track in
                                         self.trackToEdit = track
+                                    },
+                                    onTrimCutTrack: { track in
+                                        self.trackToTrimCut = track
                                     },
                                     onDeleteAlbum: { album in
                                         deleteAlbumFromDevice(album)
@@ -548,6 +570,9 @@ public struct ContentView: View {
                                     },
                                     onEditTrack: { track in
                                         self.trackToEdit = track
+                                    },
+                                    onTrimCutTrack: { track in
+                                        self.trackToTrimCut = track
                                     }
                                 )
                                 
@@ -560,6 +585,20 @@ public struct ContentView: View {
                                     },
                                     onEditTrack: { track in
                                         self.trackToEdit = track
+                                    },
+                                    onTrimCutTrack: { track in
+                                        self.trackToTrimCut = track
+                                    }
+                                )
+                                
+                            case .duplicates:
+                                DuplicatesView(
+                                    drives: drives,
+                                    onEditTrack: { track in
+                                        self.trackToEdit = track
+                                    },
+                                    onLibraryChanged: {
+                                        self.refreshLibrary()
                                     }
                                 )
                                 
@@ -577,6 +616,17 @@ public struct ContentView: View {
                                     libraryTracks: tracks
                                 )
                                 .id(activeDrive?.mountPoint ?? "no_drive")
+                                .padding(14)
+
+                            case .backupRestore:
+                                BackupRestoreView(
+                                    drives: drives,
+                                    activeDrive: activeDrive,
+                                    tracks: tracks,
+                                    cachedAlbums: cachedAlbums,
+                                    deviceInfo: deviceInfo,
+                                    onRestoreComplete: { refreshDrives() }
+                                )
                                 .padding(14)
                             }
                         }
@@ -681,6 +731,17 @@ public struct ContentView: View {
                 },
                 onDismiss: {
                     trackToEdit = nil
+                }
+            )
+        }
+        .sheet(item: $trackToTrimCut) { track in
+            TrimAndCutSheet(
+                track: track,
+                onSaved: {
+                    refreshLibrary()
+                },
+                onDismiss: {
+                    trackToTrimCut = nil
                 }
             )
         }
