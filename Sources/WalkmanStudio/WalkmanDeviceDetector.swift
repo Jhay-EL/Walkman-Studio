@@ -390,40 +390,108 @@ public final class WalkmanDeviceDetector: Sendable {
     }
 
     public func detect(drives: [WalkmanDrive]) -> WalkmanDeviceInfo? {
-        guard !drives.isEmpty else { return nil }
-        
-        let internalDrive = drives.first(where: { $0.type == .internal }) ?? drives.first
-        guard let drive = internalDrive else { return nil }
-        
-        // 1. Check for official default-capability.xml
-        let primaryXml = URL(fileURLWithPath: drive.mountPoint).appendingPathComponent("default-capability.xml")
-        let secondaryXml = URL(fileURLWithPath: drive.mountPoint).appendingPathComponent("DEFAULT-CAPABILITY.XML")
-        
-        var xmlContent: String?
-        if let data = try? Data(contentsOf: primaryXml), let s = String(data: data, encoding: .isoLatin1) ?? String(data: data, encoding: .utf8) {
-            xmlContent = s
-        } else if let data = try? Data(contentsOf: secondaryXml), let s = String(data: data, encoding: .isoLatin1) ?? String(data: data, encoding: .utf8) {
-            xmlContent = s
-        } else {
-            // Also check MicroSD card if mounted
-            for d in drives where d.type == .microsd {
-                let cardXml = URL(fileURLWithPath: d.mountPoint).appendingPathComponent("default-capability.xml")
-                if let data = try? Data(contentsOf: cardXml), let s = String(data: data, encoding: .isoLatin1) ?? String(data: data, encoding: .utf8) {
-                    xmlContent = s
+        return detectDevices(drives: drives).first?.deviceInfo
+    }
+
+    public func detectDevices(drives: [WalkmanDrive]) -> [WalkmanDevice] {
+        guard !drives.isEmpty else { return [] }
+
+        let internalDrives = drives.filter { $0.type == .internal }
+        var microsdDrives = drives.filter { $0.type == .microsd }
+
+        func readXml(from mountPoint: String) -> String? {
+            let p1 = URL(fileURLWithPath: mountPoint).appendingPathComponent("default-capability.xml")
+            let p2 = URL(fileURLWithPath: mountPoint).appendingPathComponent("DEFAULT-CAPABILITY.XML")
+            if let data = try? Data(contentsOf: p1), let s = String(data: data, encoding: .isoLatin1) ?? String(data: data, encoding: .utf8) {
+                return s
+            }
+            if let data = try? Data(contentsOf: p2), let s = String(data: data, encoding: .isoLatin1) ?? String(data: data, encoding: .utf8) {
+                return s
+            }
+            return nil
+        }
+
+        func extractVolumeIndex(from mountPoint: String) -> Int {
+            let last = URL(fileURLWithPath: mountPoint).lastPathComponent
+            let parts = last.split(separator: " ")
+            if parts.count > 1, let num = Int(parts.last!) {
+                return num
+            }
+            return 0
+        }
+
+        var devices: [WalkmanDevice] = []
+
+        // Pair each internal drive with its companion MicroSD drive if present
+        for intDrive in internalDrives {
+            let intXml = readXml(from: intDrive.mountPoint)
+            let intModel = intXml.flatMap { Self.extractXmlTag(tag: "model", from: $0) }
+            let intIdx = extractVolumeIndex(from: intDrive.mountPoint)
+
+            var bestSdIndex: Int? = nil
+            for (idx, sdDrive) in microsdDrives.enumerated() {
+                let sdXml = readXml(from: sdDrive.mountPoint)
+                let sdModel = sdXml.flatMap { Self.extractXmlTag(tag: "model", from: $0) }
+                let sdIdx = extractVolumeIndex(from: sdDrive.mountPoint)
+
+                // 1. Both have model XML and models match
+                if let im = intModel, let sm = sdModel, im.localizedCaseInsensitiveCompare(sm) == .orderedSame {
+                    if intIdx == sdIdx {
+                        bestSdIndex = idx
+                        break
+                    }
+                    if bestSdIndex == nil {
+                        bestSdIndex = idx
+                    }
+                } else if intIdx == sdIdx && intIdx > 0 {
+                    // 2. Matching numbered suffix e.g. WALKMAN 1 and SD_CARD 1
+                    bestSdIndex = idx
                     break
                 }
             }
+
+            // Fallback: If only 1 internal drive and 1 SD card remain, pair them
+            if bestSdIndex == nil && internalDrives.count == 1 && microsdDrives.count == 1 {
+                bestSdIndex = 0
+            }
+
+            var pairedDrives: [WalkmanDrive] = [intDrive]
+            var pairedSd: WalkmanDrive? = nil
+            if let sdIdx = bestSdIndex {
+                pairedSd = microsdDrives.remove(at: sdIdx)
+                pairedDrives.append(pairedSd!)
+            }
+
+            let hasCfw = pairedDrives.contains(where: { $0.hasCfw })
+            let capacityGb = Double(intDrive.totalBytes) / (1024 * 1024 * 1024)
+
+            let info: WalkmanDeviceInfo
+            if let xml = intXml ?? pairedSd.flatMap({ readXml(from: $0.mountPoint) }) {
+                info = parseCapabilityXml(xml: xml, internalCapacityGb: capacityGb, hasCfw: hasCfw)
+            } else {
+                info = detectFromFilesystemHeuristics(drive: intDrive, drives: pairedDrives, capacityGb: capacityGb, hasCfw: hasCfw)
+            }
+
+            devices.append(WalkmanDevice(deviceInfo: info, drives: pairedDrives))
         }
-        
-        let hasCfw = drives.contains(where: { $0.hasCfw })
-        let capacityGb = Double(drive.totalBytes) / (1024 * 1024 * 1024)
-        
-        if let xml = xmlContent {
-            return parseCapabilityXml(xml: xml, internalCapacityGb: capacityGb, hasCfw: hasCfw)
+
+        // Any leftover MicroSD cards (e.g. plugged into a Mac USB card reader directly)
+        for sdDrive in microsdDrives {
+            let sdXml = readXml(from: sdDrive.mountPoint)
+            let capacityGb = Double(sdDrive.totalBytes) / (1024 * 1024 * 1024)
+            let hasCfw = sdDrive.hasCfw
+
+            let info: WalkmanDeviceInfo
+            if let xml = sdXml {
+                info = parseCapabilityXml(xml: xml, internalCapacityGb: capacityGb, hasCfw: hasCfw)
+            } else {
+                info = detectFromFilesystemHeuristics(drive: sdDrive, drives: [sdDrive], capacityGb: capacityGb, hasCfw: hasCfw)
+            }
+
+            devices.append(WalkmanDevice(deviceInfo: info, drives: [sdDrive]))
         }
-        
-        // 2. Fallback heuristic detection for formatted drives with MUSIC/ folder
-        return detectFromFilesystemHeuristics(drive: drive, drives: drives, capacityGb: capacityGb, hasCfw: hasCfw)
+
+        return devices
     }
     
     private func parseCapabilityXml(xml: String, internalCapacityGb: Double, hasCfw: Bool) -> WalkmanDeviceInfo {

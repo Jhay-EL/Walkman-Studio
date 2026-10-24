@@ -71,20 +71,21 @@ Sony Walkman non-Android digital audio players deliver exceptional audio fidelit
 * Enforces relative POSIX paths (`Artist/Album/Track.flac`) and strict **CRLF** (`\r\n`) line endings required by Sony Walkman firmware for playlist recognition.
 
 ### Walkman Backup & Restore Studio
-* **Multi-Cloud & Local Storage Destinations:** One-click backup and restore directly through **Google Drive**, **Microsoft OneDrive**, **iCloud Drive**, connected **External USB / SD Drives**, or **Local Mac Storage** (`~/Music/Walkman Studio Backups`).
+* **Local & External Storage Destinations:** Reliable, complication-free backup and restore directly to **Local Mac Storage** (`~/Music/Walkman Studio Backups`), connected **External USB / SD Drives**, or custom local folder selections without any cloud dependency.
 * **Flexible Backup Scopes:**
   * **Full Library:** Safeguard entire `/MUSIC` and `/LEARNING` directories including all albums, tracks, companion `.LRC` synchronized lyrics, artwork, and `.M3U8` playlists.
   * **Playlists Scope:** Back up `.M3U8` playlists along with all referenced music tracks and lyrics.
   * **Language Study Scope:** Back up the entire `/LEARNING/` folder (courses, audiobooks, podcasts, chapter playlists).
   * **Selected Albums:** Manually select specific albums to back up via an interactive album picker with artwork and search.
   * **Selected Tracks:** Manually choose individual songs to back up.
-* **Slow High-Security Cryptographic Encryption (AES-256-GCM):** Optional cryptographic packaging with **PBKDF2-HMAC-SHA256** (100,000 rounds) key derivation and **AES-256-GCM** authenticated stream cipher. Stream hashing across large FLAC audio files ensures tamper-proof, zero-knowledge privacy across cloud storage.
+* **Slow High-Security Cryptographic Encryption (AES-256-GCM):** Optional cryptographic packaging with **PBKDF2-HMAC-SHA256** (100,000 rounds) key derivation and **AES-256-GCM** authenticated stream cipher. Stream hashing across large FLAC audio files ensures tamper-proof, zero-knowledge privacy across local drives and external disks.
 * **Safe Walkman Restoration:** Seamlessly restores backups into any selected connected Walkman partition (Internal Flash or MicroSD Card), automatically validating capacity, reconstructing clean directory hierarchies, purging macOS AppleDouble ghost files (`dot_clean -m`), and refreshing the Walkman library database.
 
-### Dual-Drive Detection & Storage Manager
-* Automatically detects both the **Internal Flash** (`/Volumes/WALKMAN`) and **MicroSD Card** (`/Volumes/SD_CARD`).
-* Direct Darwin kernel `statvfs` integration providing exact byte counts, used storage, and remaining capacity.
-* Quick-switch selector directly in the sidebar navigation to seamlessly manage or browse either storage drive.
+### Multi-Device & Dual-Drive Storage Manager
+* **Simultaneous Multi-Walkman Connection:** Plug in and manage multiple physical Sony Walkman players at the same time (e.g. NW-A55, NW-ZX300, NW-WM1A). Each connected player is automatically identified with its physical hardware model icon, storage metrics, and companion drives grouped neatly under the sidebar.
+* **Intelligent Drive Pairing:** Automatically correlates internal flash partitions (`/Volumes/WALKMAN`, `WALKMAN 1`) with companion MicroSD expansion cards (`/Volumes/SD_CARD`, `SD_CARD 1`) based on hardware capability XMLs, volume index numbering, and SCSI LUNs.
+* **Instant Device & Drive Switching:** One-click device switching in both the sidebar and the Device Overview header, with isolated library browsing, transfer queues, and duplicate management.
+* **Darwin Kernel Precision:** Direct `statvfs` kernel integration providing exact byte counts, used storage, and remaining capacity for each volume.
 
 ### macOS Dotfile Purge & Safe Eject
 * Automatically runs `/usr/bin/dot_clean -m` to merge AppleDouble resource forks before unmounting.

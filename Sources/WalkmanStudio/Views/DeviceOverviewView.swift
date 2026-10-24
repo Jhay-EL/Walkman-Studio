@@ -1,13 +1,16 @@
 import SwiftUI
 
 public struct DeviceOverviewView: View {
+    var devices: [WalkmanDevice] = []
     let drives: [WalkmanDrive]
+    var activeDevice: WalkmanDevice? = nil
     var activeDrive: WalkmanDrive? = nil
     let tracks: [Track]
     var precomputedStats: (albums: Int, artists: Int, hiRes: Int)? = nil
     let onNavigateToTab: (NavigationTab) -> Void
     let onOpenEject: () -> Void
     let onRefresh: () -> Void
+    var onSelectDevice: ((WalkmanDevice) -> Void)? = nil
     var onSelectDrive: ((WalkmanDrive) -> Void)? = nil
     var deviceInfo: WalkmanDeviceInfo? = nil
     var onOpenAbout: (() -> Void)? = nil
@@ -49,6 +52,9 @@ public struct DeviceOverviewView: View {
             
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(spacing: isNarrow ? 12 : 20) {
+                    if devices.count > 1 {
+                        deviceSwitcherBar
+                    }
                     heroHeaderView(isCompact: isCompact, isNarrow: isNarrow, isSmallest: isSmallest)
                     storageAllocationSection(isCompact: isCompact)
                     quickWorkflowsSection(isCompact: isCompact)
@@ -88,6 +94,76 @@ public struct DeviceOverviewView: View {
                 }
             }
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // MULTI-DEVICE SWITCHER BAR
+    // -------------------------------------------------------------------------
+    private var deviceSwitcherBar: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "hifispeaker.2.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(WalkmanTheme.hiResGold)
+                Text("CONNECTED WALKMAN PLAYERS (\(devices.count))")
+                    .font(WalkmanFont.sectionHeader)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 4)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(devices) { dev in
+                        let isSelected = (activeDevice?.id == dev.id) || (activeDevice == nil && dev.id == devices.first?.id)
+                        Button(action: { onSelectDevice?(dev) }) {
+                            HStack(spacing: 10) {
+                                WalkmanDeviceIconView(
+                                    size: 34,
+                                    mountPoint: dev.primaryMountPoint,
+                                    deviceInfo: dev.deviceInfo,
+                                    hasBackground: false
+                                )
+                                .frame(width: 30, height: 34)
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack(spacing: 6) {
+                                        Text(dev.specificModel)
+                                            .font(.system(size: 12.5, weight: isSelected ? .bold : .semibold))
+                                            .foregroundStyle(isSelected ? .white : WalkmanTheme.silverLight)
+
+                                        if isSelected {
+                                            Text("ACTIVE")
+                                                .font(.system(size: 8, weight: .black))
+                                                .padding(.horizontal, 4)
+                                                .padding(.vertical, 1)
+                                                .background(WalkmanTheme.hiResGold.opacity(0.2))
+                                                .foregroundStyle(WalkmanTheme.hiResGold)
+                                                .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+                                        }
+                                    }
+
+                                    let freeGb = Double(dev.freeBytes) / (1024 * 1024 * 1024)
+                                    let totalGb = Double(dev.totalBytes) / (1024 * 1024 * 1024)
+                                    Text(String(format: "%.1f GB free / %.0f GB", freeGb, totalGb))
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(isSelected ? WalkmanTheme.silverMuted : .secondary)
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(isSelected ? Color.white.opacity(0.12) : Color.white.opacity(0.04))
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(isSelected ? WalkmanTheme.hiResGold.opacity(0.4) : Color.white.opacity(0.06), lineWidth: 1)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .padding(.bottom, 4)
     }
     
     // -------------------------------------------------------------------------
@@ -388,7 +464,7 @@ public struct DeviceOverviewView: View {
                     )
                     
                     ActionCard(
-                        title: "Playlists (.M3U8)",
+                        title: "Playlist",
                         description: "Manage hardware-compliant CRLF POSIX playlists saved in /MUSIC/.",
                         icon: "list.bullet.rectangle",
                         isHorizontalRow: true,
@@ -414,7 +490,7 @@ public struct DeviceOverviewView: View {
                     )
                     
                     ActionCard(
-                        title: "Playlists (.M3U8)",
+                        title: "Playlist",
                         description: "Manage hardware-compliant CRLF POSIX playlists saved in /MUSIC/.",
                         icon: "list.bullet.rectangle",
                         isHorizontalRow: false,

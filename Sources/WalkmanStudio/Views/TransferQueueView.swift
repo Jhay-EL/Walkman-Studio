@@ -192,7 +192,9 @@ public struct TransferQueueView: View {
 
                             Picker("", selection: $targetDriveId) {
                                 ForEach(drives) { d in
-                                    Text(d.name).tag(d.mountPoint)
+                                    let dev = WalkmanDeviceDetector.shared.detectDevices(drives: drives).first(where: { $0.drives.contains(where: { $0.mountPoint == d.mountPoint }) })
+                                    let label = (drives.count > 2 && dev != nil) ? "\(dev!.specificModel) • \(d.name)" : d.name
+                                    Text(label).tag(d.mountPoint)
                                 }
                             }
                             .labelsHidden()

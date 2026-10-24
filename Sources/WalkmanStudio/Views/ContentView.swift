@@ -4,6 +4,8 @@ import Combine
 
 public struct ContentView: View {
     @State private var drives: [WalkmanDrive] = []
+    @State private var devices: [WalkmanDevice] = []
+    @State private var activeDevice: WalkmanDevice? = nil
     @State private var activeDrive: WalkmanDrive?
     @State private var tracks: [Track] = []
     @State private var isScanning: Bool = false
@@ -34,7 +36,7 @@ public struct ContentView: View {
     @State private var cachedArtists: [ArtistItem] = []
     @State private var cachedAlbums: [AlbumItem] = []
     @State private var cachedRecentTracks: [Track] = []
-    @State private var duplicateGroupCount: Int = 0
+    @ObservedObject private var duplicateFinder = DuplicateFinderService.shared
     
     private var selectedTrack: Track? {
         // When music is playing or loaded on the music player, make sure the music details panel matches what is playing
@@ -51,31 +53,65 @@ public struct ContentView: View {
         return tracks.first(where: { $0.id == id })
     }
     
+    private func selectDevice(_ device: WalkmanDevice) {
+        self.activeDevice = device
+        self.deviceInfo = device.deviceInfo
+        let devDrives = device.drives
+        if let current = activeDrive, devDrives.contains(where: { $0.mountPoint == current.mountPoint }) {
+            // Keep current drive if it belongs to this device
+        } else {
+            // Prefer MicroSD on this device, otherwise internal
+            self.activeDrive = device.microsdDrive ?? devDrives.first
+        }
+        refreshLibrary()
+    }
+
+    private func selectDrive(_ drive: WalkmanDrive) {
+        if let parentDev = devices.first(where: { $0.drives.contains(where: { $0.mountPoint == drive.mountPoint }) }) {
+            self.activeDevice = parentDev
+            self.deviceInfo = parentDev.deviceInfo
+        }
+        self.activeDrive = drive
+        refreshLibrary()
+    }
+
     private func refreshDrives() {
         isRefreshingDrives = true
         let detected = WalkmanEngine.shared.detectDrives()
         self.drives = detected
-        self.deviceInfo = WalkmanDeviceDetector.shared.detect(drives: detected)
-        
-        if detected.isEmpty {
+        let detectedDevices = WalkmanDeviceDetector.shared.detectDevices(drives: detected)
+        self.devices = detectedDevices
+
+        if detectedDevices.isEmpty {
+            self.activeDevice = nil
             self.activeDrive = nil
+            self.deviceInfo = nil
             self.tracks = []
             self.cachedArtists = []
             self.cachedAlbums = []
             self.cachedRecentTracks = []
             self.libraryStats = (0, 0, 0, 0)
-            self.duplicateGroupCount = 0
             self.selectedTrackId = nil
             self.isEjecting = false
             AudioPlayerService.shared.stopAndClear()
         } else {
-            if let current = activeDrive, detected.contains(where: { $0.mountPoint == current.mountPoint }) {
+            // 1. Maintain active device if still connected, otherwise pick first
+            if let current = activeDevice, let stillPresent = detectedDevices.first(where: { $0.id == current.id }) {
+                self.activeDevice = stillPresent
+            } else {
+                self.activeDevice = detectedDevices.first
+            }
+            self.deviceInfo = self.activeDevice?.deviceInfo
+
+            // 2. Maintain active drive for the active device
+            let availableDrives = self.activeDevice?.drives ?? detected
+            if let current = activeDrive, availableDrives.contains(where: { $0.mountPoint == current.mountPoint }) {
                 // Keep current active drive
             } else {
-                // Prefer MicroSD if present (larger storage with music), otherwise internal
-                self.activeDrive = detected.first(where: { $0.type == .microsd }) ?? detected.first
+                // Prefer MicroSD on active device if present, otherwise internal
+                self.activeDrive = self.activeDevice?.microsdDrive ?? availableDrives.first
             }
-            
+
             // If the currently playing track was on a drive that is no longer mounted, stop playback
             if let current = AudioPlayerService.shared.currentTrack {
                 let stillMounted = detected.contains(where: { current.fullPath.hasPrefix($0.mountPoint) })
@@ -84,7 +120,7 @@ public struct ContentView: View {
                 }
             }
         }
-        
+
         isRefreshingDrives = false
         refreshLibrary()
     }
@@ -164,10 +200,7 @@ public struct ContentView: View {
 
             let allDrives = self.drives
             Task {
-                let groups = await DuplicateFinderService.shared.scanForDuplicates(drives: allDrives)
-                await MainActor.run {
-                    self.duplicateGroupCount = groups.count
-                }
+                _ = await DuplicateFinderService.shared.scanForDuplicates(drives: allDrives)
             }
         }
     }
@@ -216,10 +249,18 @@ public struct ContentView: View {
             LibraryScanner.shared.removeFromCache(fullPath: track.fullPath)
             
             await MainActor.run {
-                // Refresh drive free/used space metrics for top storage bar
+                // Refresh drive free/used space metrics
                 let detected = WalkmanEngine.shared.detectDrives()
                 self.drives = detected
-                self.deviceInfo = WalkmanDeviceDetector.shared.detect(drives: detected)
+                let detectedDevs = WalkmanDeviceDetector.shared.detectDevices(drives: detected)
+                self.devices = detectedDevs
+                if let curDev = self.activeDevice, let updatedDev = detectedDevs.first(where: { $0.id == curDev.id }) {
+                    self.activeDevice = updatedDev
+                    self.deviceInfo = updatedDev.deviceInfo
+                } else {
+                    self.activeDevice = detectedDevs.first
+                    self.deviceInfo = self.activeDevice?.deviceInfo
+                }
                 if let current = self.activeDrive, let updated = detected.first(where: { $0.mountPoint == current.mountPoint }) {
                     self.activeDrive = updated
                 }
@@ -276,10 +317,18 @@ public struct ContentView: View {
             }
             
             await MainActor.run {
-                // Refresh drive free/used space metrics for top storage bar
+                // Refresh drive free/used space metrics
                 let detected = WalkmanEngine.shared.detectDrives()
                 self.drives = detected
-                self.deviceInfo = WalkmanDeviceDetector.shared.detect(drives: detected)
+                let detectedDevs = WalkmanDeviceDetector.shared.detectDevices(drives: detected)
+                self.devices = detectedDevs
+                if let curDev = self.activeDevice, let updatedDev = detectedDevs.first(where: { $0.id == curDev.id }) {
+                    self.activeDevice = updatedDev
+                    self.deviceInfo = updatedDev.deviceInfo
+                } else {
+                    self.activeDevice = detectedDevs.first
+                    self.deviceInfo = self.activeDevice?.deviceInfo
+                }
                 if let current = self.activeDrive, let updated = detected.first(where: { $0.mountPoint == current.mountPoint }) {
                     self.activeDrive = updated
                 }
@@ -445,19 +494,23 @@ public struct ContentView: View {
                 NavigationSplitView(columnVisibility: $columnVisibility) {
                     SidebarView(
                         selectedTab: $selectedTab,
+                        devices: devices,
                         drives: drives,
+                        activeDevice: activeDevice,
                         trackCount: tracks.count,
                         recentlyAddedCount: libraryStats.recentlyAdded,
                         albumCount: libraryStats.albums,
                         artistCount: libraryStats.artists,
                         hiResCount: libraryStats.hiRes,
-                        duplicateCount: duplicateGroupCount,
+                        duplicateCount: duplicateFinder.duplicateGroups.count,
                         queueCount: queueCount,
                         deviceInfo: deviceInfo,
                         activeDrive: activeDrive,
+                        onSelectDevice: { dev in
+                            selectDevice(dev)
+                        },
                         onSelectDrive: { drive in
-                            activeDrive = drive
-                            refreshLibrary()
+                            selectDrive(drive)
                         },
                         onOpenAbout: { self.showAboutSheet = true }
                     )
@@ -473,16 +526,20 @@ public struct ContentView: View {
                             switch selectedTab {
                             case .overview:
                                 DeviceOverviewView(
-                                    drives: drives,
+                                    devices: devices,
+                                    drives: activeDevice?.drives ?? drives,
+                                    activeDevice: activeDevice,
                                     activeDrive: activeDrive,
                                     tracks: tracks,
                                     precomputedStats: (albums: libraryStats.albums, artists: libraryStats.artists, hiRes: libraryStats.hiRes),
                                     onNavigateToTab: { tab in selectedTab = tab },
                                     onOpenEject: { performCleanAndEject() },
                                     onRefresh: { refreshDrives() },
+                                    onSelectDevice: { dev in
+                                        selectDevice(dev)
+                                    },
                                     onSelectDrive: { drive in
-                                        activeDrive = drive
-                                        refreshLibrary()
+                                        selectDrive(drive)
                                     },
                                     deviceInfo: deviceInfo,
                                     onOpenAbout: { self.showAboutSheet = true },
@@ -650,9 +707,14 @@ public struct ContentView: View {
                     .inspector(isPresented: $showInspector) {
                         MetadataStudioView(
                             track: selectedTrack,
-                            onSaved: { refreshLibrary() }
+                            onSaved: { refreshLibrary() },
+                            onEdit: {
+                                if let tr = selectedTrack {
+                                    self.trackToEdit = tr
+                                }
+                            }
                         )
-                        .inspectorColumnWidth(min: 270, ideal: 310, max: 360)
+                        .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
                     }
                     .toolbar {
                         Spacer()

@@ -537,8 +537,8 @@ public final class WalkmanEngine: @unchecked Sendable {
         }
 
         // Phase 2: Check each candidate against authentic Walkman hardware signatures
-        var internalCandidate: (url: URL, path: String, name: String, statv: statvfs)? = nil
-        var microsdCandidate: (url: URL, path: String, name: String, statv: statvfs)? = nil
+        var internalCandidates: [(url: URL, path: String, name: String, statv: statvfs)] = []
+        var microsdCandidates: [(url: URL, path: String, name: String, statv: statvfs)] = []
 
         for cand in candidates {
             if let insp = WalkmanDeviceDetector.inspectVolume(at: cand.url), insp.isWalkman {
@@ -548,28 +548,28 @@ public final class WalkmanEngine: @unchecked Sendable {
                 }
 
                 if insp.isInternal {
-                    if internalCandidate == nil {
-                        internalCandidate = cand
+                    if !internalCandidates.contains(where: { $0.path == cand.path }) {
+                        internalCandidates.append(cand)
                     }
                 } else if insp.isMicroSD {
-                    if microsdCandidate == nil {
-                        microsdCandidate = cand
+                    if !microsdCandidates.contains(where: { $0.path == cand.path }) {
+                        microsdCandidates.append(cand)
                     }
                 }
             }
         }
 
-        // Phase 3: If an internal Walkman is connected, check for companion MicroSD card
-        // formatted as SD_CARD or MEMORY_CARD with a MUSIC/ directory
-        if internalCandidate != nil && microsdCandidate == nil {
-            for cand in candidates where cand.url.path != internalCandidate?.url.path {
-                let upperName = cand.name.uppercased()
-                let isSdNamed = upperName == "SD_CARD" || upperName.contains("SD_CARD") || upperName.contains("MEMORY_CARD") || upperName.contains("SONY_CARD")
-                let hasMusic = FileManager.default.fileExists(atPath: cand.url.appendingPathComponent("MUSIC").path)
-                if isSdNamed && hasMusic {
-                    microsdCandidate = cand
-                    break
-                }
+        // Phase 3: Check for companion MicroSD cards formatted as SD_CARD or MEMORY_CARD with a MUSIC/ directory
+        for cand in candidates {
+            let upperName = cand.name.uppercased()
+            let isSdNamed = upperName == "SD_CARD" || upperName.contains("SD_CARD") || upperName.contains("MEMORY_CARD") || upperName.contains("SONY_CARD")
+            let hasMusic = FileManager.default.fileExists(atPath: cand.url.appendingPathComponent("MUSIC").path)
+            
+            let alreadyInternal = internalCandidates.contains(where: { $0.path == cand.path })
+            let alreadySd = microsdCandidates.contains(where: { $0.path == cand.path })
+            
+            if (isSdNamed && hasMusic) && !alreadyInternal && !alreadySd {
+                microsdCandidates.append(cand)
             }
         }
 
@@ -602,11 +602,11 @@ public final class WalkmanEngine: @unchecked Sendable {
             )
         }
 
-        if let intDrive = internalCandidate {
+        for intDrive in internalCandidates {
             drives.append(makeDrive(cand: intDrive, type: .internal))
         }
 
-        if let sdDrive = microsdCandidate {
+        for sdDrive in microsdCandidates {
             drives.append(makeDrive(cand: sdDrive, type: .microsd))
         }
 

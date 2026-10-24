@@ -329,6 +329,57 @@ public struct WalkmanDeviceInfo: Sendable, Hashable, Codable {
     }
 }
 
+public struct WalkmanDevice: Identifiable, Hashable, Sendable {
+    public var id: String { primaryMountPoint }
+    public let deviceInfo: WalkmanDeviceInfo
+    public var drives: [WalkmanDrive]
+
+    public var internalDrive: WalkmanDrive? {
+        drives.first(where: { $0.type == .internal })
+    }
+
+    public var microsdDrive: WalkmanDrive? {
+        drives.first(where: { $0.type == .microsd })
+    }
+
+    public var primaryMountPoint: String {
+        internalDrive?.mountPoint ?? microsdDrive?.mountPoint ?? deviceInfo.specificModel
+    }
+
+    public var displayName: String {
+        deviceInfo.displayName
+    }
+
+    public var specificModel: String {
+        deviceInfo.specificModel
+    }
+
+    public var seriesName: String {
+        deviceInfo.seriesName
+    }
+
+    public var totalBytes: Int64 {
+        drives.reduce(0) { $0 + $1.totalBytes }
+    }
+
+    public var usedBytes: Int64 {
+        drives.reduce(0) { $0 + $1.usedBytes }
+    }
+
+    public var freeBytes: Int64 {
+        drives.reduce(0) { $0 + $1.freeBytes }
+    }
+
+    public var percentUsed: Double {
+        totalBytes > 0 ? (Double(usedBytes) / Double(totalBytes)) * 100.0 : 0.0
+    }
+
+    public init(deviceInfo: WalkmanDeviceInfo, drives: [WalkmanDrive]) {
+        self.deviceInfo = deviceInfo
+        self.drives = drives
+    }
+}
+
 public struct AlbumItem: Identifiable, Hashable, Sendable {
     public var id: String { "\(name.lowercased())|\(artist.lowercased())" }
     public let name: String
