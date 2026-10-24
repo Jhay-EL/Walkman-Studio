@@ -33,6 +33,7 @@ public struct DuplicatesView: View {
     // Batch resolve alert
     @State private var showBatchQualityAlert: Bool = false
     @State private var isProcessing: Bool = false
+    @State private var isHoveringRescan: Bool = false
 
     public init(
         drives: [WalkmanDrive],
@@ -98,6 +99,21 @@ public struct DuplicatesView: View {
         }
     }
 
+    private func reasonColor(_ reason: DuplicateMatchReason) -> Color {
+        switch reason {
+        case .exactFile:
+            return Color.green
+        case .sameAlbum:
+            return Color.blue
+        case .strayCopy:
+            return Color.purple
+        case .crossDrive:
+            return WalkmanTheme.hiResGold
+        case .crossAlbum:
+            return Color.orange
+        }
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
             // Top Header Bar
@@ -119,6 +135,28 @@ public struct DuplicatesView: View {
                 .overlay(Color.white.opacity(0.06))
 
             // Main Content Area
+            if finder.detectionScope == .crossAlbum && !finder.duplicateGroups.isEmpty && !finder.isScanning {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Color.orange)
+                        .font(.system(size: 13))
+                    Text("Cross-Album Mode: Tracks appearing across different releases (Studio Albums, Singles, Greatest Hits, Compilations) are displayed. Deleting tracks may result in incomplete albums.")
+                        .font(WalkmanFont.callout)
+                        .foregroundStyle(WalkmanTheme.silver)
+                    Spacer()
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(Color.orange.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.orange.opacity(0.25), lineWidth: 1)
+                )
+                .padding(.horizontal, 24)
+                .padding(.top, 12)
+            }
+
             if finder.isScanning {
                 scanningView
             } else if finder.duplicateGroups.isEmpty {
@@ -175,14 +213,37 @@ public struct DuplicatesView: View {
 
     // MARK: - Header
     private var headerView: some View {
-        HStack(alignment: .center, spacing: 18) {
+        ViewThatFits(in: .horizontal) {
+            // Wide layout: title on left, metrics + rescan on right
+            HStack(alignment: .center, spacing: 18) {
+                headerTitleGroup
+
+                Spacer(minLength: 16)
+
+                headerMetricsGroup
+            }
+
+            // Compact layout for narrow windows: title stacked above metrics
+            VStack(alignment: .leading, spacing: 12) {
+                headerTitleGroup
+
+                HStack {
+                    headerMetricsGroup
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    private var headerTitleGroup: some View {
+        HStack(alignment: .center, spacing: 14) {
             ZStack {
                 Circle()
                     .fill(Color.white.opacity(0.06))
-                    .frame(width: 48, height: 48)
+                    .frame(width: 44, height: 44)
 
                 Image(systemName: "doc.on.doc.fill")
-                    .font(.system(size: 22))
+                    .font(.system(size: 20))
                     .foregroundStyle(WalkmanTheme.silver)
             }
 
@@ -191,6 +252,7 @@ public struct DuplicatesView: View {
                     Text("Duplicate Tracks")
                         .font(WalkmanFont.title1)
                         .foregroundStyle(.white)
+                        .lineLimit(1)
 
                     if !finder.duplicateGroups.isEmpty {
                         Text("\(finder.duplicateGroups.count) Groups")
@@ -200,42 +262,43 @@ public struct DuplicatesView: View {
                             .background(Color.white.opacity(0.1))
                             .foregroundStyle(WalkmanTheme.silver)
                             .clipShape(Capsule())
+                            .lineLimit(1)
                     }
                 }
 
                 Text("Detect and clean redundant songs comparing Internal Flash storage and MicroSD expansion.")
                     .font(WalkmanFont.callout)
                     .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
+        }
+    }
 
-            Spacer()
+    private var headerMetricsGroup: some View {
+        HStack(spacing: 10) {
+            // Cross-Drive metric
+            MetricPill(
+                icon: "arrow.triangle.2.circlepath",
+                label: "Cross-Drive",
+                value: "\(finder.crossDriveCount)",
+                accentColor: finder.crossDriveCount > 0 ? WalkmanTheme.hiResGold : WalkmanTheme.silverMuted
+            )
 
-            // Metrics Badges
-            HStack(spacing: 12) {
-                // Cross-Drive metric
-                MetricPill(
-                    icon: "arrow.triangle.2.circlepath",
-                    label: "Cross-Drive",
-                    value: "\(finder.crossDriveCount)",
-                    accentColor: finder.crossDriveCount > 0 ? WalkmanTheme.hiResGold : WalkmanTheme.silverMuted
-                )
+            // Quality metric
+            MetricPill(
+                icon: "sparkles",
+                label: "Quality Diff",
+                value: "\(finder.qualityDifferenceCount)",
+                accentColor: finder.qualityDifferenceCount > 0 ? Color.cyan : WalkmanTheme.silverMuted
+            )
 
-                // Quality metric
-                MetricPill(
-                    icon: "sparkles",
-                    label: "Quality Diff",
-                    value: "\(finder.qualityDifferenceCount)",
-                    accentColor: finder.qualityDifferenceCount > 0 ? Color.cyan : WalkmanTheme.silverMuted
-                )
-
-                // Recoverable space metric
-                MetricPill(
-                    icon: "internaldrive.badge.arrow.down",
-                    label: "Recoverable",
-                    value: formatBytes(finder.totalRecoverableBytes),
-                    accentColor: finder.totalRecoverableBytes > 0 ? Color.green : WalkmanTheme.silverMuted
-                )
-            }
+            // Recoverable space metric
+            MetricPill(
+                icon: "internaldrive.badge.arrow.down",
+                label: "Recoverable",
+                value: formatBytes(finder.totalRecoverableBytes),
+                accentColor: finder.totalRecoverableBytes > 0 ? Color.green : WalkmanTheme.silverMuted
+            )
 
             // Rescan Button
             Button(action: {
@@ -243,124 +306,233 @@ public struct DuplicatesView: View {
                     _ = await finder.scanForDuplicates(drives: drives)
                 }
             }) {
-                HStack(spacing: 6) {
+                HStack(spacing: 7) {
                     Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 13, weight: .bold))
                         .rotationEffect(.degrees(finder.isScanning ? 360 : 0))
                         .animation(finder.isScanning ? Animation.linear(duration: 1).repeatForever(autoreverses: false) : .default, value: finder.isScanning)
                     Text(finder.isScanning ? "Scanning..." : "Rescan")
+                        .font(.system(size: 13, weight: .bold))
+                        .lineLimit(1)
                 }
-                .font(WalkmanFont.calloutMedium)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(Color.white.opacity(0.08))
-                .foregroundStyle(WalkmanTheme.silver)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .frame(minHeight: 38)
+                .background(
+                    finder.isScanning
+                        ? LinearGradient(colors: [Color.white.opacity(0.14), Color.white.opacity(0.08)], startPoint: .top, endPoint: .bottom)
+                        : WalkmanTheme.hiResGoldGradient
+                )
+                .foregroundStyle(
+                    finder.isScanning
+                        ? WalkmanTheme.hiResGold
+                        : Color(red: 20/255, green: 20/255, blue: 24/255)
+                )
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .shadow(color: finder.isScanning ? .clear : WalkmanTheme.hiResGold.opacity(0.35), radius: 6, x: 0, y: 1.5)
+                .scaleEffect(isHoveringRescan && !finder.isScanning ? 1.02 : 1.0)
+                .brightness(isHoveringRescan && !finder.isScanning ? 0.04 : 0.0)
+                .animation(.easeInOut(duration: 0.15), value: isHoveringRescan)
             }
             .buttonStyle(.plain)
             .disabled(finder.isScanning)
+            .onHover { isHoveringRescan = $0 }
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    // MARK: - Controls Components
+    private var scopeSelector: some View {
+        HStack(spacing: 2) {
+            ForEach(DuplicateDetectionScope.allCases) { scope in
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        finder.detectionScope = scope
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: scope == .exactSameAlbum ? "checkmark.shield.fill" : "square.stack.3d.down.right.fill")
+                            .font(.system(size: 10))
+                        Text(scope.label)
+                            .font(WalkmanFont.calloutMedium)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(finder.detectionScope == scope ? WalkmanTheme.cardHover : Color.clear)
+                    .foregroundStyle(finder.detectionScope == scope ? Color.white : WalkmanTheme.silverMuted)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .help(scope.description)
+            }
+        }
+        .padding(2)
+        .background(Color.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var filterChipsGroup: some View {
+        HStack(spacing: 6) {
+            filterChip(
+                title: "All",
+                count: finder.duplicateGroups.count,
+                filter: .all
+            )
+            filterChip(
+                title: "Cross-Drive",
+                count: finder.crossDriveCount,
+                filter: .crossDrive,
+                tint: WalkmanTheme.hiResGold
+            )
+            filterChip(
+                title: "Quality Diff",
+                count: finder.qualityDifferenceCount,
+                filter: .qualityDifference,
+                tint: Color.cyan
+            )
+            filterChip(
+                title: "Same Storage",
+                count: finder.duplicateGroups.count - finder.crossDriveCount,
+                filter: .sameDrive
+            )
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var searchBar: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+
+            TextField("Search duplicates by title, artist, album...", text: $searchQuery)
+                .textFieldStyle(.plain)
+                .font(WalkmanFont.callout)
+                .foregroundStyle(.white)
+
+            if !searchQuery.isEmpty {
+                Button(action: { searchQuery = "" }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.white.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .frame(minWidth: 160, idealWidth: 260, maxWidth: 360)
+    }
+
+    private var sortMenu: some View {
+        Menu {
+            ForEach(DuplicateSortOption.allCases) { opt in
+                Button(action: { sortOption = opt }) {
+                    HStack {
+                        Text(opt.rawValue)
+                        if sortOption == opt {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "arrow.up.arrow.down")
+                    .font(.system(size: 10))
+                Text(sortOption.rawValue)
+                    .font(WalkmanFont.callout)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.white.opacity(0.06))
+            .foregroundStyle(WalkmanTheme.silver)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    @ViewBuilder
+    private var autoResolveQualityButton: some View {
+        if finder.qualityDifferenceCount > 0 {
+            Button(action: { showBatchQualityAlert = true }) {
+                HStack(spacing: 5) {
+                    Image(systemName: "sparkles")
+                    Text("Auto-Resolve Quality")
+                        .lineLimit(1)
+                }
+                .font(WalkmanFont.calloutMedium)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.cyan.opacity(0.18))
+                .foregroundStyle(Color.cyan)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .fixedSize(horizontal: true, vertical: false)
         }
     }
 
     // MARK: - Controls Bar (Filters, Search, Sort)
     private var controlsBar: some View {
-        HStack(spacing: 14) {
-            // Filter Pills
-            HStack(spacing: 6) {
-                filterChip(
-                    title: "All",
-                    count: finder.duplicateGroups.count,
-                    filter: .all
-                )
-                filterChip(
-                    title: "Cross-Drive",
-                    count: finder.crossDriveCount,
-                    filter: .crossDrive,
-                    tint: WalkmanTheme.hiResGold
-                )
-                filterChip(
-                    title: "Quality Diff",
-                    count: finder.qualityDifferenceCount,
-                    filter: .qualityDifference,
-                    tint: Color.cyan
-                )
-                filterChip(
-                    title: "Same Storage",
-                    count: finder.duplicateGroups.count - finder.crossDriveCount,
-                    filter: .sameDrive
-                )
+        ViewThatFits(in: .horizontal) {
+            // Wide single-row layout
+            HStack(spacing: 12) {
+                scopeSelector
+
+                Divider()
+                    .frame(height: 18)
+                    .overlay(Color.white.opacity(0.1))
+
+                filterChipsGroup
+
+                Spacer(minLength: 12)
+
+                searchBar
+
+                sortMenu
+
+                autoResolveQualityButton
             }
 
-            Spacer()
+            // Responsive two-row layout for narrower windows
+            VStack(alignment: .leading, spacing: 10) {
+                // Row 1: Scopes & Filter Chips
+                HStack(spacing: 12) {
+                    scopeSelector
 
-            // Search Bar
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    Divider()
+                        .frame(height: 18)
+                        .overlay(Color.white.opacity(0.1))
 
-                TextField("Search duplicates by title, artist, album...", text: $searchQuery)
-                    .textFieldStyle(.plain)
-                    .font(WalkmanFont.callout)
-                    .foregroundStyle(.white)
-
-                if !searchQuery.isEmpty {
-                    Button(action: { searchQuery = "" }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        filterChipsGroup
                     }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Color.white.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .frame(width: 250)
 
-            // Sort Picker
-            Menu {
-                ForEach(DuplicateSortOption.allCases) { opt in
-                    Button(action: { sortOption = opt }) {
-                        HStack {
-                            Text(opt.rawValue)
-                            if sortOption == opt {
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
+                    Spacer(minLength: 0)
                 }
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "arrow.up.arrow.down")
-                        .font(.system(size: 10))
-                    Text(sortOption.rawValue)
-                        .font(WalkmanFont.callout)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color.white.opacity(0.06))
-                .foregroundStyle(WalkmanTheme.silver)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            }
-            .menuStyle(.borderlessButton)
-            .frame(width: 170)
 
-            // Batch Clean Quality Mismatches Button
-            if finder.qualityDifferenceCount > 0 {
-                Button(action: { showBatchQualityAlert = true }) {
-                    HStack(spacing: 5) {
-                        Image(systemName: "sparkles")
-                        Text("Auto-Resolve Quality")
-                    }
-                    .font(WalkmanFont.calloutMedium)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Color.cyan.opacity(0.18))
-                    .foregroundStyle(Color.cyan)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                // Row 2: Search Bar + Sort Menu + Auto-Resolve Quality Action
+                HStack(spacing: 10) {
+                    searchBar
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Spacer(minLength: 8)
+
+                    sortMenu
+
+                    autoResolveQualityButton
                 }
-                .buttonStyle(.plain)
             }
         }
     }
@@ -371,8 +543,10 @@ public struct DuplicatesView: View {
             HStack(spacing: 5) {
                 Text(title)
                     .font(WalkmanFont.calloutMedium)
+                    .lineLimit(1)
                 Text("\(count)")
                     .font(WalkmanFont.pillCounter)
+                    .lineLimit(1)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 1.5)
                     .background(isSelected ? Color.white.opacity(0.2) : Color.white.opacity(0.08))
@@ -389,6 +563,7 @@ public struct DuplicatesView: View {
             )
         }
         .buttonStyle(.plain)
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     // MARK: - Duplicates List View
@@ -557,12 +732,28 @@ private struct DuplicateGroupCard: View {
         }
     }
 
+    private func reasonColor(_ reason: DuplicateMatchReason) -> Color {
+        switch reason {
+        case .exactFile:
+            return Color(red: 120/255, green: 230/255, blue: 150/255)
+        case .sameAlbum:
+            return Color(red: 130/255, green: 200/255, blue: 255/255)
+        case .strayCopy:
+            return Color(red: 205/255, green: 165/255, blue: 255/255)
+        case .crossDrive:
+            return WalkmanTheme.hiResGold
+        case .crossAlbum:
+            return Color(red: 255/255, green: 180/255, blue: 100/255)
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Card Header
             HStack(spacing: 14) {
                 if let firstTrack = group.items.first?.track {
                     TrackCoverThumbnail(track: firstTrack, size: 46)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -574,6 +765,7 @@ private struct DuplicateGroupCard: View {
 
                         if group.items.contains(where: { $0.isHiRes }) {
                             HiResBadge()
+                                .fixedSize(horizontal: true, vertical: false)
                         }
                     }
 
@@ -583,11 +775,24 @@ private struct DuplicateGroupCard: View {
                         .lineLimit(1)
                 }
 
-                Spacer()
+                Spacer(minLength: 8)
 
-                // Group Tags
+                // Group Tags & Action
                 HStack(spacing: 8) {
-                    if group.isCrossDrive {
+                    // Match Reason Badge
+                    HStack(spacing: 4) {
+                        Image(systemName: group.matchReason.icon)
+                        Text(group.matchReason.rawValue)
+                    }
+                    .font(WalkmanFont.badge)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3.5)
+                    .background(reasonColor(group.matchReason).opacity(0.18))
+                    .foregroundStyle(reasonColor(group.matchReason))
+                    .clipShape(Capsule())
+                    .fixedSize(horizontal: true, vertical: false)
+
+                    if group.isCrossDrive && group.matchReason != .crossDrive {
                         HStack(spacing: 4) {
                             Image(systemName: "arrow.triangle.2.circlepath")
                             Text("Cross-Drive")
@@ -598,6 +803,7 @@ private struct DuplicateGroupCard: View {
                         .background(WalkmanTheme.hiResGold.opacity(0.18))
                         .foregroundStyle(WalkmanTheme.hiResGold)
                         .clipShape(Capsule())
+                        .fixedSize(horizontal: true, vertical: false)
                     }
 
                     if group.hasQualityDifference {
@@ -611,6 +817,7 @@ private struct DuplicateGroupCard: View {
                         .background(Color.cyan.opacity(0.18))
                         .foregroundStyle(Color.cyan)
                         .clipShape(Capsule())
+                        .fixedSize(horizontal: true, vertical: false)
                     }
 
                     // Count and recoverable space
@@ -618,38 +825,44 @@ private struct DuplicateGroupCard: View {
                         Text("\(group.items.count) copies")
                             .font(WalkmanFont.pillCounter)
                             .foregroundStyle(WalkmanTheme.silver)
+                            .lineLimit(1)
                         if group.recoverableBytes > 0 {
                             Text("+\(formatBytes(group.recoverableBytes)) freeable")
                                 .font(WalkmanFont.badge)
                                 .foregroundStyle(Color.green)
+                                .lineLimit(1)
                         }
                     }
                     .padding(.leading, 4)
-                }
+                    .fixedSize(horizontal: true, vertical: false)
 
-                // Quick Header Action: "Keep Best Quality" or "Keep SD Card Copy"
-                if let best = group.suggestedItemToKeep {
-                    Button(action: { onKeepOnly(best) }) {
-                        HStack(spacing: 5) {
-                            Image(systemName: "checkmark.circle.fill")
-                            if group.hasQualityDifference {
-                                Text("Keep Best Quality")
-                            } else if group.isCrossDrive {
-                                Text("Keep on SD Card")
-                            } else {
-                                Text("Keep Best Copy")
+                    // Quick Header Action: "Keep Best Quality" or "Keep SD Card Copy"
+                    if let best = group.suggestedItemToKeep {
+                        Button(action: { onKeepOnly(best) }) {
+                            HStack(spacing: 5) {
+                                Image(systemName: "checkmark.circle.fill")
+                                if group.hasQualityDifference {
+                                    Text("Keep Best Quality")
+                                } else if group.isCrossDrive {
+                                    Text("Keep on SD Card")
+                                } else {
+                                    Text("Keep Best Copy")
+                                }
                             }
+                            .font(WalkmanFont.calloutMedium)
+                            .lineLimit(1)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(WalkmanTheme.silverGradient)
+                            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                         }
-                        .font(WalkmanFont.calloutMedium)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(WalkmanTheme.silverGradient)
-                        .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .buttonStyle(.plain)
+                        .help("Keeps this recommended copy and deletes all other duplicate copies in this group")
+                        .fixedSize(horizontal: true, vertical: false)
                     }
-                    .buttonStyle(.plain)
-                    .help("Keeps this recommended copy and deletes all other duplicate copies in this group")
                 }
+                .fixedSize(horizontal: true, vertical: false)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -742,6 +955,7 @@ private struct DuplicateTrackRow: View {
                 .background(Color.purple.opacity(0.2))
                 .foregroundStyle(Color(red: 200/255, green: 160/255, blue: 255/255))
                 .clipShape(Capsule())
+                .fixedSize(horizontal: true, vertical: false)
             } else {
                 HStack(spacing: 4) {
                     Image(systemName: "sdcard.fill")
@@ -753,6 +967,7 @@ private struct DuplicateTrackRow: View {
                 .background(Color.blue.opacity(0.2))
                 .foregroundStyle(Color(red: 130/255, green: 200/255, blue: 255/255))
                 .clipShape(Capsule())
+                .fixedSize(horizontal: true, vertical: false)
             }
 
             // Specs (Format, Bitrate, Resolution)
@@ -791,6 +1006,7 @@ private struct DuplicateTrackRow: View {
                     .font(WalkmanFont.monoSmall)
                     .foregroundStyle(WalkmanTheme.silverMuted)
             }
+            .fixedSize(horizontal: true, vertical: false)
 
             // Path / Album
             VStack(alignment: .leading, spacing: 2) {
@@ -818,6 +1034,7 @@ private struct DuplicateTrackRow: View {
                 .background(Color.green.opacity(0.18))
                 .foregroundStyle(Color.green)
                 .clipShape(Capsule())
+                .fixedSize(horizontal: true, vertical: false)
             }
 
             // Action Buttons
@@ -827,6 +1044,7 @@ private struct DuplicateTrackRow: View {
                     HStack(spacing: 4) {
                         Image(systemName: "checkmark")
                         Text("Keep This")
+                            .lineLimit(1)
                     }
                     .font(WalkmanFont.calloutMedium)
                     .padding(.horizontal, 8)
@@ -874,6 +1092,7 @@ private struct DuplicateTrackRow: View {
                 .buttonStyle(.plain)
                 .help("Delete this copy from device")
             }
+            .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 9)
@@ -906,6 +1125,7 @@ private struct MetricPill: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
+        .frame(minHeight: 38)
         .background(Color.white.opacity(0.05))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
