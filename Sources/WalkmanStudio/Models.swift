@@ -556,6 +556,7 @@ public struct AudioFileMetadata: Sendable {
     public var sampleRate: Int = 44100
     public var bitsPerSample: Int = 16
     public var hasArtwork: Bool = false
+    public var lyrics: String? = nil
     
     public init(
         title: String = "",
@@ -568,7 +569,8 @@ public struct AudioFileMetadata: Sendable {
         bitrateKbps: Int = 0,
         sampleRate: Int = 44100,
         bitsPerSample: Int = 16,
-        hasArtwork: Bool = false
+        hasArtwork: Bool = false,
+        lyrics: String? = nil
     ) {
         self.title = title
         self.artist = artist
@@ -581,5 +583,6 @@ public struct AudioFileMetadata: Sendable {
         self.sampleRate = sampleRate
         self.bitsPerSample = bitsPerSample
         self.hasArtwork = hasArtwork
+        self.lyrics = lyrics
     }
 }

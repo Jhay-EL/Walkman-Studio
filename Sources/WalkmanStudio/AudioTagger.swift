@@ -715,6 +715,7 @@ public final class AudioTagger: @unchecked Sendable {
                 if m.genre.isEmpty && !avMeta.genre.isEmpty { m.genre = avMeta.genre }
                 if m.durationSeconds <= 0 { m.durationSeconds = avMeta.durationSeconds }
                 if !m.hasArtwork && avMeta.hasArtwork { m.hasArtwork = true }
+                if m.lyrics == nil && avMeta.lyrics != nil { m.lyrics = avMeta.lyrics }
             }
         }
 
@@ -809,6 +810,9 @@ public final class AudioTagger: @unchecked Sendable {
                             }
                             if res.genre.isEmpty && (k.contains("genre") || k.contains("tcon") || k == "©gen") {
                                 res.genre = val
+                            }
+                            if res.lyrics == nil && (k.contains("lyric") || k == "©lyr" || k.contains("uslt")) {
+                                res.lyrics = val
                             }
                             if !res.hasArtwork && (k.contains("art") || k.contains("apic") || k == "covr") {
                                 res.hasArtwork = true
@@ -944,6 +948,8 @@ public final class AudioTagger: @unchecked Sendable {
                                                 res.genre += ", \(normalized)"
                                             }
                                         }
+                                    } else if (k == "LYRICS" || k == "UNSYNCEDLYRICS" || k == "UNSYNCED LYRICS" || k == "SYNCEDLYRICS" || k == "SYNCED LYRICS") && res.lyrics == nil {
+                                        res.lyrics = v
                                     }
                                 }
                             }
@@ -1069,6 +1075,19 @@ public final class AudioTagger: @unchecked Sendable {
                                     res.genre = AudioTagger.normalizeGenre(val)
                                 }
                             }
+                        } else if (frameID == "USLT" || frameID == "SYLT" || frameID == "ULT") && res.lyrics == nil && frameContent.count > 4 {
+                            let enc = frameContent[0]
+                            let payload = frameContent.subdata(in: 4..<frameContent.count)
+                            let text: String?
+                            if enc == 0 { text = String(data: payload, encoding: .isoLatin1) ?? String(data: payload, encoding: .windowsCP1252) }
+                            else if enc == 1 { text = String(data: payload, encoding: .utf16) }
+                            else if enc == 2 { text = String(data: payload, encoding: .utf16BigEndian) }
+                            else { text = String(data: payload, encoding: .utf8) }
+                            if let full = text {
+                                let parts = full.components(separatedBy: "\0")
+                                let lyric = parts.last?.trimmingCharacters(in: .whitespacesAndNewlines) ?? full
+                                if !lyric.isEmpty { res.lyrics = lyric }
+                            }
                         }
                     }
                 }
@@ -1181,21 +1200,33 @@ public final class AudioTagger: @unchecked Sendable {
             return cached as String
         }
 
-        // 1. Check companion .lrc or .txt file (Sony Walkman native standard)
-        let lrcURL = fileURL.deletingPathExtension().appendingPathExtension("lrc")
-        if let lrc = try? String(contentsOf: lrcURL, encoding: .utf8), !lrc.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            lyricsCache.setObject(lrc as NSString, forKey: fileURL as NSURL)
-            return lrc
+        let baseURL = fileURL.deletingPathExtension()
+
+        // 1. Check companion .lrc or .txt file (Sony Walkman native standard, case-insensitive)
+        let candidateURLs = [
+            baseURL.appendingPathExtension("lrc"),
+            baseURL.appendingPathExtension("LRC"),
+            baseURL.appendingPathExtension("txt"),
+            baseURL.appendingPathExtension("TXT")
+        ]
+
+        for cand in candidateURLs {
+            if let lrc = readCompanionFile(url: cand) {
+                lyricsCache.setObject(lrc as NSString, forKey: fileURL as NSURL)
+                return lrc
+            }
         }
 
-        let txtURL = fileURL.deletingPathExtension().appendingPathExtension("txt")
-        if let txt = try? String(contentsOf: txtURL, encoding: .utf8), !txt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            lyricsCache.setObject(txt as NSString, forKey: fileURL as NSURL)
-            return txt
-        }
-
-        // 2. Check embedded MP3 USLT frame
+        // 2. Check embedded FLAC Vorbis comments (LYRICS, UNSYNCEDLYRICS, SYNCEDLYRICS)
         let ext = fileURL.pathExtension.lowercased()
+        if ext == "flac" {
+            if let flacLyrics = extractFLACLyrics(fileURL: fileURL) {
+                lyricsCache.setObject(flacLyrics as NSString, forKey: fileURL as NSURL)
+                return flacLyrics
+            }
+        }
+
+        // 3. Check embedded MP3 USLT / SYLT / ULT frame
         if ext == "mp3" {
             if let handle = try? FileHandle(forReadingFrom: fileURL) {
                 defer { try? handle.close() }
@@ -1214,7 +1245,108 @@ public final class AudioTagger: @unchecked Sendable {
             }
         }
 
+        // 4. Check embedded M4A / MP4 / ALAC / AAC QuickTime lyrics atom (©lyr)
+        if ext == "m4a" || ext == "mp4" || ext == "alac" || ext == "aac" {
+            if let mp4Lyrics = extractMP4Lyrics(fileURL: fileURL) {
+                lyricsCache.setObject(mp4Lyrics as NSString, forKey: fileURL as NSURL)
+                return mp4Lyrics
+            }
+        }
+
         return nil
+    }
+
+    private func readCompanionFile(url: URL) -> String? {
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        guard let data = try? Data(contentsOf: url), !data.isEmpty else { return nil }
+        if let str = String(data: data, encoding: .utf8) ??
+                     String(data: data, encoding: .windowsCP1252) ??
+                     String(data: data, encoding: .isoLatin1) ??
+                     String(data: data, encoding: .utf16) {
+            let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return trimmed
+            }
+        }
+        return nil
+    }
+
+    private func extractFLACLyrics(fileURL: URL) -> String? {
+        guard let handle = try? FileHandle(forReadingFrom: fileURL) else { return nil }
+        defer { try? handle.close() }
+
+        guard let magic = try? handle.read(upToCount: 4), magic == Data([0x66, 0x4C, 0x61, 0x43]) else { return nil }
+
+        var isLast = false
+        while !isLast {
+            guard let bh = try? handle.read(upToCount: 4), bh.count == 4 else { break }
+            isLast = (bh[0] & 0x80) != 0
+            let type = Int(bh[0] & 0x7F)
+            let len = (Int(bh[1]) << 16) | (Int(bh[2]) << 8) | Int(bh[3])
+
+            if type == 4 { // VORBIS_COMMENT
+                guard let d = try? handle.read(upToCount: len), d.count == len else { break }
+                var offset = 0
+                if offset + 4 <= d.count {
+                    let vLen = Int(d[offset]) | (Int(d[offset+1]) << 8) | (Int(d[offset+2]) << 16) | (Int(d[offset+3]) << 24)
+                    offset += 4 + vLen
+                    if offset + 4 <= d.count {
+                        let count = Int(d[offset]) | (Int(d[offset+1]) << 8) | (Int(d[offset+2]) << 16) | (Int(d[offset+3]) << 24)
+                        offset += 4
+                        for _ in 0..<count {
+                            guard offset + 4 <= d.count else { break }
+                            let cLen = Int(d[offset]) | (Int(d[offset+1]) << 8) | (Int(d[offset+2]) << 16) | (Int(d[offset+3]) << 24)
+                            offset += 4
+                            guard offset + cLen <= d.count else { break }
+                            let commentData = d.subdata(in: offset..<offset+cLen)
+                            if let s = String(data: commentData, encoding: .utf8) ?? String(data: commentData, encoding: .isoLatin1) {
+                                let parts = s.components(separatedBy: "=")
+                                if parts.count >= 2 {
+                                    let k = parts[0].trimmingCharacters(in: .whitespaces).uppercased()
+                                    if k == "LYRICS" || k == "UNSYNCEDLYRICS" || k == "UNSYNCED LYRICS" || k == "SYNCEDLYRICS" || k == "SYNCED LYRICS" {
+                                        let v = parts[1...].joined(separator: "=").trimmingCharacters(in: .whitespacesAndNewlines)
+                                        if !v.isEmpty {
+                                            return v
+                                        }
+                                    }
+                                }
+                            }
+                            offset += cLen
+                        }
+                    }
+                }
+                return nil
+            } else {
+                guard (try? handle.seek(toOffset: (try? handle.offset())! + UInt64(len))) != nil else { break }
+            }
+        }
+        return nil
+    }
+
+    private func extractMP4Lyrics(fileURL: URL) -> String? {
+        let asset = AVURLAsset(url: fileURL)
+        let sem = DispatchSemaphore(value: 0)
+        var lyricsResult: String? = nil
+        Task {
+            if let formats = try? await asset.load(.availableMetadataFormats) {
+                for fmt in formats {
+                    if let items = try? await asset.loadMetadata(for: fmt) {
+                        for item in items {
+                            if let key = item.key as? String, key == "©lyr" || key.lowercased() == "lyrics" {
+                                if let str = try? await item.load(.stringValue), !str.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    lyricsResult = str
+                                    break
+                                }
+                            }
+                        }
+                    }
+                    if lyricsResult != nil { break }
+                }
+            }
+            sem.signal()
+        }
+        _ = sem.wait(timeout: .now() + 0.5)
+        return lyricsResult
     }
 
     public func saveLyrics(fileURL: URL, lyrics: String) throws {
@@ -1268,15 +1400,30 @@ public final class AudioTagger: @unchecked Sendable {
                 rawSize = (Int(data[idx+4]) << 24) | (Int(data[idx+5]) << 16) | (Int(data[idx+6]) << 8) | Int(data[idx+7])
             }
 
-            if frameID == "USLT" || frameID == "SYLT" {
+            if frameID == "USLT" || frameID == "SYLT" || frameID == "ULT" {
                 let frameContent = data.subdata(in: idx+10..<min(data.count, idx+10+rawSize))
                 if frameContent.count > 4 {
-                    // Try decoding as utf8 or utf16
-                    if let str = String(data: frameContent.subdata(in: 4..<frameContent.count), encoding: .utf8) {
-                        return str
+                    let enc = frameContent[0]
+                    let payload = frameContent.subdata(in: 4..<frameContent.count)
+                    var text: String? = nil
+                    if enc == 0 {
+                        text = String(data: payload, encoding: .isoLatin1) ?? String(data: payload, encoding: .windowsCP1252)
+                    } else if enc == 1 {
+                        text = String(data: payload, encoding: .utf16)
+                    } else if enc == 2 {
+                        text = String(data: payload, encoding: .utf16BigEndian)
+                    } else {
+                        text = String(data: payload, encoding: .utf8)
                     }
-                    if let str = String(data: frameContent.subdata(in: 4..<frameContent.count), encoding: .utf16) {
-                        return str
+                    if text == nil {
+                        text = String(data: payload, encoding: .utf8) ?? String(data: payload, encoding: .utf16)
+                    }
+                    if let full = text {
+                        let parts = full.components(separatedBy: "\0")
+                        let lyric = parts.last?.trimmingCharacters(in: .whitespacesAndNewlines) ?? full
+                        if !lyric.isEmpty {
+                            return lyric
+                        }
                     }
                 }
             }
