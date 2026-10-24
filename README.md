@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v2.0.3-brightgreen?style=for-the-badge" alt="Release v2.0.3" />
+  <img src="https://img.shields.io/badge/Release-v2.1.0-brightgreen?style=for-the-badge" alt="Release v2.1.0" />
   <img src="https://img.shields.io/badge/Platform-macOS%2014%2B%20(Apple%20Silicon%20%26%20Intel)-black?style=for-the-badge&logo=apple" alt="macOS" />
   <img src="https://img.shields.io/badge/Language-Swift%205.9%2B-orange?style=for-the-badge&logo=swift" alt="Swift" />
   <img src="https://img.shields.io/badge/Architecture-Universal%20(arm64%20%2F%20x86__64)-blue?style=for-the-badge" alt="Universal Architecture" />
@@ -213,15 +213,15 @@ Walkman Studio is designed **exclusively for non-Android Sony Walkman DAPs** run
 
 ---
 
-## Downloads & Releases (v2.0.3)
+## Downloads & Releases (v2.1.0)
 
 Pre-built `.dmg` disk images and `.zip` standalone archives are available for all modern Mac hardware:
 
 | Package | Architecture | Supported Mac Models | Download Link |
 | :--- | :--- | :--- | :--- |
-| **Apple Silicon DMG** | `arm64` | MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4) | [Walkman-Studio-2.0.3-arm64.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v2.0.3/Walkman-Studio-2.0.3-arm64.dmg) |
-| **Intel Mac DMG** | `x86_64` | Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac mini, Mac Pro | [Walkman-Studio-2.0.3-intel.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v2.0.3/Walkman-Studio-2.0.3-intel.dmg) |
-| **Universal 2 DMG** | `arm64` + `x86_64` | Universal package running natively on all Macs (macOS 14.0+) | [Walkman-Studio-2.0.3-universal.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v2.0.3/Walkman-Studio-2.0.3-universal.dmg) |
+| **Apple Silicon DMG** | `arm64` | MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4) | [Walkman-Studio-2.1.0-arm64.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v2.1.0/Walkman-Studio-2.1.0-arm64.dmg) |
+| **Intel Mac DMG** | `x86_64` | Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac mini, Mac Pro | [Walkman-Studio-2.1.0-intel.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v2.1.0/Walkman-Studio-2.1.0-intel.dmg) |
+| **Universal 2 DMG** | `arm64` + `x86_64` | Universal package running natively on all Macs (macOS 14.0+) | [Walkman-Studio-2.1.0-universal.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v2.1.0/Walkman-Studio-2.1.0-universal.dmg) |
 
 > [!TIP]
 > **Which one should I choose?**
