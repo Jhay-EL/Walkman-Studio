@@ -3,49 +3,142 @@ import AppKit
 
 public struct MetadataStudioView: View {
     let track: Track?
-    let onSaved: () -> Void
+    let onSaved: (() -> Void)?
+    let onEdit: (() -> Void)?
     
     @ObservedObject private var player = AudioPlayerService.shared
     
-    @State private var title: String = ""
-    @State private var artist: String = ""
-    @State private var album: String = ""
-    @State private var trackNumber: String = ""
-    @State private var year: String = ""
-    @State private var genre: String = ""
-    
-    @State private var coverImage: NSImage?
-    @State private var coverData: Data?
-    @State private var validationStatus: (valid: Bool, message: String)?
-    @State private var isSaving: Bool = false
-    @State private var showSuccess: Bool = false
-    @State private var isTargeted: Bool = false
-    
-    // Auto-Save State
-    @State private var isInitialLoad: Bool = true
     @State private var currentTrackId: String? = nil
-    @State private var autoSaveTask: Task<Void, Never>? = nil
-    @State private var baselineYear: String = ""
-    @State private var baselineGenre: String = ""
-    
-    // Lyrics State
+    @State private var coverImage: NSImage? = nil
+    @State private var coverData: Data? = nil
+    @State private var validationStatus: (valid: Bool, message: String)? = nil
     @State private var lyrics: String? = nil
-    @State private var isEditingLyrics: Bool = false
-    @State private var lyricsDraft: String = ""
-    @State private var lyricsStatusMessage: String? = nil
-    @State private var lyricsErrorMessage: String? = nil
-    @State private var isFetchingLyrics: Bool = false
+    @State private var verifiedMetadata: AudioFileMetadata? = nil
+    @State private var isLyricsCopied: Bool = false
+    @State private var isPathCopied: Bool = false
     
-    public init(track: Track?, onSaved: @escaping () -> Void) {
+    public init(
+        track: Track?,
+        onSaved: (() -> Void)? = nil,
+        onEdit: (() -> Void)? = nil
+    ) {
         self.track = track
         self.onSaved = onSaved
+        self.onEdit = onEdit
     }
     
+    private var displayTitle: String {
+        if let t = track?.title, !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return t
+        }
+        if let t = verifiedMetadata?.title, !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return t
+        }
+        return track?.filename ?? "Unknown Track"
+    }
+
+    private var displayArtist: String {
+        if let a = track?.artist, !a.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return a
+        }
+        if let a = verifiedMetadata?.artist, !a.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return a
+        }
+        return "Unknown Artist"
+    }
+
+    private var displayAlbum: String {
+        if let al = track?.album, !al.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return al
+        }
+        if let al = verifiedMetadata?.album, !al.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return al
+        }
+        return "Unknown Album"
+    }
+
+    private var displayYear: String {
+        if let y = track?.year, !y.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return y
+        }
+        return verifiedMetadata?.year ?? ""
+    }
+
+    private var displayGenre: String {
+        if let g = track?.genre, !g.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return g
+        }
+        return verifiedMetadata?.genre ?? ""
+    }
+
+    private var displayTrackNum: String {
+        if let tn = track?.trackNum, !tn.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return tn
+        }
+        return verifiedMetadata?.trackNumber ?? ""
+    }
+
+    private var isHiRes: Bool {
+        guard let tr = track else { return false }
+        return tr.bitsPerSample > 16 || tr.sampleRate > 48000
+    }
+    
+    private var hasLyricsOnWalkman: Bool {
+        guard let lyr = lyrics else { return false }
+        return !lyr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private struct ParsedLyricLine: Identifiable, Hashable {
+        let id: Int
+        let timestamp: String?
+        let text: String
+    }
+
+    private var parsedLyricLines: [ParsedLyricLine] {
+        guard let raw = lyrics else { return [] }
+        let rawLines = raw.components(separatedBy: .newlines)
+        var result: [ParsedLyricLine] = []
+        
+        let pattern = #"^\[(\d{1,2}:\d{2}(?:[.:]\d{1,3})?)\](.*)$"#
+        let regex = try? NSRegularExpression(pattern: pattern)
+        
+        var lineIndex = 0
+        for line in rawLines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("[ti:") || trimmed.hasPrefix("[ar:") ||
+               trimmed.hasPrefix("[al:") || trimmed.hasPrefix("[by:") ||
+               trimmed.hasPrefix("[offset:") || trimmed.hasPrefix("[length:") {
+                continue
+            }
+            
+            let nsLine = trimmed as NSString
+            if let match = regex?.firstMatch(in: trimmed, range: NSRange(location: 0, length: nsLine.length)) {
+                let timeRange = match.range(at: 1)
+                let textRange = match.range(at: 2)
+                let timeStr = nsLine.substring(with: timeRange)
+                let textStr = nsLine.substring(with: textRange).trimmingCharacters(in: .whitespaces)
+                result.append(ParsedLyricLine(id: lineIndex, timestamp: timeStr, text: textStr))
+            } else {
+                result.append(ParsedLyricLine(id: lineIndex, timestamp: nil, text: trimmed))
+            }
+            lineIndex += 1
+        }
+        return result
+    }
+
+    private var isSyncedLyrics: Bool {
+        guard let lyr = lyrics else { return false }
+        return lyr.contains("[") && lyr.contains("]") && parsedLyricLines.contains(where: { $0.timestamp != nil })
+    }
+
     private func loadTrack() {
         guard let tr = track else {
-            autoSaveTask?.cancel()
-            autoSaveTask = nil
             currentTrackId = nil
+            coverImage = nil
+            coverData = nil
+            validationStatus = nil
+            lyrics = nil
+            verifiedMetadata = nil
             return
         }
         
@@ -53,26 +146,17 @@ public struct MetadataStudioView: View {
         currentTrackId = tr.id
         
         if isDifferentTrack {
-            autoSaveTask?.cancel()
-            autoSaveTask = nil
-            isInitialLoad = true
-            
-            title = tr.title
-            artist = tr.artist
-            album = tr.album
-            trackNumber = tr.trackNum
-            year = tr.year
-            genre = tr.genre
-            baselineYear = tr.year
-            baselineGenre = tr.genre
-            isEditingLyrics = false
-            isFetchingLyrics = false
-            lyricsErrorMessage = nil
-            lyricsStatusMessage = nil
+            coverImage = nil
+            coverData = nil
+            validationStatus = nil
+            lyrics = nil
+            verifiedMetadata = nil
+            isLyricsCopied = false
+            isPathCopied = false
             
             let url = URL(fileURLWithPath: tr.fullPath)
             
-            // Fast asynchronous loading of artwork, lyrics, and verified metadata to eliminate selection lag
+            // Asynchronous extraction of artwork, lyrics, and metadata
             DispatchQueue.global(qos: .userInitiated).async {
                 let art = AudioTagger.shared.extractCoverArt(fileURL: url)
                 let lyr = AudioTagger.shared.extractLyrics(fileURL: url)
@@ -86,157 +170,60 @@ public struct MetadataStudioView: View {
                     self.coverImage = img
                     self.validationStatus = val
                     self.lyrics = lyr
-                    self.lyricsDraft = lyr ?? ""
-                    
-                    if let m = meta {
-                        if (self.year.isEmpty || self.baselineYear.isEmpty) && !m.year.isEmpty {
-                            self.year = m.year
-                            self.baselineYear = m.year
-                        }
-                        if (self.genre.isEmpty || self.baselineGenre.isEmpty) && !m.genre.isEmpty {
-                            self.genre = m.genre
-                            self.baselineGenre = m.genre
-                        }
-                        if !m.year.isEmpty || !m.genre.isEmpty {
-                            LibraryScanner.shared.updateCachedMetadata(fullPath: tr.fullPath, year: m.year, genre: m.genre)
-                        }
-                    }
-                    
-                    // Enable auto-save after initial population completes
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        if self.track?.id == tr.id {
-                            self.isInitialLoad = false
-                        }
-                    }
+                    self.verifiedMetadata = meta
                 }
             }
-        }
-    }
-    
-    private func handleDroppedImage(data: Data) {
-        if let baseline = WalkmanEngine.shared.encodeBaselineRGBJPEG(data: data) {
-            self.coverData = baseline
-            self.coverImage = NSImage(data: baseline)
-            self.validationStatus = WalkmanEngine.shared.isBaselineRGBJPEG(data: baseline)
-            // Auto-save artwork to Walkman immediately
-            self.saveMetadata()
-        }
-    }
-    
-    private func selectArtworkFile() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.image, .jpeg, .png]
-        panel.prompt = "Choose Artwork"
-        if panel.runModal() == .OK, let url = panel.url, let data = try? Data(contentsOf: url) {
-            handleDroppedImage(data: data)
         }
     }
     
     private func exportArtworkToMac() {
         guard let tr = track else { return }
-        let cleanArtist = WalkmanEngine.shared.sanitizeFilename(artist.isEmpty ? (tr.artist.isEmpty ? "Unknown Artist" : tr.artist) : artist)
-        let cleanAlbum = WalkmanEngine.shared.sanitizeFilename(album.isEmpty ? (tr.album.isEmpty ? tr.title : tr.album) : album)
+        let cleanArtist = WalkmanEngine.shared.sanitizeFilename(displayArtist.isEmpty ? (tr.artist.isEmpty ? "Unknown Artist" : tr.artist) : displayArtist)
+        let cleanAlbum = WalkmanEngine.shared.sanitizeFilename(displayAlbum.isEmpty ? (tr.album.isEmpty ? tr.title : tr.album) : displayAlbum)
         let suggestedName = "\(cleanArtist) - \(cleanAlbum) Cover.jpg"
         ArtworkExportService.exportCustomArtwork(data: coverData, image: coverImage, suggestedFilename: suggestedName)
     }
-    
-    private func saveLyrics() {
+
+    private func revealInFinder() {
         guard let tr = track else { return }
         let url = URL(fileURLWithPath: tr.fullPath)
-        let trimmed = lyricsDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        do {
-            if trimmed.isEmpty {
-                try AudioTagger.shared.deleteLyrics(fileURL: url)
-                self.lyrics = nil
-                self.isEditingLyrics = false
-                self.lyricsErrorMessage = nil
-                self.lyricsStatusMessage = "Removed .LRC from Walkman"
-            } else {
-                try AudioTagger.shared.saveLyrics(fileURL: url, lyrics: trimmed)
-                self.lyrics = trimmed
-                self.isEditingLyrics = false
-                self.lyricsErrorMessage = nil
-                self.lyricsStatusMessage = "Saved .lrc file (Sony Walkman native)"
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    private func copyLyricsToClipboard() {
+        guard let lyr = lyrics, !lyr.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(lyr, forType: .string)
+        withAnimation(.easeInOut(duration: 0.15)) {
+            isLyricsCopied = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                self.isLyricsCopied = false
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                self.lyricsStatusMessage = nil
-            }
-        } catch {
-            self.lyricsStatusMessage = "Error: \(error.localizedDescription)"
         }
     }
 
-    private func grabLyrics() {
-        guard !isFetchingLyrics else { return }
+    private func copyPathToClipboard() {
         guard let tr = track else { return }
-        
-        withAnimation(.easeInOut(duration: 0.12)) {
-            isFetchingLyrics = true
-            lyricsErrorMessage = nil
-            lyricsStatusMessage = nil
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(tr.fullPath, forType: .string)
+        withAnimation(.easeInOut(duration: 0.15)) {
+            isPathCopied = true
         }
-
-        let trackTitle = self.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? tr.title : self.title
-        let trackArtist = self.artist.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? tr.artist : self.artist
-        let trackAlbum = self.album.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? tr.album : self.album
-        let duration = tr.durationSeconds
-        let fileURL = URL(fileURLWithPath: tr.fullPath)
-
-        Task {
-            do {
-                let result = try await LyricsService.shared.fetchLyrics(
-                    title: trackTitle,
-                    artist: trackArtist,
-                    album: trackAlbum,
-                    durationSeconds: duration
-                )
-
-                // Write paired .lrc file to Walkman alongside music file
-                try AudioTagger.shared.saveLyrics(fileURL: fileURL, lyrics: result.lyrics)
-
-                await MainActor.run {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        self.lyrics = result.lyrics
-                        self.lyricsDraft = result.lyrics
-                        self.isEditingLyrics = false
-                        self.isFetchingLyrics = false
-                        self.lyricsErrorMessage = nil
-                        self.lyricsStatusMessage = result.synced ? "Synced .LRC added!" : "Added .LRC to Walkman!"
-                    }
-
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
-                        if self.lyricsStatusMessage?.contains("added") == true || self.lyricsStatusMessage?.contains("Added") == true {
-                            withAnimation {
-                                self.lyricsStatusMessage = nil
-                            }
-                        }
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        self.isFetchingLyrics = false
-                        self.lyricsErrorMessage = "No lyrics found online"
-                        self.lyricsStatusMessage = "No lyrics found online"
-                    }
-
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
-                        if self.lyricsErrorMessage == "No lyrics found online" {
-                            withAnimation {
-                                self.lyricsErrorMessage = nil
-                            }
-                        }
-                        if self.lyricsStatusMessage == "No lyrics found online" {
-                            withAnimation {
-                                self.lyricsStatusMessage = nil
-                            }
-                        }
-                    }
-                }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                self.isPathCopied = false
             }
+        }
+    }
+
+    private func togglePlayback() {
+        guard let tr = track else { return }
+        if player.currentTrack?.id == tr.id && player.isPlaying {
+            player.pause()
+        } else {
+            player.play(track: tr)
         }
     }
     
@@ -251,152 +238,47 @@ public struct MetadataStudioView: View {
         let mb = Double(bytes) / (1024 * 1024)
         return String(format: "%.1f MB", mb)
     }
-    
-    private func isHiRes(_ tr: Track) -> Bool {
-        tr.bitsPerSample > 16 || tr.sampleRate > 48000
-    }
-    
-    private func saveMetadata() {
-        guard let tr = track else { return }
-        isSaving = true
-        
-        let saveTitle = self.title
-        let saveArtist = self.artist
-        let saveAlbum = self.album
-        let saveTrackNumber = self.trackNumber
-        let saveYear = self.year
-        let saveGenre = self.genre
-        let saveCover = self.coverData
-        
-        Task {
-            let url = URL(fileURLWithPath: tr.fullPath)
-            do {
-                try AudioTagger.shared.writeMetadata(
-                    fileURL: url,
-                    title: saveTitle,
-                    artist: saveArtist,
-                    album: saveAlbum,
-                    trackNumber: saveTrackNumber,
-                    year: saveYear,
-                    genre: saveGenre,
-                    coverArtData: saveCover
-                )
-                
-                // Invalidate all layers of artwork and scanner cache
-                AudioTagger.shared.invalidateCaches(fileURL: url)
-                CoverArtCache.shared.invalidate(forFullPath: tr.fullPath, artist: tr.primaryArtist, album: tr.album)
-                LibraryScanner.shared.invalidate(fullPath: tr.fullPath)
-                
-                await MainActor.run {
-                    self.isSaving = false
-                    self.showSuccess = true
-                    self.onSaved()
-                }
-                
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
-                await MainActor.run {
-                    self.showSuccess = false
-                }
-            } catch {
-                await MainActor.run {
-                    self.isSaving = false
-                }
-            }
-        }
-    }
-    
-    private func scheduleAutoSave() {
-        guard !isInitialLoad else { return }
-        guard let tr = track else { return }
-        
-        let hasChanges = (title != tr.title) ||
-                         (artist != tr.artist) ||
-                         (album != tr.album) ||
-                         (trackNumber != tr.trackNum) ||
-                         (year != baselineYear) ||
-                         (genre != baselineGenre)
-        guard hasChanges else { return }
-        
-        autoSaveTask?.cancel()
-        autoSaveTask = Task {
-            try? await Task.sleep(nanoseconds: 600_000_000)
-            if !Task.isCancelled {
-                await MainActor.run {
-                    self.saveMetadata()
-                }
-            }
-        }
-    }
-    
-    private func saveMetadataImmediately() {
-        guard !isInitialLoad else { return }
-        guard let tr = track else { return }
-        let hasChanges = (title != tr.title) ||
-                         (artist != tr.artist) ||
-                         (album != tr.album) ||
-                         (trackNumber != tr.trackNum) ||
-                         (year != baselineYear) ||
-                         (genre != baselineGenre)
-        guard hasChanges else { return }
-        
-        autoSaveTask?.cancel()
-        autoSaveTask = nil
-        saveMetadata()
-    }
-    
+
     public var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 14) {
                 if let tr = track {
-                        // Track Title & Header
+                    // 1. HERO HEADER: Track Title, Badges & Playback Preview
+                    VStack(alignment: .leading, spacing: 8) {
                         HStack(alignment: .top) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                HStack(spacing: 6) {
-                                    Text(tr.title.isEmpty ? tr.filename : tr.title)
-                                        .font(WalkmanFont.title3)
-                                        .foregroundStyle(.white)
-                                        .lineLimit(2)
-                                    
-                                    if isHiRes(tr) {
-                                        Text("Hi-Res")
-                                            .font(WalkmanFont.badge)
-                                            .padding(.horizontal, 4.5)
-                                            .padding(.vertical, 1.5)
-                                            .background(WalkmanTheme.hiResGoldGradient)
-                                            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                                            .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
-                                    }
-                                }
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(displayTitle)
+                                    .font(WalkmanFont.title3)
+                                    .foregroundStyle(.white)
+                                    .lineLimit(3)
+                                    .textSelection(.enabled)
                                 
-                                let displayYear = !year.isEmpty ? year : tr.year
-                                let displayArtist = !artist.isEmpty ? artist : tr.artist
-                                let displayAlbum = !album.isEmpty ? album : tr.album
+                                Text(displayArtist)
+                                    .font(WalkmanFont.calloutMedium)
+                                    .foregroundStyle(WalkmanTheme.silverLight)
+                                    .lineLimit(1)
+                                    .textSelection(.enabled)
                                 
-                                Text("\(displayArtist) — \(displayAlbum)\(displayYear.isEmpty ? "" : " (\(displayYear))")")
+                                Text("\(displayAlbum)\(displayYear.isEmpty ? "" : " (\(displayYear))")")
                                     .font(WalkmanFont.subheadline)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
+                                    .textSelection(.enabled)
                             }
                             
-                            Spacer()
+                            Spacer(minLength: 8)
                             
-                            // Audio Player status & play/pause toggle
+                            // Audio Preview Play / Pause
                             let isThisPlaying = (player.currentTrack?.id == tr.id && player.isPlaying)
-                            Button(action: {
-                                if isThisPlaying {
-                                    player.pause()
-                                } else {
-                                    player.play(track: tr)
-                                }
-                            }) {
+                            Button(action: togglePlayback) {
                                 HStack(spacing: 4.5) {
                                     Image(systemName: isThisPlaying ? "pause.fill" : "play.fill")
                                         .font(.system(size: 9, weight: .bold))
-                                    Text(isThisPlaying ? "Playing" : "Play")
+                                    Text(isThisPlaying ? "Playing" : "Preview")
                                         .font(WalkmanFont.badge)
                                 }
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3.5)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
                                 .background(
                                     Group {
                                         if isThisPlaying {
@@ -410,86 +292,88 @@ public struct MetadataStudioView: View {
                                 .clipShape(Capsule())
                             }
                             .buttonStyle(WalkmanSideActionButtonStyle(cornerRadius: 12))
-                            .help(isThisPlaying ? "Pause music player" : "Play this song on music player")
-                        }
-                    
-                    // Album Artwork (Direct Image, No Background Container)
-                    VStack(spacing: 8) {
-                        Group {
-                            if let img = coverImage {
-                                Image(nsImage: img)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                    .shadow(color: Color.black.opacity(0.4), radius: 8, x: 0, y: 4)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                            .stroke(isTargeted ? WalkmanTheme.silver : Color.white.opacity(0.12), lineWidth: isTargeted ? 2 : 1)
-                                    )
-                                    .frame(maxWidth: .infinity)
-                            } else {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
-                                        .foregroundStyle(isTargeted ? WalkmanTheme.silver : Color.white.opacity(0.2))
-                                        .frame(height: 160)
-                                    
-                                    VStack(spacing: 6) {
-                                        Image(systemName: "photo.badge.plus")
-                                            .font(.system(size: 28))
-                                            .foregroundStyle(WalkmanTheme.silverMuted)
-                                        Text("Drop Album Artwork Here")
-                                            .font(WalkmanFont.calloutMedium)
-                                            .foregroundStyle(.secondary)
-                                        Text("Auto-encoded to Baseline RGB JPEG (max 800×800)")
-                                            .font(WalkmanFont.subheadline)
-                                            .foregroundStyle(.tertiary)
-                                    }
-                                }
-                            }
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            selectArtworkFile()
-                        }
-                        .onDrop(of: [.fileURL, .image], isTargeted: $isTargeted) { providers in
-                            guard let provider = providers.first else { return false }
-                            _ = provider.loadDataRepresentation(forTypeIdentifier: "public.image") { data, _ in
-                                if let d = data {
-                                    DispatchQueue.main.async {
-                                        handleDroppedImage(data: d)
-                                    }
-                                }
-                            }
-                            return true
-                        }
-                        .help("Click or drag-and-drop to choose album cover art")
-                        .contextMenu {
-                            if coverImage != nil || coverData != nil {
-                                Button(action: exportArtworkToMac) {
-                                    Label("Export Cover Art to Mac...", systemImage: "square.and.arrow.down")
-                                }
-                                Divider()
-                            }
-                            Button(action: selectArtworkFile) {
-                                Label("Choose Artwork...", systemImage: "photo")
-                            }
+                            .help(isThisPlaying ? "Pause audio preview" : "Play preview on audio player")
                         }
                         
-                        // Artwork Compliance Status & Export
+                        // Audio Badges Row
                         HStack(spacing: 6) {
-                            if let st = validationStatus {
-                                Image(systemName: st.valid ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                                    .foregroundStyle(st.valid ? Color.green : Color.orange)
-                                Text(st.message)
-                                    .font(WalkmanFont.monoSmall)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
+                            if isHiRes {
+                                Text("Hi-Res")
+                                    .font(WalkmanFont.badge)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 2)
+                                    .background(WalkmanTheme.hiResGoldGradient)
+                                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                                    .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
                             }
                             
-                            Spacer()
+                            Text(tr.format)
+                                .font(WalkmanFont.badge)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(Color.white.opacity(0.08))
+                                .foregroundStyle(WalkmanTheme.silverLight)
+                                .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
                             
-                            if coverImage != nil || coverData != nil {
+                            if tr.bitsPerSample > 0 {
+                                Text("\(tr.bitsPerSample)-bit / \(tr.sampleRate) Hz")
+                                    .font(WalkmanFont.monoSmall)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 2)
+                                    .background(Color.white.opacity(0.06))
+                                    .foregroundStyle(.secondary)
+                                    .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
+                            }
+                        }
+                    }
+                    
+                    // 2. ALBUM ARTWORK CARD (View Only with Export)
+                    VStack(spacing: 8) {
+                        if let img = coverImage {
+                            Image(nsImage: img)
+                                .resizable()
+                                .scaledToFit()
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .shadow(color: Color.black.opacity(0.35), radius: 8, x: 0, y: 4)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                                )
+                                .frame(maxWidth: .infinity)
+                                .contextMenu {
+                                    Button(action: exportArtworkToMac) {
+                                        Label("Export Cover Art to Mac...", systemImage: "square.and.arrow.down")
+                                    }
+                                    Button(action: revealInFinder) {
+                                        Label("Reveal Audio File in Finder", systemImage: "folder")
+                                    }
+                                }
+                            
+                            // Artwork Compliance & Export
+                            HStack(alignment: .center, spacing: 6) {
+                                if let st = validationStatus {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: st.valid ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(st.valid ? Color.green : Color.orange)
+                                        Text(st.message)
+                                            .font(WalkmanFont.monoSmall)
+                                            .foregroundStyle(st.valid ? .secondary : Color.orange.opacity(0.9))
+                                            .lineLimit(1)
+                                    }
+                                } else {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "photo")
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(WalkmanTheme.silverMuted)
+                                        Text("Embedded Cover Art")
+                                            .font(WalkmanFont.monoSmall)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                
+                                Spacer(minLength: 4)
+                                
                                 Button(action: exportArtworkToMac) {
                                     HStack(spacing: 4) {
                                         Image(systemName: "square.and.arrow.down")
@@ -497,319 +381,287 @@ public struct MetadataStudioView: View {
                                         Text("Export")
                                             .font(WalkmanFont.monoSmall)
                                     }
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2.5)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3)
                                     .background(Color.white.opacity(0.08))
                                     .foregroundStyle(WalkmanTheme.silverLight)
-                                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(WalkmanSideActionButtonStyle(cornerRadius: 4))
                                 .help("Export artwork to Mac...")
+                            }
+                        } else {
+                            // Non-editable Minimal Artwork Placeholder
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(Color.white.opacity(0.03))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                                    )
+                                    .frame(height: 140)
+                                
+                                VStack(spacing: 8) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(Color.white.opacity(0.05))
+                                            .frame(width: 44, height: 44)
+                                        Image(systemName: "opticaldisc.fill")
+                                            .font(.system(size: 24))
+                                            .foregroundStyle(WalkmanTheme.silverMuted)
+                                    }
+                                    Text("No Embedded Artwork")
+                                        .font(WalkmanFont.calloutMedium)
+                                        .foregroundStyle(.secondary)
+                                    Text("Walkman shows default disc animation")
+                                        .font(WalkmanFont.subheadline)
+                                        .foregroundStyle(.tertiary)
+                                }
                             }
                         }
                     }
                     
-                    // -------------------------------------------------------------
-                    // LYRICS SECTION (Replaced Play Preview per User Request)
-                    // -------------------------------------------------------------
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Label("LYRICS", systemImage: "quote.bubble.fill")
-                                .font(WalkmanFont.sectionHeader)
-                                .foregroundStyle(.tertiary)
-                            
-                            Spacer()
-                            
-                            if let msg = lyricsStatusMessage, !isFetchingLyrics {
-                                Text(msg)
-                                    .font(WalkmanFont.monoSmall)
-                                    .foregroundStyle(WalkmanTheme.silverLight)
-                            } else if let lyr = lyrics {
-                                Text(lyr.contains("[") ? "Synced .LRC" : ".LRC File")
+                    // 3. QUICK STATS 4-TILE RIBBON
+                    HStack(spacing: 6) {
+                        StatTile(
+                            icon: "clock",
+                            label: "DURATION",
+                            value: formatDuration(tr.durationSeconds)
+                        )
+                        StatTile(
+                            icon: "waveform.badge.magnifyingglass",
+                            label: "QUALITY",
+                            value: tr.bitsPerSample > 0 ? "\(tr.bitsPerSample)-bit" : tr.format
+                        )
+                        StatTile(
+                            icon: "speedometer",
+                            label: "BITRATE",
+                            value: tr.bitrateKbps > 0 ? "\(tr.bitrateKbps)k" : "Lossless"
+                        )
+                        StatTile(
+                            icon: "internaldrive",
+                            label: "SIZE",
+                            value: formatSize(tr.sizeBytes)
+                        )
+                    }
+
+                    // 4. LYRICS VIEWER (ONLY IF WALKMAN HAS LYRICS INSIDE)
+                    if hasLyricsOnWalkman {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Label("LYRICS", systemImage: "quote.bubble.fill")
+                                    .font(WalkmanFont.sectionHeader)
+                                    .foregroundStyle(.tertiary)
+                                
+                                Spacer()
+                                
+                                Text(isSyncedLyrics ? "Synced .LRC" : "Walkman Lyrics")
                                     .font(WalkmanFont.badge)
                                     .padding(.horizontal, 5)
                                     .padding(.vertical, 1.5)
                                     .background(Color.white.opacity(0.12))
                                     .foregroundStyle(WalkmanTheme.silverLight)
                                     .clipShape(Capsule())
-                            }
-                            
-                            if lyrics != nil && !isEditingLyrics {
-                                Button(action: { grabLyrics() }) {
-                                    if isFetchingLyrics {
-                                        ProgressView()
-                                            .scaleEffect(0.55)
-                                            .frame(width: 14, height: 14)
-                                    } else {
-                                        Image(systemName: "arrow.clockwise")
-                                            .font(.system(size: 11))
-                                            .foregroundStyle(WalkmanTheme.silver)
-                                            .frame(width: 22, height: 22)
-                                            .contentShape(Rectangle())
-                                    }
-                                }
-                                .buttonStyle(WalkmanSideActionButtonStyle(cornerRadius: 6))
-                                .disabled(isFetchingLyrics)
-                                .help("Re-fetch / update .LRC from internet")
-                            }
-                            
-                            if lyrics != nil {
-                                Button(action: {
-                                    isEditingLyrics.toggle()
-                                    if isEditingLyrics {
-                                        lyricsDraft = lyrics ?? ""
-                                    }
-                                }) {
-                                    Image(systemName: isEditingLyrics ? "xmark" : "pencil")
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(WalkmanTheme.silver)
-                                        .frame(width: 22, height: 22)
-                                        .contentShape(Rectangle())
-                                }
-                                .buttonStyle(WalkmanSideActionButtonStyle(cornerRadius: 6))
-                                .help(isEditingLyrics ? "Cancel editing" : "Edit lyrics manually")
-                            }
-                        }
-                        
-                        if isEditingLyrics {
-                            VStack(alignment: .trailing, spacing: 6) {
-                                TextEditor(text: $lyricsDraft)
-                                    .font(WalkmanFont.mono)
-                                    .scrollContentBackground(.hidden)
-                                    .padding(8)
-                                    .frame(minHeight: 120, maxHeight: 180)
-                                    .background(Color.white.opacity(0.05))
-                                    .clipShape(RoundedRectangle(cornerRadius: 6))
                                 
-                                HStack(spacing: 8) {
-                                    Button(action: { grabLyrics() }) {
-                                        HStack(spacing: 4) {
-                                            if isFetchingLyrics {
-                                                ProgressView()
-                                                    .scaleEffect(0.55)
-                                                    .frame(width: 12, height: 12)
-                                                Text("Fetching...")
-                                                    .font(WalkmanFont.subheadlineMedium)
-                                            } else {
-                                                Image(systemName: "arrow.down.circle")
-                                                    .font(.system(size: 11))
-                                                Text("Grab Online")
-                                                    .font(WalkmanFont.subheadlineMedium)
-                                            }
-                                        }
-                                        .padding(.horizontal, 9)
-                                        .padding(.vertical, 5)
-                                        .background(Color.white.opacity(0.08))
-                                        .foregroundStyle(.white)
-                                        .clipShape(RoundedRectangle(cornerRadius: 4))
-                                    }
-                                    .buttonStyle(WalkmanSideActionButtonStyle(cornerRadius: 4))
-                                    .disabled(isFetchingLyrics)
-                                    .help("Fetch synced .LRC from internet")
-                                    
-                                    Spacer()
-                                    
-                                    Button("Save as .LRC") {
-                                        saveLyrics()
-                                    }
-                                    .font(WalkmanFont.subheadlineMedium)
-                                    .padding(.horizontal, 11)
-                                    .padding(.vertical, 5)
-                                    .background(WalkmanTheme.silverGradient)
-                                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                                    .clipShape(RoundedRectangle(cornerRadius: 4))
-                                    .buttonStyle(WalkmanSideActionButtonStyle(cornerRadius: 4))
-                                }
-                            }
-                        } else if let lyr = lyrics, !lyr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            VStack(spacing: 6) {
-                                if isFetchingLyrics {
-                                    HStack(spacing: 6) {
-                                        ProgressView()
-                                            .scaleEffect(0.6)
-                                            .frame(width: 14, height: 14)
-                                        Text("Fetching updated lyrics from internet...")
+                                Button(action: copyLyricsToClipboard) {
+                                    HStack(spacing: 3) {
+                                        Image(systemName: isLyricsCopied ? "checkmark" : "doc.on.doc")
+                                            .font(.system(size: 9))
+                                        Text(isLyricsCopied ? "Copied" : "Copy")
                                             .font(WalkmanFont.monoSmall)
-                                            .foregroundStyle(WalkmanTheme.silverLight)
-                                        Spacer()
                                     }
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(Color.white.opacity(0.06))
-                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2.5)
+                                    .background(Color.white.opacity(0.08))
+                                    .foregroundStyle(isLyricsCopied ? Color.green : WalkmanTheme.silverLight)
+                                    .clipShape(Capsule())
                                 }
-
-                                ScrollView {
-                                    Text(lyr)
-                                        .font(WalkmanFont.body)
-                                        .lineSpacing(4)
-                                        .foregroundStyle(.primary)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(10)
-                                }
-                                .frame(maxHeight: 160)
-                                .background(Color.white.opacity(0.04))
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
-                                        .allowsHitTesting(false)
-                                )
+                                .buttonStyle(.plain)
+                                .help("Copy full lyrics to clipboard")
                             }
-                        } else {
-                            VStack(spacing: 8) {
-                                // Status container ("No lyrics on Walkman" / error)
-                                HStack(spacing: 8) {
-                                    if let err = lyricsErrorMessage {
-                                        HStack(spacing: 6) {
-                                            Image(systemName: "exclamationmark.circle.fill")
-                                                .font(.system(size: 14))
-                                                .foregroundStyle(.orange)
-                                            Text(err)
-                                                .font(WalkmanFont.calloutMedium)
-                                                .foregroundStyle(.orange)
+                            
+                            // Scrollable Lyric Reader
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    ForEach(parsedLyricLines, id: \.id) { line in
+                                        if let ts = line.timestamp {
+                                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                                Text(ts)
+                                                    .font(WalkmanFont.monoSmall)
+                                                    .foregroundStyle(WalkmanTheme.silverMuted)
+                                                    .frame(width: 44, alignment: .leading)
+                                                
+                                                Text(line.text.isEmpty ? "• • •" : line.text)
+                                                    .font(WalkmanFont.calloutMedium)
+                                                    .foregroundStyle(line.text.isEmpty ? Color.secondary : Color.white)
+                                                    .textSelection(.enabled)
+                                                
+                                                Spacer()
+                                            }
+                                        } else {
+                                            Text(line.text.isEmpty ? " " : line.text)
+                                                .font(WalkmanFont.callout)
+                                                .foregroundStyle(line.text.isEmpty ? Color.secondary : Color.white)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                                .textSelection(.enabled)
                                         }
-                                    } else {
-                                        Image(systemName: "music.mic")
-                                            .font(.system(size: 15))
-                                            .foregroundStyle(Color.secondary)
-                                        Text("No lyrics on Walkman")
-                                            .font(WalkmanFont.callout)
-                                            .foregroundStyle(.secondary)
                                     }
-                                    
-                                    Spacer()
                                 }
                                 .padding(10)
-                                .liquidGlass(cornerRadius: 8)
-                                .allowsHitTesting(false)
-                                
-                                // "Add .LRC" Button OUTSIDE the container
-                                Button(action: {
-                                    grabLyrics()
-                                }) {
-                                    HStack(spacing: 6) {
-                                        if isFetchingLyrics {
-                                            ProgressView()
-                                                .scaleEffect(0.65)
-                                                .frame(width: 14, height: 14)
-                                            Text("Fetching Lyrics on the internet...")
-                                                .font(WalkmanFont.calloutBold)
-                                        } else {
-                                            Image(systemName: "arrow.down.circle.fill")
-                                                .font(.system(size: 12, weight: .bold))
-                                            Text("Add .LRC")
-                                                .font(WalkmanFont.calloutBold)
-                                        }
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 7)
-                                    .background(
-                                        Group {
-                                            if isFetchingLyrics {
-                                                Color.white.opacity(0.12)
-                                            } else {
-                                                WalkmanTheme.silverGradient
-                                            }
-                                        }
-                                    )
-                                    .foregroundStyle(isFetchingLyrics ? WalkmanTheme.silverLight : Color(red: 20/255, green: 20/255, blue: 24/255))
-                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(WalkmanSideActionButtonStyle(isFullWidth: true, cornerRadius: 6))
-                                .disabled(isFetchingLyrics)
-                                .help(isFetchingLyrics ? "Fetching lyrics on the internet in progress..." : "Automatically grab synced lyrics from internet and add .lrc to Walkman")
                             }
+                            .frame(maxHeight: 200)
+                            .liquidGlass(cornerRadius: 8)
                         }
                     }
-                    
-                    // Technical Specifications (Compact Grid)
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("AUDIO PROPERTIES")
-                            .font(WalkmanFont.sectionHeader)
-                            .foregroundStyle(.tertiary)
-                        
-                        VStack(spacing: 4) {
-                            SpecRow(label: "Format", value: tr.format)
-                            SpecRow(label: "Duration", value: formatDuration(tr.durationSeconds))
-                            SpecRow(label: "Bitrate", value: tr.bitrateKbps > 0 ? "\(tr.bitrateKbps) kbps" : "Lossless")
-                            SpecRow(label: "Audio Quality", value: "\(tr.bitsPerSample)-bit / \(tr.sampleRate) Hz")
-                            let currentGenre = !genre.isEmpty ? genre : tr.genre
-                            if !currentGenre.isEmpty {
-                                SpecRow(label: "Genre", value: currentGenre)
-                            }
-                            let currentYear = !year.isEmpty ? year : tr.year
-                            if !currentYear.isEmpty {
-                                SpecRow(label: "Year", value: currentYear)
-                            }
-                            SpecRow(label: "File Size", value: formatSize(tr.sizeBytes))
-                            SpecRow(label: "Hardware Tags", value: tr.format == "MP3" ? "Strict ID3v2.3 (UTF-16)" : "Vorbis Comments")
-                        }
-                        .padding(10)
-                        .liquidGlass(cornerRadius: 8)
-                    }
-                    
-                    // Metadata Input Form
+
+                    // 5. TAGS & METADATA (VIEW ONLY)
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
-                            Text("TAGS & METADATA")
+                            Label("TAGS & METADATA", systemImage: "tag.fill")
                                 .font(WalkmanFont.sectionHeader)
                                 .foregroundStyle(.tertiary)
                             
                             Spacer()
                             
-                            if isSaving {
-                                HStack(spacing: 4) {
-                                    ProgressView()
-                                        .scaleEffect(0.55)
-                                        .frame(width: 12, height: 12)
-                                    Text("Saving...")
-                                        .font(WalkmanFont.monoSmall)
-                                        .foregroundStyle(WalkmanTheme.silverLight)
+                            if let editAction = onEdit {
+                                Button(action: editAction) {
+                                    HStack(spacing: 3.5) {
+                                        Image(systemName: "pencil")
+                                            .font(.system(size: 9, weight: .bold))
+                                        Text("Edit in Studio")
+                                            .font(WalkmanFont.badge)
+                                    }
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2.5)
+                                    .background(Color.white.opacity(0.08))
+                                    .foregroundStyle(WalkmanTheme.silverLight)
+                                    .clipShape(Capsule())
                                 }
-                            } else if showSuccess {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 9, weight: .bold))
-                                    Text("Saved")
-                                        .font(WalkmanFont.monoSmall)
-                                }
-                                .foregroundStyle(Color.green)
+                                .buttonStyle(.plain)
+                                .help("Open song metadata in full editor sheet")
                             }
                         }
                         
-                        VStack(spacing: 8) {
-                            FormInput(label: "Title", text: $title, onCommit: saveMetadataImmediately)
-                            FormInput(label: "Artist", text: $artist, onCommit: saveMetadataImmediately)
-                            FormInput(label: "Album", text: $album, onCommit: saveMetadataImmediately)
-                            HStack(spacing: 8) {
-                                FormInput(label: "Track #", text: $trackNumber, onCommit: saveMetadataImmediately)
-                                FormInput(label: "Year", text: $year, onCommit: saveMetadataImmediately)
-                            }
-                            FormInput(label: "Genre", text: $genre, onCommit: saveMetadataImmediately)
+                        VStack(spacing: 0) {
+                            ReadOnlyDetailRow(label: "Title", value: displayTitle)
+                            Divider().overlay(Color.white.opacity(0.06))
+                            ReadOnlyDetailRow(label: "Artist", value: displayArtist)
+                            Divider().overlay(Color.white.opacity(0.06))
+                            ReadOnlyDetailRow(label: "Album", value: displayAlbum)
+                            Divider().overlay(Color.white.opacity(0.06))
+                            ReadOnlyDetailRow(label: "Track #", value: displayTrackNum.isEmpty ? "—" : "#\(displayTrackNum)", isMonospace: true)
+                            Divider().overlay(Color.white.opacity(0.06))
+                            ReadOnlyDetailRow(label: "Year", value: displayYear.isEmpty ? "—" : displayYear, isMonospace: true)
+                            Divider().overlay(Color.white.opacity(0.06))
+                            ReadOnlyDetailRow(label: "Genre", value: displayGenre.isEmpty ? "—" : displayGenre)
                         }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .liquidGlass(cornerRadius: 8)
                     }
+
+                    // 6. AUDIO PROPERTIES & SPECIFICATIONS (VIEW ONLY)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("AUDIO PROPERTIES", systemImage: "waveform")
+                            .font(WalkmanFont.sectionHeader)
+                            .foregroundStyle(.tertiary)
+                        
+                        VStack(spacing: 0) {
+                            AudioSpecRow(label: "Format", value: tr.format, systemImage: "doc.fill")
+                            Divider().overlay(Color.white.opacity(0.06))
+                            AudioSpecRow(label: "Duration", value: formatDuration(tr.durationSeconds), systemImage: "clock")
+                            Divider().overlay(Color.white.opacity(0.06))
+                            AudioSpecRow(label: "Bitrate", value: tr.bitrateKbps > 0 ? "\(tr.bitrateKbps) kbps" : "Lossless", systemImage: "speedometer")
+                            Divider().overlay(Color.white.opacity(0.06))
+                            AudioSpecRow(label: "Audio Quality", value: "\(tr.bitsPerSample > 0 ? "\(tr.bitsPerSample)-bit" : "16-bit") / \(tr.sampleRate) Hz", systemImage: "waveform.path")
+                            Divider().overlay(Color.white.opacity(0.06))
+                            AudioSpecRow(label: "File Size", value: formatSize(tr.sizeBytes), systemImage: "internaldrive")
+                            Divider().overlay(Color.white.opacity(0.06))
+                            AudioSpecRow(
+                                label: "Hardware Tags",
+                                value: tr.format == "MP3" ? "Strict ID3v2.3 (UTF-16)" : (tr.format == "FLAC" ? "Vorbis Comments" : "MP4 iTunes Tags"),
+                                systemImage: "cpu"
+                            )
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .liquidGlass(cornerRadius: 8)
+                    }
+                    
+                    // 7. FILE LOCATION & REVEAL IN FINDER
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text("FILE LOCATION")
+                                .font(WalkmanFont.sectionHeader)
+                                .foregroundStyle(.tertiary)
+                            Spacer()
+                            Button(action: copyPathToClipboard) {
+                                HStack(spacing: 3) {
+                                    Image(systemName: isPathCopied ? "checkmark" : "doc.on.doc")
+                                        .font(.system(size: 9))
+                                    Text(isPathCopied ? "Copied" : "Copy Path")
+                                        .font(WalkmanFont.monoSmall)
+                                }
+                                .foregroundStyle(isPathCopied ? Color.green : WalkmanTheme.silverMuted)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Copy full file path to clipboard")
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(tr.relativePath.isEmpty ? tr.filename : tr.relativePath)
+                                .font(WalkmanFont.monoSmall)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                                .textSelection(.enabled)
+                            
+                            Button(action: revealInFinder) {
+                                HStack(spacing: 5) {
+                                    Image(systemName: "folder")
+                                        .font(.system(size: 10))
+                                    Text("Reveal in Finder")
+                                        .font(WalkmanFont.calloutMedium)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 5)
+                                .background(Color.white.opacity(0.07))
+                                .foregroundStyle(WalkmanTheme.silverLight)
+                                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            }
+                            .buttonStyle(WalkmanSideActionButtonStyle(isFullWidth: true, cornerRadius: 6))
+                            .help("Show audio file in macOS Finder")
+                        }
+                        .padding(10)
+                        .liquidGlass(cornerRadius: 8)
+                    }
+
                 } else {
-                    VStack(spacing: 10) {
+                    // Empty State
+                    VStack(spacing: 12) {
                         Spacer()
-                        Image(systemName: "sidebar.trailing")
-                            .font(.system(size: 28))
-                            .foregroundStyle(.tertiary)
-                        Text("No Track Selected")
-                            .font(.system(size: 12, weight: .medium))
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.04))
+                                .frame(width: 56, height: 56)
+                            Image(systemName: "sidebar.trailing")
+                                .font(.system(size: 24))
+                                .foregroundStyle(WalkmanTheme.silverMuted)
+                        }
+                        Text("Track Details")
+                            .font(WalkmanFont.headline)
+                            .foregroundStyle(.white)
+                        Text("Select a song from the library to inspect its audio properties, hardware tags, cover artwork, and lyrics.")
+                            .font(WalkmanFont.subheadline)
                             .foregroundStyle(.secondary)
-                        Text("Select a song from the library to inspect audio specs, view lyrics, and edit Baseline RGB artwork.")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
                             .multilineTextAlignment(.center)
+                            .padding(.horizontal, 20)
                         Spacer()
                     }
-                    .frame(maxWidth: .infinity, minHeight: 280)
+                    .frame(maxWidth: .infinity, minHeight: 320)
                 }
             }
             .padding(.horizontal, 14)
-            .padding(.top, 64)
+            .padding(.top, 56)
             .padding(.bottom, 24)
         }
         .ignoresSafeArea(.all, edges: .top)
@@ -823,59 +675,111 @@ public struct MetadataStudioView: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .frame(height: 52)
+            .frame(height: 48)
             .allowsHitTesting(false)
             .ignoresSafeArea(.all, edges: .top)
         }
         .onAppear { loadTrack() }
         .onChange(of: track) { loadTrack() }
-        .onChange(of: title) { scheduleAutoSave() }
-        .onChange(of: artist) { scheduleAutoSave() }
-        .onChange(of: album) { scheduleAutoSave() }
-        .onChange(of: trackNumber) { scheduleAutoSave() }
-        .onChange(of: year) { scheduleAutoSave() }
-        .onChange(of: genre) { scheduleAutoSave() }
     }
 }
 
-private struct SpecRow: View {
+// MARK: - Subcomponents
+
+private struct StatTile: View {
+    let icon: String
     let label: String
     let value: String
     
     var body: some View {
-        HStack {
-            Text(label)
-                .font(WalkmanFont.subheadline)
-                .foregroundStyle(.secondary)
-            Spacer()
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 8.5))
+                    .foregroundStyle(WalkmanTheme.silverMuted)
+                Text(label)
+                    .font(WalkmanFont.badge)
+                    .foregroundStyle(.secondary)
+            }
             Text(value)
-                .font(WalkmanFont.mono)
+                .font(WalkmanFont.monoSmall)
+                .fontWeight(.semibold)
                 .foregroundStyle(.white)
+                .lineLimit(1)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(Color.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(Color.white.opacity(0.06), lineWidth: 1)
+        )
     }
 }
 
-private struct FormInput: View {
+private struct ReadOnlyDetailRow: View {
     let label: String
-    @Binding var text: String
-    var onCommit: (() -> Void)? = nil
+    let value: String
+    var isMonospace: Bool = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        HStack(alignment: .top, spacing: 8) {
             Text(label)
                 .font(WalkmanFont.subheadlineMedium)
                 .foregroundStyle(.secondary)
+                .frame(width: 64, alignment: .leading)
             
-            TextField("", text: $text)
-                .textFieldStyle(.plain)
-                .font(WalkmanFont.body)
-                .padding(.horizontal, 9)
-                .padding(.vertical, 6)
-                .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .onSubmit {
-                    onCommit?()
-                }
+            Spacer(minLength: 4)
+            
+            if value.isEmpty {
+                Text("—")
+                    .font(isMonospace ? WalkmanFont.monoSmall : WalkmanFont.subheadlineMedium)
+                    .foregroundStyle(.tertiary)
+            } else {
+                Text(value)
+                    .font(isMonospace ? WalkmanFont.monoSmall : WalkmanFont.subheadlineMedium)
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.trailing)
+                    .textSelection(.enabled)
+            }
         }
+        .padding(.vertical, 3.5)
+    }
+}
+
+private struct AudioSpecRow: View {
+    let label: String
+    let value: String
+    var systemImage: String? = nil
+    var isSuccess: Bool = false
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            if let img = systemImage {
+                Image(systemName: img)
+                    .font(.system(size: 10))
+                    .foregroundStyle(WalkmanTheme.silverMuted)
+                    .frame(width: 14)
+            }
+            Text(label)
+                .font(WalkmanFont.subheadline)
+                .foregroundStyle(.secondary)
+            
+            Spacer()
+            
+            if isSuccess {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.green)
+            }
+            
+            Text(value)
+                .font(WalkmanFont.monoSmall)
+                .foregroundStyle(isSuccess ? WalkmanTheme.silverLight : .white)
+                .textSelection(.enabled)
+        }
+        .padding(.vertical, 3)
     }
 }
