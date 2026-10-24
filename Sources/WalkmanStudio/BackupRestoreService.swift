@@ -6,23 +6,25 @@ import AppKit
 // MARK: - Enums & Models
 
 public enum BackupDestinationType: String, Codable, CaseIterable, Identifiable, Sendable {
+    case local = "Local Mac Storage"
+    case externalDrive = "External Drive"
+    case custom = "Custom Folder"
+
+    // Legacy cases retained for backward compatibility with existing manifest decoders
     case googleDrive = "Google Drive"
     case oneDrive = "OneDrive"
     case iCloud = "iCloud Drive"
-    case externalDrive = "External Drive"
-    case local = "Local Mac Storage"
-    case custom = "Custom Folder"
 
     public var id: String { rawValue }
 
     public var defaultIcon: String {
         switch self {
+        case .local: return "internaldrive.fill"
+        case .externalDrive: return "externaldrive.fill"
+        case .custom: return "folder.fill"
         case .googleDrive: return "externaldrive.badge.icloud"
         case .oneDrive: return "cloud.fill"
         case .iCloud: return "icloud.fill"
-        case .externalDrive: return "externaldrive.fill"
-        case .local: return "internaldrive.fill"
-        case .custom: return "folder.fill"
         }
     }
 }
@@ -282,7 +284,7 @@ public final class BackupRestoreService: @unchecked Sendable {
         isCancelled = true
     }
 
-    // MARK: - Destination Detection
+    // MARK: - Destination Detection (Local & External Only)
 
     public func detectAvailableDestinations(
         walkmanMountPoints: Set<String>,
@@ -291,114 +293,8 @@ public final class BackupRestoreService: @unchecked Sendable {
         var destinations: [BackupDestination] = []
         let fm = FileManager.default
         let home = fm.homeDirectoryForCurrentUser
-        let cloudStorage = home.appendingPathComponent("Library/CloudStorage")
 
-        // 1. Google Drive
-        var googleDriveURL: URL? = nil
-        var googleDriveName = "Google Drive"
-        if let cloudContents = try? fm.contentsOfDirectory(at: cloudStorage, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) {
-            for item in cloudContents {
-                let name = item.lastPathComponent
-                if name.lowercased().hasPrefix("googledrive") {
-                    googleDriveURL = item
-                    googleDriveName = "Google Drive (\(name.replacingOccurrences(of: "GoogleDrive-", with: "")))"
-                    break
-                }
-            }
-        }
-        if googleDriveURL == nil {
-            let legacyGD = home.appendingPathComponent("Google Drive")
-            if fm.fileExists(atPath: legacyGD.path) {
-                googleDriveURL = legacyGD
-            }
-        }
-        if let gd = googleDriveURL {
-            let backupFolder = gd.appendingPathComponent("Walkman Studio Backups")
-            destinations.append(BackupDestination(
-                id: "google_drive",
-                type: .googleDrive,
-                name: googleDriveName,
-                path: backupFolder.path,
-                url: backupFolder,
-                isAvailable: true,
-                freeBytes: getFreeSpace(for: gd),
-                descriptionText: "Direct cloud sync via Google Drive for Desktop"
-            ))
-        } else {
-            // Placeholder so user can set custom Google Drive folder
-            let placeholder = home.appendingPathComponent("Google Drive/Walkman Studio Backups")
-            destinations.append(BackupDestination(
-                id: "google_drive",
-                type: .googleDrive,
-                name: "Google Drive",
-                path: placeholder.path,
-                url: placeholder,
-                isAvailable: false,
-                descriptionText: "Click 'Set Folder...' to select your Google Drive directory"
-            ))
-        }
-
-        // 2. Microsoft OneDrive
-        var oneDriveURL: URL? = nil
-        var oneDriveName = "OneDrive"
-        if let cloudContents = try? fm.contentsOfDirectory(at: cloudStorage, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) {
-            for item in cloudContents {
-                let name = item.lastPathComponent
-                if name.lowercased().hasPrefix("onedrive") {
-                    oneDriveURL = item
-                    oneDriveName = name.replacingOccurrences(of: "-", with: " ")
-                    break
-                }
-            }
-        }
-        if oneDriveURL == nil {
-            let legacyOD = home.appendingPathComponent("OneDrive")
-            if fm.fileExists(atPath: legacyOD.path) {
-                oneDriveURL = legacyOD
-            }
-        }
-        if let od = oneDriveURL {
-            let backupFolder = od.appendingPathComponent("Walkman Studio Backups")
-            destinations.append(BackupDestination(
-                id: "onedrive",
-                type: .oneDrive,
-                name: oneDriveName,
-                path: backupFolder.path,
-                url: backupFolder,
-                isAvailable: true,
-                freeBytes: getFreeSpace(for: od),
-                descriptionText: "Direct cloud sync via Microsoft OneDrive"
-            ))
-        } else {
-            let placeholder = home.appendingPathComponent("OneDrive/Walkman Studio Backups")
-            destinations.append(BackupDestination(
-                id: "onedrive",
-                type: .oneDrive,
-                name: "OneDrive",
-                path: placeholder.path,
-                url: placeholder,
-                isAvailable: false,
-                descriptionText: "Click 'Set Folder...' to select your OneDrive directory"
-            ))
-        }
-
-        // 3. iCloud Drive
-        let icloud = home.appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs")
-        if fm.fileExists(atPath: icloud.path) {
-            let backupFolder = icloud.appendingPathComponent("Walkman Studio Backups")
-            destinations.append(BackupDestination(
-                id: "icloud",
-                type: .iCloud,
-                name: "iCloud Drive",
-                path: backupFolder.path,
-                url: backupFolder,
-                isAvailable: true,
-                freeBytes: getFreeSpace(for: icloud),
-                descriptionText: "Apple iCloud Drive cloud synchronization"
-            ))
-        }
-
-        // 4. Local Mac Storage
+        // 1. Local Mac Storage (Default: ~/Music/Walkman Studio Backups)
         let localDir = home.appendingPathComponent("Music/Walkman Studio Backups")
         destinations.append(BackupDestination(
             id: "local_mac",
@@ -411,30 +307,30 @@ public final class BackupRestoreService: @unchecked Sendable {
             descriptionText: "~/Music/Walkman Studio Backups"
         ))
 
-        // 5. External Drives
+        // 2. External Drives & USB Storage
         let externalVolumes = detectExternalVolumes(excludingWalkman: walkmanMountPoints)
         for extVol in externalVolumes {
             let backupFolder = extVol.url.appendingPathComponent("Walkman Studio Backups")
             destinations.append(BackupDestination(
                 id: "ext_\(extVol.url.path)",
                 type: .externalDrive,
-                name: extVol.name,
+                name: "External: \(extVol.name)",
                 path: backupFolder.path,
                 url: backupFolder,
                 isAvailable: true,
                 freeBytes: extVol.freeBytes,
-                descriptionText: "External Drive: \(extVol.url.path)"
+                descriptionText: "Direct to external storage: \(extVol.url.path)"
             ))
         }
 
-        // 6. Custom Directory (if configured)
+        // 3. Custom Local Folder (if configured)
         if let cp = customPath, !cp.isEmpty {
             let customURL = URL(fileURLWithPath: cp)
             if fm.fileExists(atPath: customURL.path) {
                 destinations.append(BackupDestination(
                     id: "custom_dir",
                     type: .custom,
-                    name: customURL.lastPathComponent,
+                    name: "Custom: \(customURL.lastPathComponent)",
                     path: customURL.path,
                     url: customURL,
                     isAvailable: true,
@@ -476,8 +372,9 @@ public final class BackupRestoreService: @unchecked Sendable {
                 continue
             }
 
-            let res = try? volURL.resourceValues(forKeys: [.volumeIsReadOnlyKey])
+            let res = try? volURL.resourceValues(forKeys: [.volumeIsLocalKey, .volumeIsReadOnlyKey])
             if res?.volumeIsReadOnly == true { continue }
+            if let isLocal = res?.volumeIsLocal, !isLocal { continue }
 
             var statv = statvfs()
             guard statvfs(volURL.path, &statv) == 0 else { continue }
@@ -491,7 +388,11 @@ public final class BackupRestoreService: @unchecked Sendable {
 
     public func getFreeSpace(for url: URL) -> Int64? {
         var statv = statvfs()
-        guard statvfs(url.path, &statv) == 0 else { return nil }
+        var checkPath = url.path
+        if !FileManager.default.fileExists(atPath: checkPath) {
+            checkPath = url.deletingLastPathComponent().path
+        }
+        guard statvfs(checkPath, &statv) == 0 else { return nil }
         let blockSize = Int64(statv.f_frsize)
         return blockSize * Int64(statv.f_bavail)
     }
@@ -535,7 +436,14 @@ public final class BackupRestoreService: @unchecked Sendable {
         let musicURL = URL(fileURLWithPath: drive.musicDir)
         let learningURL = URL(fileURLWithPath: drive.learningDir)
 
-        func addFileIfValid(url: URL, relativePath: String) {
+        // Fast in-memory lookup for pre-scanned track sizes to avoid slow USB 2.0 stats
+        var trackSizeLookup: [String: Int64] = [:]
+        trackSizeLookup.reserveCapacity(allTracks.count)
+        for tr in allTracks {
+            trackSizeLookup[tr.fullPath] = tr.sizeBytes
+        }
+
+        func addFileIfValid(url: URL, relativePath: String, fallbackSize: Int64? = nil) {
             let lower = url.lastPathComponent.lowercased()
             if lower == ".ds_store" || lower.hasPrefix("._") || lower.hasPrefix(".spotlight") || lower.hasPrefix(".trashes") {
                 return
@@ -545,11 +453,20 @@ public final class BackupRestoreService: @unchecked Sendable {
             }
             let cleanRel = relativePath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             if seenRelativePaths.contains(cleanRel) { return }
-            guard let attrs = try? fm.attributesOfItem(atPath: url.path),
-                  let type = attrs[.type] as? FileAttributeType, type == .typeRegular,
-                  let size = attrs[.size] as? Int64, size > 0 else {
+
+            let size: Int64
+            if let fb = fallbackSize, fb > 0 {
+                size = fb
+            } else if let cached = trackSizeLookup[url.path], cached > 0 {
+                size = cached
+            } else if let res = try? url.resourceValues(forKeys: [.fileSizeKey]), let fSize = res.fileSize, fSize > 0 {
+                size = Int64(fSize)
+            } else if let attrs = try? fm.attributesOfItem(atPath: url.path), let fSize = attrs[.size] as? Int64, fSize > 0 {
+                size = fSize
+            } else {
                 return
             }
+
             seenRelativePaths.insert(cleanRel)
             items.append((url, cleanRel, size))
         }

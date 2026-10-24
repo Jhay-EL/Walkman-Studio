@@ -22,13 +22,27 @@ public struct BackupRestoreView: View {
     @State private var selectedScope: BackupScopeType = .full
     @State private var selectedAlbumKeys: Set<String> = []
     @State private var selectedTrackPaths: Set<String> = []
-    @State private var destinations: [BackupDestination] = []
-    @State private var selectedDestinationId: String = "google_drive"
+    @State private var sourceTracks: [Track] = []
+    @State private var sourceAlbums: [AlbumItem] = []
+    @State private var destinations: [BackupDestination] = [
+        BackupDestination(
+            id: "local_mac",
+            type: .local,
+            name: "Local Mac Storage",
+            path: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Music/Walkman Studio Backups").path,
+            url: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Music/Walkman Studio Backups"),
+            isAvailable: true,
+            descriptionText: "~/Music/Walkman Studio Backups"
+        )
+    ]
+    @State private var selectedDestinationId: String = "local_mac"
     @State private var isEncrypted: Bool = false
     @State private var passphrase: String = ""
     @State private var confirmPassphrase: String = ""
     @State private var showPassphrase: Bool = false
     @State private var customFolderKey: String = ""
+    @State private var estimatedCount: Int = 0
+    @State private var estimatedBytes: Int64 = 0
 
     // In-Flight Backup
     @State private var isBackingUp: Bool = false
@@ -91,49 +105,174 @@ public struct BackupRestoreView: View {
         return String(format: "%.1f MB", mb)
     }
 
-    private func refreshDestinations() {
-        let walkmanMounts = Set(drives.map(\.mountPoint))
-        let customPath = UserDefaults.standard.string(forKey: "walkman_custom_backup_dest")
-        let detected = BackupRestoreService.shared.detectAvailableDestinations(
-            walkmanMountPoints: walkmanMounts,
-            customPath: customPath
-        )
-        self.destinations = detected
+    private func recalculateEstimatedScope() {
+        guard let drive = currentSourceDrive else {
+            self.estimatedCount = 0
+            self.estimatedBytes = 0
+            return
+        }
 
-        if !detected.contains(where: { $0.id == selectedDestinationId }) {
-            if let firstAvail = detected.first(where: { $0.isAvailable }) {
-                selectedDestinationId = firstAvail.id
-            } else if let first = detected.first {
-                selectedDestinationId = first.id
+        let mount = drive.mountPoint
+        switch selectedScope {
+        case .full:
+            var count = 0
+            var trackBytes: Int64 = 0
+            for tr in sourceTracks where tr.fullPath.hasPrefix(mount) {
+                count += 1
+                trackBytes += tr.sizeBytes
+            }
+            self.estimatedCount = count
+            self.estimatedBytes = max(trackBytes, drive.usedBytes)
+
+        case .playlists:
+            var count = 0
+            var trackBytes: Int64 = 0
+            for tr in sourceTracks where tr.fullPath.hasPrefix(mount) {
+                count += 1
+                trackBytes += tr.sizeBytes
+            }
+            self.estimatedCount = count
+            self.estimatedBytes = trackBytes
+
+        case .learning:
+            var count = 0
+            var bytes: Int64 = 0
+            for tr in sourceTracks where tr.fullPath.hasPrefix(mount) && (tr.isLanguageStudy || tr.fullPath.contains("/LEARNING")) {
+                count += 1
+                bytes += tr.sizeBytes
+            }
+            self.estimatedCount = count
+            self.estimatedBytes = bytes
+
+        case .albums:
+            var count = 0
+            var bytes: Int64 = 0
+            for tr in sourceTracks where tr.fullPath.hasPrefix(mount) {
+                let key = "\(tr.album.lowercased())|\(tr.artist.lowercased())"
+                if selectedAlbumKeys.contains(key) || selectedAlbumKeys.contains(tr.album.lowercased()) {
+                    count += 1
+                    bytes += tr.sizeBytes
+                }
+            }
+            self.estimatedCount = count
+            self.estimatedBytes = bytes
+
+        case .tracks:
+            var count = 0
+            var bytes: Int64 = 0
+            for tr in sourceTracks where tr.fullPath.hasPrefix(mount) && selectedTrackPaths.contains(tr.fullPath) {
+                count += 1
+                bytes += tr.sizeBytes
+            }
+            self.estimatedCount = count
+            self.estimatedBytes = bytes
+        }
+    }
+
+    private func updateSourceDriveTracks(mount: String) {
+        guard let drive = drives.first(where: { $0.mountPoint == mount }) ?? currentSourceDrive else {
+            self.sourceTracks = []
+            self.sourceAlbums = []
+            recalculateEstimatedScope()
+            return
+        }
+
+        // Fast-path: if this drive is activeDrive and ContentView already scanned its tracks, use them immediately
+        if drive.mountPoint == activeDrive?.mountPoint && !tracks.isEmpty {
+            self.sourceTracks = tracks
+            self.sourceAlbums = cachedAlbums
+            recalculateEstimatedScope()
+        } else {
+            // Instant SQLite lookup (< 1ms, zero USB disk I/O)
+            let cached = LibraryScanner.shared.loadCachedTracks(forMount: drive.mountPoint)
+            if !cached.isEmpty {
+                self.sourceTracks = cached
+                self.sourceAlbums = AlbumsView.buildAlbums(from: cached)
+                recalculateEstimatedScope()
+            } else if drive.usedBytes > 0 {
+                self.estimatedBytes = drive.usedBytes
             }
         }
 
-        refreshDiscoveredBackups()
+        // Background task: reconcile files and count total files (including playlists, .lrc, .jpg)
+        refreshSourceDriveAsync(drive: drive)
     }
 
-    private func refreshDiscoveredBackups() {
-        let found = BackupRestoreService.shared.discoverBackups(in: destinations)
-        self.discoveredBackups = found
-        if selectedBackup == nil || !found.contains(where: { $0.url == selectedBackup?.url }) {
-            self.selectedBackup = found.first
+    private func refreshSourceDriveAsync(drive: WalkmanDrive) {
+        let mount = drive.mountPoint
+        Task.detached(priority: .userInitiated) {
+            var scanDirs: [URL] = [URL(fileURLWithPath: drive.musicDir)]
+            let learningURL = URL(fileURLWithPath: drive.learningDir)
+            if FileManager.default.fileExists(atPath: learningURL.path) {
+                scanDirs.append(learningURL)
+            }
+
+            // 1. Fast background scan with LibraryScanner to discover any uncached or modified tracks
+            let result = await LibraryScanner.shared.scan(directories: scanDirs)
+            let albums = AlbumsView.buildAlbums(from: result.tracks)
+
+            // 2. Count total regular files in /MUSIC and /LEARNING for full library scope accuracy (.m3u8, .lrc, .jpg, etc.)
+            var totalFiles = 0
+            let fm = FileManager.default
+            for dir in scanDirs {
+                if let enumerator = fm.enumerator(at: dir, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles]) {
+                    while let fileURL = enumerator.nextObject() as? URL {
+                        let name = fileURL.lastPathComponent.lowercased()
+                        if name == ".ds_store" || name.hasPrefix("._") || name.hasPrefix(".spotlight") || name.hasPrefix(".trashes") {
+                            continue
+                        }
+                        if name == "devicon.fil" || name == "default-capability.xml" || name.contains("system volume information") {
+                            continue
+                        }
+                        totalFiles += 1
+                    }
+                }
+            }
+
+            let finalFileCount = totalFiles
+
+            await MainActor.run {
+                guard self.sourceDriveMount == mount else { return }
+                self.sourceTracks = result.tracks
+                self.sourceAlbums = albums
+
+                if self.selectedScope == .full {
+                    self.estimatedCount = max(result.tracks.count, finalFileCount)
+                    let trackBytes = result.tracks.reduce(0) { $0 + $1.sizeBytes }
+                    self.estimatedBytes = max(trackBytes, drive.usedBytes)
+                } else {
+                    self.recalculateEstimatedScope()
+                }
+            }
         }
     }
 
-    // MARK: - Estimated Scope Size & Count
-    private var estimatedScopeSummary: (count: Int, bytes: Int64) {
-        guard let drive = currentSourceDrive else { return (0, 0) }
-        let config = BackupScopeConfig(
-            type: selectedScope,
-            selectedAlbumKeys: selectedAlbumKeys,
-            selectedTrackPaths: selectedTrackPaths
-        )
-        let resolved = BackupRestoreService.shared.resolveFilesToBackup(
-            drive: drive,
-            scope: config,
-            allTracks: tracks
-        )
-        let totalB = resolved.reduce(0) { $0 + $1.sizeBytes }
-        return (resolved.count, totalB)
+    private func refreshDestinationsAsync() {
+        let walkmanMounts = Set(drives.map(\.mountPoint))
+        let customPath = UserDefaults.standard.string(forKey: "walkman_custom_backup_dest")
+
+        Task.detached(priority: .userInitiated) {
+            let detected = BackupRestoreService.shared.detectAvailableDestinations(
+                walkmanMountPoints: walkmanMounts,
+                customPath: customPath
+            )
+            let found = BackupRestoreService.shared.discoverBackups(in: detected)
+
+            await MainActor.run {
+                self.destinations = detected
+                if !detected.contains(where: { $0.id == self.selectedDestinationId }) {
+                    if let firstAvail = detected.first(where: { $0.isAvailable }) {
+                        self.selectedDestinationId = firstAvail.id
+                    } else if let first = detected.first {
+                        self.selectedDestinationId = first.id
+                    }
+                }
+                self.discoveredBackups = found
+                if self.selectedBackup == nil || !found.contains(where: { $0.url == self.selectedBackup?.url }) {
+                    self.selectedBackup = found.first
+                }
+            }
+        }
     }
 
     // MARK: - Main Body
@@ -159,13 +298,28 @@ public struct BackupRestoreView: View {
         }
         .background(WalkmanTheme.background)
         .onAppear {
-            refreshDestinations()
             if sourceDriveMount.isEmpty, let d = currentSourceDrive {
                 sourceDriveMount = d.mountPoint
             }
             if targetDriveMount.isEmpty, let d = currentTargetDrive {
                 targetDriveMount = d.mountPoint
             }
+            updateSourceDriveTracks(mount: sourceDriveMount)
+            refreshDestinationsAsync()
+        }
+        .onChange(of: selectedScope) { _, _ in
+            recalculateEstimatedScope()
+        }
+        .onChange(of: sourceDriveMount) { _, newMount in
+            selectedAlbumKeys.removeAll()
+            selectedTrackPaths.removeAll()
+            updateSourceDriveTracks(mount: newMount)
+        }
+        .onChange(of: selectedAlbumKeys) { _, _ in
+            recalculateEstimatedScope()
+        }
+        .onChange(of: selectedTrackPaths) { _, _ in
+            recalculateEstimatedScope()
         }
         .sheet(isPresented: $showAlbumPickerSheet) {
             albumPickerSheet
@@ -188,7 +342,7 @@ public struct BackupRestoreView: View {
                         .font(WalkmanFont.title2)
                         .foregroundStyle(.white)
 
-                    Text("Safeguard or restore your Walkman library across Cloud Drives, External Disks, and Local Storage")
+                    Text("Safeguard or restore your Walkman library locally to your Mac or direct to an external drive")
                         .font(WalkmanFont.callout)
                         .foregroundStyle(WalkmanTheme.silverMuted)
                 }
@@ -199,30 +353,7 @@ public struct BackupRestoreView: View {
             // Segmented Mode Switcher
             HStack(spacing: 4) {
                 ForEach(Mode.allCases) { mode in
-                    let isSelected = selectedMode == mode
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            selectedMode = mode
-                            if mode == .restore {
-                                refreshDiscoveredBackups()
-                            }
-                        }
-                    }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: mode == .backup ? "arrow.up.doc.fill" : "arrow.down.doc.fill")
-                                .font(.system(size: 11))
-                            Text(mode.rawValue)
-                                .font(WalkmanFont.calloutBold)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                        .background(
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .fill(isSelected ? Color.white.opacity(0.14) : Color.clear)
-                        )
-                        .foregroundStyle(isSelected ? .white : .secondary)
-                    }
-                    .buttonStyle(.plain)
+                    modeSwitcherButton(for: mode)
                 }
             }
             .padding(3)
@@ -235,6 +366,34 @@ public struct BackupRestoreView: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
+    }
+
+    @ViewBuilder
+    private func modeSwitcherButton(for mode: Mode) -> some View {
+        let isSelected = selectedMode == mode
+        Button {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                selectedMode = mode
+            }
+            if mode == .restore {
+                refreshDestinationsAsync()
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: mode == .backup ? "arrow.up.doc.fill" : "arrow.down.doc.fill")
+                    .font(.system(size: 11))
+                Text(mode.rawValue)
+                    .font(WalkmanFont.calloutBold)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(isSelected ? Color.white.opacity(0.14) : Color.clear)
+            )
+            .foregroundStyle(isSelected ? .white : .secondary)
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - BACKUP VIEW
@@ -352,14 +511,13 @@ public struct BackupRestoreView: View {
 
                 Spacer()
 
-                let est = estimatedScopeSummary
                 HStack(spacing: 6) {
-                    Text("\(est.count.formatted()) items selected")
+                    Text("\(estimatedCount.formatted()) items selected")
                         .font(WalkmanFont.subheadlineBold)
                         .foregroundStyle(.white)
                     Text("•")
                         .foregroundStyle(.secondary)
-                    Text(formatBytes(est.bytes))
+                    Text(formatBytes(estimatedBytes))
                         .font(WalkmanFont.mono)
                         .foregroundStyle(WalkmanTheme.hiResGold)
                 }
@@ -457,7 +615,7 @@ public struct BackupRestoreView: View {
     private var destinationCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label("3. DESTINATION (ONLINE CLOUD & LOCAL STORAGE)", systemImage: "externaldrive.badge.icloud")
+                Label("3. DESTINATION (LOCAL MAC & EXTERNAL STORAGE)", systemImage: "internaldrive.fill")
                     .font(WalkmanFont.sectionHeader)
                     .foregroundStyle(WalkmanTheme.hiResGold)
 
@@ -479,33 +637,21 @@ public struct BackupRestoreView: View {
                     let isSelected = selectedDestinationId == dest.id
                     HStack(spacing: 12) {
                         Button(action: {
-                            if dest.isAvailable {
-                                selectedDestinationId = dest.id
-                            } else {
-                                configureUnavailableDestination(dest)
-                            }
+                            selectedDestinationId = dest.id
                         }) {
                             HStack(spacing: 12) {
                                 Image(systemName: dest.icon)
                                     .font(.system(size: 16))
                                     .frame(width: 24)
-                                    .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : (dest.isAvailable ? WalkmanTheme.silverMuted : Color.white.opacity(0.2)))
+                                    .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : WalkmanTheme.silverMuted)
 
                                 VStack(alignment: .leading, spacing: 2) {
                                     HStack(spacing: 6) {
                                         Text(dest.name)
                                             .font(WalkmanFont.bodyBold)
-                                            .foregroundStyle(isSelected ? .white : (dest.isAvailable ? .white.opacity(0.85) : .secondary))
+                                            .foregroundStyle(isSelected ? .white : .white.opacity(0.85))
 
-                                        if !dest.isAvailable {
-                                            Text("Not Configured")
-                                                .font(WalkmanFont.badge)
-                                                .padding(.horizontal, 6)
-                                                .padding(.vertical, 1.5)
-                                                .background(Color.red.opacity(0.2))
-                                                .foregroundStyle(Color.red.opacity(0.9))
-                                                .clipShape(Capsule())
-                                        } else if let free = dest.freeBytes {
+                                        if let free = dest.freeBytes {
                                             Text("\(formatBytes(free)) free")
                                                 .font(WalkmanFont.badge)
                                                 .padding(.horizontal, 6)
@@ -525,17 +671,9 @@ public struct BackupRestoreView: View {
 
                                 Spacer()
 
-                                if !dest.isAvailable {
-                                    Button("Set Folder...") {
-                                        configureUnavailableDestination(dest)
-                                    }
-                                    .font(WalkmanFont.calloutMedium)
-                                    .buttonStyle(.bordered)
-                                } else {
-                                    Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
-                                        .font(.system(size: 16))
-                                        .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : Color.white.opacity(0.2))
-                                }
+                                Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
+                                    .font(.system(size: 16))
+                                    .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : Color.white.opacity(0.2))
                             }
                             .padding(12)
                             .background(
@@ -549,6 +687,35 @@ public struct BackupRestoreView: View {
                         }
                         .buttonStyle(.plain)
                     }
+                }
+
+                // If no external drive is plugged in, show helpful connect banner
+                if !destinations.contains(where: { $0.type == .externalDrive }) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "externaldrive.badge.plus")
+                            .font(.system(size: 15))
+                            .frame(width: 24)
+                            .foregroundStyle(WalkmanTheme.silverMuted.opacity(0.6))
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("External Drive / USB Storage")
+                                .font(WalkmanFont.bodyBold)
+                                .foregroundStyle(WalkmanTheme.silverMuted)
+
+                            Text("Connect a USB flash drive or external SSD to back up directly to external storage.")
+                                .font(WalkmanFont.callout)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+                    }
+                    .padding(12)
+                    .background(Color.white.opacity(0.01))
+                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .stroke(WalkmanTheme.border.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [4]))
+                    )
                 }
             }
         }
@@ -591,7 +758,7 @@ public struct BackupRestoreView: View {
                         .clipShape(Capsule())
                 }
 
-                Text("Applies 256-bit AES encryption with PBKDF2-HMAC-SHA256 (100,000 rounds) key derivation. Stream hashing across large FLAC audio files is computationally intensive (slower transfer), but completely protects confidential music tracks on Google Drive, OneDrive, or external flash drives.")
+                Text("Applies 256-bit AES encryption with PBKDF2-HMAC-SHA256 (100,000 rounds) key derivation. Stream hashing across large FLAC audio files is computationally intensive (slower transfer), but completely protects confidential music tracks on local storage or external flash drives.")
                     .font(WalkmanFont.callout)
                     .foregroundStyle(WalkmanTheme.silverMuted)
             }
@@ -796,12 +963,11 @@ public struct BackupRestoreView: View {
             } else {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        let est = estimatedScopeSummary
                         Text("Ready to Back Up")
                             .font(WalkmanFont.bodyBold)
                             .foregroundStyle(.white)
 
-                        Text("\(est.count) files (\(formatBytes(est.bytes))) → \(currentDestination?.name ?? "Destination")")
+                        Text("\(estimatedCount) files (\(formatBytes(estimatedBytes))) → \(currentDestination?.name ?? "Destination")")
                             .font(WalkmanFont.callout)
                             .foregroundStyle(WalkmanTheme.silverMuted)
                     }
@@ -863,7 +1029,7 @@ public struct BackupRestoreView: View {
                     sourceDrive: source,
                     destination: dest,
                     scope: config,
-                    allTracks: tracks,
+                    allTracks: sourceTracks,
                     deviceInfo: deviceInfo,
                     isEncrypted: isEncrypted,
                     passphrase: pass
@@ -876,7 +1042,7 @@ public struct BackupRestoreView: View {
                 await MainActor.run {
                     self.isBackingUp = false
                     self.backupSuccessURL = savedURL
-                    self.refreshDiscoveredBackups()
+                    self.refreshDestinationsAsync()
                 }
             } catch {
                 await MainActor.run {
@@ -931,7 +1097,7 @@ public struct BackupRestoreView: View {
                 }
                 .buttonStyle(.plain)
 
-                Button(action: { refreshDiscoveredBackups() }) {
+                Button(action: { refreshDestinationsAsync() }) {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 12))
                         .foregroundStyle(WalkmanTheme.silverMuted)
@@ -950,7 +1116,7 @@ public struct BackupRestoreView: View {
                         .font(WalkmanFont.bodyBold)
                         .foregroundStyle(.white)
 
-                    Text("No .walkmanbackup or .walkmanbackup.enc archives found in Google Drive, OneDrive, or local backup locations. Click 'Browse Other Backup File...' to select an archive from Finder.")
+                    Text("No .walkmanbackup or .walkmanbackup.enc archives found in local Mac storage or external drives. Click 'Browse Other Backup File...' to select an archive from Finder.")
                         .font(WalkmanFont.callout)
                         .foregroundStyle(WalkmanTheme.silverMuted)
                         .multilineTextAlignment(.center)
@@ -1421,26 +1587,11 @@ public struct BackupRestoreView: View {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.prompt = "Select Backup Folder"
-        panel.message = "Choose a local folder, external drive, or cloud directory for Walkman Studio backups."
+        panel.message = "Choose a local folder or external drive directory for Walkman Studio backups."
 
         if panel.runModal() == .OK, let url = panel.url {
             UserDefaults.standard.set(url.path, forKey: "walkman_custom_backup_dest")
-            refreshDestinations()
-            selectedDestinationId = "custom_dir"
-        }
-    }
-
-    private func configureUnavailableDestination(_ dest: BackupDestination) {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Choose \(dest.name) Folder"
-        panel.message = "Select the sync folder for \(dest.name) on your Mac."
-
-        if panel.runModal() == .OK, let url = panel.url {
-            UserDefaults.standard.set(url.path, forKey: "walkman_custom_backup_dest")
-            refreshDestinations()
+            refreshDestinationsAsync()
             selectedDestinationId = "custom_dir"
         }
     }
@@ -1501,7 +1652,7 @@ public struct BackupRestoreView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                 Button("Select All") {
-                    for alb in cachedAlbums {
+                    for alb in sourceAlbums {
                         selectedAlbumKeys.insert(alb.id)
                     }
                 }
@@ -1519,7 +1670,7 @@ public struct BackupRestoreView: View {
 
             Divider().overlay(WalkmanTheme.border)
 
-            let filtered = cachedAlbums.filter { alb in
+            let filtered = sourceAlbums.filter { alb in
                 if albumSearchText.isEmpty { return true }
                 return alb.name.localizedCaseInsensitiveContains(albumSearchText) ||
                        alb.artist.localizedCaseInsensitiveContains(albumSearchText)
@@ -1600,7 +1751,7 @@ public struct BackupRestoreView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                 Button("Select All") {
-                    for tr in tracks {
+                    for tr in sourceTracks {
                         selectedTrackPaths.insert(tr.fullPath)
                     }
                 }
@@ -1618,7 +1769,7 @@ public struct BackupRestoreView: View {
 
             Divider().overlay(WalkmanTheme.border)
 
-            let filtered = tracks.filter { tr in
+            let filtered = sourceTracks.filter { tr in
                 if trackSearchText.isEmpty { return true }
                 return tr.title.localizedCaseInsensitiveContains(trackSearchText) ||
                        tr.artist.localizedCaseInsensitiveContains(trackSearchText) ||
