@@ -443,4 +443,71 @@ public final class LibraryScanner: @unchecked Sendable {
             sqlite3_finalize(stmt)
         }
     }
+
+    public func loadCachedTracks(forMount mount: String) -> [Track] {
+        guard let db = getDB() else { return [] }
+        defer { sqlite3_close(db) }
+        
+        var tracks: [Track] = []
+        let query = """
+        SELECT full_path, mtime, size, format, title, artist, album, track_num, year, genre,
+               duration_seconds, bitrate_kbps, sample_rate, bits_per_sample, has_artwork, relative_path, date_added
+        FROM tracks_cache
+        WHERE full_path LIKE ?;
+        """
+        var stmt: OpaquePointer?
+        let prefix = mount.hasSuffix("/") ? "\(mount)%" : "\(mount)/%"
+        if sqlite3_prepare_v2(db, query, -1, &stmt, nil) == SQLITE_OK {
+            sqlite3_bind_text(stmt, 1, (prefix as NSString).utf8String, -1, nil)
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                let fPath = String(cString: sqlite3_column_text(stmt, 0))
+                let mtime = sqlite3_column_double(stmt, 1)
+                let size = sqlite3_column_int64(stmt, 2)
+                let fmt = String(cString: sqlite3_column_text(stmt, 3))
+                let title = sqlite3_column_text(stmt, 4).map { String(cString: $0) } ?? ""
+                let artist = sqlite3_column_text(stmt, 5).map { String(cString: $0) } ?? "Unknown Artist"
+                let album = sqlite3_column_text(stmt, 6).map { String(cString: $0) } ?? "Unknown Album"
+                let trackNum = sqlite3_column_text(stmt, 7).map { String(cString: $0) } ?? ""
+                let year = sqlite3_column_text(stmt, 8).map { String(cString: $0) } ?? ""
+                let genre = sqlite3_column_text(stmt, 9).map { String(cString: $0) } ?? ""
+                let duration = sqlite3_column_double(stmt, 10)
+                let bitrate = Int(sqlite3_column_int(stmt, 11))
+                let sampleRate = Int(sqlite3_column_int(stmt, 12))
+                let bitsPerSample = Int(sqlite3_column_int(stmt, 13))
+                let hasArt = sqlite3_column_int(stmt, 14) != 0
+                let relPath = sqlite3_column_text(stmt, 15).map { String(cString: $0) } ?? URL(fileURLWithPath: fPath).lastPathComponent
+                let dateAddedSec = sqlite3_column_double(stmt, 16)
+                let effectiveAdded = dateAddedSec > 0 ? dateAddedSec : mtime
+                let dateAdded = Date(timeIntervalSince1970: effectiveAdded > 0 ? effectiveAdded : CFAbsoluteTimeGetCurrent() + 978307200.0)
+
+                let cleanTitle = WalkmanEngine.sanitizeWalkmanText(title)
+                let cleanArtist = WalkmanEngine.sanitizeWalkmanText(artist, stripExplicitMarkers: false)
+                let cleanAlbum = WalkmanEngine.sanitizeWalkmanText(album)
+                let fallbackTitle = WalkmanEngine.sanitizeWalkmanText(URL(fileURLWithPath: fPath).deletingPathExtension().lastPathComponent)
+
+                let tr = Track(
+                    filename: URL(fileURLWithPath: fPath).lastPathComponent,
+                    relativePath: relPath,
+                    fullPath: fPath,
+                    format: fmt,
+                    title: cleanTitle.isEmpty ? (fallbackTitle.isEmpty ? "Unknown Track" : fallbackTitle) : cleanTitle,
+                    artist: cleanArtist.isEmpty ? "Unknown Artist" : cleanArtist,
+                    album: cleanAlbum.isEmpty ? "Unknown Album" : cleanAlbum,
+                    trackNum: trackNum.trimmingCharacters(in: CharacterSet(charactersIn: " '\"")),
+                    year: year,
+                    genre: genre,
+                    durationSeconds: duration,
+                    bitrateKbps: bitrate,
+                    sampleRate: sampleRate,
+                    bitsPerSample: bitsPerSample,
+                    hasArtwork: hasArt,
+                    sizeBytes: size,
+                    dateAdded: dateAdded
+                )
+                tracks.append(tr)
+            }
+            sqlite3_finalize(stmt)
+        }
+        return tracks
+    }
 }

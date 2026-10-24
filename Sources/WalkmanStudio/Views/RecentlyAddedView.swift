@@ -164,59 +164,6 @@ public struct RecentlyAddedView: View {
     
     public var body: some View {
         VStack(spacing: 0) {
-            // Header Hero Banner
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(WalkmanTheme.card)
-                        .frame(width: 48, height: 48)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                        )
-                    
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(WalkmanTheme.silverLight)
-                }
-                
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Recently Added")
-                        .font(WalkmanFont.title2)
-                        .foregroundStyle(.white)
-                    
-                    Text("Freshly synchronized audio files on your Walkman, ordered by transfer date.")
-                        .font(WalkmanFont.callout)
-                        .foregroundStyle(.secondary)
-                }
-                
-                Spacer()
-                
-                if !displayedTracks.isEmpty {
-                    Button(action: {
-                        if let first = currentPlaybackQueue.first {
-                            player.play(track: first, in: currentPlaybackQueue)
-                        }
-                    }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "play.fill")
-                                .font(.system(size: 11))
-                            Text("Play Recent Queue")
-                                .font(WalkmanFont.calloutBold)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                        .background(WalkmanTheme.silverGradient)
-                        .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(16)
-            .liquidGlass(cornerRadius: 12)
-            .padding(14)
-            
             // Search & Filter Bar
             HStack(spacing: 12) {
                 // Search Field
@@ -270,9 +217,33 @@ public struct RecentlyAddedView: View {
                 Text("\(displayedTracks.count.formatted()) tracks")
                     .font(WalkmanFont.mono)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                
+                if !displayedTracks.isEmpty {
+                    Button(action: {
+                        if let first = currentPlaybackQueue.first {
+                            player.play(track: first, in: currentPlaybackQueue)
+                        }
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 11))
+                            Text("Play Recent Queue")
+                                .font(WalkmanFont.calloutBold)
+                                .lineLimit(1)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(WalkmanTheme.silverGradient)
+                        .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                    }
+                    .buttonStyle(.plain)
+                    .fixedSize()
+                }
             }
             .padding(.horizontal, 14)
-            .padding(.bottom, 8)
+            .padding(.vertical, 8)
             
             Divider()
                 .overlay(Color.white.opacity(0.06))
