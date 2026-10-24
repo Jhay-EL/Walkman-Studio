@@ -83,9 +83,18 @@ public struct MetadataStudioView: View {
         return tr.bitsPerSample > 16 || tr.sampleRate > 48000
     }
     
+    private var activeLyrics: String? {
+        if let lyr = lyrics, !lyr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return lyr
+        }
+        if let lyr = verifiedMetadata?.lyrics, !lyr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return lyr
+        }
+        return nil
+    }
+
     private var hasLyricsOnWalkman: Bool {
-        guard let lyr = lyrics else { return false }
-        return !lyr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        activeLyrics != nil
     }
 
     private struct ParsedLyricLine: Identifiable, Hashable {
@@ -95,7 +104,7 @@ public struct MetadataStudioView: View {
     }
 
     private var parsedLyricLines: [ParsedLyricLine] {
-        guard let raw = lyrics else { return [] }
+        guard let raw = activeLyrics else { return [] }
         let rawLines = raw.components(separatedBy: .newlines)
         var result: [ParsedLyricLine] = []
         
@@ -127,8 +136,59 @@ public struct MetadataStudioView: View {
     }
 
     private var isSyncedLyrics: Bool {
-        guard let lyr = lyrics else { return false }
+        guard let lyr = activeLyrics else { return false }
         return lyr.contains("[") && lyr.contains("]") && parsedLyricLines.contains(where: { $0.timestamp != nil })
+    }
+
+    private func formatSampleRate(_ hz: Int) -> String {
+        if hz <= 0 { return "" }
+        if hz % 1000 == 0 {
+            return "\(hz / 1000) kHz"
+        } else {
+            let khz = Double(hz) / 1000.0
+            return String(format: "%.1f kHz", locale: Locale(identifier: "en_US_POSIX"), khz)
+        }
+    }
+    
+    private func formatQuality(_ tr: Track) -> String {
+        let bits = tr.bitsPerSample > 0 ? "\(tr.bitsPerSample)-bit" : ""
+        let rate = formatSampleRate(tr.sampleRate)
+        if !bits.isEmpty && !rate.isEmpty {
+            return "\(bits) / \(rate)"
+        } else if !bits.isEmpty {
+            return bits
+        } else if !rate.isEmpty {
+            return rate
+        }
+        return tr.format
+    }
+
+    private func artworkStatusShortLabel(_ st: (valid: Bool, message: String)) -> String {
+        if st.valid {
+            if let img = coverImage {
+                let w = Int(img.size.width)
+                let h = Int(img.size.height)
+                if w > 0 && h > 0 {
+                    return "\(w)×\(h) • Walkman Ready"
+                }
+            }
+            return "Walkman Ready (Baseline)"
+        } else {
+            if let img = coverImage {
+                let w = Int(img.size.width)
+                let h = Int(img.size.height)
+                if w > 800 || h > 800 {
+                    return "\(w)×\(h) • Exceeds 800px"
+                }
+            }
+            if st.message.contains("Progressive") {
+                return "Progressive JPEG (Advisory)"
+            }
+            if st.message.contains("Color mode") || st.message.contains("RGB") {
+                return "Non-RGB Color Mode"
+            }
+            return st.message
+        }
     }
 
     private func loadTrack() {
@@ -169,7 +229,7 @@ public struct MetadataStudioView: View {
                     self.coverData = art
                     self.coverImage = img
                     self.validationStatus = val
-                    self.lyrics = lyr
+                    self.lyrics = lyr ?? meta?.lyrics
                     self.verifiedMetadata = meta
                 }
             }
@@ -315,14 +375,29 @@ public struct MetadataStudioView: View {
                                 .foregroundStyle(WalkmanTheme.silverLight)
                                 .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
                             
-                            if tr.bitsPerSample > 0 {
-                                Text("\(tr.bitsPerSample)-bit / \(tr.sampleRate) Hz")
+                            let qualityStr = formatQuality(tr)
+                            if !qualityStr.isEmpty {
+                                Text(qualityStr)
                                     .font(WalkmanFont.monoSmall)
                                     .padding(.horizontal, 5)
                                     .padding(.vertical, 2)
                                     .background(Color.white.opacity(0.06))
                                     .foregroundStyle(.secondary)
                                     .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
+                            }
+
+                            if hasLyricsOnWalkman {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "quote.bubble.fill")
+                                        .font(.system(size: 8))
+                                    Text(isSyncedLyrics ? "LRC" : "Lyrics")
+                                        .font(WalkmanFont.badge)
+                                }
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(Color.white.opacity(0.12))
+                                .foregroundStyle(WalkmanTheme.silverLight)
+                                .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
                             }
                         }
                     }
@@ -352,15 +427,16 @@ public struct MetadataStudioView: View {
                             // Artwork Compliance & Export
                             HStack(alignment: .center, spacing: 6) {
                                 if let st = validationStatus {
-                                    HStack(spacing: 4) {
+                                    HStack(spacing: 4.5) {
                                         Image(systemName: st.valid ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                                             .font(.system(size: 10))
                                             .foregroundStyle(st.valid ? Color.green : Color.orange)
-                                        Text(st.message)
+                                        Text(artworkStatusShortLabel(st))
                                             .font(WalkmanFont.monoSmall)
-                                            .foregroundStyle(st.valid ? .secondary : Color.orange.opacity(0.9))
+                                            .foregroundStyle(st.valid ? .secondary : Color.orange)
                                             .lineLimit(1)
                                     }
+                                    .help(st.message)
                                 } else {
                                     HStack(spacing: 4) {
                                         Image(systemName: "photo")
@@ -381,13 +457,13 @@ public struct MetadataStudioView: View {
                                         Text("Export")
                                             .font(WalkmanFont.monoSmall)
                                     }
-                                    .padding(.horizontal, 7)
-                                    .padding(.vertical, 3)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3.5)
                                     .background(Color.white.opacity(0.08))
                                     .foregroundStyle(WalkmanTheme.silverLight)
-                                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                                 }
-                                .buttonStyle(WalkmanSideActionButtonStyle(cornerRadius: 4))
+                                .buttonStyle(WalkmanSideActionButtonStyle(cornerRadius: 5))
                                 .help("Export artwork to Mac...")
                             }
                         } else {
@@ -421,26 +497,33 @@ public struct MetadataStudioView: View {
                         }
                     }
                     
-                    // 3. QUICK STATS 4-TILE RIBBON
-                    HStack(spacing: 6) {
+                    // 3. QUICK STATS 2x2 GRID (Optimized layout, no clipped labels)
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.flexible(), spacing: 8),
+                            GridItem(.flexible(), spacing: 8)
+                        ],
+                        spacing: 8
+                    ) {
                         StatTile(
                             icon: "clock",
                             label: "DURATION",
                             value: formatDuration(tr.durationSeconds)
                         )
                         StatTile(
-                            icon: "waveform.badge.magnifyingglass",
-                            label: "QUALITY",
-                            value: tr.bitsPerSample > 0 ? "\(tr.bitsPerSample)-bit" : tr.format
-                        )
-                        StatTile(
                             icon: "speedometer",
                             label: "BITRATE",
-                            value: tr.bitrateKbps > 0 ? "\(tr.bitrateKbps)k" : "Lossless"
+                            value: tr.bitrateKbps > 0 ? "\(tr.bitrateKbps) kbps" : "Lossless"
+                        )
+                        StatTile(
+                            icon: "waveform",
+                            label: "QUALITY",
+                            value: formatQuality(tr),
+                            highlight: isHiRes
                         )
                         StatTile(
                             icon: "internaldrive",
-                            label: "SIZE",
+                            label: "FILE SIZE",
                             value: formatSize(tr.sizeBytes)
                         )
                     }
@@ -573,7 +656,7 @@ public struct MetadataStudioView: View {
                             Divider().overlay(Color.white.opacity(0.06))
                             AudioSpecRow(label: "Bitrate", value: tr.bitrateKbps > 0 ? "\(tr.bitrateKbps) kbps" : "Lossless", systemImage: "speedometer")
                             Divider().overlay(Color.white.opacity(0.06))
-                            AudioSpecRow(label: "Audio Quality", value: "\(tr.bitsPerSample > 0 ? "\(tr.bitsPerSample)-bit" : "16-bit") / \(tr.sampleRate) Hz", systemImage: "waveform.path")
+                            AudioSpecRow(label: "Audio Quality", value: formatQuality(tr), systemImage: "waveform.path")
                             Divider().overlay(Color.white.opacity(0.06))
                             AudioSpecRow(label: "File Size", value: formatSize(tr.sizeBytes), systemImage: "internaldrive")
                             Divider().overlay(Color.white.opacity(0.06))
@@ -582,6 +665,15 @@ public struct MetadataStudioView: View {
                                 value: tr.format == "MP3" ? "Strict ID3v2.3 (UTF-16)" : (tr.format == "FLAC" ? "Vorbis Comments" : "MP4 iTunes Tags"),
                                 systemImage: "cpu"
                             )
+                            if hasLyricsOnWalkman {
+                                Divider().overlay(Color.white.opacity(0.06))
+                                AudioSpecRow(
+                                    label: "Lyrics",
+                                    value: isSyncedLyrics ? "Synchronized .LRC" : "Embedded Text",
+                                    systemImage: "quote.bubble.fill",
+                                    isSuccess: true
+                                )
+                            }
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
@@ -602,7 +694,11 @@ public struct MetadataStudioView: View {
                                     Text(isPathCopied ? "Copied" : "Copy Path")
                                         .font(WalkmanFont.monoSmall)
                                 }
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2.5)
+                                .background(Color.white.opacity(0.06))
                                 .foregroundStyle(isPathCopied ? Color.green : WalkmanTheme.silverMuted)
+                                .clipShape(Capsule())
                             }
                             .buttonStyle(.plain)
                             .help("Copy full file path to clipboard")
@@ -690,30 +786,33 @@ private struct StatTile: View {
     let icon: String
     let label: String
     let value: String
+    var highlight: Bool = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 4) {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4.5) {
                 Image(systemName: icon)
-                    .font(.system(size: 8.5))
+                    .font(.system(size: 9))
                     .foregroundStyle(WalkmanTheme.silverMuted)
                 Text(label)
                     .font(WalkmanFont.badge)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
             Text(value)
                 .font(WalkmanFont.monoSmall)
                 .fontWeight(.semibold)
-                .foregroundStyle(.white)
+                .foregroundStyle(highlight ? WalkmanTheme.hiResGold : .white)
                 .lineLimit(1)
+                .minimumScaleFactor(0.85)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
         .background(Color.white.opacity(0.04))
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .stroke(Color.white.opacity(0.06), lineWidth: 1)
         )
     }
@@ -729,7 +828,8 @@ private struct ReadOnlyDetailRow: View {
             Text(label)
                 .font(WalkmanFont.subheadlineMedium)
                 .foregroundStyle(.secondary)
-                .frame(width: 64, alignment: .leading)
+                .frame(width: 72, alignment: .leading)
+                .lineLimit(1)
             
             Spacer(minLength: 4)
             
@@ -742,6 +842,7 @@ private struct ReadOnlyDetailRow: View {
                     .font(isMonospace ? WalkmanFont.monoSmall : WalkmanFont.subheadlineMedium)
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.trailing)
+                    .lineLimit(2)
                     .textSelection(.enabled)
             }
         }
@@ -766,8 +867,9 @@ private struct AudioSpecRow: View {
             Text(label)
                 .font(WalkmanFont.subheadline)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
             
-            Spacer()
+            Spacer(minLength: 4)
             
             if isSuccess {
                 Image(systemName: "checkmark.circle.fill")
@@ -779,6 +881,7 @@ private struct AudioSpecRow: View {
                 .font(WalkmanFont.monoSmall)
                 .foregroundStyle(isSuccess ? WalkmanTheme.silverLight : .white)
                 .textSelection(.enabled)
+                .lineLimit(1)
         }
         .padding(.vertical, 3)
     }
