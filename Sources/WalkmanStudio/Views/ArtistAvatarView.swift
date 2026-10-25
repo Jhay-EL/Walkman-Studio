@@ -41,7 +41,7 @@ public struct ArtistAvatarView: View {
                             )
                     )
                     .shadow(
-                        color: isSelected ? WalkmanTheme.hiResGold.opacity(0.35) : Color.black.opacity(0.25),
+                        color: Color.black.opacity(isSelected ? 0.35 : 0.20),
                         radius: isSelected ? 4 : 2
                     )
             } else {
