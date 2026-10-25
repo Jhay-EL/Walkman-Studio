@@ -387,18 +387,33 @@ public struct AlbumItem: Identifiable, Hashable, Sendable {
     public let year: String
     public let trackCount: Int
     public let tracks: [Track]
+    public let latestDateAdded: Date
+    public let isHiRes: Bool
+    public let isLanguageStudy: Bool
+    
     public var representativeTrack: Track? { tracks.first }
-    public var isHiRes: Bool {
-        tracks.contains { $0.bitsPerSample > 16 || $0.sampleRate > 48000 }
-    }
-    public var latestDateAdded: Date {
-        tracks.map(\.dateAdded).max() ?? Date.distantPast
-    }
     public var primaryFormat: String {
         tracks.first?.format ?? "FLAC"
     }
-    public var isLanguageStudy: Bool {
-        tracks.contains(where: \.isLanguageStudy)
+    
+    public init(
+        name: String,
+        artist: String,
+        year: String,
+        trackCount: Int,
+        tracks: [Track],
+        latestDateAdded: Date? = nil,
+        isHiRes: Bool? = nil,
+        isLanguageStudy: Bool? = nil
+    ) {
+        self.name = name
+        self.artist = artist
+        self.year = year
+        self.trackCount = trackCount
+        self.tracks = tracks
+        self.latestDateAdded = latestDateAdded ?? (tracks.map(\.dateAdded).max() ?? Date.distantPast)
+        self.isHiRes = isHiRes ?? tracks.contains { $0.bitsPerSample > 16 || $0.sampleRate > 48000 }
+        self.isLanguageStudy = isLanguageStudy ?? tracks.contains(where: \.isLanguageStudy)
     }
 }
 
@@ -409,11 +424,28 @@ public struct ArtistItem: Identifiable, Hashable, Sendable {
     public let trackCount: Int
     public let albums: [AlbumItem]
     public let tracks: [Track]
-    public var representativeTrack: Track? {
-        tracks.first(where: { $0.hasArtwork }) ?? tracks.first
-    }
-    public var isLanguageStudy: Bool {
-        tracks.contains(where: \.isLanguageStudy)
+    public let representativeTrack: Track?
+    public let isLanguageStudy: Bool
+    public let isHiRes: Bool
+    
+    public init(
+        name: String,
+        albumCount: Int,
+        trackCount: Int,
+        albums: [AlbumItem],
+        tracks: [Track],
+        representativeTrack: Track? = nil,
+        isLanguageStudy: Bool? = nil,
+        isHiRes: Bool? = nil
+    ) {
+        self.name = name
+        self.albumCount = albumCount
+        self.trackCount = trackCount
+        self.albums = albums
+        self.tracks = tracks
+        self.representativeTrack = representativeTrack ?? (tracks.first(where: { $0.hasArtwork }) ?? tracks.first)
+        self.isLanguageStudy = isLanguageStudy ?? tracks.contains(where: \.isLanguageStudy)
+        self.isHiRes = isHiRes ?? tracks.contains { $0.bitsPerSample > 16 || $0.sampleRate > 48000 }
     }
 }
 

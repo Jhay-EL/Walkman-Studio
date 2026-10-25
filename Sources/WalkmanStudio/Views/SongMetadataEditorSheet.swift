@@ -4,6 +4,7 @@ import AppKit
 public struct SongMetadataEditorSheet: View {
     let track: Track
     let onSaved: () -> Void
+    let onSavedTrack: ((Track) -> Void)?
     let onDismiss: () -> Void
     
     @ObservedObject private var player = AudioPlayerService.shared
@@ -59,9 +60,15 @@ public struct SongMetadataEditorSheet: View {
     @State private var isFetchingOnlineInfo: Bool = false
     @State private var showTrimCutSheet: Bool = false
     
-    public init(track: Track, onSaved: @escaping () -> Void, onDismiss: @escaping () -> Void) {
+    public init(
+        track: Track,
+        onSaved: @escaping () -> Void = {},
+        onSavedTrack: ((Track) -> Void)? = nil,
+        onDismiss: @escaping () -> Void
+    ) {
         self.track = track
         self.onSaved = onSaved
+        self.onSavedTrack = onSavedTrack
         self.onDismiss = onDismiss
     }
     
@@ -307,11 +314,29 @@ public struct SongMetadataEditorSheet: View {
                 CoverArtCache.shared.invalidate(forFullPath: track.fullPath, artist: track.primaryArtist, album: track.album)
                 LibraryScanner.shared.invalidate(fullPath: track.fullPath)
                 
+                var updatedTrack = track
+                updatedTrack.title = saveTitle
+                updatedTrack.artist = saveArtist
+                updatedTrack.album = saveAlbum
+                updatedTrack.trackNum = saveTrackNum
+                updatedTrack.year = saveYear
+                updatedTrack.genre = saveGenre
+                if self.isCoverArtModified {
+                    updatedTrack.hasArtwork = (saveCover != nil)
+                }
+                
                 await MainActor.run {
                     self.isSaving = false
                     self.statusMessage = "Saved successfully!"
                     self.isError = false
+                    self.onSavedTrack?(updatedTrack)
                     self.onSaved()
+                    
+                    NotificationCenter.default.post(
+                        name: .trackMetadataDidUpdate,
+                        object: nil,
+                        userInfo: ["trackId": track.id, "track": updatedTrack]
+                    )
                     
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                         self.onDismiss()

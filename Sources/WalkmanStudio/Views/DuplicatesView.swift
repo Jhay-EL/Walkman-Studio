@@ -329,7 +329,7 @@ public struct DuplicatesView: View {
                         : Color(red: 20/255, green: 20/255, blue: 24/255)
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .shadow(color: finder.isScanning ? .clear : WalkmanTheme.hiResGold.opacity(0.35), radius: 6, x: 0, y: 1.5)
+                .shadow(color: Color.black.opacity(finder.isScanning ? 0.0 : 0.22), radius: 3, x: 0, y: 1.5)
                 .scaleEffect(isHoveringRescan && !finder.isScanning ? 1.02 : 1.0)
                 .brightness(isHoveringRescan && !finder.isScanning ? 0.04 : 0.0)
                 .animation(.easeInOut(duration: 0.15), value: isHoveringRescan)

@@ -9,7 +9,7 @@ public struct BackupRestoreView: View {
     let deviceInfo: WalkmanDeviceInfo?
     let onRestoreComplete: () -> Void
 
-    private enum Mode: String, CaseIterable, Identifiable {
+    fileprivate enum Mode: String, CaseIterable, Identifiable {
         case backup = "Backup Walkman"
         case restore = "Restore to Walkman"
         var id: String { rawValue }
@@ -49,6 +49,8 @@ public struct BackupRestoreView: View {
     @State private var backupProgress: BackupProgress? = nil
     @State private var backupSuccessURL: URL? = nil
     @State private var backupErrorMessage: String? = nil
+    @State private var isBackupSuccessHovered: Bool = false
+    @State private var backupSuccessDismissTask: Task<Void, Never>? = nil
 
     // Scope Pickers State
     @State private var showAlbumPickerSheet: Bool = false
@@ -65,6 +67,8 @@ public struct BackupRestoreView: View {
     @State private var restoreProgress: BackupProgress? = nil
     @State private var restoreSuccessResult: RestoreResult? = nil
     @State private var restoreErrorMessage: String? = nil
+    @State private var isRestoreSuccessHovered: Bool = false
+    @State private var restoreSuccessDismissTask: Task<Void, Never>? = nil
 
     public init(
         drives: [WalkmanDrive],
@@ -103,6 +107,19 @@ public struct BackupRestoreView: View {
             return String(format: "%.2f GB", mb / 1024.0)
         }
         return String(format: "%.1f MB", mb)
+    }
+
+    private func cleanDriveName(_ drive: WalkmanDrive) -> String {
+        var name = drive.name
+        name = name.replacingOccurrences(of: " (MicroSD)", with: "")
+        name = name.replacingOccurrences(of: " (Internal)", with: "")
+        name = name.replacingOccurrences(of: "(MicroSD)", with: "")
+        name = name.replacingOccurrences(of: "(Internal)", with: "")
+        name = name.trimmingCharacters(in: .whitespaces)
+        if name.isEmpty {
+            return drive.type == .internal ? "Internal Flash" : "MicroSD Card"
+        }
+        return name
     }
 
     private func recalculateEstimatedScope() {
@@ -275,6 +292,32 @@ public struct BackupRestoreView: View {
         }
     }
 
+    private func scheduleBackupSuccessAutoDismiss(seconds: Double = 5.0) {
+        backupSuccessDismissTask?.cancel()
+        backupSuccessDismissTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            if !isBackupSuccessHovered {
+                withAnimation(.easeInOut(duration: 0.35)) {
+                    backupSuccessURL = nil
+                }
+            }
+        }
+    }
+
+    private func scheduleRestoreSuccessAutoDismiss(seconds: Double = 5.0) {
+        restoreSuccessDismissTask?.cancel()
+        restoreSuccessDismissTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            if !isRestoreSuccessHovered {
+                withAnimation(.easeInOut(duration: 0.35)) {
+                    restoreSuccessResult = nil
+                }
+            }
+        }
+    }
+
     // MARK: - Main Body
     public var body: some View {
         VStack(spacing: 0) {
@@ -293,7 +336,9 @@ public struct BackupRestoreView: View {
                         restoreView
                     }
                 }
-                .padding(18)
+                .padding(.horizontal, 18)
+                .padding(.top, 16)
+                .padding(.bottom, 36)
             }
         }
         .background(WalkmanTheme.background)
@@ -306,6 +351,10 @@ public struct BackupRestoreView: View {
             }
             updateSourceDriveTracks(mount: sourceDriveMount)
             refreshDestinationsAsync()
+        }
+        .onDisappear {
+            backupSuccessDismissTask?.cancel()
+            restoreSuccessDismissTask?.cancel()
         }
         .onChange(of: selectedScope) { _, _ in
             recalculateEstimatedScope()
@@ -331,69 +380,72 @@ public struct BackupRestoreView: View {
 
     // MARK: - Top Bar
     private var topBar: some View {
-        HStack(spacing: 16) {
-            HStack(spacing: 10) {
-                Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
-                    .font(.system(size: 20))
-                    .foregroundStyle(WalkmanTheme.hiResGoldGradient)
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Backup & Restore")
-                        .font(WalkmanFont.title2)
-                        .foregroundStyle(.white)
-
-                    Text("Safeguard or restore your Walkman library locally to your Mac or direct to an external drive")
-                        .font(WalkmanFont.callout)
-                        .foregroundStyle(WalkmanTheme.silverMuted)
-                }
+        ViewThatFits(in: .horizontal) {
+            // Wide layout
+            HStack(spacing: 16) {
+                topBarTitleGroup(compactSubtitle: false)
+                Spacer(minLength: 12)
+                topBarModeSwitcher
             }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
 
-            Spacer()
-
-            // Segmented Mode Switcher
-            HStack(spacing: 4) {
-                ForEach(Mode.allCases) { mode in
-                    modeSwitcherButton(for: mode)
-                }
+            // Compact/Narrow layout
+            VStack(alignment: .leading, spacing: 10) {
+                topBarTitleGroup(compactSubtitle: true)
+                topBarModeSwitcher
             }
-            .padding(3)
-            .background(Color.black.opacity(0.35))
-            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(WalkmanTheme.border, lineWidth: 1)
-            )
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
     }
 
-    @ViewBuilder
-    private func modeSwitcherButton(for mode: Mode) -> some View {
-        let isSelected = selectedMode == mode
-        Button {
-            withAnimation(.easeInOut(duration: 0.15)) {
-                selectedMode = mode
+    private func topBarTitleGroup(compactSubtitle: Bool) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                .font(.system(size: 20))
+                .foregroundStyle(WalkmanTheme.hiResGoldGradient)
+                .fixedSize()
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Backup & Restore")
+                    .font(WalkmanFont.title2)
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+
+                Text(compactSubtitle ? "Safeguard or restore your Walkman library locally or to external storage" : "Safeguard or restore your Walkman library locally to your Mac or direct to an external drive")
+                    .font(WalkmanFont.callout)
+                    .foregroundStyle(WalkmanTheme.silverMuted)
+                    .lineLimit(1)
             }
-            if mode == .restore {
-                refreshDestinationsAsync()
-            }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: mode == .backup ? "arrow.up.doc.fill" : "arrow.down.doc.fill")
-                    .font(.system(size: 11))
-                Text(mode.rawValue)
-                    .font(WalkmanFont.calloutBold)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 7)
-            .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(isSelected ? Color.white.opacity(0.14) : Color.clear)
-            )
-            .foregroundStyle(isSelected ? .white : .secondary)
         }
-        .buttonStyle(.plain)
+    }
+
+    private var topBarModeSwitcher: some View {
+        HStack(spacing: 4) {
+            ForEach(Mode.allCases) { mode in
+                ModeSwitcherTabButton(
+                    mode: mode,
+                    isSelected: selectedMode == mode,
+                    onSelect: {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            selectedMode = mode
+                        }
+                        if mode == .restore {
+                            refreshDestinationsAsync()
+                        }
+                    }
+                )
+            }
+        }
+        .padding(3)
+        .background(Color.black.opacity(0.35))
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .stroke(WalkmanTheme.border, lineWidth: 1)
+        )
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     // MARK: - BACKUP VIEW
@@ -419,17 +471,34 @@ public struct BackupRestoreView: View {
     // MARK: - Source Partition Card
     private var sourcePartitionCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label("1. SOURCE WALKMAN PARTITION", systemImage: "hifispeaker.fill")
-                    .font(WalkmanFont.sectionHeader)
-                    .foregroundStyle(WalkmanTheme.hiResGold)
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    Label("1. SOURCE WALKMAN PARTITION", systemImage: "hifispeaker.fill")
+                        .font(WalkmanFont.sectionHeader)
+                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .lineLimit(1)
 
-                Spacer()
+                    Spacer(minLength: 8)
 
-                if let info = deviceInfo {
-                    Text(info.displayName)
-                        .font(WalkmanFont.subheadlineMedium)
-                        .foregroundStyle(.secondary)
+                    if let info = deviceInfo {
+                        Text(info.displayName)
+                            .font(WalkmanFont.subheadlineMedium)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Label("1. SOURCE WALKMAN PARTITION", systemImage: "hifispeaker.fill")
+                        .font(WalkmanFont.sectionHeader)
+                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .lineLimit(1)
+
+                    if let info = deviceInfo {
+                        Text(info.displayName)
+                            .font(WalkmanFont.subheadlineMedium)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                 }
             }
 
@@ -438,56 +507,16 @@ public struct BackupRestoreView: View {
                     .font(WalkmanFont.callout)
                     .foregroundStyle(.secondary)
             } else {
-                HStack(spacing: 12) {
-                    ForEach(drives) { drive in
-                        let isSelected = currentSourceDrive?.mountPoint == drive.mountPoint
-                        Button(action: {
-                            sourceDriveMount = drive.mountPoint
-                        }) {
-                            HStack(spacing: 12) {
-                                Image(systemName: drive.type == .internal ? "internaldrive.fill" : "sdcard.fill")
-                                    .font(.system(size: 18))
-                                    .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : WalkmanTheme.silverMuted)
-
-                                VStack(alignment: .leading, spacing: 2) {
-                                    HStack(spacing: 6) {
-                                        Text(drive.name)
-                                            .font(WalkmanFont.bodyBold)
-                                            .foregroundStyle(isSelected ? .white : .secondary)
-
-                                        Text(drive.type == .internal ? "Internal Flash" : "MicroSD Card")
-                                            .font(WalkmanFont.badge)
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 2)
-                                            .background(isSelected ? WalkmanTheme.hiResGold.opacity(0.18) : Color.white.opacity(0.06))
-                                            .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : .secondary)
-                                            .clipShape(Capsule())
-                                    }
-
-                                    Text("\(formatBytes(drive.usedBytes)) used • \(formatBytes(drive.freeBytes)) free")
-                                        .font(WalkmanFont.monoSmall)
-                                        .foregroundStyle(WalkmanTheme.silverMuted)
-                                }
-
-                                Spacer()
-
-                                if isSelected {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .font(.system(size: 16))
-                                        .foregroundStyle(WalkmanTheme.hiResGold)
-                                }
-                            }
-                            .padding(12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(isSelected ? Color.white.opacity(0.08) : Color.white.opacity(0.02))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .stroke(isSelected ? WalkmanTheme.hiResGold.opacity(0.6) : WalkmanTheme.border, lineWidth: isSelected ? 1.5 : 1)
-                            )
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) {
+                        ForEach(drives) { drive in
+                            sourcePartitionDriveButton(drive: drive)
                         }
-                        .buttonStyle(.plain)
+                    }
+                    VStack(spacing: 8) {
+                        ForEach(drives) { drive in
+                            sourcePartitionDriveButton(drive: drive)
+                        }
                     }
                 }
             }
@@ -501,30 +530,88 @@ public struct BackupRestoreView: View {
         )
     }
 
+    private func sourcePartitionDriveButton(drive: WalkmanDrive) -> some View {
+        let isSelected = currentSourceDrive?.mountPoint == drive.mountPoint
+        return Button(action: {
+            sourceDriveMount = drive.mountPoint
+        }) {
+            HStack(spacing: 10) {
+                Image(systemName: drive.type == .internal ? "internaldrive.fill" : "sdcard.fill")
+                    .font(.system(size: 18))
+                    .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : WalkmanTheme.silverMuted)
+                    .frame(width: 22)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(cleanDriveName(drive))
+                            .font(WalkmanFont.bodyBold)
+                            .foregroundStyle(isSelected ? .white : .secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+
+                        Text(drive.type == .internal ? "Internal Flash" : "MicroSD Card")
+                            .font(WalkmanFont.badge)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(isSelected ? WalkmanTheme.hiResGold.opacity(0.18) : Color.white.opacity(0.06))
+                            .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : .secondary)
+                            .clipShape(Capsule())
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+
+                    Text("\(formatBytes(drive.usedBytes)) used • \(formatBytes(drive.freeBytes)) free")
+                        .font(WalkmanFont.monoSmall)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.9)
+                }
+
+                Spacer(minLength: 4)
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .fixedSize()
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(isSelected ? Color.white.opacity(0.08) : Color.white.opacity(0.02))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(isSelected ? WalkmanTheme.hiResGold.opacity(0.6) : WalkmanTheme.border, lineWidth: isSelected ? 1.5 : 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: - Backup Scope Card
     private var backupScopeCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("2. BACKUP SCOPE", systemImage: "square.grid.2x2.fill")
-                    .font(WalkmanFont.sectionHeader)
-                    .foregroundStyle(WalkmanTheme.hiResGold)
-
-                Spacer()
-
-                HStack(spacing: 6) {
-                    Text("\(estimatedCount.formatted()) items selected")
-                        .font(WalkmanFont.subheadlineBold)
-                        .foregroundStyle(.white)
-                    Text("•")
-                        .foregroundStyle(.secondary)
-                    Text(formatBytes(estimatedBytes))
-                        .font(WalkmanFont.mono)
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    Label("2. BACKUP SCOPE", systemImage: "square.grid.2x2.fill")
+                        .font(WalkmanFont.sectionHeader)
                         .foregroundStyle(WalkmanTheme.hiResGold)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 8)
+
+                    backupScopeSelectionPill
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(Color.white.opacity(0.06))
-                .clipShape(Capsule())
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("2. BACKUP SCOPE", systemImage: "square.grid.2x2.fill")
+                        .font(WalkmanFont.sectionHeader)
+                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .lineLimit(1)
+
+                    backupScopeSelectionPill
+                }
             }
 
             // Scope Options Grid
@@ -546,19 +633,21 @@ public struct BackupRestoreView: View {
                                 Text(scope.title)
                                     .font(WalkmanFont.bodyBold)
                                     .foregroundStyle(isSelected ? .white : .secondary)
+                                    .lineLimit(1)
 
                                 Text(scope.subtitle)
                                     .font(WalkmanFont.callout)
                                     .foregroundStyle(WalkmanTheme.silverMuted)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
 
-                            Spacer()
+                            Spacer(minLength: 8)
 
                             if scope == .albums {
                                 Button(action: { showAlbumPickerSheet = true }) {
                                     HStack(spacing: 5) {
                                         Image(systemName: "checklist")
-                                        Text(selectedAlbumKeys.isEmpty ? "Select Albums..." : "\(selectedAlbumKeys.count) Albums Chosen")
+                                        Text(selectedAlbumKeys.isEmpty ? "Select Albums..." : "\(selectedAlbumKeys.count) Albums")
                                     }
                                     .font(WalkmanFont.calloutBold)
                                     .padding(.horizontal, 10)
@@ -566,13 +655,15 @@ public struct BackupRestoreView: View {
                                     .background(WalkmanTheme.silverGradient)
                                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                    .lineLimit(1)
+                                    .fixedSize(horizontal: true, vertical: false)
                                 }
                                 .buttonStyle(.plain)
                             } else if scope == .tracks {
                                 Button(action: { showTrackPickerSheet = true }) {
                                     HStack(spacing: 5) {
                                         Image(systemName: "music.note.list")
-                                        Text(selectedTrackPaths.isEmpty ? "Select Tracks..." : "\(selectedTrackPaths.count) Tracks Chosen")
+                                        Text(selectedTrackPaths.isEmpty ? "Select Tracks..." : "\(selectedTrackPaths.count) Tracks")
                                     }
                                     .font(WalkmanFont.calloutBold)
                                     .padding(.horizontal, 10)
@@ -580,6 +671,8 @@ public struct BackupRestoreView: View {
                                     .background(WalkmanTheme.silverGradient)
                                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                    .lineLimit(1)
+                                    .fixedSize(horizontal: true, vertical: false)
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -587,6 +680,7 @@ public struct BackupRestoreView: View {
                             Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
                                 .font(.system(size: 16))
                                 .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : Color.white.opacity(0.2))
+                                .fixedSize()
                         }
                         .padding(12)
                         .background(
@@ -611,25 +705,48 @@ public struct BackupRestoreView: View {
         )
     }
 
+    private var backupScopeSelectionPill: some View {
+        HStack(spacing: 6) {
+            Text("\(estimatedCount.formatted()) items selected")
+                .font(WalkmanFont.subheadlineBold)
+                .foregroundStyle(.white)
+                .lineLimit(1)
+            Text("•")
+                .foregroundStyle(.secondary)
+            Text(formatBytes(estimatedBytes))
+                .font(WalkmanFont.mono)
+                .foregroundStyle(WalkmanTheme.hiResGold)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(Color.white.opacity(0.06))
+        .clipShape(Capsule())
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
     // MARK: - Destination Card
     private var destinationCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("3. DESTINATION (LOCAL MAC & EXTERNAL STORAGE)", systemImage: "internaldrive.fill")
-                    .font(WalkmanFont.sectionHeader)
-                    .foregroundStyle(WalkmanTheme.hiResGold)
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    Label("3. DESTINATION (LOCAL & EXTERNAL)", systemImage: "internaldrive.fill")
+                        .font(WalkmanFont.sectionHeader)
+                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .lineLimit(1)
 
-                Spacer()
+                    Spacer(minLength: 8)
 
-                Button(action: { chooseCustomFolder() }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "folder.badge.plus")
-                        Text("Choose Custom Folder...")
-                    }
-                    .font(WalkmanFont.calloutMedium)
-                    .foregroundStyle(WalkmanTheme.silverMuted)
+                    chooseCustomFolderButton
                 }
-                .buttonStyle(.plain)
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("3. DESTINATION (LOCAL & EXTERNAL)", systemImage: "internaldrive.fill")
+                        .font(WalkmanFont.sectionHeader)
+                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .lineLimit(1)
+
+                    chooseCustomFolderButton
+                }
             }
 
             VStack(spacing: 8) {
@@ -650,6 +767,7 @@ public struct BackupRestoreView: View {
                                         Text(dest.name)
                                             .font(WalkmanFont.bodyBold)
                                             .foregroundStyle(isSelected ? .white : .white.opacity(0.85))
+                                            .lineLimit(1)
 
                                         if let free = dest.freeBytes {
                                             Text("\(formatBytes(free)) free")
@@ -659,6 +777,8 @@ public struct BackupRestoreView: View {
                                                 .background(Color.white.opacity(0.08))
                                                 .foregroundStyle(WalkmanTheme.silverMuted)
                                                 .clipShape(Capsule())
+                                                .lineLimit(1)
+                                                .fixedSize(horizontal: true, vertical: false)
                                         }
                                     }
 
@@ -669,11 +789,12 @@ public struct BackupRestoreView: View {
                                         .truncationMode(.middle)
                                 }
 
-                                Spacer()
+                                Spacer(minLength: 4)
 
                                 Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
                                     .font(.system(size: 16))
                                     .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : Color.white.opacity(0.2))
+                                    .fixedSize()
                             }
                             .padding(12)
                             .background(
@@ -701,10 +822,12 @@ public struct BackupRestoreView: View {
                             Text("External Drive / USB Storage")
                                 .font(WalkmanFont.bodyBold)
                                 .foregroundStyle(WalkmanTheme.silverMuted)
+                                .lineLimit(1)
 
                             Text("Connect a USB flash drive or external SSD to back up directly to external storage.")
                                 .font(WalkmanFont.callout)
                                 .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
 
                         Spacer()
@@ -728,6 +851,20 @@ public struct BackupRestoreView: View {
         )
     }
 
+    private var chooseCustomFolderButton: some View {
+        Button(action: { chooseCustomFolder() }) {
+            HStack(spacing: 4) {
+                Image(systemName: "folder.badge.plus")
+                Text("Choose Custom Folder...")
+            }
+            .font(WalkmanFont.calloutMedium)
+            .foregroundStyle(WalkmanTheme.silverMuted)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: - Encryption Card
     private var encryptionCard: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -735,12 +872,14 @@ public struct BackupRestoreView: View {
                 Label("4. SECURITY & CRYPTOGRAPHY", systemImage: "lock.shield.fill")
                     .font(WalkmanFont.sectionHeader)
                     .foregroundStyle(WalkmanTheme.hiResGold)
+                    .lineLimit(1)
 
                 Spacer()
 
                 Toggle("", isOn: $isEncrypted.animation(.easeInOut(duration: 0.2)))
                     .toggleStyle(.switch)
                     .tint(WalkmanTheme.hiResGold)
+                    .labelsHidden()
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -748,6 +887,8 @@ public struct BackupRestoreView: View {
                     Text("Encrypt Backup Container (AES-256-GCM)")
                         .font(WalkmanFont.bodyBold)
                         .foregroundStyle(isEncrypted ? .white : .secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
 
                     Text("Slow / High Security")
                         .font(WalkmanFont.badge)
@@ -756,11 +897,14 @@ public struct BackupRestoreView: View {
                         .background(isEncrypted ? WalkmanTheme.hiResGold.opacity(0.2) : Color.white.opacity(0.05))
                         .foregroundStyle(isEncrypted ? WalkmanTheme.hiResGold : .secondary)
                         .clipShape(Capsule())
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
 
                 Text("Applies 256-bit AES encryption with PBKDF2-HMAC-SHA256 (100,000 rounds) key derivation. Stream hashing across large FLAC audio files is computationally intensive (slower transfer), but completely protects confidential music tracks on local storage or external flash drives.")
                     .font(WalkmanFont.callout)
                     .foregroundStyle(WalkmanTheme.silverMuted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if isEncrypted {
@@ -858,6 +1002,7 @@ public struct BackupRestoreView: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 14))
                         .foregroundStyle(Color.red)
+                        .fixedSize()
                     Text(err)
                         .font(WalkmanFont.calloutMedium)
                         .foregroundStyle(Color.red)
@@ -866,6 +1011,8 @@ public struct BackupRestoreView: View {
                         .font(WalkmanFont.calloutMedium)
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
                 .padding(12)
                 .background(Color.red.opacity(0.12))
@@ -873,38 +1020,60 @@ public struct BackupRestoreView: View {
             }
 
             if let successURL = backupSuccessURL {
-                HStack(spacing: 12) {
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 20))
-                        .foregroundStyle(Color.green)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 20))
+                            .foregroundStyle(Color.green)
+                            .fixedSize()
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Backup Completed Successfully!")
-                            .font(WalkmanFont.bodyBold)
-                            .foregroundStyle(.white)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Backup Completed Successfully!")
+                                .font(WalkmanFont.bodyBold)
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
 
-                        Text("Saved to \(successURL.lastPathComponent)")
-                            .font(WalkmanFont.callout)
-                            .foregroundStyle(WalkmanTheme.silverMuted)
-                    }
-
-                    Spacer()
-
-                    Button(action: {
-                        NSWorkspace.shared.selectFile(successURL.path, inFileViewerRootedAtPath: successURL.deletingLastPathComponent().path)
-                    }) {
-                        HStack(spacing: 5) {
-                            Image(systemName: "finder")
-                            Text("Reveal in Finder")
+                            Text("Saved to \(successURL.lastPathComponent)")
+                                .font(WalkmanFont.callout)
+                                .foregroundStyle(WalkmanTheme.silverMuted)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                         }
-                        .font(WalkmanFont.calloutBold)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(WalkmanTheme.silverGradient)
-                        .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+                        Spacer(minLength: 8)
+
+                        backupRevealInFinderButton(url: successURL)
+                        backupSuccessDismissButton
                     }
-                    .buttonStyle(.plain)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.system(size: 20))
+                                .foregroundStyle(Color.green)
+                                .fixedSize()
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Backup Completed Successfully!")
+                                    .font(WalkmanFont.bodyBold)
+                                    .foregroundStyle(.white)
+                                    .lineLimit(1)
+
+                                Text("Saved to \(successURL.lastPathComponent)")
+                                    .font(WalkmanFont.callout)
+                                    .foregroundStyle(WalkmanTheme.silverMuted)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+
+                            Spacer()
+
+                            backupSuccessDismissButton
+                        }
+
+                        backupRevealInFinderButton(url: successURL)
+                            .frame(maxWidth: .infinity)
+                    }
                 }
                 .padding(14)
                 .background(Color.green.opacity(0.1))
@@ -913,6 +1082,18 @@ public struct BackupRestoreView: View {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .stroke(Color.green.opacity(0.3), lineWidth: 1)
                 )
+                .onHover { hovering in
+                    isBackupSuccessHovered = hovering
+                    if hovering {
+                        backupSuccessDismissTask?.cancel()
+                    } else {
+                        scheduleBackupSuccessAutoDismiss(seconds: 5.0)
+                    }
+                }
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .scale(scale: 0.98)),
+                    removal: .opacity.combined(with: .move(edge: .top))
+                ))
             }
 
             if isBackingUp, let prog = backupProgress {
@@ -921,12 +1102,14 @@ public struct BackupRestoreView: View {
                         Text(prog.phase.rawValue)
                             .font(WalkmanFont.bodyBold)
                             .foregroundStyle(.white)
+                            .lineLimit(1)
 
                         Spacer()
 
                         Text("\(prog.itemsProcessed) of \(prog.totalItems) files (\(Int(prog.fractionCompleted * 100))%)")
                             .font(WalkmanFont.monoSmall)
                             .foregroundStyle(WalkmanTheme.silverMuted)
+                            .lineLimit(1)
                     }
 
                     ProgressView(value: prog.fractionCompleted)
@@ -945,6 +1128,7 @@ public struct BackupRestoreView: View {
                         Text("\(formatBytes(prog.bytesProcessed)) / \(formatBytes(prog.totalBytes))")
                             .font(WalkmanFont.monoSmall)
                             .foregroundStyle(WalkmanTheme.silverMuted)
+                            .lineLimit(1)
                     }
 
                     HStack {
@@ -961,33 +1145,40 @@ public struct BackupRestoreView: View {
                 .background(WalkmanTheme.card)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             } else {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Ready to Back Up")
-                            .font(WalkmanFont.bodyBold)
-                            .foregroundStyle(.white)
+                ViewThatFits(in: .horizontal) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Ready to Back Up")
+                                .font(WalkmanFont.bodyBold)
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
 
-                        Text("\(estimatedCount) files (\(formatBytes(estimatedBytes))) → \(currentDestination?.name ?? "Destination")")
-                            .font(WalkmanFont.callout)
-                            .foregroundStyle(WalkmanTheme.silverMuted)
-                    }
-
-                    Spacer()
-
-                    Button(action: { startBackup() }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: isEncrypted ? "lock.fill" : "arrow.up.circle.fill")
-                            Text(isEncrypted ? "Start Encrypted Backup" : "Start Backup")
+                            Text("\(estimatedCount) files (\(formatBytes(estimatedBytes))) → \(currentDestination?.name ?? "Destination")")
+                                .font(WalkmanFont.callout)
+                                .foregroundStyle(WalkmanTheme.silverMuted)
+                                .lineLimit(1)
                         }
-                        .font(WalkmanFont.bodyBold)
-                        .padding(.horizontal, 22)
-                        .padding(.vertical, 10)
-                        .background(canStartBackup ? WalkmanTheme.hiResGoldGradient : LinearGradient(colors: [Color.white.opacity(0.1), Color.white.opacity(0.05)], startPoint: .top, endPoint: .bottom))
-                        .foregroundStyle(canStartBackup ? Color(red: 20/255, green: 20/255, blue: 24/255) : Color.white.opacity(0.3))
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                        Spacer(minLength: 12)
+
+                        backupStartButton(fullWidth: false)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(!canStartBackup)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Ready to Back Up")
+                                .font(WalkmanFont.bodyBold)
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+
+                            Text("\(estimatedCount) files (\(formatBytes(estimatedBytes))) → \(currentDestination?.name ?? "Destination")")
+                                .font(WalkmanFont.callout)
+                                .foregroundStyle(WalkmanTheme.silverMuted)
+                                .lineLimit(1)
+                        }
+
+                        backupStartButton(fullWidth: true)
+                    }
                 }
                 .padding(14)
                 .background(WalkmanTheme.card)
@@ -998,6 +1189,63 @@ public struct BackupRestoreView: View {
                 )
             }
         }
+    }
+
+    private func backupRevealInFinderButton(url: URL) -> some View {
+        Button(action: {
+            NSWorkspace.shared.selectFile(url.path, inFileViewerRootedAtPath: url.deletingLastPathComponent().path)
+        }) {
+            HStack(spacing: 5) {
+                Image(systemName: "finder")
+                Text("Reveal in Finder")
+            }
+            .font(WalkmanFont.calloutBold)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(WalkmanTheme.silverGradient)
+            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var backupSuccessDismissButton: some View {
+        Button(action: {
+            backupSuccessDismissTask?.cancel()
+            withAnimation(.easeInOut(duration: 0.25)) {
+                backupSuccessURL = nil
+            }
+        }) {
+            Image(systemName: "xmark")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(WalkmanTheme.silverMuted)
+                .padding(6)
+                .background(Color.white.opacity(0.08))
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help("Dismiss")
+    }
+
+    private func backupStartButton(fullWidth: Bool) -> some View {
+        Button(action: { startBackup() }) {
+            HStack(spacing: 8) {
+                Image(systemName: isEncrypted ? "lock.fill" : "arrow.up.circle.fill")
+                Text(isEncrypted ? "Start Encrypted Backup" : "Start Backup")
+                    .lineLimit(1)
+            }
+            .font(WalkmanFont.bodyBold)
+            .padding(.horizontal, 22)
+            .padding(.vertical, 10)
+            .frame(maxWidth: fullWidth ? .infinity : nil)
+            .background(canStartBackup ? WalkmanTheme.hiResGoldGradient : LinearGradient(colors: [Color.white.opacity(0.1), Color.white.opacity(0.05)], startPoint: .top, endPoint: .bottom))
+            .foregroundStyle(canStartBackup ? Color(red: 20/255, green: 20/255, blue: 24/255) : Color.white.opacity(0.3))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(!canStartBackup)
     }
 
     private var canStartBackup: Bool {
@@ -1013,6 +1261,7 @@ public struct BackupRestoreView: View {
     private func startBackup() {
         guard let source = currentSourceDrive, let dest = currentDestination else { return }
         backupErrorMessage = nil
+        backupSuccessDismissTask?.cancel()
         backupSuccessURL = nil
         isBackingUp = true
 
@@ -1041,8 +1290,11 @@ public struct BackupRestoreView: View {
 
                 await MainActor.run {
                     self.isBackingUp = false
-                    self.backupSuccessURL = savedURL
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        self.backupSuccessURL = savedURL
+                    }
                     self.refreshDestinationsAsync()
+                    self.scheduleBackupSuccessAutoDismiss(seconds: 5.0)
                 }
             } catch {
                 await MainActor.run {
@@ -1080,30 +1332,25 @@ public struct BackupRestoreView: View {
     // MARK: - Discovered Backups Card
     private var discoveredBackupsCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("1. SELECT BACKUP ARCHIVE", systemImage: "clock.arrow.circlepath")
-                    .font(WalkmanFont.sectionHeader)
-                    .foregroundStyle(WalkmanTheme.hiResGold)
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    Label("1. SELECT BACKUP ARCHIVE", systemImage: "clock.arrow.circlepath")
+                        .font(WalkmanFont.sectionHeader)
+                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .lineLimit(1)
 
-                Spacer()
+                    Spacer(minLength: 8)
 
-                Button(action: { browseOtherBackupFile() }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "folder.badge.gearshape")
-                        Text("Browse Other Backup File...")
-                    }
-                    .font(WalkmanFont.calloutMedium)
-                    .foregroundStyle(WalkmanTheme.silverMuted)
+                    discoveredBackupsActions
                 }
-                .buttonStyle(.plain)
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("1. SELECT BACKUP ARCHIVE", systemImage: "clock.arrow.circlepath")
+                        .font(WalkmanFont.sectionHeader)
+                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .lineLimit(1)
 
-                Button(action: { refreshDestinationsAsync() }) {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 12))
-                        .foregroundStyle(WalkmanTheme.silverMuted)
+                    discoveredBackupsActions
                 }
-                .buttonStyle(.plain)
-                .help("Rescan backup destinations")
             }
 
             if discoveredBackups.isEmpty {
@@ -1115,8 +1362,9 @@ public struct BackupRestoreView: View {
                     Text("No Walkman Backups Found")
                         .font(WalkmanFont.bodyBold)
                         .foregroundStyle(.white)
+                        .lineLimit(1)
 
-                    Text("No .walkmanbackup or .walkmanbackup.enc archives found in local Mac storage or external drives. Click 'Browse Other Backup File...' to select an archive from Finder.")
+                    Text("No .walkmanbackup or .walkmanbackup.enc archives found in local Mac storage or external drives. Click 'Browse Other Backup...' to select an archive from Finder.")
                         .font(WalkmanFont.callout)
                         .foregroundStyle(WalkmanTheme.silverMuted)
                         .multilineTextAlignment(.center)
@@ -1141,6 +1389,7 @@ public struct BackupRestoreView: View {
                                         Text(b.manifest?.deviceName ?? b.filename)
                                             .font(WalkmanFont.bodyBold)
                                             .foregroundStyle(isSelected ? .white : .white.opacity(0.9))
+                                            .lineLimit(1)
 
                                         if b.isEncrypted {
                                             Text("AES-256-GCM")
@@ -1150,6 +1399,8 @@ public struct BackupRestoreView: View {
                                                 .background(WalkmanTheme.hiResGold.opacity(0.2))
                                                 .foregroundStyle(WalkmanTheme.hiResGold)
                                                 .clipShape(Capsule())
+                                                .lineLimit(1)
+                                                .fixedSize(horizontal: true, vertical: false)
                                         }
 
                                         Text(b.destinationType.rawValue)
@@ -1159,12 +1410,15 @@ public struct BackupRestoreView: View {
                                             .background(Color.white.opacity(0.06))
                                             .foregroundStyle(WalkmanTheme.silverMuted)
                                             .clipShape(Capsule())
+                                            .lineLimit(1)
+                                            .fixedSize(horizontal: true, vertical: false)
                                     }
 
                                     HStack(spacing: 8) {
                                         Text(b.manifest?.scopeSummary ?? (b.isEncrypted ? "Encrypted Archive" : "Walkman Bundle"))
                                             .font(WalkmanFont.calloutMedium)
                                             .foregroundStyle(WalkmanTheme.silverMuted)
+                                            .lineLimit(1)
 
                                         Text("•")
                                             .foregroundStyle(.secondary)
@@ -1172,6 +1426,7 @@ public struct BackupRestoreView: View {
                                         Text(b.dateModified.formatted(date: .abbreviated, time: .shortened))
                                             .font(WalkmanFont.callout)
                                             .foregroundStyle(.secondary)
+                                            .lineLimit(1)
 
                                         Text("•")
                                             .foregroundStyle(.secondary)
@@ -1179,14 +1434,16 @@ public struct BackupRestoreView: View {
                                         Text(formatBytes(b.sizeBytes))
                                             .font(WalkmanFont.monoSmall)
                                             .foregroundStyle(WalkmanTheme.silverMuted)
+                                            .lineLimit(1)
                                     }
                                 }
 
-                                Spacer()
+                                Spacer(minLength: 4)
 
                                 Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
                                     .font(.system(size: 16))
                                     .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : Color.white.opacity(0.2))
+                                    .fixedSize()
                             }
                             .padding(12)
                             .background(
@@ -1212,69 +1469,89 @@ public struct BackupRestoreView: View {
         )
     }
 
+    private var discoveredBackupsActions: some View {
+        HStack(spacing: 8) {
+            Button(action: { browseOtherBackupFile() }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "folder.badge.gearshape")
+                    Text("Browse Other Backup...")
+                }
+                .font(WalkmanFont.calloutMedium)
+                .foregroundStyle(WalkmanTheme.silverMuted)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+            }
+            .buttonStyle(.plain)
+
+            Button(action: { refreshDestinationsAsync() }) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 12))
+                    .foregroundStyle(WalkmanTheme.silverMuted)
+            }
+            .buttonStyle(.plain)
+            .help("Rescan backup destinations")
+        }
+    }
+
     // MARK: - Selected Backup Inspection Card
     private func backupInspectionCard(backup: DiscoveredBackup) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label("BACKUP METADATA & CONTENTS", systemImage: "info.circle.fill")
-                    .font(WalkmanFont.sectionHeader)
-                    .foregroundStyle(WalkmanTheme.hiResGold)
-
-                Spacer()
-
-                Text(backup.url.lastPathComponent)
-                    .font(WalkmanFont.monoSmall)
-                    .foregroundStyle(WalkmanTheme.silverMuted)
-            }
-
-            HStack(spacing: 20) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Source Model")
-                        .font(WalkmanFont.callout)
-                        .foregroundStyle(WalkmanTheme.silverMuted)
-                    Text(backup.manifest?.deviceName ?? "Sony Walkman")
-                        .font(WalkmanFont.bodyBold)
-                        .foregroundStyle(.white)
-                }
-
-                Divider().frame(height: 32).overlay(WalkmanTheme.border)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Created")
-                        .font(WalkmanFont.callout)
-                        .foregroundStyle(WalkmanTheme.silverMuted)
-                    Text(backup.dateModified.formatted(date: .abbreviated, time: .shortened))
-                        .font(WalkmanFont.bodyBold)
-                        .foregroundStyle(.white)
-                }
-
-                Divider().frame(height: 32).overlay(WalkmanTheme.border)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Total Size")
-                        .font(WalkmanFont.callout)
-                        .foregroundStyle(WalkmanTheme.silverMuted)
-                    Text(formatBytes(backup.sizeBytes))
-                        .font(WalkmanFont.mono)
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    Label("BACKUP METADATA & CONTENTS", systemImage: "info.circle.fill")
+                        .font(WalkmanFont.sectionHeader)
                         .foregroundStyle(WalkmanTheme.hiResGold)
-                }
+                        .lineLimit(1)
 
-                Divider().frame(height: 32).overlay(WalkmanTheme.border)
+                    Spacer(minLength: 8)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Files")
-                        .font(WalkmanFont.callout)
+                    Text(backup.url.lastPathComponent)
+                        .font(WalkmanFont.monoSmall)
                         .foregroundStyle(WalkmanTheme.silverMuted)
-                    Text(backup.manifest != nil ? "\(backup.manifest!.totalFiles) items" : "Protected")
-                        .font(WalkmanFont.bodyBold)
-                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
+                VStack(alignment: .leading, spacing: 3) {
+                    Label("BACKUP METADATA & CONTENTS", systemImage: "info.circle.fill")
+                        .font(WalkmanFont.sectionHeader)
+                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .lineLimit(1)
 
-                Spacer()
+                    Text(backup.url.lastPathComponent)
+                        .font(WalkmanFont.monoSmall)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
             }
-            .padding(12)
-            .background(Color.white.opacity(0.03))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            ViewThatFits(in: .horizontal) {
+                // Wide: 4-column horizontal stack
+                HStack(spacing: 20) {
+                    inspectionStatItem(title: "Source Model", value: backup.manifest?.deviceName ?? "Sony Walkman", isMono: false, isGold: false)
+                    Divider().frame(height: 32).overlay(WalkmanTheme.border)
+                    inspectionStatItem(title: "Created", value: backup.dateModified.formatted(date: .abbreviated, time: .shortened), isMono: false, isGold: false)
+                    Divider().frame(height: 32).overlay(WalkmanTheme.border)
+                    inspectionStatItem(title: "Total Size", value: formatBytes(backup.sizeBytes), isMono: true, isGold: true)
+                    Divider().frame(height: 32).overlay(WalkmanTheme.border)
+                    inspectionStatItem(title: "Files", value: backup.manifest != nil ? "\(backup.manifest!.totalFiles) items" : "Protected", isMono: false, isGold: false)
+                    Spacer()
+                }
+                .padding(12)
+                .background(Color.white.opacity(0.03))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                // Narrow: 2x2 grid
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    inspectionStatItem(title: "Source Model", value: backup.manifest?.deviceName ?? "Sony Walkman", isMono: false, isGold: false)
+                    inspectionStatItem(title: "Created", value: backup.dateModified.formatted(date: .abbreviated, time: .shortened), isMono: false, isGold: false)
+                    inspectionStatItem(title: "Total Size", value: formatBytes(backup.sizeBytes), isMono: true, isGold: true)
+                    inspectionStatItem(title: "Files", value: backup.manifest != nil ? "\(backup.manifest!.totalFiles) items" : "Protected", isMono: false, isGold: false)
+                }
+                .padding(12)
+                .background(Color.white.opacity(0.03))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
         }
         .padding(16)
         .background(WalkmanTheme.card)
@@ -1285,72 +1562,43 @@ public struct BackupRestoreView: View {
         )
     }
 
+    private func inspectionStatItem(title: String, value: String, isMono: Bool, isGold: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(WalkmanFont.callout)
+                .foregroundStyle(WalkmanTheme.silverMuted)
+                .lineLimit(1)
+            Text(value)
+                .font(isMono ? WalkmanFont.mono : WalkmanFont.bodyBold)
+                .foregroundStyle(isGold ? WalkmanTheme.hiResGold : .white)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     // MARK: - Target Walkman Card
     private var targetWalkmanCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label("2. TARGET WALKMAN RESTORE PARTITION", systemImage: "hifispeaker.fill")
-                    .font(WalkmanFont.sectionHeader)
-                    .foregroundStyle(WalkmanTheme.hiResGold)
-
-                Spacer()
-            }
+            Label("2. TARGET WALKMAN RESTORE PARTITION", systemImage: "hifispeaker.fill")
+                .font(WalkmanFont.sectionHeader)
+                .foregroundStyle(WalkmanTheme.hiResGold)
+                .lineLimit(1)
 
             if drives.isEmpty {
                 Text("No target Walkman connected to restore into.")
                     .font(WalkmanFont.callout)
                     .foregroundStyle(.secondary)
             } else {
-                HStack(spacing: 12) {
-                    ForEach(drives) { drive in
-                        let isSelected = currentTargetDrive?.mountPoint == drive.mountPoint
-                        Button(action: {
-                            targetDriveMount = drive.mountPoint
-                        }) {
-                            HStack(spacing: 12) {
-                                Image(systemName: drive.type == .internal ? "internaldrive.fill" : "sdcard.fill")
-                                    .font(.system(size: 18))
-                                    .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : WalkmanTheme.silverMuted)
-
-                                VStack(alignment: .leading, spacing: 2) {
-                                    HStack(spacing: 6) {
-                                        Text(drive.name)
-                                            .font(WalkmanFont.bodyBold)
-                                            .foregroundStyle(isSelected ? .white : .secondary)
-
-                                        Text(drive.type == .internal ? "Internal Flash" : "MicroSD Card")
-                                            .font(WalkmanFont.badge)
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 2)
-                                            .background(isSelected ? WalkmanTheme.hiResGold.opacity(0.18) : Color.white.opacity(0.06))
-                                            .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : .secondary)
-                                            .clipShape(Capsule())
-                                    }
-
-                                    Text("\(formatBytes(drive.freeBytes)) available")
-                                        .font(WalkmanFont.monoSmall)
-                                        .foregroundStyle(WalkmanTheme.silverMuted)
-                                }
-
-                                Spacer()
-
-                                if isSelected {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .font(.system(size: 16))
-                                        .foregroundStyle(WalkmanTheme.hiResGold)
-                                }
-                            }
-                            .padding(12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(isSelected ? Color.white.opacity(0.08) : Color.white.opacity(0.02))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .stroke(isSelected ? WalkmanTheme.hiResGold.opacity(0.6) : WalkmanTheme.border, lineWidth: isSelected ? 1.5 : 1)
-                            )
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) {
+                        ForEach(drives) { drive in
+                            targetPartitionDriveButton(drive: drive)
                         }
-                        .buttonStyle(.plain)
+                    }
+                    VStack(spacing: 8) {
+                        ForEach(drives) { drive in
+                            targetPartitionDriveButton(drive: drive)
+                        }
                     }
                 }
             }
@@ -1362,6 +1610,66 @@ public struct BackupRestoreView: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(WalkmanTheme.border, lineWidth: 1)
         )
+    }
+
+    private func targetPartitionDriveButton(drive: WalkmanDrive) -> some View {
+        let isSelected = currentTargetDrive?.mountPoint == drive.mountPoint
+        return Button(action: {
+            targetDriveMount = drive.mountPoint
+        }) {
+            HStack(spacing: 10) {
+                Image(systemName: drive.type == .internal ? "internaldrive.fill" : "sdcard.fill")
+                    .font(.system(size: 18))
+                    .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : WalkmanTheme.silverMuted)
+                    .frame(width: 22)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(cleanDriveName(drive))
+                            .font(WalkmanFont.bodyBold)
+                            .foregroundStyle(isSelected ? .white : .secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+
+                        Text(drive.type == .internal ? "Internal Flash" : "MicroSD Card")
+                            .font(WalkmanFont.badge)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(isSelected ? WalkmanTheme.hiResGold.opacity(0.18) : Color.white.opacity(0.06))
+                            .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : .secondary)
+                            .clipShape(Capsule())
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+
+                    Text("\(formatBytes(drive.freeBytes)) available")
+                        .font(WalkmanFont.monoSmall)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.9)
+                }
+
+                Spacer(minLength: 4)
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .fixedSize()
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(isSelected ? Color.white.opacity(0.08) : Color.white.opacity(0.02))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(isSelected ? WalkmanTheme.hiResGold.opacity(0.6) : WalkmanTheme.border, lineWidth: isSelected ? 1.5 : 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Restore Decryption Card
@@ -1410,6 +1718,7 @@ public struct BackupRestoreView: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 14))
                         .foregroundStyle(Color.red)
+                        .fixedSize()
                     Text(err)
                         .font(WalkmanFont.calloutMedium)
                         .foregroundStyle(Color.red)
@@ -1418,6 +1727,8 @@ public struct BackupRestoreView: View {
                         .font(WalkmanFont.calloutMedium)
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
                 .padding(12)
                 .background(Color.red.opacity(0.12))
@@ -1425,22 +1736,52 @@ public struct BackupRestoreView: View {
             }
 
             if let res = restoreSuccessResult {
-                HStack(spacing: 12) {
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 20))
-                        .foregroundStyle(Color.green)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 20))
+                            .foregroundStyle(Color.green)
+                            .fixedSize()
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Restore Completed Successfully!")
-                            .font(WalkmanFont.bodyBold)
-                            .foregroundStyle(.white)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Restore Completed Successfully!")
+                                .font(WalkmanFont.bodyBold)
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+
+                            Text("Restored \(res.totalFilesRestored) files (\(formatBytes(res.totalBytesRestored))) to Walkman. Ghost files purged & database ready.")
+                                .font(WalkmanFont.callout)
+                                .foregroundStyle(WalkmanTheme.silverMuted)
+                                .lineLimit(1)
+                        }
+
+                        Spacer(minLength: 8)
+
+                        restoreSuccessDismissButton
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.system(size: 20))
+                                .foregroundStyle(Color.green)
+                                .fixedSize()
+
+                            Text("Restore Completed Successfully!")
+                                .font(WalkmanFont.bodyBold)
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+
+                            Spacer()
+
+                            restoreSuccessDismissButton
+                        }
 
                         Text("Restored \(res.totalFilesRestored) files (\(formatBytes(res.totalBytesRestored))) to Walkman. Ghost files purged & database ready.")
                             .font(WalkmanFont.callout)
                             .foregroundStyle(WalkmanTheme.silverMuted)
+                            .lineLimit(2)
                     }
-
-                    Spacer()
                 }
                 .padding(14)
                 .background(Color.green.opacity(0.1))
@@ -1449,6 +1790,18 @@ public struct BackupRestoreView: View {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .stroke(Color.green.opacity(0.3), lineWidth: 1)
                 )
+                .onHover { hovering in
+                    isRestoreSuccessHovered = hovering
+                    if hovering {
+                        restoreSuccessDismissTask?.cancel()
+                    } else {
+                        scheduleRestoreSuccessAutoDismiss(seconds: 5.0)
+                    }
+                }
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .scale(scale: 0.98)),
+                    removal: .opacity.combined(with: .move(edge: .top))
+                ))
             }
 
             if isRestoring, let prog = restoreProgress {
@@ -1457,12 +1810,14 @@ public struct BackupRestoreView: View {
                         Text(prog.phase.rawValue)
                             .font(WalkmanFont.bodyBold)
                             .foregroundStyle(.white)
+                            .lineLimit(1)
 
                         Spacer()
 
                         Text("\(prog.itemsProcessed) of \(prog.totalItems) files (\(Int(prog.fractionCompleted * 100))%)")
                             .font(WalkmanFont.monoSmall)
                             .foregroundStyle(WalkmanTheme.silverMuted)
+                            .lineLimit(1)
                     }
 
                     ProgressView(value: prog.fractionCompleted)
@@ -1481,6 +1836,7 @@ public struct BackupRestoreView: View {
                         Text("\(formatBytes(prog.bytesProcessed)) / \(formatBytes(prog.totalBytes))")
                             .font(WalkmanFont.monoSmall)
                             .foregroundStyle(WalkmanTheme.silverMuted)
+                            .lineLimit(1)
                     }
 
                     HStack {
@@ -1497,33 +1853,41 @@ public struct BackupRestoreView: View {
                 .background(WalkmanTheme.card)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             } else {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Restore into \(currentTargetDrive?.name ?? "Walkman")")
-                            .font(WalkmanFont.bodyBold)
-                            .foregroundStyle(.white)
+                let targetName = currentTargetDrive != nil ? cleanDriveName(currentTargetDrive!) : "Walkman"
+                ViewThatFits(in: .horizontal) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Restore into \(targetName)")
+                                .font(WalkmanFont.bodyBold)
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
 
-                        Text("Reconstructs clean /MUSIC and /LEARNING directory trees without macOS ghost files.")
-                            .font(WalkmanFont.callout)
-                            .foregroundStyle(WalkmanTheme.silverMuted)
-                    }
-
-                    Spacer()
-
-                    Button(action: { startRestore() }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "arrow.down.circle.fill")
-                            Text("Restore to Walkman")
+                            Text("Reconstructs clean /MUSIC and /LEARNING directory trees without ghost files.")
+                                .font(WalkmanFont.callout)
+                                .foregroundStyle(WalkmanTheme.silverMuted)
+                                .lineLimit(1)
                         }
-                        .font(WalkmanFont.bodyBold)
-                        .padding(.horizontal, 22)
-                        .padding(.vertical, 10)
-                        .background(canStartRestore ? WalkmanTheme.hiResGoldGradient : LinearGradient(colors: [Color.white.opacity(0.1), Color.white.opacity(0.05)], startPoint: .top, endPoint: .bottom))
-                        .foregroundStyle(canStartRestore ? Color(red: 20/255, green: 20/255, blue: 24/255) : Color.white.opacity(0.3))
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                        Spacer(minLength: 12)
+
+                        restoreStartButton(fullWidth: false)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(!canStartRestore)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Restore into \(targetName)")
+                                .font(WalkmanFont.bodyBold)
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+
+                            Text("Reconstructs clean /MUSIC and /LEARNING directory trees without ghost files.")
+                                .font(WalkmanFont.callout)
+                                .foregroundStyle(WalkmanTheme.silverMuted)
+                                .lineLimit(1)
+                        }
+
+                        restoreStartButton(fullWidth: true)
+                    }
                 }
                 .padding(14)
                 .background(WalkmanTheme.card)
@@ -1534,6 +1898,43 @@ public struct BackupRestoreView: View {
                 )
             }
         }
+    }
+
+    private var restoreSuccessDismissButton: some View {
+        Button(action: {
+            restoreSuccessDismissTask?.cancel()
+            withAnimation(.easeInOut(duration: 0.25)) {
+                restoreSuccessResult = nil
+            }
+        }) {
+            Image(systemName: "xmark")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(WalkmanTheme.silverMuted)
+                .padding(6)
+                .background(Color.white.opacity(0.08))
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help("Dismiss")
+    }
+
+    private func restoreStartButton(fullWidth: Bool) -> some View {
+        Button(action: { startRestore() }) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.down.circle.fill")
+                Text("Restore to Walkman")
+                    .lineLimit(1)
+            }
+            .font(WalkmanFont.bodyBold)
+            .padding(.horizontal, 22)
+            .padding(.vertical, 10)
+            .frame(maxWidth: fullWidth ? .infinity : nil)
+            .background(canStartRestore ? WalkmanTheme.hiResGoldGradient : LinearGradient(colors: [Color.white.opacity(0.1), Color.white.opacity(0.05)], startPoint: .top, endPoint: .bottom))
+            .foregroundStyle(canStartRestore ? Color(red: 20/255, green: 20/255, blue: 24/255) : Color.white.opacity(0.3))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(!canStartRestore)
     }
 
     private var canStartRestore: Bool {
@@ -1549,6 +1950,7 @@ public struct BackupRestoreView: View {
     private func startRestore() {
         guard let backup = selectedBackup, let target = currentTargetDrive else { return }
         restoreErrorMessage = nil
+        restoreSuccessDismissTask?.cancel()
         restoreSuccessResult = nil
         isRestoring = true
 
@@ -1568,8 +1970,11 @@ public struct BackupRestoreView: View {
 
                 await MainActor.run {
                     self.isRestoring = false
-                    self.restoreSuccessResult = result
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        self.restoreSuccessResult = result
+                    }
                     self.onRestoreComplete()
+                    self.scheduleRestoreSuccessAutoDismiss(seconds: 5.0)
                 }
             } catch {
                 await MainActor.run {
@@ -1822,5 +2227,55 @@ public struct BackupRestoreView: View {
         }
         .frame(minWidth: 580, minHeight: 480)
         .background(WalkmanTheme.background)
+    }
+}
+
+// -----------------------------------------------------------------------------
+// MODE SWITCHER TAB BUTTON (ROUNDED CLICK BOX WITH HOVER EFFECT)
+// -----------------------------------------------------------------------------
+private struct ModeSwitcherTabButton: View {
+    let mode: BackupRestoreView.Mode
+    let isSelected: Bool
+    let onSelect: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 6) {
+                Image(systemName: mode == .backup ? "arrow.up.doc.fill" : "arrow.down.doc.fill")
+                    .font(.system(size: 11))
+                Text(mode.rawValue)
+                    .font(WalkmanFont.calloutBold)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(isSelected ? Color.white.opacity(0.14) : (isHovered ? Color.white.opacity(0.08) : Color.white.opacity(0.001)))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(
+                        isSelected ? Color.white.opacity(0.30) : (isHovered ? Color.white.opacity(0.18) : Color.clear),
+                        lineWidth: 0.8
+                    )
+            )
+            .foregroundStyle(isSelected ? .white : (isHovered ? .white : .secondary))
+            .scaleEffect(isHovered ? 1.025 : 1.0)
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .onHover { hovering in
+            guard isHovered != hovering else { return }
+            isHovered = hovering
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+        .onDisappear {
+            if isHovered { isHovered = false; NSCursor.pop() }
+        }
+        .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+        .animation(.easeInOut(duration: 0.12), value: isSelected)
     }
 }

@@ -52,7 +52,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
     }
 
     private func setupTimeObserver() {
-        let interval = CMTime(seconds: 0.25, preferredTimescale: 600)
+        let interval = CMTime(seconds: 0.1, preferredTimescale: 600)
         timeObserverToken = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             guard let self = self, !self.isSeeking else { return }
             self.progress.currentTime = CMTimeGetSeconds(time)
@@ -69,8 +69,11 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
         }
     }
 
-    public func prepare(track: Track, in queue: [Track] = [], autoPlay: Bool = false) {
+    public func prepare(track: Track, in queue: [Track] = [], autoPlay: Bool = false, startTime: Double? = nil) {
         if let current = currentTrack, current.id == track.id {
+            if let start = startTime {
+                seek(to: start)
+            }
             if autoPlay && !isPlaying {
                 player.play()
                 self.isPlaying = true
@@ -81,7 +84,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
         if !queue.isEmpty {
             self.currentQueue = queue
         }
-        self.progress.currentTime = 0.0
+        let initialTime = startTime ?? 0.0
+        self.progress.currentTime = initialTime
         self.progress.duration = track.durationSeconds
         self.isPlaying = autoPlay
 
@@ -95,6 +99,13 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
             DispatchQueue.main.async {
                 guard let self = self, self.currentTrack?.id == track.id else { return }
                 self.player.replaceCurrentItem(with: item)
+                if initialTime > 0 {
+                    self.isSeeking = true
+                    let target = CMTime(seconds: initialTime, preferredTimescale: 600)
+                    self.player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+                        self?.isSeeking = false
+                    }
+                }
                 if autoPlay {
                     self.player.play()
                     self.isPlaying = true
@@ -105,10 +116,13 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
         loadArtwork(for: track)
     }
 
-    public func play(track: Track, coverArt: NSImage? = nil, in queue: [Track] = []) {
+    public func play(track: Track, coverArt: NSImage? = nil, in queue: [Track] = [], startTime: Double? = nil) {
         if currentTrack?.id == track.id {
             if let cover = coverArt {
                 self.currentCoverArt = cover
+            }
+            if let start = startTime {
+                seek(to: start)
             }
             if !isPlaying {
                 player.play()
@@ -117,7 +131,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
             return
         }
 
-        prepare(track: track, in: queue, autoPlay: true)
+        prepare(track: track, in: queue, autoPlay: true, startTime: startTime)
         if let cover = coverArt {
             self.currentCoverArt = cover
         }
@@ -150,10 +164,32 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
     }
 
     public func seek(to seconds: Double) {
+        self.isSeeking = true
         progress.currentTime = seconds
         let targetTime = CMTime(seconds: seconds, preferredTimescale: 600)
         player.seek(to: targetTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
             self?.isSeeking = false
+        }
+    }
+
+    /// Accurately jump to a specific timestamp in a track, seamlessly loading/playing it if necessary.
+    public func seekTo(time seconds: Double, in track: Track? = nil) {
+        let targetTrack = track ?? currentTrack
+        guard let target = targetTrack else { return }
+
+        if currentTrack?.id == target.id && player.currentItem != nil {
+            self.isSeeking = true
+            self.progress.currentTime = seconds
+            let targetTime = CMTime(seconds: seconds, preferredTimescale: 600)
+            player.seek(to: targetTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+                self?.isSeeking = false
+            }
+            if !isPlaying {
+                player.play()
+                self.isPlaying = true
+            }
+        } else {
+            play(track: target, startTime: seconds)
         }
     }
 
@@ -182,6 +218,18 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
                 play(track: currentQueue[prevIdx], in: currentQueue)
             } else {
                 seek(to: 0)
+            }
+        }
+    }
+
+    public func updateTrackInfo(track: Track) {
+        if currentTrack?.id == track.id {
+            self.currentTrack = track
+            loadArtwork(for: track)
+        }
+        for (idx, tr) in currentQueue.enumerated() {
+            if tr.id == track.id {
+                currentQueue[idx] = track
             }
         }
     }

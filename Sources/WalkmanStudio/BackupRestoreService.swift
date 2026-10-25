@@ -2,6 +2,7 @@ import Foundation
 import CommonCrypto
 import CryptoKit
 import AppKit
+import Darwin
 
 // MARK: - Enums & Models
 
@@ -693,8 +694,10 @@ public final class BackupRestoreService: @unchecked Sendable {
             var countBig = UInt32(totalCount).bigEndian
             handle.write(Data(bytes: &countBig, count: 4))
 
-            // Stream and encrypt each file
+            // Stream and encrypt each file with throttled progress reporting
             var bytesDone: Int64 = 0
+            var lastProgressTime: CFAbsoluteTime = 0
+
             for (idx, item) in files.enumerated() {
                 if isCancelled {
                     try? handle.close()
@@ -702,16 +705,28 @@ public final class BackupRestoreService: @unchecked Sendable {
                     throw NSError(domain: "BackupRestore", code: -999, userInfo: [NSLocalizedDescriptionKey: "Backup cancelled by user."])
                 }
 
-                onProgress(BackupProgress(
-                    phase: .encrypting,
-                    currentItemName: item.sourceURL.lastPathComponent,
-                    itemsProcessed: idx,
-                    totalItems: totalCount,
-                    bytesProcessed: bytesDone,
-                    totalBytes: totalBytes
-                ))
+                let now = CFAbsoluteTimeGetCurrent()
+                if now - lastProgressTime >= 0.08 || idx == 0 || idx == totalCount - 1 {
+                    lastProgressTime = now
+                    onProgress(BackupProgress(
+                        phase: .encrypting,
+                        currentItemName: item.sourceURL.lastPathComponent,
+                        itemsProcessed: idx,
+                        totalItems: totalCount,
+                        bytesProcessed: bytesDone,
+                        totalBytes: totalBytes
+                    ))
+                }
 
-                let fileData = try Data(contentsOf: item.sourceURL, options: .mappedIfSafe)
+                // Sequential direct stream read (avoids 4KB page fault penalties over USB 2.0 FAT32)
+                let fileData: Data
+                if let readHandle = try? FileHandle(forReadingFrom: item.sourceURL) {
+                    fileData = readHandle.readDataToEndOfFile()
+                    try? readHandle.close()
+                } else {
+                    fileData = try Data(contentsOf: item.sourceURL)
+                }
+
                 let sealedFile = try AES.GCM.seal(fileData, using: key).combined!
                 var dLen = UInt64(sealedFile.count).bigEndian
                 handle.write(Data(bytes: &dLen, count: 8))
@@ -743,33 +758,53 @@ public final class BackupRestoreService: @unchecked Sendable {
             let manifestData = try encoder.encode(manifest)
             try manifestData.write(to: manifestURL, options: .atomic)
 
-            // Copy each file into mirrored relative structure
+            // Copy each file into mirrored relative structure with kernel-level copyfile and directory caching
             var bytesDone: Int64 = 0
+            var createdDirs = Set<String>()
+            var lastProgressTime: CFAbsoluteTime = 0
+
             for (idx, item) in files.enumerated() {
                 if isCancelled {
                     try? fm.removeItem(at: bundleURL)
                     throw NSError(domain: "BackupRestore", code: -999, userInfo: [NSLocalizedDescriptionKey: "Backup cancelled by user."])
                 }
 
-                onProgress(BackupProgress(
-                    phase: .copying,
-                    currentItemName: item.sourceURL.lastPathComponent,
-                    itemsProcessed: idx,
-                    totalItems: totalCount,
-                    bytesProcessed: bytesDone,
-                    totalBytes: totalBytes
-                ))
+                let now = CFAbsoluteTimeGetCurrent()
+                if now - lastProgressTime >= 0.08 || idx == 0 || idx == totalCount - 1 {
+                    lastProgressTime = now
+                    onProgress(BackupProgress(
+                        phase: .copying,
+                        currentItemName: item.sourceURL.lastPathComponent,
+                        itemsProcessed: idx,
+                        totalItems: totalCount,
+                        bytesProcessed: bytesDone,
+                        totalBytes: totalBytes
+                    ))
+                }
 
                 let targetFileURL = bundleURL.appendingPathComponent(item.relativePath)
                 let parentDir = targetFileURL.deletingLastPathComponent()
-                if !fm.fileExists(atPath: parentDir.path) {
-                    try fm.createDirectory(at: parentDir, withIntermediateDirectories: true)
+                let parentDirPath = parentDir.path
+
+                // Ensure parent directory exists (cached to avoid redundant disk stats)
+                if !createdDirs.contains(parentDirPath) {
+                    if !fm.fileExists(atPath: parentDirPath) {
+                        try fm.createDirectory(at: parentDir, withIntermediateDirectories: true)
+                    }
+                    createdDirs.insert(parentDirPath)
                 }
 
-                if fm.fileExists(atPath: targetFileURL.path) {
-                    try fm.removeItem(at: targetFileURL)
+                // Fast kernel-level copy via copyfile(3)
+                // Uses optimized 1MB-4MB kernel buffers and APFS cloning where supported
+                let srcPath = item.sourceURL.path
+                let dstPath = targetFileURL.path
+                let status = copyfile(srcPath, dstPath, nil, copyfile_flags_t(COPYFILE_ALL | COPYFILE_UNLINK))
+                if status != 0 {
+                    if fm.fileExists(atPath: dstPath) {
+                        try? fm.removeItem(at: targetFileURL)
+                    }
+                    try fm.copyItem(at: item.sourceURL, to: targetFileURL)
                 }
-                try fm.copyItem(at: item.sourceURL, to: targetFileURL)
 
                 bytesDone += item.sizeBytes
             }
@@ -954,19 +989,26 @@ public final class BackupRestoreService: @unchecked Sendable {
             let fileCount = Int(countData.withUnsafeBytes { $0.load(as: UInt32.self).bigEndian })
 
             var bytesRestored: Int64 = 0
+            var createdDirs = Set<String>()
+            var lastProgressTime: CFAbsoluteTime = 0
+
             for (idx, entry) in manifest.files.enumerated() {
                 if isCancelled {
                     throw NSError(domain: "BackupRestore", code: -999, userInfo: [NSLocalizedDescriptionKey: "Restore cancelled by user."])
                 }
 
-                onProgress(BackupProgress(
-                    phase: .decrypting,
-                    currentItemName: (entry.relativePath as NSString).lastPathComponent,
-                    itemsProcessed: idx,
-                    totalItems: fileCount,
-                    bytesProcessed: bytesRestored,
-                    totalBytes: manifest.totalBytes
-                ))
+                let now = CFAbsoluteTimeGetCurrent()
+                if now - lastProgressTime >= 0.08 || idx == 0 || idx == fileCount - 1 {
+                    lastProgressTime = now
+                    onProgress(BackupProgress(
+                        phase: .decrypting,
+                        currentItemName: (entry.relativePath as NSString).lastPathComponent,
+                        itemsProcessed: idx,
+                        totalItems: fileCount,
+                        bytesProcessed: bytesRestored,
+                        totalBytes: manifest.totalBytes
+                    ))
+                }
 
                 let lenData = handle.readData(ofLength: 8)
                 guard lenData.count == 8 else { break }
@@ -981,17 +1023,22 @@ public final class BackupRestoreService: @unchecked Sendable {
                     throw NSError(domain: "BackupRestore", code: 500, userInfo: [NSLocalizedDescriptionKey: "Failed to decrypt \(entry.relativePath). File may be corrupted."])
                 }
 
-                // Write file to Walkman target
+                // Write file to Walkman target (direct write avoids slow .atomic rename on FAT32/exFAT)
                 let targetURL = targetMountURL.appendingPathComponent(entry.relativePath)
                 let parentDir = targetURL.deletingLastPathComponent()
-                if !fm.fileExists(atPath: parentDir.path) {
-                    try fm.createDirectory(at: parentDir, withIntermediateDirectories: true)
+                let parentDirPath = parentDir.path
+
+                if !createdDirs.contains(parentDirPath) {
+                    if !fm.fileExists(atPath: parentDirPath) {
+                        try fm.createDirectory(at: parentDir, withIntermediateDirectories: true)
+                    }
+                    createdDirs.insert(parentDirPath)
                 }
 
                 if fm.fileExists(atPath: targetURL.path) {
                     try? fm.removeItem(at: targetURL)
                 }
-                try fileBytes.write(to: targetURL, options: .atomic)
+                try fileBytes.write(to: targetURL)
 
                 bytesRestored += entry.sizeBytes
             }
@@ -1022,34 +1069,50 @@ public final class BackupRestoreService: @unchecked Sendable {
 
             var bytesRestored: Int64 = 0
             let totalCount = manifest.files.count
+            var createdDirs = Set<String>()
+            var lastProgressTime: CFAbsoluteTime = 0
 
             for (idx, entry) in manifest.files.enumerated() {
                 if isCancelled {
                     throw NSError(domain: "BackupRestore", code: -999, userInfo: [NSLocalizedDescriptionKey: "Restore cancelled by user."])
                 }
 
-                onProgress(BackupProgress(
-                    phase: .restoring,
-                    currentItemName: (entry.relativePath as NSString).lastPathComponent,
-                    itemsProcessed: idx,
-                    totalItems: totalCount,
-                    bytesProcessed: bytesRestored,
-                    totalBytes: manifest.totalBytes
-                ))
+                let now = CFAbsoluteTimeGetCurrent()
+                if now - lastProgressTime >= 0.08 || idx == 0 || idx == totalCount - 1 {
+                    lastProgressTime = now
+                    onProgress(BackupProgress(
+                        phase: .restoring,
+                        currentItemName: (entry.relativePath as NSString).lastPathComponent,
+                        itemsProcessed: idx,
+                        totalItems: totalCount,
+                        bytesProcessed: bytesRestored,
+                        totalBytes: manifest.totalBytes
+                    ))
+                }
 
                 let sourceFileURL = backupURL.appendingPathComponent(entry.relativePath)
                 let targetFileURL = targetMountURL.appendingPathComponent(entry.relativePath)
 
                 if fm.fileExists(atPath: sourceFileURL.path) {
                     let parentDir = targetFileURL.deletingLastPathComponent()
-                    if !fm.fileExists(atPath: parentDir.path) {
-                        try fm.createDirectory(at: parentDir, withIntermediateDirectories: true)
+                    let parentDirPath = parentDir.path
+
+                    if !createdDirs.contains(parentDirPath) {
+                        if !fm.fileExists(atPath: parentDirPath) {
+                            try fm.createDirectory(at: parentDir, withIntermediateDirectories: true)
+                        }
+                        createdDirs.insert(parentDirPath)
                     }
 
-                    if fm.fileExists(atPath: targetFileURL.path) {
-                        try? fm.removeItem(at: targetFileURL)
+                    let srcPath = sourceFileURL.path
+                    let dstPath = targetFileURL.path
+                    let status = copyfile(srcPath, dstPath, nil, copyfile_flags_t(COPYFILE_ALL | COPYFILE_UNLINK))
+                    if status != 0 {
+                        if fm.fileExists(atPath: dstPath) {
+                            try? fm.removeItem(at: targetFileURL)
+                        }
+                        try fm.copyItem(at: sourceFileURL, to: targetFileURL)
                     }
-                    try fm.copyItem(at: sourceFileURL, to: targetFileURL)
                 }
 
                 bytesRestored += entry.sizeBytes

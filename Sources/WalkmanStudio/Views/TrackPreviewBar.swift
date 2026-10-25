@@ -77,7 +77,7 @@ public struct TrackPreviewBar: View {
                                             RoundedRectangle(cornerRadius: 3, style: .continuous)
                                                 .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
                                         )
-                                        .shadow(color: WalkmanTheme.hiResGold.opacity(player.isPlaying ? 0.45 : 0.2), radius: player.isPlaying ? 4 : 2)
+                                        .shadow(color: Color.black.opacity(0.2), radius: 1.5, x: 0, y: 0.5)
                                         .fixedSize()
                                 }
                             }

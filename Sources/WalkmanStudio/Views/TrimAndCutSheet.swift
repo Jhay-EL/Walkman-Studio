@@ -756,7 +756,7 @@ public struct TrimAndCutSheet: View {
                         Rectangle()
                             .fill(WalkmanTheme.hiResGoldLight)
                             .frame(width: 2.0, height: h)
-                            .shadow(color: WalkmanTheme.hiResGold.opacity(0.75), radius: 2.5, x: 0, y: 0)
+                            .shadow(color: Color.black.opacity(0.35), radius: 1.5, x: 0, y: 0.5)
                             .offset(x: lineX, y: 0)
 
                         // 2. Start Badge Handle (Center is anchored directly to gold line)
@@ -812,7 +812,7 @@ public struct TrimAndCutSheet: View {
                         Rectangle()
                             .fill(WalkmanTheme.hiResGoldLight)
                             .frame(width: 2.0, height: h)
-                            .shadow(color: WalkmanTheme.hiResGold.opacity(0.75), radius: 2.5, x: 0, y: 0)
+                            .shadow(color: Color.black.opacity(0.35), radius: 1.5, x: 0, y: 0.5)
                             .offset(x: lineX, y: 0)
 
                         // 2. End Badge Handle (Center is anchored directly to gold line)
@@ -865,7 +865,7 @@ public struct TrimAndCutSheet: View {
                         Rectangle()
                             .fill(Color.white)
                             .frame(width: 1.5, height: h)
-                            .shadow(color: Color.white.opacity(0.95), radius: 3, x: 0, y: 0)
+                            .shadow(color: Color.black.opacity(0.4), radius: 1.5, x: 0, y: 0.5)
                             .offset(x: pLineX, y: 0)
 
                         // Downward White Triangle Cap
