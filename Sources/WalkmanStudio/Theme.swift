@@ -361,3 +361,73 @@ public struct WalkmanSideActionButtonStyle: ButtonStyle {
         }
     }
 }
+
+// =============================================================================
+// TABLE VIEW BOTTOM SCROLL INSET MODIFIER
+// Ensures NSTableView in SwiftUI Table extends edge-to-edge behind floating
+// player containers while preserving bottom padding so the final rows and
+// scrollers are never obstructed.
+// =============================================================================
+
+public struct TableScrollInsetModifier: NSViewRepresentable {
+    public var bottomInset: CGFloat = 88
+    
+    public init(bottomInset: CGFloat = 88) {
+        self.bottomInset = bottomInset
+    }
+
+    public func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        view.wantsLayer = true
+        view.layer?.backgroundColor = NSColor.clear.cgColor
+        DispatchQueue.main.async { [weak view] in
+            guard let view = view else { return }
+            applyInset(from: view)
+        }
+        return view
+    }
+
+    public func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { [weak nsView] in
+            guard let nsView = nsView else { return }
+            applyInset(from: nsView)
+        }
+    }
+
+    private func applyInset(from view: NSView) {
+        var current: NSView? = view
+        var attempts = 0
+        while let c = current, attempts < 10 {
+            if let tableView = findTableView(in: c), let scrollView = tableView.enclosingScrollView {
+                scrollView.automaticallyAdjustsContentInsets = false
+                if scrollView.contentInsets.bottom != bottomInset {
+                    scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0)
+                }
+                if scrollView.scrollerInsets.bottom != bottomInset {
+                    scrollView.scrollerInsets = NSEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0)
+                }
+                return
+            }
+            current = c.superview
+            attempts += 1
+        }
+    }
+
+    private func findTableView(in view: NSView) -> NSTableView? {
+        if let tv = view as? NSTableView {
+            return tv
+        }
+        for sub in view.subviews {
+            if let tv = findTableView(in: sub) {
+                return tv
+            }
+        }
+        return nil
+    }
+}
+
+public extension View {
+    func tableScrollBottomInset(_ inset: CGFloat = 88) -> some View {
+        self.background(TableScrollInsetModifier(bottomInset: inset))
+    }
+}
