@@ -3,6 +3,7 @@ import AppKit
 
 extension Notification.Name {
     public static let showAboutWalkmanStudio = Notification.Name("showAboutWalkmanStudio")
+    public static let trackMetadataDidUpdate = Notification.Name("WalkmanStudio.trackMetadataDidUpdate")
 }
 
 public struct WindowConfigurator: NSViewRepresentable {
@@ -31,6 +32,27 @@ public struct WindowConfigurator: NSViewRepresentable {
         window.titlebarSeparatorStyle = .none
         window.isOpaque = true
         window.backgroundColor = NSColor(red: 16/255, green: 17/255, blue: 20/255, alpha: 1.0)
+        
+        // Enforce 1366x768 minimum window size constraint so buttons, navigation, and labels display properly
+        let minW: CGFloat = 1366
+        let minH: CGFloat = 768
+        window.minSize = NSSize(width: minW, height: minH)
+        window.contentMinSize = NSSize(width: minW, height: minH)
+        
+        var frame = window.frame
+        var needsResize = false
+        if frame.size.width < minW {
+            frame.size.width = minW
+            needsResize = true
+        }
+        if frame.size.height < minH {
+            frame.origin.y -= (minH - frame.size.height)
+            frame.size.height = minH
+            needsResize = true
+        }
+        if needsResize {
+            window.setFrame(frame, display: true, animate: false)
+        }
         
         // Ensure the titlebar/toolbar container background and decoration views are transparent
         if let contentView = window.contentView, let themeFrame = contentView.superview {
@@ -66,9 +88,10 @@ struct WalkmanStudioApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .frame(minWidth: 780, minHeight: 520)
+                .frame(minWidth: 1366, idealWidth: 1440, minHeight: 768, idealHeight: 900)
                 .background(WindowConfigurator())
         }
+        .defaultSize(width: 1440, height: 900)
         .windowToolbarStyle(.unified(showsTitle: false))
         .commands {
             SidebarCommands()

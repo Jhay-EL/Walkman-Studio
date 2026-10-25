@@ -39,18 +39,16 @@ public struct ContentView: View {
     @ObservedObject private var duplicateFinder = DuplicateFinderService.shared
     
     private var selectedTrack: Track? {
-        // When music is playing or loaded on the music player, make sure the music details panel matches what is playing
+        if let id = selectedTrackId, let tr = tracks.first(where: { $0.id == id }) {
+            return tr
+        }
         if let playing = player.currentTrack {
-            if player.isPlaying || selectedTrackId == nil || selectedTrackId == playing.id {
-                return playing
-            }
-            if let id = selectedTrackId, let tr = tracks.first(where: { $0.id == id }) {
+            if let tr = tracks.first(where: { $0.id == playing.id }) {
                 return tr
             }
             return playing
         }
-        guard let id = selectedTrackId else { return nil }
-        return tracks.first(where: { $0.id == id })
+        return nil
     }
     
     private func selectDevice(_ device: WalkmanDevice) {
@@ -514,7 +512,7 @@ public struct ContentView: View {
                         },
                         onOpenAbout: { self.showAboutSheet = true }
                     )
-                    .navigationSplitViewColumnWidth(min: 220, ideal: 220, max: 220)
+                    .navigationSplitViewColumnWidth(min: 260, ideal: 275, max: 320)
                     .animation(nil, value: showInspector)
                     .toolbarBackground(.hidden, for: .windowToolbar)
                 } detail: {
@@ -636,15 +634,26 @@ public struct ContentView: View {
                             case .hiRes:
                                 HiResAudioView(
                                     tracks: tracks,
+                                    precomputedAlbums: cachedAlbums,
+                                    precomputedArtists: cachedArtists,
                                     onSelectTrack: { track in
                                         self.selectedTrackId = track.id
                                         self.showInspector = true
+                                    },
+                                    onEditAlbum: { album in
+                                        self.albumToEdit = album
                                     },
                                     onEditTrack: { track in
                                         self.trackToEdit = track
                                     },
                                     onTrimCutTrack: { track in
                                         self.trackToTrimCut = track
+                                    },
+                                    onDeleteAlbum: { album in
+                                        deleteAlbumFromDevice(album)
+                                    },
+                                    onDeleteTrack: { track in
+                                        deleteTrackFromDevice(track)
                                     }
                                 )
                                 
@@ -788,8 +797,14 @@ public struct ContentView: View {
         .sheet(item: $trackToEdit) { track in
             SongMetadataEditorSheet(
                 track: track,
-                onSaved: {
-                    refreshLibrary()
+                onSavedTrack: { updatedTrack in
+                    if let idx = self.tracks.firstIndex(where: { $0.id == updatedTrack.id }) {
+                        self.tracks[idx] = updatedTrack
+                    }
+                    if self.player.currentTrack?.id == updatedTrack.id {
+                        self.player.updateTrackInfo(track: updatedTrack)
+                    }
+                    self.refreshLibrary()
                 },
                 onDismiss: {
                     trackToEdit = nil

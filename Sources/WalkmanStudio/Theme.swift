@@ -1,6 +1,23 @@
 import SwiftUI
 import AppKit
 
+// =============================================================================
+// WALKMAN STUDIO DESIGN SYSTEM LANGUAGE
+//
+// Core Principles:
+// 1. Zero Background Gradients:
+//    All main backdrops, sidebars, panels, and view containers use pure, solid
+//    matte obsidian (#101114) and dark card surfaces (#18191D). Ambient gradient
+//    washes, atmospheric caustics, and background gradients are strictly avoided.
+// 2. Zero Glow / Bloom Effects:
+//    No colored luminescence, neon aura, or glowing shadows. The interface
+//    embraces the authentic, tactile industrial design of Sony Walkman hardware
+//    (brushed aluminum, matte finishes, crisp borders).
+// 3. Tactile Physical Depth:
+//    Spatial depth is achieved exclusively through subtle, neutral black drop
+//    shadows (Color.black) and crisp, precise physical borders.
+// =============================================================================
+
 public enum WalkmanTheme {
     // Sony Walkman NW-A55 Ash Grey & Silver Palette
     public static let silver = Color(red: 220 / 255, green: 224 / 255, blue: 232 / 255) // #DCE0E8 Minimal Crisp Silver
@@ -22,9 +39,10 @@ public enum WalkmanTheme {
     public static let gold = hiResGold
     public static let brass = silverMuted
     public static let goldLight = hiResGoldLight
-    public static let goldGlow = hiResGold.opacity(0.3)
+    // Deprecated glow alias: design system strictly enforces zero glow
+    public static let goldGlow = Color.clear
 
-    // Obsidian & Slate Surface Palette
+    // Obsidian & Slate Surface Palette (Clean, Flat, Non-Gradient Solids)
     public static let obsidian = Color(red: 16 / 255, green: 17 / 255, blue: 20 / 255) // #101114 Deep matte body
     public static let background = obsidian
     public static let card = Color(red: 24 / 255, green: 25 / 255, blue: 29 / 255) // #18191D Minimal card
@@ -89,31 +107,184 @@ public enum WalkmanFont {
 public struct LiquidGlassModifier: ViewModifier {
     var cornerRadius: CGFloat = 12
     var borderOpacity: Double = 0.35
-    var hasGoldGlow: Bool = false
+    var hasGoldGlow: Bool = false // Deprecated: design system enforces zero glow
+    var isSelected: Bool = false
+    var isHovered: Bool = false
+    var tint: Color? = nil
 
     public func body(content: Content) -> some View {
         content
             .background(.ultraThinMaterial)
-            .background(WalkmanTheme.card.opacity(0.75))
+            .background(
+                ZStack {
+                    WalkmanTheme.card.opacity(0.68)
+                    if let tint = tint {
+                        tint.opacity(0.12)
+                    }
+                    if isSelected {
+                        Color.white.opacity(0.04)
+                    }
+                }
+            )
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay(
+                // Clean tactile physical rim (No glow)
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(Color.white.opacity(borderOpacity * 0.3), lineWidth: 1)
+                    .stroke(
+                        isSelected ? WalkmanTheme.silverLight.opacity(borderOpacity * 0.95) : Color.white.opacity(borderOpacity * (isHovered ? 0.35 : 0.20)),
+                        lineWidth: isSelected ? 1.5 : 1.0
+                    )
                     .allowsHitTesting(false)
             )
-            // Clean, minimal shadow without any colored glow
+            // Multi-depth soft spatial shadow (Neutral tactile depth only - NO GLOW)
             .shadow(
-                color: Color.black.opacity(0.18),
-                radius: 4,
+                color: Color.black.opacity(0.24),
+                radius: isHovered ? 10 : 6,
                 x: 0,
-                y: 2
+                y: isHovered ? 4 : 2
+            )
+            .shadow(
+                color: Color.black.opacity(0.12),
+                radius: 2,
+                x: 0,
+                y: 1
             )
     }
 }
 
 public extension View {
-    func liquidGlass(cornerRadius: CGFloat = 12, borderOpacity: Double = 0.35, hasGoldGlow: Bool = false) -> some View {
-        self.modifier(LiquidGlassModifier(cornerRadius: cornerRadius, borderOpacity: borderOpacity, hasGoldGlow: false))
+    func liquidGlass(
+        cornerRadius: CGFloat = 12,
+        borderOpacity: Double = 0.35,
+        hasGoldGlow: Bool = false,
+        isSelected: Bool = false,
+        isHovered: Bool = false,
+        tint: Color? = nil
+    ) -> some View {
+        self.modifier(LiquidGlassModifier(
+            cornerRadius: cornerRadius,
+            borderOpacity: borderOpacity,
+            hasGoldGlow: hasGoldGlow,
+            isSelected: isSelected,
+            isHovered: isHovered,
+            tint: tint
+        ))
+    }
+}
+
+public struct LiquidGlassButtonStyle: ButtonStyle {
+    public enum Variant {
+        case prominent   // Crisp silver/platinum glass
+        case gold        // Authentic Hi-Res gold glass
+        case glass       // Translucent clear liquid glass
+        case capsule     // Pill-shaped translucent glass
+        case subtle      // Subtle low-contrast frosted glass
+    }
+    
+    public var variant: Variant
+    public var cornerRadius: CGFloat
+    
+    public init(variant: Variant = .prominent, cornerRadius: CGFloat = 8) {
+        self.variant = variant
+        self.cornerRadius = cornerRadius
+    }
+    
+    public func makeBody(configuration: Configuration) -> some View {
+        LiquidGlassButtonBody(
+            configuration: configuration,
+            variant: variant,
+            cornerRadius: cornerRadius
+        )
+    }
+    
+    private struct LiquidGlassButtonBody: View {
+        let configuration: Configuration
+        let variant: Variant
+        let cornerRadius: CGFloat
+        @State private var isHovered = false
+        
+        var body: some View {
+            configuration.label
+                .scaleEffect(configuration.isPressed ? 0.955 : (isHovered ? 1.02 : 1.0))
+                .opacity(configuration.isPressed ? 0.85 : 1.0)
+                .background(
+                    ZStack {
+                        switch variant {
+                        case .prominent:
+                            LinearGradient(
+                                stops: [
+                                    .init(color: Color(red: 245/255, green: 247/255, blue: 252/255), location: 0.0),
+                                    .init(color: Color(red: 215/255, green: 220/255, blue: 230/255), location: 1.0)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        case .gold:
+                            WalkmanTheme.hiResGoldGradient
+                        case .glass, .capsule:
+                            Color.white.opacity(isHovered ? 0.14 : 0.08)
+                        case .subtle:
+                            Color.white.opacity(isHovered ? 0.10 : 0.05)
+                        }
+                        
+                        // Surface optical liquid gloss (top specular reflection)
+                        VStack(spacing: 0) {
+                            LinearGradient(
+                                stops: [
+                                    .init(color: Color.white.opacity(variant == .prominent ? 0.65 : 0.35), location: 0.0),
+                                    .init(color: Color.white.opacity(0.0), location: 1.0)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .frame(height: 12)
+                            Spacer(minLength: 0)
+                        }
+                    }
+                )
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .stroke(
+                            LinearGradient(
+                                stops: [
+                                    .init(color: Color.white.opacity(isHovered ? 0.60 : 0.38), location: 0.0),
+                                    .init(color: Color.white.opacity(isHovered ? 0.28 : 0.14), location: 0.5),
+                                    .init(color: Color.white.opacity(0.05), location: 1.0)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                        .allowsHitTesting(false)
+                )
+                .shadow(
+                    color: Color.black.opacity(isHovered ? 0.25 : 0.14),
+                    radius: isHovered ? 6 : 3,
+                    x: 0,
+                    y: isHovered ? 3 : 1.5
+                )
+                .scaleEffect(configuration.isPressed ? 0.97 : (isHovered ? 1.025 : 1.0))
+                .animation(.spring(response: 0.22, dampingFraction: 0.70), value: configuration.isPressed)
+                .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+                .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .onHover { hovering in
+                    guard isHovered != hovering else { return }
+                    isHovered = hovering
+                    if hovering {
+                        NSCursor.pointingHand.push()
+                    } else {
+                        NSCursor.pop()
+                    }
+                }
+                .onDisappear {
+                    if isHovered {
+                        isHovered = false
+                        NSCursor.pop()
+                    }
+                }
+        }
     }
 }
 
