@@ -183,6 +183,7 @@ public struct TrackCoverThumbnail: View {
         self.track = track
         self.size = size
         self.isPlaying = isPlaying
+        self._image = State(initialValue: CoverArtCache.shared.thumbnail(for: track))
     }
 
     public var body: some View {
