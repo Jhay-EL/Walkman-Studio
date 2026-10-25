@@ -1226,40 +1226,20 @@ private struct ArtistCoverAvatarButton: View {
     
     var body: some View {
         Button(action: onChooseCustom) {
-            ZStack(alignment: .bottomTrailing) {
-                ArtistAvatarView(
-                    artistName: artist.name,
-                    representativeTrack: artist.representativeTrack,
-                    size: 120,
-                    isSelected: false
-                )
-                .frame(width: 120, height: 120)
-                .clipShape(Circle())
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(isHovered ? 0.28 : 0.14), lineWidth: 0.85)
-                )
-                .shadow(color: Color.black.opacity(isHovered ? 0.60 : 0.45), radius: isHovered ? 14 : 10, x: 0, y: isHovered ? 7 : 5)
-                .scaleEffect(isHovered ? 1.025 : 1.0)
-                
-                // Camera edit badge on bottom right
-                ZStack {
-                    Circle()
-                        .fill(isHovered ? Color.white.opacity(0.18) : WalkmanTheme.card)
-                        .frame(width: 28, height: 28)
-                    
-                    Image(systemName: "camera.fill")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(isHovered ? .white : WalkmanTheme.silverLight)
-                }
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(isHovered ? 0.35 : 0.20), lineWidth: 0.8)
-                )
-                .shadow(color: Color.black.opacity(0.35), radius: 3, x: 0, y: 1.5)
-                .offset(x: -2, y: -2)
-                .scaleEffect(isHovered ? 1.05 : 1.0)
-            }
+            ArtistAvatarView(
+                artistName: artist.name,
+                representativeTrack: artist.representativeTrack,
+                size: 120,
+                isSelected: false
+            )
+            .frame(width: 120, height: 120)
+            .clipShape(Circle())
+            .overlay(
+                Circle()
+                    .stroke(Color.white.opacity(isHovered ? 0.28 : 0.14), lineWidth: 0.85)
+            )
+            .shadow(color: Color.black.opacity(isHovered ? 0.60 : 0.45), radius: isHovered ? 14 : 10, x: 0, y: isHovered ? 7 : 5)
+            .scaleEffect(isHovered ? 1.025 : 1.0)
         }
         .buttonStyle(.plain)
         .contentShape(Circle())
