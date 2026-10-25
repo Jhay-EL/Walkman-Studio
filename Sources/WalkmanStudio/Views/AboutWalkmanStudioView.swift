@@ -1,11 +1,39 @@
 import SwiftUI
 import AppKit
 
+// MARK: - About Tabs
+public enum AboutTab: Int, CaseIterable, Identifiable {
+    case hardware = 0
+    case supportedDAPs = 1
+    case engineRules = 2
+    case developerSupport = 3
+
+    public var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .hardware: return "Hardware"
+        case .supportedDAPs: return "Supported DAPs"
+        case .engineRules: return "Engine Rules"
+        case .developerSupport: return "Developer & Support"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .hardware: return "cpu"
+        case .supportedDAPs: return "music.note.list"
+        case .engineRules: return "gearshape.2"
+        case .developerSupport: return "person.crop.circle"
+        }
+    }
+}
+
 public struct AboutWalkmanStudioView: View {
     let currentDeviceInfo: WalkmanDeviceInfo?
     let onDismiss: () -> Void
     
-    @State private var selectedTab: Int = 0
+    @State private var selectedTab: AboutTab = .hardware
     
     public init(currentDeviceInfo: WalkmanDeviceInfo?, onDismiss: @escaping () -> Void) {
         self.currentDeviceInfo = currentDeviceInfo
@@ -34,36 +62,38 @@ public struct AboutWalkmanStudioView: View {
             // Dismiss button on top right
             HStack {
                 Spacer()
-                Button(action: onDismiss) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 17))
-                        .foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.plain)
-                .keyboardShortcut(.cancelAction)
+                SheetCloseButton(action: onDismiss)
             }
-            .padding(.top, 14)
-            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.horizontal, 20)
             
-            // Hero App Header (Apple macOS System Style)
-            VStack(spacing: 6) {
+            // Hero App Header (Apple macOS 27 Liquid Glass Style)
+            VStack(spacing: 7) {
                 if let icon = appIcon {
                     Image(nsImage: icon)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .frame(width: 68, height: 68)
-                        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-                        .shadow(color: Color.black.opacity(0.35), radius: 8, x: 0, y: 4)
+                        .frame(width: 74, height: 74)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(Color.white.opacity(0.14), lineWidth: 0.85)
+                        )
+                        .shadow(color: Color.black.opacity(0.35), radius: 10, x: 0, y: 5)
                 } else {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .fill(WalkmanTheme.silverGradient)
-                            .frame(width: 68, height: 68)
+                            .frame(width: 74, height: 74)
                         Text("W.")
-                            .font(.system(size: 28, weight: .black, design: .rounded))
-                            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                            .font(.system(size: 32, weight: .black, design: .rounded))
+                            .foregroundStyle(Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255))
                     }
-                    .shadow(color: Color.black.opacity(0.35), radius: 8, x: 0, y: 4)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color.white.opacity(0.14), lineWidth: 0.85)
+                    )
+                    .shadow(color: Color.black.opacity(0.35), radius: 10, x: 0, y: 5)
                 }
                 
                 Text("Walkman Studio")
@@ -71,54 +101,55 @@ public struct AboutWalkmanStudioView: View {
                     .foregroundStyle(.primary)
                 
                 Text("Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.1.0") • Universal (Apple Silicon & Intel)")
-                    .font(WalkmanFont.callout)
+                    .font(WalkmanFont.calloutMedium)
                     .foregroundStyle(.secondary)
                 
-                HStack(spacing: 5) {
+                HStack(spacing: 6) {
                     Circle()
                         .fill(Color.green)
-                        .frame(width: 5, height: 5)
+                        .frame(width: 6, height: 6)
                     Text("Non-Android Sony OS / Linux Architecture")
                         .font(WalkmanFont.badge)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(WalkmanTheme.silver)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
                 .background(Color.white.opacity(0.06))
                 .clipShape(Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
+                )
             }
-            .padding(.top, -6)
-            .padding(.bottom, 12)
+            .padding(.top, -10)
+            .padding(.bottom, 14)
             
             // Developer Attribution & Action Card
             developerHeaderCard
             
-            // Segmented Tab Picker
-            Picker("", selection: $selectedTab) {
-                Text("Hardware").tag(0)
-                Text("Supported DAPs").tag(1)
-                Text("Engine Rules").tag(2)
-                Text("Developer & Support").tag(3)
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 480)
-            .padding(.bottom, 12)
+            // Liquid Glass Segmented Pill Bar
+            AboutSegmentedBar(selectedTab: $selectedTab)
+                .padding(.bottom, 14)
             
             // Tab Content
             Group {
                 switch selectedTab {
-                case 0:
+                case .hardware:
                     hardwareTabView
-                case 1:
+                case .supportedDAPs:
                     supportedModelsTabView
-                case 2:
+                case .engineRules:
                     engineRulesTabView
-                default:
+                case .developerSupport:
                     developerTabView
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.horizontal, 22)
+            .padding(.horizontal, 24)
+            
+            Divider()
+                .overlay(Color.white.opacity(0.08))
+                .padding(.top, 10)
             
             // Bottom Action Footer
             HStack(alignment: .center) {
@@ -129,30 +160,59 @@ public struct AboutWalkmanStudioView: View {
                 
                 Spacer()
                 
-                Button("Done") {
-                    onDismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .font(WalkmanFont.calloutBold)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 6)
-                .background(Color.white.opacity(0.12))
-                .foregroundStyle(.primary)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                .buttonStyle(.plain)
+                PrimaryDoneButton(action: onDismiss)
             }
-            .padding(.horizontal, 22)
+            .padding(.horizontal, 24)
             .padding(.vertical, 14)
         }
-        .frame(width: 680, height: 660)
-        .background(WalkmanTheme.background)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        // Studio Window Dimensions (Generous, High-Precision macOS Layout)
+        .frame(width: 780, height: 750)
+        .background(
+            ZStack {
+                WalkmanTheme.card.opacity(0.88)
+                    .background(.ultraThinMaterial)
+                
+                // Top specular sheen (Apple Liquid Glass refraction)
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(0.20), location: 0.0),
+                            .init(color: .white.opacity(0.04), location: 0.5),
+                            .init(color: .clear, location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 7)
+                    Spacer(minLength: 0)
+                }
+            }
+            .ignoresSafeArea()
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(0.18), location: 0.0),
+                            .init(color: .white.opacity(0.08), location: 0.5),
+                            .init(color: .white.opacity(0.05), location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 0.85
+                )
+                .allowsHitTesting(false)
+        )
+        .shadow(color: Color.black.opacity(0.45), radius: 24, x: 0, y: 10)
     }
     
     // MARK: - Developer Attribution Card
     private var developerHeaderCard: some View {
-        HStack(spacing: 12) {
-            // Developer Icon
+        HStack(spacing: 14) {
+            // Developer Avatar
             ZStack {
                 Circle()
                     .fill(
@@ -165,19 +225,19 @@ public struct AboutWalkmanStudioView: View {
                             endPoint: .bottomTrailing
                         )
                     )
-                    .frame(width: 42, height: 42)
+                    .frame(width: 46, height: 46)
                     .overlay(
                         Circle()
-                            .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                            .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
                     )
                 
                 Image(systemName: "person.crop.circle.fill")
-                    .font(.system(size: 24))
+                    .font(.system(size: 26))
                     .foregroundStyle(WalkmanTheme.silverLight)
             }
             
             VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
+                HStack(spacing: 7) {
                     Text("Developer:")
                         .font(WalkmanFont.subheadlineMedium)
                         .foregroundStyle(.secondary)
@@ -193,108 +253,82 @@ public struct AboutWalkmanStudioView: View {
                 
                 Text("Creator and Lead Software Engineer of Walkman Studio")
                     .font(WalkmanFont.subheadline)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
             }
             
             Spacer()
             
             // Direct Link Buttons: GitHub & Buy Me a Coffee
-            HStack(spacing: 8) {
-                // GitHub Button
-                Button(action: {
-                    openURL("https://github.com/Jhay-EL")
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "chevron.left.forwardslash.chevron.right")
-                            .font(.system(size: 11, weight: .bold))
-                        Text("GitHub")
-                            .font(WalkmanFont.calloutBold)
-                    }
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 6)
-                    .background(Color.white.opacity(0.08))
-                    .foregroundStyle(.primary)
-                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
-                    )
-                }
-                .buttonStyle(.plain)
-                .help("Visit John Lloyd Malabanan's GitHub profile (https://github.com/Jhay-EL)")
+            HStack(spacing: 10) {
+                TactileLinkButton(
+                    title: "GitHub",
+                    icon: "chevron.left.forwardslash.chevron.right",
+                    url: "https://github.com/Jhay-EL"
+                )
                 
-                // Buy Me a Coffee Button
-                Button(action: {
-                    openURL("https://www.buymeacoffee.com/jhayel")
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "cup.and.saucer.fill")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(Color(red: 255 / 255, green: 221 / 255, blue: 0 / 255))
-                        Text("Buy Me a Coffee")
-                            .font(WalkmanFont.calloutBold)
-                            .foregroundStyle(Color(red: 255 / 255, green: 221 / 255, blue: 0 / 255))
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color(red: 255 / 255, green: 221 / 255, blue: 0 / 255).opacity(0.14))
-                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .strokeBorder(Color(red: 255 / 255, green: 221 / 255, blue: 0 / 255).opacity(0.35), lineWidth: 1)
-                    )
-                }
-                .buttonStyle(.plain)
-                .help("Support development on Buy Me a Coffee (https://www.buymeacoffee.com/jhayel)")
+                TactileLinkButton(
+                    title: "Buy Me a Coffee",
+                    icon: "cup.and.saucer.fill",
+                    url: "https://www.buymeacoffee.com/jhayel",
+                    isAccent: true
+                )
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .background(Color.white.opacity(0.035))
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.07), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.85)
         )
-        .padding(.horizontal, 22)
-        .padding(.bottom, 12)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 14)
     }
     
     // MARK: - Tab 0: Hardware View
     private var hardwareTabView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 14) {
             if let dev = currentDeviceInfo {
-                HStack(spacing: 12) {
-                    WalkmanDeviceIconView(size: 44, deviceInfo: dev)
+                HStack(spacing: 14) {
+                    WalkmanDeviceIconView(size: 48, deviceInfo: dev)
                     
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 8) {
                             Text(dev.displayName)
-                                .font(WalkmanFont.bodyBold)
+                                .font(WalkmanFont.title3)
                                 .foregroundStyle(.primary)
                             
-                            HStack(spacing: 4) {
-                                Circle().fill(Color.green).frame(width: 5, height: 5)
+                            HStack(spacing: 5) {
+                                Circle().fill(Color.green).frame(width: 5.5, height: 5.5)
                                 Text("Verified")
                                     .font(WalkmanFont.badge.weight(.bold))
                                     .foregroundStyle(Color.green)
                             }
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
                             .background(Color.green.opacity(0.12))
                             .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .stroke(Color.green.opacity(0.25), lineWidth: 0.8)
+                            )
                         }
                         
                         Text("Connected via USB Mass Storage • S-Master HX DAC")
-                            .font(WalkmanFont.subheadline)
+                            .font(WalkmanFont.subheadlineMedium)
                             .foregroundStyle(.secondary)
                     }
                     
                     Spacer()
                 }
-                .padding(10)
+                .padding(14)
                 .background(Color.white.opacity(0.04))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.85)
+                )
                 
                 // Specifications Grid
                 VStack(spacing: 1) {
@@ -305,12 +339,16 @@ public struct AboutWalkmanStudioView: View {
                     SpecRow(label: "Audio Pipeline", value: "S-Master HX, DSEE HX, Vinyl")
                     SpecRow(label: "Tag Standard", value: "Strict ID3v2.3 (UTF-16) & Vorbis")
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.85)
+                )
             } else {
-                VStack(spacing: 10) {
+                VStack(spacing: 12) {
                     Spacer()
                     Image(systemName: "cable.connector.horizontal")
-                        .font(.system(size: 28))
+                        .font(.system(size: 34))
                         .foregroundStyle(WalkmanTheme.silverMuted)
                     
                     Text("No Walkman Connected")
@@ -321,37 +359,41 @@ public struct AboutWalkmanStudioView: View {
                         .font(WalkmanFont.callout)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
-                        .frame(maxWidth: 340)
+                        .frame(maxWidth: 380)
                     Spacer()
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.white.opacity(0.025))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 0.85)
+                )
             }
         }
     }
     
     // MARK: - Tab 1: Supported Models View
     private var supportedModelsTabView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
+        ScrollView(.vertical, showsIndicators: true) {
+            VStack(alignment: .leading, spacing: 14) {
                 ForEach(WalkmanDeviceDetector.supportedSeriesCategories, id: \.category) { cat in
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 6) {
                         Text(cat.category.uppercased())
                             .font(WalkmanFont.sectionHeader)
                             .foregroundStyle(.tertiary)
-                            .padding(.leading, 2)
+                            .padding(.leading, 4)
                         
                         VStack(spacing: 1) {
                             ForEach(cat.models) { m in
-                                HStack(spacing: 10) {
+                                HStack(spacing: 12) {
                                     WalkmanDeviceIconView(
-                                        size: 30,
+                                        size: 32,
                                         modelName: m.modelCode,
                                         hasBackground: false
                                     )
                                     
-                                    VStack(alignment: .leading, spacing: 1) {
+                                    VStack(alignment: .leading, spacing: 2) {
                                         Text(m.modelCode)
                                             .font(WalkmanFont.bodyMedium)
                                             .foregroundStyle(.primary)
@@ -367,35 +409,43 @@ public struct AboutWalkmanStudioView: View {
                                         .font(WalkmanFont.monoSmall)
                                         .foregroundStyle(WalkmanTheme.silverMuted)
                                 }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 7)
                                 .background(Color.white.opacity(0.03))
                             }
                         }
-                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.07), lineWidth: 0.85)
+                        )
                     }
                 }
                 
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Image(systemName: "info.circle")
-                        .font(.system(size: 11))
+                        .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                     Text("Android Walkmans (NW-A100/A300, NW-ZX500) use MTP and are not supported.")
                         .font(WalkmanFont.subheadline)
                         .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
-                .background(Color.white.opacity(0.02))
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.white.opacity(0.025))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 0.85)
+                )
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, 4)
         }
     }
     
     // MARK: - Tab 2: Engine Rules View
     private var engineRulesTabView: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 10) {
             RuleCard(
                 icon: "photo.artframe",
                 title: "Baseline RGB JPEG Artwork",
@@ -421,10 +471,10 @@ public struct AboutWalkmanStudioView: View {
     
     // MARK: - Tab 3: Developer & Support View
     private var developerTabView: some View {
-        ScrollView {
-            VStack(spacing: 12) {
+        ScrollView(.vertical, showsIndicators: true) {
+            VStack(spacing: 14) {
                 // Developer Profile Hero Card
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 14) {
                         ZStack {
                             Circle()
@@ -438,18 +488,18 @@ public struct AboutWalkmanStudioView: View {
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .frame(width: 52, height: 52)
+                                .frame(width: 54, height: 54)
                                 .overlay(
                                     Circle()
-                                        .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
+                                        .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
                                 )
                             
                             Image(systemName: "person.crop.circle.fill")
-                                .font(.system(size: 32))
+                                .font(.system(size: 34))
                                 .foregroundStyle(WalkmanTheme.silverLight)
                         }
                         
-                        VStack(alignment: .leading, spacing: 3) {
+                        VStack(alignment: .leading, spacing: 4) {
                             HStack(spacing: 8) {
                                 Text("John Lloyd Malabanan")
                                     .font(WalkmanFont.title2)
@@ -458,14 +508,18 @@ public struct AboutWalkmanStudioView: View {
                                 Text("Creator")
                                     .font(WalkmanFont.badge)
                                     .foregroundStyle(WalkmanTheme.hiResGold)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 2.5)
                                     .background(WalkmanTheme.hiResGold.opacity(0.12))
                                     .clipShape(Capsule())
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(WalkmanTheme.hiResGold.opacity(0.30), lineWidth: 0.8)
+                                    )
                             }
                             
                             Text("GitHub: @Jhay-EL • Software Engineer & Audiophile")
-                                .font(WalkmanFont.subheadline)
+                                .font(WalkmanFont.subheadlineMedium)
                                 .foregroundStyle(.secondary)
                         }
                         
@@ -477,18 +531,18 @@ public struct AboutWalkmanStudioView: View {
                         .foregroundStyle(.secondary)
                         .lineSpacing(3)
                 }
-                .padding(14)
+                .padding(16)
                 .background(Color.white.opacity(0.035))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.85)
                 )
                 
                 // Links Grid
-                HStack(spacing: 10) {
+                HStack(spacing: 12) {
                     // GitHub Profile Card
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 10) {
                         HStack(spacing: 8) {
                             Image(systemName: "chevron.left.forwardslash.chevron.right")
                                 .font(.system(size: 14, weight: .bold))
@@ -510,32 +564,25 @@ public struct AboutWalkmanStudioView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                         
-                        Spacer(minLength: 4)
+                        Spacer(minLength: 6)
                         
-                        Button(action: {
-                            openURL("https://github.com/Jhay-EL")
-                        }) {
-                            HStack(spacing: 5) {
-                                Text("github.com/Jhay-EL")
-                                    .font(WalkmanFont.calloutBold)
-                                Image(systemName: "arrow.up.forward")
-                                    .font(.system(size: 10))
-                            }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(Color.white.opacity(0.08))
-                            .foregroundStyle(.primary)
-                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
+                        TactileLinkButton(
+                            title: "github.com/Jhay-EL",
+                            icon: "arrow.up.forward",
+                            url: "https://github.com/Jhay-EL"
+                        )
                     }
-                    .padding(12)
+                    .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.white.opacity(0.03))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.07), lineWidth: 0.85)
+                    )
                     
                     // Walkman Studio Repo Card
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 10) {
                         HStack(spacing: 8) {
                             Image(systemName: "folder.fill")
                                 .font(.system(size: 14, weight: .semibold))
@@ -557,45 +604,38 @@ public struct AboutWalkmanStudioView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                         
-                        Spacer(minLength: 4)
+                        Spacer(minLength: 6)
                         
-                        Button(action: {
-                            openURL("https://github.com/Jhay-EL/Walkman-Studio")
-                        }) {
-                            HStack(spacing: 5) {
-                                Text("Jhay-EL/Walkman-Studio")
-                                    .font(WalkmanFont.calloutBold)
-                                Image(systemName: "arrow.up.forward")
-                                    .font(.system(size: 10))
-                            }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(Color.white.opacity(0.08))
-                            .foregroundStyle(.primary)
-                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
+                        TactileLinkButton(
+                            title: "Jhay-EL/Walkman-Studio",
+                            icon: "arrow.up.forward",
+                            url: "https://github.com/Jhay-EL/Walkman-Studio"
+                        )
                     }
-                    .padding(12)
+                    .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.white.opacity(0.03))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.07), lineWidth: 0.85)
+                    )
                 }
                 
                 // Buy Me a Coffee Support Banner
-                HStack(spacing: 12) {
+                HStack(spacing: 14) {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .fill(Color(red: 255 / 255, green: 221 / 255, blue: 0 / 255).opacity(0.18))
-                            .frame(width: 44, height: 44)
+                            .frame(width: 48, height: 48)
                         
                         Image(systemName: "cup.and.saucer.fill")
-                            .font(.system(size: 20, weight: .bold))
+                            .font(.system(size: 22, weight: .bold))
                             .foregroundStyle(Color(red: 255 / 255, green: 221 / 255, blue: 0 / 255))
                     }
                     
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 7) {
                             Text("Support Walkman Studio Development")
                                 .font(WalkmanFont.bodyBold)
                                 .foregroundStyle(.primary)
@@ -603,10 +643,14 @@ public struct AboutWalkmanStudioView: View {
                             Text("Buy Me a Coffee")
                                 .font(WalkmanFont.badge)
                                 .foregroundStyle(Color(red: 255 / 255, green: 221 / 255, blue: 0 / 255))
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 2.5)
                                 .background(Color(red: 255 / 255, green: 221 / 255, blue: 0 / 255).opacity(0.15))
                                 .clipShape(Capsule())
+                                .overlay(
+                                    Capsule()
+                                        .stroke(Color(red: 255 / 255, green: 221 / 255, blue: 0 / 255).opacity(0.30), lineWidth: 0.8)
+                                )
                         }
                         
                         Text("If Walkman Studio enhances your music listening experience, consider buying a coffee to support maintenance and hardware testing.")
@@ -617,36 +661,26 @@ public struct AboutWalkmanStudioView: View {
                     
                     Spacer()
                     
-                    Button(action: {
-                        openURL("https://www.buymeacoffee.com/jhayel")
-                    }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "cup.and.saucer.fill")
-                                .font(.system(size: 11, weight: .bold))
-                            Text("Support")
-                                .font(WalkmanFont.calloutBold)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(Color(red: 255 / 255, green: 221 / 255, blue: 0 / 255))
-                        .foregroundStyle(Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255))
-                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
+                    TactileLinkButton(
+                        title: "Support",
+                        icon: "cup.and.saucer.fill",
+                        url: "https://www.buymeacoffee.com/jhayel",
+                        isAccent: true
+                    )
                 }
-                .padding(12)
+                .padding(14)
                 .background(Color(red: 255 / 255, green: 221 / 255, blue: 0 / 255).opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(Color(red: 255 / 255, green: 221 / 255, blue: 0 / 255).opacity(0.2), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color(red: 255 / 255, green: 221 / 255, blue: 0 / 255).opacity(0.22), lineWidth: 0.85)
                 )
                 
                 // Contact & Licensing Footer Info
-                HStack(spacing: 12) {
+                HStack(spacing: 14) {
                     HStack(spacing: 6) {
                         Image(systemName: "envelope.fill")
-                            .font(.system(size: 11))
+                            .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                         Text("Contact:")
                             .font(WalkmanFont.subheadline)
@@ -660,23 +694,255 @@ public struct AboutWalkmanStudioView: View {
                                 .underline()
                         }
                         .buttonStyle(.plain)
+                        .onHover { h in
+                            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                        }
                     }
                     
                     Spacer()
                     
                     HStack(spacing: 6) {
                         Image(systemName: "doc.plaintext")
-                            .font(.system(size: 11))
+                            .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                         Text("License: MIT (Free & Open Source)")
                             .font(WalkmanFont.subheadline)
                             .foregroundStyle(.tertiary)
                     }
                 }
-                .padding(.horizontal, 8)
+                .padding(.horizontal, 10)
                 .padding(.vertical, 6)
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, 4)
+        }
+    }
+}
+
+// MARK: - Liquid Glass Segmented Pill Bar
+private struct AboutSegmentedBar: View {
+    @Binding var selectedTab: AboutTab
+    @Namespace private var tabNamespace
+    
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(AboutTab.allCases) { tab in
+                AboutTabButton(
+                    tab: tab,
+                    isSelected: selectedTab == tab,
+                    namespace: tabNamespace,
+                    action: {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
+                            selectedTab = tab
+                        }
+                    }
+                )
+            }
+        }
+        .padding(4)
+        .background(Color.white.opacity(0.04))
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(Color.white.opacity(0.10), lineWidth: 0.85)
+        )
+    }
+}
+
+private struct AboutTabButton: View {
+    let tab: AboutTab
+    let isSelected: Bool
+    let namespace: Namespace.ID
+    let action: () -> Void
+    
+    @State private var isHovered: Bool = false
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: tab.icon)
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                Text(tab.title)
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .foregroundStyle(isSelected ? Color.white : (isHovered ? Color.white : Color.white.opacity(0.68)))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .frame(minHeight: 36)
+            .background(
+                ZStack {
+                    if isSelected {
+                        Capsule()
+                            .fill(Color.white.opacity(0.16))
+                            .matchedGeometryEffect(id: "activeAboutTab", in: namespace)
+                        
+                        VStack(spacing: 0) {
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .white.opacity(0.35), location: 0.0),
+                                    .init(color: .clear, location: 1.0)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .frame(height: 6)
+                            Spacer(minLength: 0)
+                        }
+                        .clipShape(Capsule())
+                        .matchedGeometryEffect(id: "activeAboutTabSheen", in: namespace)
+                    } else if isHovered {
+                        Capsule()
+                            .fill(Color.white.opacity(0.08))
+                    }
+                }
+            )
+            .overlay(
+                Group {
+                    if isSelected {
+                        Capsule()
+                            .stroke(Color.white.opacity(0.32), lineWidth: 0.85)
+                            .matchedGeometryEffect(id: "activeAboutTabBorder", in: namespace)
+                    }
+                }
+            )
+            .shadow(color: isSelected ? Color.black.opacity(0.25) : Color.clear, radius: 3, y: 1)
+            .scaleEffect(isHovered && !isSelected ? 1.025 : 1.0)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .onHover { h in
+            withAnimation(.spring(response: 0.22, dampingFraction: 0.72)) {
+                isHovered = h
+            }
+            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+    }
+}
+
+// MARK: - Tactile Link Button
+private struct TactileLinkButton: View {
+    let title: String
+    let icon: String
+    let url: String
+    var isAccent: Bool = false
+    var accentColor: Color = Color(red: 255 / 255, green: 221 / 255, blue: 0 / 255)
+    
+    @State private var isHovered: Bool = false
+    
+    var body: some View {
+        Button(action: {
+            if let u = URL(string: url) {
+                NSWorkspace.shared.open(u)
+            }
+        }) {
+            HStack(spacing: 6.5) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .bold))
+                Text(title)
+                    .font(WalkmanFont.calloutBold)
+            }
+            .foregroundStyle(isAccent ? (isHovered ? Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255) : accentColor) : (isHovered ? Color.white : WalkmanTheme.silverLight))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7.5)
+            .background(
+                ZStack {
+                    if isAccent {
+                        if isHovered {
+                            accentColor
+                        } else {
+                            accentColor.opacity(0.14)
+                        }
+                    } else {
+                        Color.white.opacity(isHovered ? 0.14 : 0.07)
+                    }
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(
+                        isAccent
+                            ? accentColor.opacity(isHovered ? 0.70 : 0.32)
+                            : Color.white.opacity(isHovered ? 0.25 : 0.12),
+                        lineWidth: 0.85
+                    )
+            )
+            .shadow(color: Color.black.opacity(isHovered ? 0.25 : 0.08), radius: isHovered ? 4 : 2, y: isHovered ? 2 : 1)
+            .scaleEffect(isHovered ? 1.025 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .onHover { h in
+            withAnimation(.spring(response: 0.20, dampingFraction: 0.72)) {
+                isHovered = h
+            }
+            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+    }
+}
+
+// MARK: - Primary Done Button
+private struct PrimaryDoneButton: View {
+    let action: () -> Void
+    @State private var isHovered: Bool = false
+    
+    var body: some View {
+        Button(action: action) {
+            Text("Done")
+                .font(WalkmanFont.calloutBold)
+                .foregroundStyle(Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255))
+                .padding(.horizontal, 24)
+                .padding(.vertical, 8.5)
+                .background(WalkmanTheme.silverGradient)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.white.opacity(0.35), lineWidth: 0.85)
+                )
+                .shadow(color: Color.black.opacity(isHovered ? 0.35 : 0.20), radius: isHovered ? 6 : 3, x: 0, y: isHovered ? 2 : 1)
+                .scaleEffect(isHovered ? 1.03 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(.defaultAction)
+        .onHover { h in
+            withAnimation(.spring(response: 0.20, dampingFraction: 0.72)) {
+                isHovered = h
+            }
+            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+    }
+}
+
+// MARK: - Sheet Close Button
+private struct SheetCloseButton: View {
+    let action: () -> Void
+    @State private var isHovered: Bool = false
+    
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(isHovered ? 0.14 : 0.07))
+                    .frame(width: 28, height: 28)
+                
+                Circle()
+                    .stroke(Color.white.opacity(isHovered ? 0.25 : 0.12), lineWidth: 0.8)
+                    .frame(width: 28, height: 28)
+                
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(isHovered ? Color.white : Color.white.opacity(0.65))
+            }
+            .scaleEffect(isHovered ? 1.08 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(.cancelAction)
+        .help("Close")
+        .onHover { h in
+            withAnimation(.spring(response: 0.20, dampingFraction: 0.70)) {
+                isHovered = h
+            }
+            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
     }
 }
@@ -689,16 +955,16 @@ private struct SpecRow: View {
     var body: some View {
         HStack {
             Text(label)
-                .font(WalkmanFont.callout)
-                .foregroundStyle(.secondary)
+                .font(WalkmanFont.calloutMedium)
+                .foregroundStyle(WalkmanTheme.silverMuted)
             Spacer()
             Text(value)
                 .font(WalkmanFont.mono)
-                .foregroundStyle(.primary)
+                .foregroundStyle(WalkmanTheme.silverLight)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color.white.opacity(0.03))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8.5)
+        .background(Color.white.opacity(0.035))
     }
 }
 
@@ -708,27 +974,39 @@ private struct RuleCard: View {
     let detail: String
     
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 14))
-                .foregroundStyle(WalkmanTheme.silver)
-                .frame(width: 18, height: 18)
-                .padding(.top, 1)
+        HStack(alignment: .center, spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.white.opacity(0.06))
+                    .frame(width: 38, height: 38)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.85)
+                    )
+                
+                Image(systemName: icon)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(WalkmanTheme.silverLight)
+            }
             
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(WalkmanFont.bodyMedium)
+                    .font(WalkmanFont.bodyBold)
                     .foregroundStyle(.primary)
                 Text(detail)
-                    .font(WalkmanFont.subheadline)
+                    .font(WalkmanFont.callout)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .lineSpacing(2)
             }
             
             Spacer()
         }
-        .padding(10)
-        .background(Color.white.opacity(0.035))
-        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .padding(14)
+        .background(Color.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.85)
+        )
     }
 }
