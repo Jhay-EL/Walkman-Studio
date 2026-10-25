@@ -516,7 +516,7 @@ public struct ContentView: View {
                     .animation(nil, value: showInspector)
                     .toolbarBackground(.hidden, for: .windowToolbar)
                 } detail: {
-                    VStack(spacing: 0) {
+                    ZStack(alignment: .bottom) {
                         ZStack {
                             WalkmanTheme.background
                                 .ignoresSafeArea()
@@ -696,7 +696,8 @@ public struct ContentView: View {
                                 .padding(14)
                             }
                         }
-                        .clipped()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .safeAreaPadding(.bottom, 78)
                         
                         // Audio Preview & Playback Bar (Floating Liquid Glass Container)
                         HStack {
@@ -718,7 +719,6 @@ public struct ContentView: View {
                         }
                         .padding(.horizontal, 16)
                         .padding(.bottom, 12)
-                        .padding(.top, 4)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(WalkmanTheme.background.ignoresSafeArea())

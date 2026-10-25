@@ -47,16 +47,24 @@ public struct TrackPreviewBar: View {
         .frame(height: 56)
         .background(
             ZStack {
-                // Frosted Liquid Glass chassis
-                WalkmanTheme.card.opacity(0.85)
-                    .background(.ultraThinMaterial)
+                // Native Apple macOS ultra-thin frosted glass material
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+
+                // Translucent obsidian veil (reveals UI elements underneath while keeping controls sharp)
+                Color(red: 16 / 255, green: 17 / 255, blue: 21 / 255)
+                    .opacity(0.42)
+
+                // Subtle white ambient reflection
+                Color.white
+                    .opacity(0.035)
 
                 // Top specular refraction sheen
                 VStack(spacing: 0) {
                     LinearGradient(
                         stops: [
-                            .init(color: .white.opacity(0.20), location: 0.0),
-                            .init(color: .white.opacity(0.04), location: 0.5),
+                            .init(color: .white.opacity(0.25), location: 0.0),
+                            .init(color: .white.opacity(0.05), location: 0.5),
                             .init(color: .clear, location: 1.0)
                         ],
                         startPoint: .top,
@@ -73,8 +81,8 @@ public struct TrackPreviewBar: View {
                 .strokeBorder(
                     LinearGradient(
                         stops: [
-                            .init(color: .white.opacity(0.20), location: 0.0),
-                            .init(color: .white.opacity(0.08), location: 0.5),
+                            .init(color: .white.opacity(0.22), location: 0.0),
+                            .init(color: .white.opacity(0.09), location: 0.5),
                             .init(color: .white.opacity(0.05), location: 1.0)
                         ],
                         startPoint: .top,
@@ -83,8 +91,8 @@ public struct TrackPreviewBar: View {
                     lineWidth: 0.85
                 )
         )
-        .shadow(color: Color.black.opacity(0.40), radius: 14, x: 0, y: 5)
-        .shadow(color: Color.black.opacity(0.20), radius: 3, x: 0, y: 1)
+        .shadow(color: Color.black.opacity(0.35), radius: 16, x: 0, y: 6)
+        .shadow(color: Color.black.opacity(0.15), radius: 3, x: 0, y: 1)
     }
 
     // MARK: - Left: Transport Controls
@@ -147,16 +155,16 @@ public struct TrackPreviewBar: View {
     // MARK: - Center: Display Pod
     private var centerDisplayPod: some View {
         ZStack {
-            // Display pod inner glass styling
+            // Display pod inner glass styling (translucent)
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.black.opacity(0.24))
+                .fill(Color.white.opacity(0.04))
 
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(
                     LinearGradient(
                         stops: [
-                            .init(color: .white.opacity(0.12), location: 0.0),
-                            .init(color: .white.opacity(0.04), location: 1.0)
+                            .init(color: .white.opacity(0.16), location: 0.0),
+                            .init(color: .white.opacity(0.05), location: 1.0)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
