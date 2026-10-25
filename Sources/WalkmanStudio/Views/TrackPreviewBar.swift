@@ -9,7 +9,6 @@ public struct TrackPreviewBar: View {
     let onOpenInspector: () -> Void
 
     @State private var dragTime: Double? = nil
-    @State private var isDetailsHovered: Bool = false
     @State private var isArtworkHovered: Bool = false
     @State private var lastNonZeroVolume: Float = 0.8
 
@@ -18,17 +17,6 @@ public struct TrackPreviewBar: View {
         let mins = Int(seconds) / 60
         let secs = Int(seconds) % 60
         return String(format: "%d:%02d", mins, secs)
-    }
-
-    private func secondarySpecs(for track: Track) -> String {
-        var parts: [String] = []
-        if track.sampleRate > 0 {
-            parts.append("\(track.bitsPerSample)b/\(String(format: "%.1f", Double(track.sampleRate)/1000.0))k")
-        }
-        if track.bitrateKbps > 0 {
-            parts.append("\(track.bitrateKbps) kbps")
-        }
-        return parts.joined(separator: " • ")
     }
 
     public var body: some View {
@@ -221,56 +209,23 @@ public struct TrackPreviewBar: View {
 
             // Metadata & Scrubber
             VStack(alignment: .leading, spacing: 1.5) {
-                // Top row: Title, Artist, Badges
+                // Top row: Title and Artist only
                 HStack(spacing: 5) {
                     Text(track.title)
-                        .font(.system(size: 11.5, weight: .bold))
+                        .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(player.isPlaying ? .white : Color(white: 0.9))
                         .lineLimit(1)
                         .truncationMode(.tail)
 
                     Text("•")
                         .font(.system(size: 8))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.secondary.opacity(0.7))
 
-                    Text("\(track.artist) — \(track.album)")
-                        .font(.system(size: 10.5, weight: .regular))
+                    Text(track.artist)
+                        .font(.system(size: 11, weight: .regular))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
-
-                    if isHiRes {
-                        Text("Hi-Res")
-                            .font(WalkmanFont.badge)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(WalkmanTheme.hiResGoldGradient)
-                            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                            .clipShape(RoundedRectangle(cornerRadius: 2.5, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 2.5, style: .continuous)
-                                    .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
-                            )
-                            .fixedSize()
-                    }
-
-                    Text(track.format)
-                        .font(WalkmanFont.badge)
-                        .padding(.horizontal, 3.5)
-                        .padding(.vertical, 1)
-                        .background(isHiRes ? WalkmanTheme.hiResGold.opacity(0.16) : Color.white.opacity(0.10))
-                        .foregroundStyle(isHiRes ? WalkmanTheme.hiResGold : WalkmanTheme.silverLight)
-                        .clipShape(RoundedRectangle(cornerRadius: 2.5))
-                        .fixedSize()
-
-                    let specs = secondarySpecs(for: track)
-                    if !specs.isEmpty {
-                        Text(specs)
-                            .font(WalkmanFont.monoSmall)
-                            .foregroundStyle(isHiRes ? WalkmanTheme.hiResGold.opacity(0.85) : Color.white.opacity(0.40))
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
                 }
 
                 // Bottom row: Timeline scrubber
@@ -331,80 +286,34 @@ public struct TrackPreviewBar: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - Right: Volume & Details
+    // MARK: - Right: Volume Control
     private var trailingControlsZone: some View {
-        HStack(spacing: 10) {
-            // Speaker Icon + Volume Slider
-            HStack(spacing: 5) {
-                Button(action: {
-                    if player.volume > 0.001 {
-                        lastNonZeroVolume = player.volume
-                        player.volume = 0.0
-                    } else {
-                        player.volume = lastNonZeroVolume > 0.05 ? lastNonZeroVolume : 0.8
-                    }
-                }) {
-                    Image(systemName: player.volume > 0.5 ? "speaker.wave.2.fill" : (player.volume > 0.001 ? "speaker.wave.1.fill" : "speaker.slash.fill"))
-                        .font(.system(size: 12))
-                        .foregroundStyle(player.volume > 0.001 ? WalkmanTheme.silverMuted : Color.white.opacity(0.4))
-                        .frame(width: 18, height: 18)
+        HStack(spacing: 6) {
+            Button(action: {
+                if player.volume > 0.001 {
+                    lastNonZeroVolume = player.volume
+                    player.volume = 0.0
+                } else {
+                    player.volume = lastNonZeroVolume > 0.05 ? lastNonZeroVolume : 0.8
                 }
-                .buttonStyle(.plain)
-                .help(player.volume > 0.001 ? "Mute" : "Unmute")
-                .onHover { h in
-                    if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                }
-
-                Slider(value: $player.volume, in: 0...1)
-                    .controlSize(.mini)
-                    .tint(WalkmanTheme.silver)
-                    .frame(width: 68)
+            }) {
+                Image(systemName: player.volume > 0.5 ? "speaker.wave.2.fill" : (player.volume > 0.001 ? "speaker.wave.1.fill" : "speaker.slash.fill"))
+                    .font(.system(size: 12))
+                    .foregroundStyle(player.volume > 0.001 ? WalkmanTheme.silverMuted : Color.white.opacity(0.4))
+                    .frame(width: 18, height: 18)
+            }
+            .buttonStyle(.plain)
+            .help(player.volume > 0.001 ? "Mute" : "Unmute")
+            .onHover { h in
+                if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
             }
 
-            // Details Button
-            if !isInspectorPresented {
-                Button(action: onOpenInspector) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "info.circle")
-                            .font(.system(size: 11, weight: .medium))
-                        Text("Details")
-                            .font(WalkmanFont.subheadlineMedium)
-                    }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4.5)
-                    .background(Color.white.opacity(isDetailsHovered ? 0.14 : 0.07))
-                    .clipShape(Capsule())
-                    .overlay(
-                        Capsule()
-                            .stroke(
-                                LinearGradient(
-                                    stops: [
-                                        .init(color: .white.opacity(isDetailsHovered ? 0.28 : 0.12), location: 0.0),
-                                        .init(color: .white.opacity(isDetailsHovered ? 0.14 : 0.06), location: 1.0)
-                                    ],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                ),
-                                lineWidth: 0.8
-                            )
-                    )
-                    .foregroundStyle(isDetailsHovered ? .white : WalkmanTheme.silverLight)
-                    .scaleEffect(isDetailsHovered ? 1.03 : 1.0)
-                }
-                .buttonStyle(.plain)
-                .fixedSize()
-                .help("View & edit metadata tags, hardware compliance, and artwork")
-                .onHover { h in
-                    withAnimation(.spring(response: 0.22, dampingFraction: 0.72)) {
-                        isDetailsHovered = h
-                    }
-                    if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                }
-                .transition(.opacity.combined(with: .scale(scale: 0.95)))
-            }
+            Slider(value: $player.volume, in: 0...1)
+                .controlSize(.mini)
+                .tint(WalkmanTheme.silver)
+                .frame(width: 76)
         }
         .fixedSize(horizontal: true, vertical: false)
-        .animation(.easeInOut(duration: 0.2), value: isInspectorPresented)
     }
 }
 
