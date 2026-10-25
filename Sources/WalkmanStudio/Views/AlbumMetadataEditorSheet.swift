@@ -318,6 +318,11 @@ public struct AlbumMetadataEditorSheet: View {
                 self.saveProgress = 1.0
                 self.saveStatus = "Saved album successfully!"
                 self.isSaving = false
+                NotificationCenter.default.post(
+                    name: .trackMetadataDidUpdate,
+                    object: nil,
+                    userInfo: [:]
+                )
                 self.onSaved()
                 
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
