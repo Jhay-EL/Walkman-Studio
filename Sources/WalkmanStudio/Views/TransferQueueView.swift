@@ -442,7 +442,7 @@ public struct TransferQueueView: View {
                     // EMPTY STATE: Large, inviting drop zone
                     emptyDropZone
                         .padding(.horizontal, 16)
-                        .padding(.bottom, 12)
+                        .padding(.bottom, 88)
                 } else {
                     // POPULATED STATE: High-end Queue View (No huge redundant drop box!)
                     VStack(spacing: 0) {
@@ -568,12 +568,14 @@ public struct TransferQueueView: View {
                                     )
                                 }
                             }
-                            .padding(10)
+                            .padding(.horizontal, 10)
+                            .padding(.top, 10)
+                            .padding(.bottom, 88)
                         }
                     }
                     .liquidGlass(cornerRadius: 12)
                     .padding(.horizontal, 16)
-                    .padding(.bottom, 12)
+                    .padding(.bottom, 88)
                 }
             }
 

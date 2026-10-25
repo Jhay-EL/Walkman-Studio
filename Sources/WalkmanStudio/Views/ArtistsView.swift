@@ -281,7 +281,7 @@ public struct ArtistsView: View {
                         }
                         .padding(.horizontal, 22)
                         .padding(.top, 16)
-                        .padding(.bottom, 32)
+                        .padding(.bottom, 88)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {

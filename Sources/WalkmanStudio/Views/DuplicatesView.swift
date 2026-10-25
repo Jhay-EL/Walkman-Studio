@@ -597,7 +597,9 @@ public struct DuplicatesView: View {
                     )
                 }
             }
-            .padding(24)
+            .padding(.horizontal, 24)
+            .padding(.top, 24)
+            .padding(.bottom, 88)
         }
     }
 

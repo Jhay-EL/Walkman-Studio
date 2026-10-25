@@ -669,6 +669,9 @@ public struct LibraryView: View {
                 }
             }
         }
+        .safeAreaInset(edge: .bottom) {
+            Color.clear.frame(height: 84)
+        }
     }
 }
 

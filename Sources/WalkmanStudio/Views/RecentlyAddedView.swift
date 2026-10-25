@@ -706,6 +706,9 @@ public struct RecentlyAddedView: View {
                 }
             }
         }
+        .safeAreaInset(edge: .bottom) {
+            Color.clear.frame(height: 84)
+        }
     }
 }
 

@@ -304,7 +304,9 @@ public struct AlbumsView: View {
                                     )
                                 }
                             }
-                            .padding(20)
+                            .padding(.horizontal, 20)
+                            .padding(.top, 20)
+                            .padding(.bottom, 88)
                         }
                     }
                 }
@@ -1226,7 +1228,7 @@ private struct AlbumDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 32)
                     .padding(.top, 14)
-                    .padding(.bottom, 28)
+                    .padding(.bottom, 88)
                 }
             }
         }

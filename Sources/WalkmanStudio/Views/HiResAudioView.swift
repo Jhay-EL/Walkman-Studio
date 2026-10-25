@@ -421,7 +421,7 @@ public struct HiResAudioView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
-            .padding(.bottom, 24)
+            .padding(.bottom, 88)
         }
     }
     

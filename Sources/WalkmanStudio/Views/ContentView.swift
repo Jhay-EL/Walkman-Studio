@@ -697,7 +697,6 @@ public struct ContentView: View {
                             }
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .safeAreaPadding(.bottom, 78)
                         
                         // Audio Preview & Playback Bar (Floating Liquid Glass Container)
                         HStack {

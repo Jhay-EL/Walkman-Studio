@@ -338,7 +338,7 @@ public struct BackupRestoreView: View {
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, 16)
-                .padding(.bottom, 36)
+                .padding(.bottom, 88)
             }
         }
         .background(WalkmanTheme.background)

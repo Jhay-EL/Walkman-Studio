@@ -786,7 +786,7 @@ public struct PlaylistsView: View {
                                         
                                         // Bottom drop target area to move track to the end of the playlist
                                         Color.clear
-                                            .frame(height: 40)
+                                            .frame(height: 88)
                                             .onDrop(of: [.plainText, .text], isTargeted: nil) { providers in
                                                 if let from = draggedTrackIndex {
                                                     let to = playlistTracks.count - 1

@@ -41,18 +41,18 @@ public struct TrackPreviewBar: View {
 
                 // Translucent obsidian veil (reveals UI elements underneath while keeping controls sharp)
                 Color(red: 16 / 255, green: 17 / 255, blue: 21 / 255)
-                    .opacity(0.42)
+                    .opacity(0.24)
 
                 // Subtle white ambient reflection
                 Color.white
-                    .opacity(0.035)
+                    .opacity(0.04)
 
                 // Top specular refraction sheen
                 VStack(spacing: 0) {
                     LinearGradient(
                         stops: [
-                            .init(color: .white.opacity(0.25), location: 0.0),
-                            .init(color: .white.opacity(0.05), location: 0.5),
+                            .init(color: .white.opacity(0.28), location: 0.0),
+                            .init(color: .white.opacity(0.06), location: 0.5),
                             .init(color: .clear, location: 1.0)
                         ],
                         startPoint: .top,
@@ -69,9 +69,9 @@ public struct TrackPreviewBar: View {
                 .strokeBorder(
                     LinearGradient(
                         stops: [
-                            .init(color: .white.opacity(0.22), location: 0.0),
-                            .init(color: .white.opacity(0.09), location: 0.5),
-                            .init(color: .white.opacity(0.05), location: 1.0)
+                            .init(color: .white.opacity(0.24), location: 0.0),
+                            .init(color: .white.opacity(0.10), location: 0.5),
+                            .init(color: .white.opacity(0.06), location: 1.0)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
@@ -79,8 +79,8 @@ public struct TrackPreviewBar: View {
                     lineWidth: 0.85
                 )
         )
-        .shadow(color: Color.black.opacity(0.35), radius: 16, x: 0, y: 6)
-        .shadow(color: Color.black.opacity(0.15), radius: 3, x: 0, y: 1)
+        .shadow(color: Color.black.opacity(0.45), radius: 22, x: 0, y: 8)
+        .shadow(color: Color.black.opacity(0.20), radius: 4, x: 0, y: 1.5)
     }
 
     // MARK: - Left: Transport Controls
