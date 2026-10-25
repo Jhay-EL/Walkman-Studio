@@ -22,16 +22,8 @@ public struct DuplicatesView: View {
     @State private var selectedFilter: DuplicateFilter = .all
     @State private var sortOption: DuplicateSortOption = .recoverableSpace
 
-    // Delete single track alert state
-    @State private var itemToDelete: DuplicateTrackItem? = nil
-    @State private var showDeleteAlert: Bool = false
-
-    // Keep single track (delete others in group) alert state
-    @State private var keepSelection: (item: DuplicateTrackItem, group: DuplicateGroup)? = nil
-    @State private var showKeepAlert: Bool = false
-
-    // Batch resolve alert
-    @State private var showBatchQualityAlert: Bool = false
+    // Active modal action sheet state
+    @State private var activeModalAction: DuplicateModalAction? = nil
     @State private var isProcessing: Bool = false
     @State private var isHoveringRescan: Bool = false
 
@@ -173,41 +165,24 @@ public struct DuplicatesView: View {
                 _ = await finder.scanForDuplicates(drives: drives)
             }
         }
-        .alert("Delete Duplicate Copy?", isPresented: $showDeleteAlert) {
-            Button("Cancel", role: .cancel) { itemToDelete = nil }
-            Button("Delete Copy", role: .destructive) {
-                if let item = itemToDelete {
-                    deleteItem(item)
+        .sheet(item: $activeModalAction) { action in
+            DuplicateResolutionSheet(
+                action: action,
+                onConfirm: {
+                    switch action {
+                    case .deleteSingle(let item):
+                        deleteItem(item)
+                    case .keepSingle(let item, let group):
+                        keepItem(item, in: group)
+                    case .batchQualityResolve(let groups):
+                        resolveBatchQuality(groups: groups)
+                    }
+                    activeModalAction = nil
+                },
+                onCancel: {
+                    activeModalAction = nil
                 }
-            }
-        } message: {
-            if let item = itemToDelete {
-                Text("Are you sure you want to delete '\(item.track.filename)' from \(item.driveName)?\n\nThis will safely remove the audio file and its companion .lrc lyrics file from the device.")
-            }
-        }
-        .alert("Keep This Copy?", isPresented: $showKeepAlert) {
-            Button("Cancel", role: .cancel) { keepSelection = nil }
-            Button("Keep & Delete Others", role: .destructive) {
-                if let sel = keepSelection {
-                    keepItem(sel.item, in: sel.group)
-                }
-            }
-        } message: {
-            if let sel = keepSelection {
-                let otherCount = sel.group.items.count - 1
-                let saved = formatBytes(sel.group.totalSizeBytes - sel.item.track.sizeBytes)
-                Text("Keep '\(sel.item.track.filename)' on \(sel.item.driveName) and delete \(otherCount) other duplicate copy(ies)?\n\nYou will recover approximately \(saved) of storage on your Walkman.")
-            }
-        }
-        .alert("Resolve All Quality Discrepancies?", isPresented: $showBatchQualityAlert) {
-            Button("Cancel", role: .cancel) {}
-            Button("Keep Best Copies", role: .destructive) {
-                resolveAllQualityMismatches()
-            }
-        } message: {
-            let qualityGroups = finder.duplicateGroups.filter { $0.hasQualityDifference }
-            let totalSaved = qualityGroups.reduce(0) { $0 + $1.recoverableBytes }
-            Text("This will automatically keep the highest quality version (FLAC/Hi-Res) and remove lower quality duplicate files (MP3/lossy) across \(qualityGroups.count) songs.\n\nEstimated space recoverable: \(formatBytes(totalSaved)).")
+            )
         }
     }
 
@@ -464,8 +439,11 @@ public struct DuplicatesView: View {
 
     @ViewBuilder
     private var autoResolveQualityButton: some View {
-        if finder.qualityDifferenceCount > 0 {
-            Button(action: { showBatchQualityAlert = true }) {
+        let qualityGroups = finder.duplicateGroups.filter { $0.hasQualityDifference }
+        if !qualityGroups.isEmpty {
+            Button(action: {
+                activeModalAction = .batchQualityResolve(groups: qualityGroups)
+            }) {
                 HStack(spacing: 5) {
                     Image(systemName: "sparkles")
                     Text("Auto-Resolve Quality")
@@ -477,6 +455,10 @@ public struct DuplicatesView: View {
                 .background(Color.cyan.opacity(0.18))
                 .foregroundStyle(Color.cyan)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.cyan.opacity(0.35), lineWidth: 0.85)
+                )
             }
             .buttonStyle(.plain)
             .fixedSize(horizontal: true, vertical: false)
@@ -581,12 +563,10 @@ public struct DuplicatesView: View {
                             }
                         },
                         onKeepOnly: { item in
-                            keepSelection = (item, group)
-                            showKeepAlert = true
+                            activeModalAction = .keepSingle(item: item, group: group)
                         },
                         onDeleteSingle: { item in
-                            itemToDelete = item
-                            showDeleteAlert = true
+                            activeModalAction = .deleteSingle(item: item)
                         },
                         onRevealInFinder: { item in
                             NSWorkspace.shared.selectFile(item.track.fullPath, inFileViewerRootedAtPath: "")
@@ -703,9 +683,13 @@ public struct DuplicatesView: View {
     }
 
     private func resolveAllQualityMismatches() {
+        let qualityGroups = finder.duplicateGroups.filter { $0.hasQualityDifference }
+        resolveBatchQuality(groups: qualityGroups)
+    }
+
+    private func resolveBatchQuality(groups: [DuplicateGroup]) {
         Task {
-            let qualityGroups = finder.duplicateGroups.filter { $0.hasQualityDifference }
-            for group in qualityGroups {
+            for group in groups {
                 if let best = group.suggestedItemToKeep {
                     await finder.keepOnly(item: best, in: group)
                 }
@@ -1143,5 +1127,901 @@ private struct HiResBadge: View {
             .padding(.vertical, 1.5)
             .background(WalkmanTheme.hiResGoldGradient)
             .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+    }
+}
+
+// MARK: - Duplicate Modal Action
+public enum DuplicateModalAction: Identifiable {
+    case keepSingle(item: DuplicateTrackItem, group: DuplicateGroup)
+    case deleteSingle(item: DuplicateTrackItem)
+    case batchQualityResolve(groups: [DuplicateGroup])
+
+    public var id: String {
+        switch self {
+        case .keepSingle(let item, let group):
+            return "keep-\(group.id)-\(item.id)"
+        case .deleteSingle(let item):
+            return "delete-\(item.id)"
+        case .batchQualityResolve:
+            return "batch-quality"
+        }
+    }
+}
+
+// MARK: - Duplicate Resolution Sheet (Liquid Glass)
+public struct DuplicateResolutionSheet: View {
+    let action: DuplicateModalAction
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+
+    @State private var isConfirmHovered: Bool = false
+    @State private var isCancelHovered: Bool = false
+
+    private func formatBytes(_ bytes: Int64) -> String {
+        if bytes >= 1024 * 1024 * 1024 {
+            let gb = Double(bytes) / Double(1024 * 1024 * 1024)
+            return String(format: "%.2f GB", gb)
+        } else {
+            let mb = Double(bytes) / Double(1024 * 1024)
+            return String(format: "%.1f MB", mb)
+        }
+    }
+
+    private var sheetWidth: CGFloat {
+        680
+    }
+
+    private var sheetHeight: CGFloat {
+        switch action {
+        case .keepSingle:
+            return 570
+        case .batchQualityResolve:
+            return 620
+        case .deleteSingle:
+            return 480
+        }
+    }
+
+    public var body: some View {
+        VStack(spacing: 0) {
+            // Dismiss button on top right
+            HStack {
+                Spacer()
+                SheetCloseButton(action: onCancel)
+            }
+            .padding(.top, 16)
+            .padding(.horizontal, 20)
+
+            // Header Section
+            headerSection
+                .padding(.top, -10)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 14)
+
+            // Content Preview Section
+            contentPreview
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, 24)
+
+            Divider()
+                .overlay(Color.white.opacity(0.08))
+                .padding(.top, 12)
+
+            // Footer Action Bar
+            footerBar
+                .padding(.horizontal, 24)
+                .padding(.vertical, 14)
+        }
+        .frame(width: sheetWidth, height: sheetHeight)
+        .background(
+            ZStack {
+                WalkmanTheme.card.opacity(0.88)
+                    .background(.ultraThinMaterial)
+
+                // Top specular sheen (Apple Liquid Glass optical refraction)
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(0.20), location: 0.0),
+                            .init(color: .white.opacity(0.04), location: 0.5),
+                            .init(color: .clear, location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 7)
+                    Spacer(minLength: 0)
+                }
+            }
+            .ignoresSafeArea()
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(0.18), location: 0.0),
+                            .init(color: .white.opacity(0.08), location: 0.5),
+                            .init(color: .white.opacity(0.05), location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 0.85
+                )
+                .allowsHitTesting(false)
+        )
+        .shadow(color: Color.black.opacity(0.45), radius: 24, x: 0, y: 10)
+    }
+
+    // MARK: - Header
+    @ViewBuilder
+    private var headerSection: some View {
+        switch action {
+        case .keepSingle(let item, let group):
+            let otherCount = group.items.count - 1
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.green.opacity(0.14))
+                        .frame(width: 48, height: 48)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(Color.green.opacity(0.30), lineWidth: 0.85)
+                        )
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(Color.green)
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        Text("Keep This Copy")
+                            .font(WalkmanFont.title1)
+                            .foregroundStyle(.primary)
+
+                        Text("Safe Resolution")
+                            .font(WalkmanFont.badge)
+                            .foregroundStyle(Color.green)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2.5)
+                            .background(Color.green.opacity(0.12))
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .stroke(Color.green.opacity(0.25), lineWidth: 0.8)
+                            )
+                    }
+
+                    Text("Retain selected copy on \(item.driveName) and delete \(otherCount) duplicate copy(ies) to reclaim storage.")
+                        .font(WalkmanFont.callout)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                Spacer()
+            }
+
+        case .batchQualityResolve(let groups):
+            let totalSaved = groups.reduce(0) { $0 + $1.recoverableBytes }
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.cyan.opacity(0.16))
+                        .frame(width: 48, height: 48)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(Color.cyan.opacity(0.35), lineWidth: 0.85)
+                        )
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(Color.cyan)
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        Text("Auto-Resolve Quality Discrepancies")
+                            .font(WalkmanFont.title1)
+                            .foregroundStyle(.primary)
+
+                        Text("\(groups.count) Songs")
+                            .font(WalkmanFont.badge)
+                            .foregroundStyle(Color.cyan)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2.5)
+                            .background(Color.cyan.opacity(0.12))
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .stroke(Color.cyan.opacity(0.25), lineWidth: 0.8)
+                            )
+                    }
+
+                    Text("Automatically keep highest resolution copies (FLAC/Hi-Res) and remove lower quality encodes, recovering ~\(formatBytes(totalSaved)).")
+                        .font(WalkmanFont.callout)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                Spacer()
+            }
+
+        case .deleteSingle(let item):
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.red.opacity(0.15))
+                        .frame(width: 48, height: 48)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(Color.red.opacity(0.30), lineWidth: 0.85)
+                        )
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(Color.red)
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        Text("Delete Duplicate Copy")
+                            .font(WalkmanFont.title1)
+                            .foregroundStyle(.primary)
+
+                        Text("Permanent Delete")
+                            .font(WalkmanFont.badge)
+                            .foregroundStyle(Color.red)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2.5)
+                            .background(Color.red.opacity(0.12))
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .stroke(Color.red.opacity(0.25), lineWidth: 0.8)
+                            )
+                    }
+
+                    Text("Are you sure you want to delete this specific duplicate copy from \(item.driveName)?")
+                        .font(WalkmanFont.callout)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                Spacer()
+            }
+        }
+    }
+
+    // MARK: - Previews
+    @ViewBuilder
+    private var contentPreview: some View {
+        switch action {
+        case .keepSingle(let item, let group):
+            keepSinglePreview(item: item, group: group)
+        case .batchQualityResolve(let groups):
+            batchQualityPreview(groups: groups)
+        case .deleteSingle(let item):
+            deleteSinglePreview(item: item)
+        }
+    }
+
+    private func keepSinglePreview(item: DuplicateTrackItem, group: DuplicateGroup) -> some View {
+        let otherItems = group.items.filter { $0.id != item.id }
+        let savedBytes = group.totalSizeBytes - item.track.sizeBytes
+
+        return VStack(spacing: 12) {
+            // Metrics summary strip
+            HStack(spacing: 10) {
+                MetricChip(
+                    icon: "internaldrive.badge.arrow.down",
+                    label: "Space Freeable",
+                    value: "+\(formatBytes(savedBytes))",
+                    accentColor: .green
+                )
+                MetricChip(
+                    icon: "trash",
+                    label: "Copies Removed",
+                    value: "\(otherItems.count)",
+                    accentColor: WalkmanTheme.silverMuted
+                )
+                MetricChip(
+                    icon: item.isMicroSD ? "sdcard" : "internaldrive",
+                    label: "Keep Drive",
+                    value: item.driveName,
+                    accentColor: item.isMicroSD ? Color.blue : WalkmanTheme.silverLight
+                )
+            }
+
+            // Section 1: Copy to Keep
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Circle().fill(Color.green).frame(width: 6, height: 6)
+                    Text("COPY TO KEEP")
+                        .font(WalkmanFont.sectionHeader)
+                        .foregroundStyle(Color.green)
+                }
+
+                HStack(spacing: 12) {
+                    TrackCoverThumbnail(track: item.track, size: 48)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Text(item.track.title.isEmpty ? item.track.filename : item.track.title)
+                                .font(WalkmanFont.bodyBold)
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+
+                            if item.isHiRes {
+                                HiResBadge()
+                            }
+                        }
+
+                        Text(item.track.artist.isEmpty ? "Unknown Artist" : item.track.artist)
+                            .font(WalkmanFont.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+
+                        Text(item.track.relativePath)
+                            .font(WalkmanFont.monoSmall)
+                            .foregroundStyle(WalkmanTheme.silverMuted)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    VStack(alignment: .trailing, spacing: 4) {
+                        HStack(spacing: 6) {
+                            DriveBadgeView(isMicroSD: item.isMicroSD, driveName: item.driveName)
+                            FormatPill(track: item.track)
+                        }
+
+                        Text(formatBytes(item.track.sizeBytes))
+                            .font(WalkmanFont.monoSmall)
+                            .foregroundStyle(WalkmanTheme.silverLight)
+                    }
+                }
+                .padding(12)
+                .background(Color.green.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Color.green.opacity(0.30), lineWidth: 0.85)
+                )
+            }
+
+            // Section 2: Copies to Delete
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Circle().fill(Color.red).frame(width: 6, height: 6)
+                    Text("COPIES TO DELETE (\(otherItems.count))")
+                        .font(WalkmanFont.sectionHeader)
+                        .foregroundStyle(.secondary)
+                }
+
+                ScrollView(.vertical, showsIndicators: true) {
+                    VStack(spacing: 6) {
+                        ForEach(otherItems) { other in
+                            HStack(spacing: 10) {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Color.red.opacity(0.8))
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(other.track.filename)
+                                        .font(WalkmanFont.subheadlineMedium)
+                                        .foregroundStyle(.primary)
+                                        .lineLimit(1)
+
+                                    Text(other.track.relativePath)
+                                        .font(WalkmanFont.monoSmall)
+                                        .foregroundStyle(WalkmanTheme.silverMuted)
+                                        .lineLimit(1)
+                                }
+
+                                Spacer(minLength: 8)
+
+                                DriveBadgeView(isMicroSD: other.isMicroSD, driveName: other.driveName)
+                                FormatPill(track: other.track)
+
+                                Text(formatBytes(other.track.sizeBytes))
+                                    .font(WalkmanFont.monoSmall)
+                                    .foregroundStyle(WalkmanTheme.silverMuted)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(Color.white.opacity(0.03))
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 0.8)
+                            )
+                        }
+                    }
+                }
+                .frame(maxHeight: 130)
+            }
+        }
+    }
+
+    private func batchQualityPreview(groups: [DuplicateGroup]) -> some View {
+        let totalSaved = groups.reduce(0) { $0 + $1.recoverableBytes }
+
+        return VStack(spacing: 12) {
+            // Metrics strip
+            HStack(spacing: 10) {
+                MetricChip(
+                    icon: "sparkles",
+                    label: "Songs Upgraded",
+                    value: "\(groups.count)",
+                    accentColor: .cyan
+                )
+                MetricChip(
+                    icon: "internaldrive.badge.arrow.down",
+                    label: "Recoverable Storage",
+                    value: "+\(formatBytes(totalSaved))",
+                    accentColor: .green
+                )
+                MetricChip(
+                    icon: "waveform.badge.magnifyingglass",
+                    label: "Engine Standard",
+                    value: "FLAC / Hi-Res Priority",
+                    accentColor: WalkmanTheme.hiResGold
+                )
+            }
+
+            // Preview list of affected groups
+            VStack(alignment: .leading, spacing: 6) {
+                Text("DISCREPANCIES TO BE RESOLVED (\(groups.count))")
+                    .font(WalkmanFont.sectionHeader)
+                    .foregroundStyle(.tertiary)
+
+                ScrollView(.vertical, showsIndicators: true) {
+                    VStack(spacing: 8) {
+                        ForEach(groups) { grp in
+                            if let best = grp.suggestedItemToKeep {
+                                let discarded = grp.items.filter { $0.id != best.id }
+                                HStack(spacing: 12) {
+                                    TrackCoverThumbnail(track: best.track, size: 40)
+                                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(grp.title)
+                                            .font(WalkmanFont.bodyMedium)
+                                            .foregroundStyle(.primary)
+                                            .lineLimit(1)
+                                        Text(grp.artist)
+                                            .font(WalkmanFont.subheadline)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                    }
+
+                                    Spacer(minLength: 8)
+
+                                    // Quality comparison
+                                    HStack(spacing: 6) {
+                                        // Keep Pill
+                                        HStack(spacing: 4) {
+                                            Text("Keep:")
+                                                .font(WalkmanFont.monoSmall)
+                                                .foregroundStyle(Color.green)
+                                            FormatPill(track: best.track)
+                                        }
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 3)
+                                        .background(Color.green.opacity(0.10))
+                                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+                                        Image(systemName: "arrow.right")
+                                            .font(.system(size: 9))
+                                            .foregroundStyle(.tertiary)
+
+                                        // Discard Pill
+                                        if let firstDiscard = discarded.first {
+                                            HStack(spacing: 4) {
+                                                Text("Remove:")
+                                                    .font(WalkmanFont.monoSmall)
+                                                    .foregroundStyle(Color.red.opacity(0.8))
+                                                FormatPill(track: firstDiscard.track)
+                                            }
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 3)
+                                            .background(Color.red.opacity(0.08))
+                                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                        }
+                                    }
+
+                                    if grp.recoverableBytes > 0 {
+                                        Text("+\(formatBytes(grp.recoverableBytes))")
+                                            .font(WalkmanFont.badge)
+                                            .foregroundStyle(Color.green)
+                                    }
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .background(Color.white.opacity(0.03))
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 0.8)
+                                )
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: 250)
+            }
+
+            // Notice card
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.shield.fill")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.cyan)
+                Text("Safe Operation: Walkman Studio preserves the highest-fidelity copy of each track. Companion lyrics (.lrc) and AppleDouble ghost files for deleted copies are removed cleanly.")
+                    .font(WalkmanFont.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(10)
+            .background(Color.cyan.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Color.cyan.opacity(0.18), lineWidth: 0.85)
+            )
+        }
+    }
+
+    private func deleteSinglePreview(item: DuplicateTrackItem) -> some View {
+        VStack(spacing: 14) {
+            // Track Card
+            HStack(spacing: 14) {
+                TrackCoverThumbnail(track: item.track, size: 54)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(item.track.title.isEmpty ? item.track.filename : item.track.title)
+                            .font(WalkmanFont.title3)
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+
+                        if item.isHiRes {
+                            HiResBadge()
+                        }
+                    }
+
+                    Text(item.track.artist.isEmpty ? "Unknown Artist" : item.track.artist)
+                        .font(WalkmanFont.callout)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+
+                    Text(item.track.album.isEmpty ? "Unknown Album" : item.track.album)
+                        .font(WalkmanFont.subheadline)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 4) {
+                    DriveBadgeView(isMicroSD: item.isMicroSD, driveName: item.driveName)
+                    FormatPill(track: item.track)
+                    Text(formatBytes(item.track.sizeBytes))
+                        .font(WalkmanFont.monoSmall)
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                }
+            }
+            .padding(14)
+            .background(Color.white.opacity(0.04))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.85)
+            )
+
+            // Path card
+            VStack(alignment: .leading, spacing: 4) {
+                Text("FILE LOCATION ON DEVICE")
+                    .font(WalkmanFont.sectionHeader)
+                    .foregroundStyle(.tertiary)
+                Text(item.track.fullPath)
+                    .font(WalkmanFont.monoSmall)
+                    .foregroundStyle(WalkmanTheme.silverMuted)
+                    .textSelection(.enabled)
+                    .lineLimit(2)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(Color.white.opacity(0.025))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 0.8)
+            )
+
+            // Warning notice
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.red)
+                Text("This action permanently removes this duplicate audio file and its matching .lrc lyrics file from your Walkman. Other copies of this track in your library will remain intact.")
+                    .font(WalkmanFont.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(10)
+            .background(Color.red.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Color.red.opacity(0.20), lineWidth: 0.85)
+            )
+        }
+    }
+
+    // MARK: - Footer
+    private var footerBar: some View {
+        HStack(alignment: .center) {
+            Text("Changes are written directly to your Sony Walkman storage.")
+                .font(WalkmanFont.monoSmall)
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+
+            Spacer()
+
+            // Cancel Button
+            Button(action: onCancel) {
+                Text("Cancel")
+                    .font(WalkmanFont.calloutMedium)
+                    .foregroundStyle(WalkmanTheme.silverLight)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 8)
+                    .background(Color.white.opacity(isCancelHovered ? 0.12 : 0.07))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color.white.opacity(isCancelHovered ? 0.25 : 0.12), lineWidth: 0.85)
+                    )
+                    .scaleEffect(isCancelHovered ? 1.02 : 1.0)
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.cancelAction)
+            .onHover { h in
+                withAnimation(.spring(response: 0.20, dampingFraction: 0.72)) {
+                    isCancelHovered = h
+                }
+                if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
+
+            // Confirm Button
+            confirmButton
+        }
+    }
+
+    @ViewBuilder
+    private var confirmButton: some View {
+        switch action {
+        case .keepSingle:
+            Button(action: onConfirm) {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 12, weight: .bold))
+                    Text("Keep & Delete Others")
+                        .font(WalkmanFont.calloutBold)
+                }
+                .foregroundStyle(Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255))
+                .padding(.horizontal, 22)
+                .padding(.vertical, 8.5)
+                .background(WalkmanTheme.silverGradient)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.white.opacity(0.35), lineWidth: 0.85)
+                )
+                .shadow(color: Color.black.opacity(isConfirmHovered ? 0.35 : 0.20), radius: isConfirmHovered ? 6 : 3, y: isConfirmHovered ? 2 : 1)
+                .scaleEffect(isConfirmHovered ? 1.03 : 1.0)
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.defaultAction)
+            .onHover { h in
+                withAnimation(.spring(response: 0.20, dampingFraction: 0.72)) {
+                    isConfirmHovered = h
+                }
+                if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
+
+        case .batchQualityResolve:
+            Button(action: onConfirm) {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 12, weight: .bold))
+                    Text("Auto-Resolve All")
+                        .font(WalkmanFont.calloutBold)
+                }
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 8.5)
+                .background(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0/255, green: 170/255, blue: 200/255),
+                            Color(red: 0/255, green: 120/255, blue: 170/255)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.cyan.opacity(0.50), lineWidth: 0.85)
+                )
+                .shadow(color: Color.black.opacity(isConfirmHovered ? 0.35 : 0.20), radius: isConfirmHovered ? 6 : 3, y: isConfirmHovered ? 2 : 1)
+                .scaleEffect(isConfirmHovered ? 1.03 : 1.0)
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.defaultAction)
+            .onHover { h in
+                withAnimation(.spring(response: 0.20, dampingFraction: 0.72)) {
+                    isConfirmHovered = h
+                }
+                if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
+
+        case .deleteSingle:
+            Button(action: onConfirm) {
+                HStack(spacing: 6) {
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 12, weight: .bold))
+                    Text("Delete Copy")
+                        .font(WalkmanFont.calloutBold)
+                }
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 8.5)
+                .background(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 220/255, green: 50/255, blue: 50/255),
+                            Color(red: 170/255, green: 30/255, blue: 30/255)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.red.opacity(0.40), lineWidth: 0.85)
+                )
+                .shadow(color: Color.black.opacity(isConfirmHovered ? 0.35 : 0.20), radius: isConfirmHovered ? 6 : 3, y: isConfirmHovered ? 2 : 1)
+                .scaleEffect(isConfirmHovered ? 1.03 : 1.0)
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.defaultAction)
+            .onHover { h in
+                withAnimation(.spring(response: 0.20, dampingFraction: 0.72)) {
+                    isConfirmHovered = h
+                }
+                if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
+        }
+    }
+}
+
+// MARK: - Metric Chip
+private struct MetricChip: View {
+    let icon: String
+    let label: String
+    let value: String
+    var accentColor: Color = WalkmanTheme.silverLight
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(accentColor)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label)
+                    .font(WalkmanFont.badge)
+                    .foregroundStyle(.tertiary)
+                Text(value)
+                    .font(WalkmanFont.subheadlineMedium)
+                    .foregroundStyle(accentColor)
+                    .lineLimit(1)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.white.opacity(0.035))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.06), lineWidth: 0.8)
+        )
+    }
+}
+
+// MARK: - Drive Badge View
+private struct DriveBadgeView: View {
+    let isMicroSD: Bool
+    let driveName: String
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: isMicroSD ? "sdcard" : "internaldrive")
+                .font(.system(size: 10))
+            Text(isMicroSD ? "MicroSD" : driveName)
+                .font(WalkmanFont.badge)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2.5)
+        .background(isMicroSD ? Color.blue.opacity(0.18) : Color.white.opacity(0.10))
+        .foregroundStyle(isMicroSD ? Color.blue : WalkmanTheme.silverLight)
+        .clipShape(Capsule())
+    }
+}
+
+// MARK: - Format Pill
+private struct FormatPill: View {
+    let track: Track
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(track.format.uppercased())
+                .font(WalkmanFont.badge)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(Color.white.opacity(0.08))
+                .foregroundStyle(WalkmanTheme.silver)
+                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+
+            if track.bitsPerSample > 16 || track.sampleRate > 48000 {
+                Text("\(track.bitsPerSample)b/\(track.sampleRate / 1000)kHz")
+                    .font(WalkmanFont.badge)
+                    .foregroundStyle(WalkmanTheme.hiResGold)
+            } else if track.bitrateKbps > 0 {
+                Text("\(track.bitrateKbps) kbps")
+                    .font(WalkmanFont.badge)
+                    .foregroundStyle(WalkmanTheme.silverMuted)
+            }
+        }
+    }
+}
+
+// MARK: - Sheet Close Button
+private struct SheetCloseButton: View {
+    let action: () -> Void
+    @State private var isHovered: Bool = false
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(isHovered ? 0.14 : 0.07))
+                    .frame(width: 28, height: 28)
+
+                Circle()
+                    .stroke(Color.white.opacity(isHovered ? 0.25 : 0.12), lineWidth: 0.8)
+                    .frame(width: 28, height: 28)
+
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(isHovered ? Color.white : Color.white.opacity(0.65))
+            }
+            .scaleEffect(isHovered ? 1.08 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(.cancelAction)
+        .help("Close")
+        .onHover { h in
+            withAnimation(.spring(response: 0.20, dampingFraction: 0.70)) {
+                isHovered = h
+            }
+            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
     }
 }
