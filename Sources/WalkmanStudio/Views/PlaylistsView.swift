@@ -938,7 +938,6 @@ public struct PlaylistsView: View {
                 
                 Spacer(minLength: 8)
                 
-                autoSavedBadge(compact: false)
                 sortMenuButton
                 addFromLibraryButton(compact: false)
             }
@@ -954,7 +953,6 @@ public struct PlaylistsView: View {
                 
                 Spacer(minLength: 6)
                 
-                autoSavedBadge(compact: true)
                 sortMenuButton
                 addFromLibraryButton(compact: true)
             }
@@ -984,8 +982,6 @@ public struct PlaylistsView: View {
                     }
                     
                     Spacer(minLength: 8)
-                    
-                    autoSavedBadge(compact: false)
                 }
                 
                 HStack(alignment: .center, spacing: 8) {
@@ -1025,8 +1021,6 @@ public struct PlaylistsView: View {
                     }
                     
                     Spacer(minLength: 6)
-                    
-                    autoSavedBadge(compact: true)
                 }
                 
                 HStack(alignment: .center, spacing: 6) {
@@ -1121,31 +1115,7 @@ public struct PlaylistsView: View {
         }
     }
     
-    @ViewBuilder
-    private func autoSavedBadge(compact: Bool = false) -> some View {
-        HStack(spacing: 5) {
-            if isSaving {
-                ProgressView()
-                    .controlSize(.mini)
-                Text(compact ? "Saving" : "Saving...")
-                    .lineLimit(1)
-            } else {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.green)
-                Text(compact ? "Auto-saved" : "Auto-saved to Walkman")
-                    .lineLimit(1)
-            }
-        }
-        .font(WalkmanFont.subheadlineMedium)
-        .padding(.horizontal, compact ? 7 : 9)
-        .padding(.vertical, compact ? 4 : 5)
-        .background(Color.white.opacity(0.06))
-        .foregroundStyle(WalkmanTheme.silverLight)
-        .clipShape(Capsule())
-        .fixedSize(horizontal: true, vertical: false)
-    }
-    
+
     @ViewBuilder
     private var sortMenuButton: some View {
         PlaylistSortMenuButton(
