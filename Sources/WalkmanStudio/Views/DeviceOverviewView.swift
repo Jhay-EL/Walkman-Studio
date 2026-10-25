@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 public struct DeviceOverviewView: View {
     var devices: [WalkmanDevice] = []
@@ -17,6 +18,7 @@ public struct DeviceOverviewView: View {
     var isEjecting: Bool = false
     
     @State private var stats: (albums: Int, artists: Int, hiRes: Int) = (0, 0, 0)
+    @State private var lastSyncedTrackCount: Int = -1
     
     private var internalDrive: WalkmanDrive? {
         drives.first(where: { $0.type == .internal })
@@ -50,18 +52,25 @@ public struct DeviceOverviewView: View {
             let isNarrow = width < 520
             let isSmallest = width < 380
             
-            ScrollView(.vertical, showsIndicators: true) {
-                VStack(spacing: isNarrow ? 12 : 20) {
-                    if devices.count > 1 {
-                        deviceSwitcherBar
+            ZStack(alignment: .top) {
+                // macOS 27 Golden Gate Ambient Atmosphere (Caustic Lighting behind Liquid Glass)
+                atmosphericBackdrop
+                    .ignoresSafeArea()
+                
+                ScrollView(.vertical, showsIndicators: true) {
+                    VStack(spacing: isNarrow ? 16 : 22) {
+                        if devices.count > 1 {
+                            deviceSwitcherBar
+                        }
+                        heroHeaderView(isCompact: isCompact, isNarrow: isNarrow, isSmallest: isSmallest)
+                        storageAllocationSection(isCompact: isCompact)
+                        quickWorkflowsSection(isCompact: isCompact)
+                        hardwareComplianceSection(isNarrow: isNarrow)
                     }
-                    heroHeaderView(isCompact: isCompact, isNarrow: isNarrow, isSmallest: isSmallest)
-                    storageAllocationSection(isCompact: isCompact)
-                    quickWorkflowsSection(isCompact: isCompact)
-                    hardwareComplianceSection(isNarrow: isNarrow)
+                    .padding(isNarrow ? 12 : 18)
+                    .padding(.bottom, 24)
+                    .frame(width: max(0, width), alignment: .top)
                 }
-                .padding(isNarrow ? 10 : 16)
-                .frame(width: max(0, width), alignment: .top)
             }
         }
         .clipped()
@@ -73,25 +82,36 @@ public struct DeviceOverviewView: View {
         }
     }
     
+    // -------------------------------------------------------------------------
+    // SOLID MATTE BACKDROP (Zero Gradient, Clean Obsidian Chassis)
+    // -------------------------------------------------------------------------
+    private var atmosphericBackdrop: some View {
+        WalkmanTheme.background
+    }
+    
     private func syncStats() {
         if let p = precomputedStats, (p.albums > 0 || p.artists > 0 || tracks.isEmpty) {
             self.stats = p
-        } else {
-            Task.detached(priority: .userInitiated) {
-                var albumSet = Set<String>()
-                var artistSet = Set<String>()
-                var hiRes = 0
-                for track in self.tracks {
-                    let alb = track.album.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let art = track.primaryArtist.trimmingCharacters(in: .whitespacesAndNewlines)
-                    albumSet.insert("\(art)|\(alb)")
-                    if !art.isEmpty { artistSet.insert(art) }
-                    if track.bitsPerSample > 16 || track.sampleRate > 48000 { hiRes += 1 }
-                }
-                let res = (albumSet.count, artistSet.count, hiRes)
-                await MainActor.run {
-                    self.stats = res
-                }
+            self.lastSyncedTrackCount = tracks.count
+            return
+        }
+        guard lastSyncedTrackCount != tracks.count else { return }
+        lastSyncedTrackCount = tracks.count
+        
+        Task.detached(priority: .userInitiated) {
+            var albumSet = Set<String>()
+            var artistSet = Set<String>()
+            var hiRes = 0
+            for track in self.tracks {
+                let alb = track.album.trimmingCharacters(in: .whitespacesAndNewlines)
+                let art = track.primaryArtist.trimmingCharacters(in: .whitespacesAndNewlines)
+                albumSet.insert("\(art)|\(alb)")
+                if !art.isEmpty { artistSet.insert(art) }
+                if track.bitsPerSample > 16 || track.sampleRate > 48000 { hiRes += 1 }
+            }
+            let res = (albumSet.count, artistSet.count, hiRes)
+            await MainActor.run {
+                self.stats = res
             }
         }
     }
@@ -103,11 +123,12 @@ public struct DeviceOverviewView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "hifispeaker.2.fill")
-                    .font(.system(size: 11))
+                    .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(WalkmanTheme.hiResGold)
                 Text("CONNECTED WALKMAN PLAYERS (\(devices.count))")
                     .font(WalkmanFont.sectionHeader)
                     .foregroundStyle(.secondary)
+                    .tracking(0.6)
             }
             .padding(.horizontal, 4)
 
@@ -115,232 +136,270 @@ public struct DeviceOverviewView: View {
                 HStack(spacing: 10) {
                     ForEach(devices) { dev in
                         let isSelected = (activeDevice?.id == dev.id) || (activeDevice == nil && dev.id == devices.first?.id)
-                        Button(action: { onSelectDevice?(dev) }) {
-                            HStack(spacing: 10) {
-                                WalkmanDeviceIconView(
-                                    size: 34,
-                                    mountPoint: dev.primaryMountPoint,
-                                    deviceInfo: dev.deviceInfo,
-                                    hasBackground: false
-                                )
-                                .frame(width: 30, height: 34)
-
-                                VStack(alignment: .leading, spacing: 2) {
-                                    HStack(spacing: 6) {
-                                        Text(dev.specificModel)
-                                            .font(.system(size: 12.5, weight: isSelected ? .bold : .semibold))
-                                            .foregroundStyle(isSelected ? .white : WalkmanTheme.silverLight)
-
-                                        if isSelected {
-                                            Text("ACTIVE")
-                                                .font(.system(size: 8, weight: .black))
-                                                .padding(.horizontal, 4)
-                                                .padding(.vertical, 1)
-                                                .background(WalkmanTheme.hiResGold.opacity(0.2))
-                                                .foregroundStyle(WalkmanTheme.hiResGold)
-                                                .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
-                                        }
-                                    }
-
-                                    let freeGb = Double(dev.freeBytes) / (1024 * 1024 * 1024)
-                                    let totalGb = Double(dev.totalBytes) / (1024 * 1024 * 1024)
-                                    Text(String(format: "%.1f GB free / %.0f GB", freeGb, totalGb))
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(isSelected ? WalkmanTheme.silverMuted : .secondary)
-                                }
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(isSelected ? Color.white.opacity(0.12) : Color.white.opacity(0.04))
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .stroke(isSelected ? WalkmanTheme.hiResGold.opacity(0.4) : Color.white.opacity(0.06), lineWidth: 1)
-                            )
-                        }
-                        .buttonStyle(.plain)
+                        DeviceSegmentPill(
+                            device: dev,
+                            isSelected: isSelected,
+                            onSelect: { onSelectDevice?(dev) }
+                        )
                     }
                 }
+                .padding(.vertical, 2)
             }
         }
-        .padding(.bottom, 4)
+        .padding(.bottom, 2)
     }
     
     // -------------------------------------------------------------------------
-    // HERO HEADER
+    // HERO HEADER (Liquid Glass Stage)
     // -------------------------------------------------------------------------
     @ViewBuilder
     private func heroHeaderView(isCompact: Bool, isNarrow: Bool, isSmallest: Bool) -> some View {
         if isCompact {
-            VStack(alignment: .leading, spacing: isSmallest ? 10 : 12) {
-                HStack(alignment: .top, spacing: isSmallest ? 10 : 12) {
-                    WalkmanDeviceIconView(
-                        size: isSmallest ? 44 : (isNarrow ? 52 : 60),
+            VStack(alignment: .leading, spacing: isSmallest ? 12 : 14) {
+                HStack(alignment: .top, spacing: isSmallest ? 10 : 14) {
+                    // Liquid Glass Pedestal for Device Icon
+                    LiquidGlassDeviceShowcase(
+                        size: isSmallest ? 48 : (isNarrow ? 56 : 64),
                         mountPoint: internalDrive?.mountPoint ?? drives.first?.mountPoint,
                         deviceInfo: deviceInfo
                     )
                     
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 5) {
                         Text(deviceInfo?.displayName ?? "Sony Walkman")
-                            .font(isSmallest ? WalkmanFont.headline : (isNarrow ? WalkmanFont.title2 : WalkmanFont.title1))
+                            .font(isSmallest ? .system(size: 16, weight: .bold) : (isNarrow ? .system(size: 18, weight: .bold) : .system(size: 21, weight: .bold)))
                             .foregroundStyle(.white)
                             .lineLimit(2)
                         
-                        HStack(spacing: 5) {
-                            Text("Hi-Res Audio")
-                                .font(WalkmanFont.badge)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(WalkmanTheme.hiResGoldGradient)
-                                .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                                .clipShape(Capsule())
-                                .shadow(color: WalkmanTheme.hiResGold.opacity(0.35), radius: 3, x: 0, y: 1)
+                        HStack(spacing: 6) {
+                            liquidHiResBadge
                             
                             if let fw = deviceInfo?.firmwareVersion {
-                                Text("FW v\(fw)")
-                                    .font(WalkmanFont.badge)
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 2)
-                                    .background(Color.white.opacity(0.08))
-                                    .foregroundStyle(WalkmanTheme.silverMuted)
-                                    .clipShape(Capsule())
+                                liquidFwBadge(version: fw)
                             }
                         }
                         
                         if !isSmallest {
-                            Text("Connected via USB Mass Storage • Sony OS")
-                                .font(WalkmanFont.callout)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
+                            HStack(spacing: 5) {
+                                Image(systemName: "cable.connector.horizontal")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(Color.white.opacity(0.35))
+                                Text("Connected via USB Mass Storage • Sony OS")
+                                    .font(WalkmanFont.callout)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            .padding(.top, 1)
                         }
                     }
                     
                     if !isNarrow {
                         Spacer(minLength: 6)
-                        cleanEjectButton
+                        cleanEjectLiquidButton
                     }
                 }
                 
                 if isNarrow {
-                    cleanEjectButton
+                    cleanEjectLiquidButton
                         .frame(maxWidth: isSmallest ? .infinity : nil, alignment: .trailing)
                 }
                 
-                Divider()
-                    .background(Color.white.opacity(0.08))
+                // Specular Glass Divider
+                specularGlassDivider
                 
-                // Stats Grid
+                // Liquid Stat Chips
                 if isNarrow {
                     LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], spacing: 8) {
-                        statItem(title: "\(tracks.count.formatted()) Tracks", icon: "music.note", color: WalkmanTheme.silver)
-                        statItem(title: "\(effectiveStats.albums.formatted()) Albums", icon: "square.stack", color: WalkmanTheme.silver)
-                        statItem(title: "\(effectiveStats.artists.formatted()) Artists", icon: "music.mic", color: WalkmanTheme.silver)
-                        statItem(title: "\(effectiveStats.hiRes.formatted()) Hi-Res", icon: "waveform.badge.magnifyingglass", color: WalkmanTheme.hiResGoldLight)
+                        LiquidStatChip(title: "\(tracks.count.formatted()) Tracks", icon: "music.note", color: WalkmanTheme.silverLight)
+                        LiquidStatChip(title: "\(effectiveStats.albums.formatted()) Albums", icon: "square.stack.fill", color: Color(red: 200/255, green: 210/255, blue: 235/255))
+                        LiquidStatChip(title: "\(effectiveStats.artists.formatted()) Artists", icon: "music.mic", color: Color(red: 175/255, green: 220/255, blue: 245/255))
+                        LiquidStatChip(title: "\(effectiveStats.hiRes.formatted()) Hi-Res", icon: "waveform.badge.magnifyingglass", color: WalkmanTheme.hiResGoldLight, isGold: true)
                     }
                 } else {
-                    HStack(spacing: 14) {
-                        statItem(title: "\(tracks.count.formatted()) Tracks", icon: "music.note", color: WalkmanTheme.silver)
-                        statItem(title: "\(effectiveStats.albums.formatted()) Albums", icon: "square.stack", color: WalkmanTheme.silver)
-                        statItem(title: "\(effectiveStats.artists.formatted()) Artists", icon: "music.mic", color: WalkmanTheme.silver)
-                        statItem(title: "\(effectiveStats.hiRes.formatted()) Hi-Res", icon: "waveform.badge.magnifyingglass", color: WalkmanTheme.hiResGoldLight)
+                    HStack(spacing: 8) {
+                        LiquidStatChip(title: "\(tracks.count.formatted()) Tracks", icon: "music.note", color: WalkmanTheme.silverLight)
+                        LiquidStatChip(title: "\(effectiveStats.albums.formatted()) Albums", icon: "square.stack.fill", color: Color(red: 200/255, green: 210/255, blue: 235/255))
+                        LiquidStatChip(title: "\(effectiveStats.artists.formatted()) Artists", icon: "music.mic", color: Color(red: 175/255, green: 220/255, blue: 245/255))
+                        LiquidStatChip(title: "\(effectiveStats.hiRes.formatted()) Hi-Res", icon: "waveform.badge.magnifyingglass", color: WalkmanTheme.hiResGoldLight, isGold: true)
                     }
                 }
             }
-            .padding(isSmallest ? 12 : 14)
-            .liquidGlass(cornerRadius: 14)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 4)
         } else {
-            HStack(spacing: 16) {
-                WalkmanDeviceIconView(
-                    size: 64,
+            HStack(spacing: 18) {
+                // Liquid Glass Pedestal for Device Icon
+                LiquidGlassDeviceShowcase(
+                    size: 70,
                     mountPoint: internalDrive?.mountPoint ?? drives.first?.mountPoint,
                     deviceInfo: deviceInfo
                 )
                 
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 9) {
                         Text(deviceInfo?.displayName ?? "Sony Walkman")
-                            .font(WalkmanFont.title1)
+                            .font(.system(size: 22, weight: .bold))
                             .foregroundStyle(.white)
                         
-                        Text("Hi-Res Audio")
-                            .font(WalkmanFont.badge)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 2.5)
-                            .background(WalkmanTheme.hiResGoldGradient)
-                            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                            .clipShape(Capsule())
-                            .shadow(color: WalkmanTheme.hiResGold.opacity(0.35), radius: 4, x: 0, y: 1)
+                        liquidHiResBadge
                         
                         if let fw = deviceInfo?.firmwareVersion {
-                            Text("FW v\(fw)")
-                                .font(WalkmanFont.badge)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.white.opacity(0.08))
-                                .foregroundStyle(WalkmanTheme.silverMuted)
-                                .clipShape(Capsule())
+                            liquidFwBadge(version: fw)
                         }
                     }
                     
-                    Text("Connected via USB Mass Storage • Sony OS / Linux Architecture")
-                        .font(WalkmanFont.callout)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    
-                    HStack(spacing: 14) {
-                        statItem(title: "\(tracks.count.formatted()) Tracks", icon: "music.note", color: WalkmanTheme.silver)
-                        statItem(title: "\(effectiveStats.albums.formatted()) Albums", icon: "square.stack", color: WalkmanTheme.silver)
-                        statItem(title: "\(effectiveStats.artists.formatted()) Artists", icon: "music.mic", color: WalkmanTheme.silver)
-                        statItem(title: "\(effectiveStats.hiRes.formatted()) Hi-Res", icon: "waveform.badge.magnifyingglass", color: WalkmanTheme.hiResGoldLight)
+                    HStack(spacing: 5) {
+                        Image(systemName: "cable.connector.horizontal")
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(Color.white.opacity(0.35))
+                        Text("Connected via USB Mass Storage • Sony OS / Linux Architecture")
+                            .font(WalkmanFont.callout)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
-                    .padding(.top, 2)
+                    
+                    // Liquid Stat Chips Row
+                    HStack(spacing: 8) {
+                        LiquidStatChip(title: "\(tracks.count.formatted()) Tracks", icon: "music.note", color: WalkmanTheme.silverLight)
+                        LiquidStatChip(title: "\(effectiveStats.albums.formatted()) Albums", icon: "square.stack.fill", color: Color(red: 200/255, green: 210/255, blue: 235/255))
+                        LiquidStatChip(title: "\(effectiveStats.artists.formatted()) Artists", icon: "music.mic", color: Color(red: 175/255, green: 220/255, blue: 245/255))
+                        LiquidStatChip(title: "\(effectiveStats.hiRes.formatted()) Hi-Res", icon: "waveform.badge.magnifyingglass", color: WalkmanTheme.hiResGoldLight, isGold: true)
+                    }
+                    .padding(.top, 4)
                 }
                 
-                Spacer(minLength: 10)
+                Spacer(minLength: 12)
                 
-                cleanEjectButton
+                cleanEjectLiquidButton
             }
-            .padding(18)
-            .liquidGlass(cornerRadius: 16)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 4)
         }
     }
     
-    private var cleanEjectButton: some View {
+    // Liquid Glass Hi-Res Badge
+    private var liquidHiResBadge: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "waveform")
+                .font(.system(size: 8.5, weight: .black))
+            Text("Hi-Res Audio")
+                .font(.system(size: 9.5, weight: .bold, design: .rounded))
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3.5)
+        .background(
+            ZStack {
+                WalkmanTheme.hiResGoldGradient
+                
+                // Specular liquid reflection
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(0.45), location: 0),
+                            .init(color: .clear, location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 7)
+                    Spacer(minLength: 0)
+                }
+            }
+        )
+        .foregroundStyle(Color(red: 22/255, green: 20/255, blue: 18/255))
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(
+                    LinearGradient(
+                        colors: [.white.opacity(0.55), WalkmanTheme.hiResGoldLight.opacity(0.8), .clear],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.9
+                )
+        )
+        .shadow(color: Color.black.opacity(0.18), radius: 2, x: 0, y: 1)
+    }
+    
+    // Liquid Glass Firmware Badge
+    private func liquidFwBadge(version: String) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: "cpu")
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(WalkmanTheme.silverMuted)
+            Text("FW v\(version)")
+                .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                .foregroundStyle(WalkmanTheme.silverLight)
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3.5)
+        .background(
+            ZStack {
+                Color.white.opacity(0.08)
+                // Specular reflection
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(0.18), location: 0),
+                            .init(color: .clear, location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 6)
+                    Spacer(minLength: 0)
+                }
+            }
+        )
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(Color.white.opacity(0.15), lineWidth: 0.8)
+        )
+    }
+    
+    // Liquid Glass Eject Action Button
+    private var cleanEjectLiquidButton: some View {
         Button(action: onOpenEject) {
-            HStack(spacing: 5) {
+            HStack(spacing: 6) {
                 if isEjecting {
                     ProgressView()
                         .controlSize(.small)
-                        .scaleEffect(0.7)
+                        .scaleEffect(0.72)
                     Text("Ejecting...")
                 } else {
                     Image(systemName: "eject.circle.fill")
+                        .font(.system(size: 13, weight: .semibold))
                     Text("Eject")
                 }
             }
-            .font(WalkmanFont.calloutBold)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6.5)
-            .background(WalkmanTheme.silverGradient)
+            .font(.system(size: 12.5, weight: .semibold))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7.5)
             .foregroundStyle(Color(red: 18 / 255, green: 18 / 255, blue: 22 / 255))
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 18))
         .disabled(isEjecting)
-        .help("Clean macOS ghost files and safely unmount Walkman")
+        .help("Safely unmount device and purge macOS shadow files (.DS_Store / AppleDouble)")
     }
     
-    private func statItem(title: String, icon: String, color: Color) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.system(size: 10.5))
-                .foregroundStyle(color)
-            Text(title)
-                .font(WalkmanFont.subheadlineMedium)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-        }
+    private var specularGlassDivider: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0.0),
+                        .init(color: .white.opacity(0.12), location: 0.2),
+                        .init(color: .white.opacity(0.15), location: 0.5),
+                        .init(color: .white.opacity(0.12), location: 0.8),
+                        .init(color: .clear, location: 1.0)
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .frame(height: 1)
+            .padding(.vertical, 2)
     }
     
     // -------------------------------------------------------------------------
@@ -349,18 +408,24 @@ public struct DeviceOverviewView: View {
     @ViewBuilder
     private func storageAllocationSection(isCompact: Bool) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("STORAGE ALLOCATION")
-                .font(WalkmanFont.sectionHeader)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 4)
+            HStack(spacing: 6) {
+                Image(systemName: "internaldrive.fill")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(WalkmanTheme.silverMuted)
+                Text("STORAGE ALLOCATION")
+                    .font(WalkmanFont.sectionHeader)
+                    .foregroundStyle(.secondary)
+                    .tracking(0.6)
+            }
+            .padding(.horizontal, 4)
             
             if isCompact {
-                VStack(spacing: 10) {
+                VStack(spacing: 12) {
                     internalDriveCard
                     microsdDriveCard
                 }
             } else {
-                HStack(spacing: 12) {
+                HStack(spacing: 14) {
                     internalDriveCard
                     microsdDriveCard
                 }
@@ -375,7 +440,7 @@ public struct DeviceOverviewView: View {
                 StorageDriveCard(
                     title: "Internal WALKMAN",
                     subtitle: "/Volumes/\(d.name)",
-                    icon: "internaldrive",
+                    icon: "internaldrive.fill",
                     usedBytes: d.usedBytes,
                     freeBytes: d.freeBytes,
                     totalBytes: d.totalBytes,
@@ -388,7 +453,7 @@ public struct DeviceOverviewView: View {
                 StorageDriveCard(
                     title: "Internal WALKMAN",
                     subtitle: "Not Mounted",
-                    icon: "internaldrive",
+                    icon: "internaldrive.fill",
                     usedBytes: 0,
                     freeBytes: 0,
                     totalBytes: 0,
@@ -408,7 +473,7 @@ public struct DeviceOverviewView: View {
                 StorageDriveCard(
                     title: "MicroSD Expansion",
                     subtitle: "/Volumes/\(d.name)",
-                    icon: "sdcard",
+                    icon: "sdcard.fill",
                     usedBytes: d.usedBytes,
                     freeBytes: d.freeBytes,
                     totalBytes: d.totalBytes,
@@ -421,7 +486,7 @@ public struct DeviceOverviewView: View {
                 StorageDriveCard(
                     title: "MicroSD Expansion",
                     subtitle: "Slot Empty",
-                    icon: "sdcard",
+                    icon: "sdcard.fill",
                     usedBytes: 0,
                     freeBytes: 0,
                     totalBytes: 0,
@@ -440,17 +505,24 @@ public struct DeviceOverviewView: View {
     @ViewBuilder
     private func quickWorkflowsSection(isCompact: Bool) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("QUICK WORKFLOWS")
-                .font(WalkmanFont.sectionHeader)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 4)
+            HStack(spacing: 6) {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(WalkmanTheme.silverMuted)
+                Text("QUICK WORKFLOWS")
+                    .font(WalkmanFont.sectionHeader)
+                    .foregroundStyle(.secondary)
+                    .tracking(0.6)
+            }
+            .padding(.horizontal, 4)
             
             if isCompact {
-                VStack(spacing: 8) {
+                VStack(spacing: 10) {
                     ActionCard(
                         title: "Music Library",
                         description: "Browse \(tracks.count.formatted()) tracks across \(effectiveStats.albums.formatted()) albums and \(effectiveStats.artists.formatted()) artists.",
                         icon: "music.note.list",
+                        iconTint: Color(red: 165/255, green: 180/255, blue: 245/255),
                         isHorizontalRow: true,
                         action: { onNavigateToTab(.library) }
                     )
@@ -458,7 +530,8 @@ public struct DeviceOverviewView: View {
                     ActionCard(
                         title: "Transfer & Convert",
                         description: "Drag-and-drop audio files from Finder with automatic FFmpeg transcoding.",
-                        icon: "arrow.up.arrow.down.circle",
+                        icon: "arrow.up.arrow.down.circle.fill",
+                        iconTint: Color(red: 130/255, green: 215/255, blue: 245/255),
                         isHorizontalRow: true,
                         action: { onNavigateToTab(.transfer) }
                     )
@@ -466,17 +539,19 @@ public struct DeviceOverviewView: View {
                     ActionCard(
                         title: "Playlist",
                         description: "Manage hardware-compliant CRLF POSIX playlists saved in /MUSIC/.",
-                        icon: "list.bullet.rectangle",
+                        icon: "list.bullet.rectangle.portrait.fill",
+                        iconTint: Color(red: 150/255, green: 230/255, blue: 200/255),
                         isHorizontalRow: true,
                         action: { onNavigateToTab(.playlists) }
                     )
                 }
             } else {
-                HStack(spacing: 12) {
+                HStack(spacing: 14) {
                     ActionCard(
                         title: "Music Library",
                         description: "Browse \(tracks.count.formatted()) tracks across \(effectiveStats.albums.formatted()) albums and \(effectiveStats.artists.formatted()) artists.",
                         icon: "music.note.list",
+                        iconTint: Color(red: 165/255, green: 180/255, blue: 245/255),
                         isHorizontalRow: false,
                         action: { onNavigateToTab(.library) }
                     )
@@ -484,7 +559,8 @@ public struct DeviceOverviewView: View {
                     ActionCard(
                         title: "Transfer & Convert",
                         description: "Drag-and-drop audio files from Finder with automatic FFmpeg transcoding.",
-                        icon: "arrow.up.arrow.down.circle",
+                        icon: "arrow.up.arrow.down.circle.fill",
+                        iconTint: Color(red: 130/255, green: 215/255, blue: 245/255),
                         isHorizontalRow: false,
                         action: { onNavigateToTab(.transfer) }
                     )
@@ -492,7 +568,8 @@ public struct DeviceOverviewView: View {
                     ActionCard(
                         title: "Playlist",
                         description: "Manage hardware-compliant CRLF POSIX playlists saved in /MUSIC/.",
-                        icon: "list.bullet.rectangle",
+                        icon: "list.bullet.rectangle.portrait.fill",
+                        iconTint: Color(red: 150/255, green: 230/255, blue: 200/255),
                         isHorizontalRow: false,
                         action: { onNavigateToTab(.playlists) }
                     )
@@ -502,90 +579,363 @@ public struct DeviceOverviewView: View {
     }
     
     // -------------------------------------------------------------------------
-    // HARDWARE COMPLIANCE
+    // HARDWARE COMPLIANCE (System Inspector Glass Panel)
     // -------------------------------------------------------------------------
     @ViewBuilder
     private func hardwareComplianceSection(isNarrow: Bool) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             if isNarrow {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("SONY HARDWARE COMPLIANCE")
-                        .font(WalkmanFont.sectionHeader)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.shield.fill")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Color.green)
+                        Text("SONY HARDWARE COMPLIANCE")
+                            .font(WalkmanFont.sectionHeader)
+                            .foregroundStyle(.secondary)
+                            .tracking(0.6)
+                    }
                     
                     if let onAbout = onOpenAbout {
-                        aboutButton(onAbout)
+                        aboutLiquidButton(onAbout)
                     }
                 }
                 .padding(.horizontal, 4)
             } else {
                 HStack {
-                    Text("SONY NON-ANDROID HARDWARE COMPLIANCE")
-                        .font(WalkmanFont.sectionHeader)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.shield.fill")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Color.green)
+                        Text("SONY NON-ANDROID HARDWARE COMPLIANCE")
+                            .font(WalkmanFont.sectionHeader)
+                            .foregroundStyle(.secondary)
+                            .tracking(0.6)
+                    }
+                    
                     Spacer()
                     
                     if let onAbout = onOpenAbout {
-                        aboutButton(onAbout)
+                        aboutLiquidButton(onAbout)
                     } else {
-                        Text("Active & Enforced")
-                            .font(WalkmanFont.monoSmall.weight(.bold))
-                            .foregroundStyle(WalkmanTheme.silverMuted)
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(Color.green)
+                                .frame(width: 5, height: 5)
+                            Text("Active & Enforced")
+                                .font(WalkmanFont.monoSmall.weight(.bold))
+                                .foregroundStyle(WalkmanTheme.silverMuted)
+                        }
                     }
                 }
                 .padding(.horizontal, 4)
             }
             
-            VStack(spacing: 8) {
+            // Unified Liquid Glass Panel
+            VStack(spacing: 0) {
                 ComplianceRow(
                     title: "Baseline RGB JPEG Artwork",
                     detail: "Non-progressive, no CMYK, max 800×800 px encoded via Apple ImageIO",
+                    badge: "800×800 px • ImageIO",
                     isEnforced: true
                 )
+                
+                complianceDivider
+                
                 ComplianceRow(
                     title: "Strict ID3v2.3 (UTF-16) Tagging",
                     detail: "MP3s written with ID3v2.3 encoding=1 to prevent Sony player freeze bugs",
+                    badge: "ID3v2.3 • UTF-16",
                     isEnforced: true
                 )
+                
+                complianceDivider
+                
                 ComplianceRow(
                     title: "FAT32 / exFAT Path Sanitization",
                     detail: "Illegal characters < > : \" / \\ | ? * and trailing dots stripped automatically",
+                    badge: "FAT32/exFAT • Clean",
                     isEnforced: true
                 )
+                
+                complianceDivider
+                
                 ComplianceRow(
                     title: "CRLF Relative POSIX Playlists",
                     detail: "M3U8 playlists formatted with \\r\\n line endings inside /MUSIC/",
+                    badge: "M3U8 • CRLF",
                     isEnforced: true
                 )
+                
+                complianceDivider
+                
                 ComplianceRow(
                     title: "macOS Shadow File Purging",
                     detail: "dot_clean -m automatically merges AppleDouble forks and removes ._* / .DS_Store",
+                    badge: "dot_clean • No ._*",
                     isEnforced: true
                 )
             }
-            .padding(12)
-            .liquidGlass(cornerRadius: 12)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .liquidGlass(cornerRadius: 16, borderOpacity: 0.38)
         }
     }
     
-    private func aboutButton(_ action: @escaping () -> Void) -> some View {
+    private var complianceDivider: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    stops: [
+                        .init(color: .white.opacity(0.02), location: 0.0),
+                        .init(color: .white.opacity(0.08), location: 0.2),
+                        .init(color: .white.opacity(0.08), location: 0.8),
+                        .init(color: .white.opacity(0.02), location: 1.0)
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .frame(height: 0.75)
+            .padding(.horizontal, 6)
+    }
+    
+    private func aboutLiquidButton(_ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 5) {
-                Image(systemName: "info.circle")
-                    .font(.system(size: 10.5))
+                Image(systemName: "info.circle.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(WalkmanTheme.silverLight)
                 Text("About & Supported Devices")
-                    .font(WalkmanFont.subheadlineMedium)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(WalkmanTheme.silverLight)
             }
-            .foregroundStyle(WalkmanTheme.silverLight)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 3.5)
-            .background(Color.white.opacity(0.08))
-            .clipShape(Capsule())
+            .padding(.horizontal, 11)
+            .padding(.vertical, 4.5)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LiquidGlassButtonStyle(variant: .capsule, cornerRadius: 16))
     }
 }
 
+// -----------------------------------------------------------------------------
+// LIQUID GLASS DEVICE SHOWCASE (ELEVATED PEDESTAL)
+// -----------------------------------------------------------------------------
+private struct LiquidGlassDeviceShowcase: View {
+    let size: CGFloat
+    let mountPoint: String?
+    let deviceInfo: WalkmanDeviceInfo?
+    
+    var body: some View {
+        ZStack {
+            // Frosted Beveled Pedestal
+            RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    ZStack {
+                        // Ambient card background
+                        WalkmanTheme.card.opacity(0.7)
+                        
+                        // Top specular refraction
+                        LinearGradient(
+                            stops: [
+                                .init(color: .white.opacity(0.18), location: 0.0),
+                                .init(color: .white.opacity(0.04), location: 0.35),
+                                .init(color: .clear, location: 0.8)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    }
+                )
+                .clipShape(RoundedRectangle(cornerRadius: size * 0.24, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                        .stroke(
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .white.opacity(0.45), location: 0.0),
+                                    .init(color: .white.opacity(0.15), location: 0.5),
+                                    .init(color: .white.opacity(0.04), location: 1.0)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                )
+                .shadow(color: Color.black.opacity(0.35), radius: 8, x: 0, y: 3)
+            
+            // Walkman Device Image
+            WalkmanDeviceIconView(
+                size: size * 0.82,
+                mountPoint: mountPoint,
+                deviceInfo: deviceInfo,
+                hasBackground: false
+            )
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+// -----------------------------------------------------------------------------
+// LIQUID GLASS MULTI-DEVICE SEGMENT PILL
+// -----------------------------------------------------------------------------
+private struct DeviceSegmentPill: View {
+    let device: WalkmanDevice
+    let isSelected: Bool
+    let onSelect: () -> Void
+    @State private var isHovered = false
+    
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 9) {
+                WalkmanDeviceIconView(
+                    size: 30,
+                    mountPoint: device.primaryMountPoint,
+                    deviceInfo: device.deviceInfo,
+                    hasBackground: false
+                )
+                .frame(width: 26, height: 30)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(device.specificModel)
+                            .font(.system(size: 12, weight: isSelected ? .bold : .semibold))
+                            .foregroundStyle(isSelected ? .white : WalkmanTheme.silverLight)
+
+                        if isSelected {
+                            HStack(spacing: 3) {
+                                Circle()
+                                    .fill(WalkmanTheme.hiResGold)
+                                    .frame(width: 4, height: 4)
+                                Text("ACTIVE")
+                                    .font(.system(size: 7.5, weight: .black))
+                            }
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1.5)
+                            .background(WalkmanTheme.hiResGold.opacity(0.18))
+                            .foregroundStyle(WalkmanTheme.hiResGold)
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule().stroke(WalkmanTheme.hiResGold.opacity(0.4), lineWidth: 0.75)
+                            )
+                        }
+                    }
+
+                    let freeGb = Double(device.freeBytes) / (1024 * 1024 * 1024)
+                    let totalGb = Double(device.totalBytes) / (1024 * 1024 * 1024)
+                    Text(String(format: "%.1f GB free / %.0f GB", freeGb, totalGb))
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(isSelected ? WalkmanTheme.silverMuted : .secondary)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(.ultraThinMaterial)
+            .background(
+                ZStack {
+                    if isSelected {
+                        Color.white.opacity(0.10)
+                        WalkmanTheme.hiResGold.opacity(0.06)
+                    } else {
+                        Color.white.opacity(isHovered ? 0.08 : 0.04)
+                    }
+                    
+                    // Specular gloss
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(0.14), location: 0.0),
+                            .init(color: .clear, location: 0.8)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(
+                        isSelected ? WalkmanTheme.hiResGold.opacity(0.55) : Color.white.opacity(isHovered ? 0.22 : 0.09),
+                        lineWidth: isSelected ? 1.25 : 1
+                    )
+            )
+            .shadow(
+                color: Color.black.opacity(isSelected ? 0.22 : 0.12),
+                radius: isSelected ? 4 : 2,
+                x: 0,
+                y: 1
+            )
+            .scaleEffect(isHovered ? 1.015 : 1.0)
+            .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// LIQUID STAT CHIP (MICRO-CAPSULE)
+// -----------------------------------------------------------------------------
+private struct LiquidStatChip: View {
+    let title: String
+    let icon: String
+    let color: Color
+    var isGold: Bool = false
+    @State private var isHovered = false
+    
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(color)
+            
+            Text(title)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(isGold ? WalkmanTheme.hiResGoldLight : .white.opacity(0.92))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4.5)
+        .background(
+            ZStack {
+                Color.white.opacity(isHovered ? 0.10 : 0.05)
+                if isGold {
+                    WalkmanTheme.hiResGold.opacity(0.08)
+                }
+                
+                // Specular top highlight
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(0.15), location: 0),
+                            .init(color: .clear, location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 5)
+                    Spacer(minLength: 0)
+                }
+            }
+        )
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(
+                    isGold ? WalkmanTheme.hiResGold.opacity(0.35) : Color.white.opacity(isHovered ? 0.25 : 0.12),
+                    lineWidth: 0.85
+                )
+        )
+        .shadow(color: Color.black.opacity(0.12), radius: 2, x: 0, y: 1)
+        .onHover { isHovered = $0 }
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
+    }
+}
+
+// -----------------------------------------------------------------------------
+// LIQUID GLASS STORAGE DRIVE CARD
+// -----------------------------------------------------------------------------
 private struct StorageDriveCard: View {
     let title: String
     let subtitle: String
@@ -600,128 +950,236 @@ private struct StorageDriveCard: View {
     
     @State private var isHovered = false
     
+    private var isCriticallyFull: Bool {
+        percentUsed > 95
+    }
+    
     var body: some View {
         Button(action: {
             onSelect?()
         }) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
-                    Image(systemName: icon)
-                        .font(.system(size: 15))
-                        .foregroundStyle(isSelected ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
-                        .frame(width: 20)
+            VStack(alignment: .leading, spacing: 12) {
+                // Top Header Row
+                HStack(alignment: .center, spacing: 10) {
+                    // Frosted Medallion Icon
+                    ZStack {
+                        Circle()
+                            .fill(.ultraThinMaterial)
+                            .frame(width: 32, height: 32)
+                            .overlay(
+                                Circle()
+                                    .fill(isSelected ? Color.white.opacity(0.12) : Color.white.opacity(0.05))
+                            )
+                            .overlay(
+                                Circle()
+                                    .stroke(
+                                        LinearGradient(
+                                            colors: [.white.opacity(isSelected ? 0.45 : 0.2), .white.opacity(0.05)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        lineWidth: 0.8
+                                    )
+                            )
+                        
+                        Image(systemName: icon)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(isSelected ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
+                    }
                     
                     VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 7) {
+                        HStack(spacing: 8) {
                             Text(title)
-                                .font(WalkmanFont.headline)
+                                .font(.system(size: 13.5, weight: .semibold))
                                 .foregroundStyle(.white)
                                 .lineLimit(1)
                             
                             if isSelected {
                                 HStack(spacing: 4) {
                                     Circle()
-                                        .fill(WalkmanTheme.silverLight)
+                                        .fill(Color(red: 160/255, green: 220/255, blue: 255/255))
                                         .frame(width: 5, height: 5)
                                     Text("Selected")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundStyle(WalkmanTheme.silverLight)
+                                        .font(.system(size: 9.5, weight: .bold))
+                                        .foregroundStyle(Color(red: 235/255, green: 245/255, blue: 255/255))
                                 }
                                 .padding(.horizontal, 7)
-                                .padding(.vertical, 2.5)
-                                .background(WalkmanTheme.silver.opacity(0.18))
+                                .padding(.vertical, 2)
+                                .background(Color.cyan.opacity(0.16))
                                 .clipShape(Capsule())
                                 .overlay(
-                                    Capsule()
-                                        .stroke(WalkmanTheme.silver.opacity(0.45), lineWidth: 0.8)
+                                    Capsule().stroke(Color.cyan.opacity(0.4), lineWidth: 0.8)
                                 )
                             }
                         }
                         
                         Text(subtitle)
                             .font(WalkmanFont.monoSmall)
-                            .foregroundStyle(isSelected ? WalkmanTheme.silverLight.opacity(0.75) : .secondary)
+                            .foregroundStyle(isSelected ? WalkmanTheme.silverLight.opacity(0.8) : .secondary)
                             .lineLimit(1)
                     }
                     
                     Spacer(minLength: 4)
                     
-                    Text(String(format: "%.1f%%", percentUsed))
-                        .font(WalkmanFont.monoSmall.weight(.bold))
-                        .foregroundStyle(percentUsed > 95 ? Color.orange : (isSelected ? .white : WalkmanTheme.silver))
+                    // Liquid Percentage Badge
+                    HStack(spacing: 3) {
+                        if isCriticallyFull {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(Color.orange)
+                        }
+                        Text(String(format: "%.1f%%", percentUsed))
+                            .font(.system(size: 11.5, weight: .bold, design: .monospaced))
+                            .foregroundStyle(isCriticallyFull ? Color.orange : (isSelected ? .white : WalkmanTheme.silverLight))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3.5)
+                    .background(
+                        ZStack {
+                            Color.white.opacity(0.08)
+                            if isCriticallyFull {
+                                Color.orange.opacity(0.12)
+                            }
+                            
+                            // Top reflection
+                            VStack(spacing: 0) {
+                                LinearGradient(
+                                    stops: [
+                                        .init(color: .white.opacity(0.2), location: 0),
+                                        .init(color: .clear, location: 1)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                                .frame(height: 5)
+                                Spacer(minLength: 0)
+                            }
+                        }
+                    )
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(
+                                isCriticallyFull ? Color.orange.opacity(0.4) : Color.white.opacity(0.15),
+                                lineWidth: 0.8
+                            )
+                    )
                 }
                 
-                // Progress Bar
+                // Physical Liquid Glass Tube Progress Bar
                 GeometryReader { geo in
+                    let fillWidth = max(6, geo.size.width * CGFloat(min(1.0, percentUsed / 100.0)))
+                    
                     ZStack(alignment: .leading) {
+                        // Glass Trench (Outer Channel)
                         Capsule()
-                            .fill(Color.white.opacity(0.08))
-                            .frame(height: 7)
+                            .fill(Color.black.opacity(0.35))
+                            .frame(height: 8)
+                            .overlay(
+                                Capsule()
+                                    .stroke(Color.white.opacity(0.08), lineWidth: 0.8)
+                            )
                         
-                        Capsule()
-                            .fill(isSelected ? WalkmanTheme.silverGradient : WalkmanTheme.storageGradient)
-                            .frame(width: max(4, geo.size.width * CGFloat(min(1.0, percentUsed / 100.0))), height: 7)
+                        // Liquid Fluid Fill
+                        ZStack(alignment: .topLeading) {
+                            // Fluid Base Gradient
+                            Capsule()
+                                .fill(
+                                    isCriticallyFull
+                                        ? LinearGradient(colors: [Color(red: 255/255, green: 145/255, blue: 60/255), Color(red: 235/255, green: 90/255, blue: 40/255)], startPoint: .leading, endPoint: .trailing)
+                                        : (isSelected ? WalkmanTheme.silverGradient : WalkmanTheme.storageGradient)
+                                )
+                                .frame(width: fillWidth, height: 8)
+                            
+                            // Specular Light Tube Sheen (glossy top highlight beam)
+                            Capsule()
+                                .fill(
+                                    LinearGradient(
+                                        stops: [
+                                            .init(color: .white.opacity(0.65), location: 0.0),
+                                            .init(color: .white.opacity(0.15), location: 0.45),
+                                            .init(color: .clear, location: 1.0)
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
+                                .frame(width: fillWidth, height: 3.5)
+                        }
+                        .shadow(
+                            color: Color.black.opacity(0.2),
+                            radius: 2,
+                            x: 0,
+                            y: 1
+                        )
                     }
                 }
-                .frame(height: 7)
+                .frame(height: 8)
                 
-                // Numbers
+                // Numbers Footer
                 HStack {
-                    Text("\(formatBytes(usedBytes)) Used")
-                        .font(WalkmanFont.subheadlineMedium)
-                        .foregroundStyle(isSelected ? .white.opacity(0.85) : .secondary)
-                        .lineLimit(1)
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(Color.white.opacity(0.4))
+                            .frame(width: 4, height: 4)
+                        Text("\(formatBytes(usedBytes)) Used")
+                            .font(.system(size: 11.5, weight: .medium))
+                            .foregroundStyle(isSelected ? .white.opacity(0.88) : .secondary)
+                            .lineLimit(1)
+                    }
                     
                     Spacer(minLength: 4)
                     
                     Text("\(formatBytes(freeBytes)) Available")
-                        .font(WalkmanFont.subheadlineMedium)
+                        .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(.white)
                         .lineLimit(1)
                 }
             }
-            .padding(12)
+            .padding(14)
             .frame(maxWidth: .infinity)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
                     .fill(isSelected ? Color.white.opacity(0.04) : Color.clear)
             )
-            .liquidGlass(cornerRadius: 12, borderOpacity: isSelected ? 0.75 : 0.35)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(
-                        isSelected ? WalkmanTheme.silverLight.opacity(0.65) : (isHovered && onSelect != nil ? Color.white.opacity(0.15) : Color.clear),
-                        lineWidth: isSelected ? 1.5 : 1
-                    )
+            .liquidGlass(
+                cornerRadius: 15,
+                borderOpacity: isSelected ? 0.85 : (isHovered ? 0.5 : 0.35),
+                isSelected: isSelected,
+                isHovered: isHovered
             )
+            .scaleEffect(isHovered && onSelect != nil ? 1.012 : 1.0)
+            .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(onSelect == nil)
         .onHover { isHovered = $0 }
-        .animation(.easeInOut(duration: 0.15), value: isSelected)
     }
 }
 
+// -----------------------------------------------------------------------------
+// LIQUID GLASS ACTION CARD (INTERACTIVE WORKFLOW TILE)
+// -----------------------------------------------------------------------------
 private struct ActionCard: View {
     let title: String
     let description: String
     let icon: String
+    var iconTint: Color = WalkmanTheme.silverLight
     var isHorizontalRow: Bool = false
     let action: () -> Void
+    @State private var isHovered = false
     
     var body: some View {
         Button(action: action) {
             if isHorizontalRow {
-                HStack(spacing: 10) {
-                    Image(systemName: icon)
-                        .font(.system(size: 16))
-                        .foregroundStyle(WalkmanTheme.silverMuted)
-                        .frame(width: 22)
+                HStack(spacing: 12) {
+                    // Liquid Glass Icon Medallion
+                    iconMedallion
                     
-                    VStack(alignment: .leading, spacing: 1) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(title)
-                            .font(WalkmanFont.headline)
+                            .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(.white)
                             .lineLimit(1)
                         
@@ -731,31 +1189,54 @@ private struct ActionCard: View {
                             .lineLimit(1)
                     }
                     
-                    Spacer(minLength: 4)
+                    Spacer(minLength: 6)
                     
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .liquidGlass(cornerRadius: 10)
-            } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Image(systemName: icon)
-                            .font(.system(size: 16))
-                            .foregroundStyle(WalkmanTheme.silverMuted)
-                        Spacer()
+                    // Translucent Circular Forward Button
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(isHovered ? 0.15 : 0.06))
+                            .frame(width: 24, height: 24)
+                            .overlay(
+                                Circle().stroke(Color.white.opacity(isHovered ? 0.3 : 0.1), lineWidth: 0.75)
+                            )
+                        
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(.tertiary)
+                            .font(.system(size: 9.5, weight: .bold))
+                            .foregroundStyle(isHovered ? Color.white : Color.white.opacity(0.35))
+                            .offset(x: isHovered ? 1.5 : 0)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .liquidGlass(cornerRadius: 14, borderOpacity: isHovered ? 0.6 : 0.32, isHovered: isHovered)
+                .scaleEffect(isHovered ? 1.01 : 1.0)
+                .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        iconMedallion
+                        Spacer()
+                        
+                        // Translucent Circular Forward Button
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(isHovered ? 0.15 : 0.06))
+                                .frame(width: 24, height: 24)
+                                .overlay(
+                                    Circle().stroke(Color.white.opacity(isHovered ? 0.3 : 0.1), lineWidth: 0.75)
+                                )
+                            
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 9.5, weight: .bold))
+                                .foregroundStyle(isHovered ? Color.white : Color.white.opacity(0.35))
+                                .offset(x: isHovered ? 1.5 : 0)
+                        }
                     }
                     
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 3) {
                         Text(title)
-                            .font(WalkmanFont.headline)
+                            .font(.system(size: 13.5, weight: .semibold))
                             .foregroundStyle(.white)
                             .lineLimit(1)
                         
@@ -766,40 +1247,102 @@ private struct ActionCard: View {
                             .frame(maxWidth: .infinity, minHeight: 32, alignment: .topLeading)
                     }
                 }
-                .padding(12)
-                .frame(maxWidth: .infinity, minHeight: 100, alignment: .topLeading)
-                .liquidGlass(cornerRadius: 12)
+                .padding(14)
+                .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
+                .liquidGlass(cornerRadius: 15, borderOpacity: isHovered ? 0.6 : 0.32, isHovered: isHovered)
+                .scaleEffect(isHovered ? 1.015 : 1.0)
+                .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
             }
         }
         .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+    }
+    
+    private var iconMedallion: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .frame(width: 32, height: 32)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(iconTint.opacity(isHovered ? 0.22 : 0.12))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .stroke(
+                            LinearGradient(
+                                colors: [iconTint.opacity(0.45), .white.opacity(0.1)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 0.85
+                        )
+                )
+                .shadow(color: Color.black.opacity(isHovered ? 0.25 : 0.12), radius: 3, x: 0, y: 1)
+            
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(iconTint)
+        }
     }
 }
 
+// -----------------------------------------------------------------------------
+// SONY HARDWARE COMPLIANCE ROW (INSPECTOR STYLE)
+// -----------------------------------------------------------------------------
 private struct ComplianceRow: View {
     let title: String
     let detail: String
+    var badge: String? = nil
     let isEnforced: Bool
+    @State private var isHovered = false
     
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: isEnforced ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                .font(.system(size: 13))
-                .foregroundStyle(isEnforced ? Color.green : Color.orange)
-                .padding(.top, 2)
+        HStack(alignment: .center, spacing: 10) {
+            // Verified Indicator (Clean tactile badge - No Glow)
+            ZStack {
+                Circle()
+                    .fill(Color.green.opacity(0.15))
+                    .frame(width: 22, height: 22)
+                
+                Image(systemName: isEnforced ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(isEnforced ? Color.green : Color.orange)
+            }
             
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(WalkmanFont.bodyMedium)
+                    .font(.system(size: 12.5, weight: .medium))
                     .foregroundStyle(.white)
                     .lineLimit(1)
                 Text(detail)
-                    .font(WalkmanFont.subheadline)
+                    .font(.system(size: 11, weight: .regular))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
             
-            Spacer(minLength: 0)
+            Spacer(minLength: 6)
+            
+            if let badge = badge {
+                Text(badge)
+                    .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(WalkmanTheme.silverMuted)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2.5)
+                    .background(Color.white.opacity(0.05))
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule().stroke(Color.white.opacity(0.08), lineWidth: 0.75)
+                    )
+            }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 7)
+        .padding(.horizontal, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(isHovered ? Color.white.opacity(0.035) : Color.clear)
+        )
+        .onHover { isHovered = $0 }
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
     }
 }
