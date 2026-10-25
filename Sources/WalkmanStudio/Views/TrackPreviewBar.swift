@@ -266,22 +266,14 @@ public struct TrackPreviewBar: View {
     }
 
     private var idleDisplay: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Image(systemName: "waveform")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(WalkmanTheme.silverMuted.opacity(0.6))
 
             Text("Walkman Studio")
-                .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(WalkmanTheme.silverLight)
-
-            Text("•")
-                .font(.system(size: 8))
-                .foregroundStyle(WalkmanTheme.silverMuted.opacity(0.4))
-
-            Text("Ready • Select a track to play")
-                .font(.system(size: 11))
-                .foregroundStyle(WalkmanTheme.silverMuted.opacity(0.7))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(WalkmanTheme.silverMuted)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
