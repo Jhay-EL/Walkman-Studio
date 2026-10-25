@@ -29,6 +29,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
     }
     @Published public var currentCoverArt: NSImage?
     @Published public var isSeeking: Bool = false
+    @Published public var isShuffle: Bool = false
+    @Published public var isRepeat: Bool = false
 
     /// Convenience accessors forwarding to `progress`
     public var currentTime: Double {
@@ -195,10 +197,21 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
 
     public func playNext() {
         guard let current = currentTrack, !currentQueue.isEmpty else { return }
+        if isShuffle && currentQueue.count > 1 {
+            let candidates = currentQueue.filter { $0.id != current.id }
+            if let random = candidates.randomElement() {
+                play(track: random, in: currentQueue)
+                return
+            }
+        }
         if let idx = currentQueue.firstIndex(where: { $0.id == current.id }) {
             let nextIdx = idx + 1
             if nextIdx < currentQueue.count {
                 play(track: currentQueue[nextIdx], in: currentQueue)
+            } else if isRepeat {
+                if let first = currentQueue.first {
+                    play(track: first, in: currentQueue)
+                }
             } else {
                 pause()
                 seek(to: 0)
@@ -216,6 +229,10 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
             let prevIdx = idx - 1
             if prevIdx >= 0 {
                 play(track: currentQueue[prevIdx], in: currentQueue)
+            } else if isRepeat {
+                if let last = currentQueue.last {
+                    play(track: last, in: currentQueue)
+                }
             } else {
                 seek(to: 0)
             }

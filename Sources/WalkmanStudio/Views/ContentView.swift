@@ -698,18 +698,27 @@ public struct ContentView: View {
                         }
                         .clipped()
                         
-                        // Audio Preview & Playback Bar
-                        TrackPreviewBar(
-                            isInspectorPresented: showInspector,
-                            onOpenInspector: {
-                                if let cur = player.currentTrack {
-                                    self.selectedTrackId = cur.id
+                        // Audio Preview & Playback Bar (Floating Liquid Glass Container)
+                        HStack {
+                            Spacer(minLength: 0)
+                            TrackPreviewBar(
+                                libraryTracks: tracks,
+                                isInspectorPresented: showInspector,
+                                onOpenInspector: {
+                                    if let cur = player.currentTrack {
+                                        self.selectedTrackId = cur.id
+                                    }
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                        self.showInspector = true
+                                    }
                                 }
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                    self.showInspector = true
-                                }
-                            }
-                        )
+                            )
+                            .frame(maxWidth: 1040)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 12)
+                        .padding(.top, 4)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(WalkmanTheme.background.ignoresSafeArea())

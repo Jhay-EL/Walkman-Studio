@@ -4,10 +4,14 @@ import AppKit
 public struct TrackPreviewBar: View {
     @ObservedObject var player = AudioPlayerService.shared
     @ObservedObject var progress = AudioPlayerService.shared.progress
+    var libraryTracks: [Track] = []
     var isInspectorPresented: Bool = false
     let onOpenInspector: () -> Void
 
     @State private var dragTime: Double? = nil
+    @State private var isDetailsHovered: Bool = false
+    @State private var isArtworkHovered: Bool = false
+    @State private var lastNonZeroVolume: Float = 0.8
 
     private func formatTime(_ seconds: Double) -> String {
         if seconds.isNaN || seconds.isInfinite || seconds < 0 { return "0:00" }
@@ -28,214 +32,469 @@ public struct TrackPreviewBar: View {
     }
 
     public var body: some View {
-        if let track = player.currentTrack {
-            VStack(spacing: 0) {
-                Divider()
-                    .overlay(Color.white.opacity(0.1))
+        HStack(spacing: 12) {
+            // LEFT: Transport controls (Shuffle, Prev, Play/Pause, Next, Repeat)
+            transportControlsZone
 
-                HStack(spacing: 12) {
-                    // LEFT: Track Info & Cover Art Thumbnail
-                    let isHiRes = track.bitsPerSample > 16 || track.sampleRate > 48000
-                    HStack(spacing: 10) {
-                        Button(action: onOpenInspector) {
-                            ZStack {
-                                if let img = player.currentCoverArt {
-                                    Image(nsImage: img)
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
-                                        .frame(width: 42, height: 42)
-                                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                } else {
-                                    TrackCoverThumbnail(track: track, size: 42, isPlaying: player.isPlaying)
-                                }
-                            }
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .stroke(player.isPlaying ? Color.white.opacity(0.35) : Color.white.opacity(0.12), lineWidth: 1)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .help("Click to view full metadata details & artwork")
+            // CENTER: Now Playing Display Pod
+            centerDisplayPod
 
-                        VStack(alignment: .leading, spacing: 2.5) {
-                            HStack(spacing: 6) {
-                                Text(track.title)
-                                    .font(WalkmanFont.bodyBold)
-                                    .foregroundStyle(player.isPlaying ? .white : Color(white: 0.9))
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
+            // RIGHT: Volume & Details Inspector Toggle
+            trailingControlsZone
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+        .frame(height: 56)
+        .background(
+            ZStack {
+                // Frosted Liquid Glass chassis
+                WalkmanTheme.card.opacity(0.85)
+                    .background(.ultraThinMaterial)
 
-                                if isHiRes {
-                                    Text("Hi-Res")
-                                        .font(WalkmanFont.badge)
-                                        .padding(.horizontal, 5)
-                                        .padding(.vertical, 1.5)
-                                        .background(WalkmanTheme.hiResGoldGradient)
-                                        .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                                        .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                                .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
-                                        )
-                                        .shadow(color: Color.black.opacity(0.2), radius: 1.5, x: 0, y: 0.5)
-                                        .fixedSize()
-                                }
-                            }
-
-                            Text("\(track.artist) • \(track.album)")
-                                .font(WalkmanFont.subheadline)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-
-                            HStack(spacing: 5) {
-                                Text(track.format)
-                                    .font(WalkmanFont.badge)
-                                    .padding(.horizontal, 4.5)
-                                    .padding(.vertical, 1.5)
-                                    .background(isHiRes ? WalkmanTheme.hiResGold.opacity(0.16) : Color.white.opacity(0.10))
-                                    .foregroundStyle(isHiRes ? WalkmanTheme.hiResGold : WalkmanTheme.silverLight)
-                                    .clipShape(RoundedRectangle(cornerRadius: 3))
-                                    .fixedSize()
-
-                                let specs = secondarySpecs(for: track)
-                                if !specs.isEmpty {
-                                    Text(specs)
-                                        .font(WalkmanFont.monoSmall)
-                                        .foregroundStyle(isHiRes ? WalkmanTheme.hiResGold.opacity(0.9) : Color.white.opacity(0.45))
-                                        .lineLimit(1)
-                                        .truncationMode(.tail)
-                                }
-                            }
-                        }
-                        .frame(minWidth: 130, idealWidth: 190, maxWidth: 250, alignment: .leading)
-                    }
-                    .layoutPriority(1)
-
-                    Spacer(minLength: 6)
-
-                    // CENTER: Playback Controls & Interactive Scrubber
-                    VStack(spacing: 4) {
-                        HStack(spacing: 16) {
-                            Button(action: { player.playPrevious() }) {
-                                Image(systemName: "backward.fill")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.plain)
-                            .help("Previous track")
-
-                            Button(action: { player.togglePlayPause() }) {
-                                ZStack {
-                                    Circle()
-                                        .fill(WalkmanTheme.silverGradient)
-                                        .frame(width: 32, height: 32)
-
-                                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                                        .font(.system(size: 12, weight: .bold))
-                                        .foregroundStyle(Color(red: 18 / 255, green: 18 / 255, blue: 22 / 255))
-                                        .offset(x: player.isPlaying ? 0 : 1)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            .keyboardShortcut(.space, modifiers: [])
-                            .help(player.isPlaying ? "Pause (Space)" : "Play (Space)")
-
-                            Button(action: { player.playNext() }) {
-                                Image(systemName: "forward.fill")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.plain)
-                            .help("Next track")
-                        }
-
-                        // Scrubber Slider Row
-                        HStack(spacing: 6) {
-                            let curTime = dragTime ?? progress.currentTime
-                            Text(formatTime(curTime))
-                                .font(WalkmanFont.monoSmall)
-                                .foregroundStyle(.secondary)
-                                .frame(width: 38, alignment: .trailing)
-
-                            Slider(
-                                value: Binding(
-                                    get: { dragTime ?? progress.currentTime },
-                                    set: { newTime in
-                                        dragTime = newTime
-                                    }
-                                ),
-                                in: 0...max(1.0, progress.duration),
-                                onEditingChanged: { editing in
-                                    if editing {
-                                        player.isSeeking = true
-                                    } else {
-                                        if let target = dragTime {
-                                            player.seek(to: target)
-                                        }
-                                        dragTime = nil
-                                    }
-                                }
-                            )
-                            .controlSize(.mini)
-                            .tint(WalkmanTheme.silver)
-                            .frame(minWidth: 70, idealWidth: 180, maxWidth: 280)
-
-                            Text(formatTime(progress.duration))
-                                .font(WalkmanFont.monoSmall)
-                                .foregroundStyle(.secondary)
-                                .frame(width: 38, alignment: .leading)
-                        }
-                    }
-                    .frame(minWidth: 160, maxWidth: 380)
-                    .layoutPriority(2)
-
-                    Spacer(minLength: 6)
-
-                    // RIGHT: Volume & Info Inspector Button
-                    HStack(spacing: 10) {
-                        HStack(spacing: 5) {
-                            Image(systemName: player.volume > 0.5 ? "speaker.wave.2.fill" : (player.volume > 0 ? "speaker.wave.1.fill" : "speaker.slash.fill"))
-                                .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
-
-                            Slider(value: $player.volume, in: 0...1)
-                                .controlSize(.mini)
-                                .tint(WalkmanTheme.silver)
-                                .frame(minWidth: 44, idealWidth: 60, maxWidth: 75)
-                        }
-
-                        if !isInspectorPresented {
-                            Button(action: onOpenInspector) {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "info.circle")
-                                        .font(.system(size: 12))
-                                    Text("Details")
-                                        .font(WalkmanFont.subheadlineMedium)
-                                }
-                                .padding(.horizontal, 9)
-                                .padding(.vertical, 4.5)
-                                .background(Color.white.opacity(0.08))
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                                .foregroundStyle(.primary)
-                            }
-                            .buttonStyle(.plain)
-                            .fixedSize()
-                            .help("View & edit metadata tags, hardware compliance, and artwork")
-                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                        }
-                    }
-                    .fixedSize(horizontal: true, vertical: false)
-                    .animation(.easeInOut(duration: 0.2), value: isInspectorPresented)
+                // Top specular refraction sheen
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(0.20), location: 0.0),
+                            .init(color: .white.opacity(0.04), location: 0.5),
+                            .init(color: .clear, location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 7)
+                    Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(
-                    WalkmanTheme.card
-                        .background(.ultraThinMaterial)
-                )
             }
-            .transition(.move(edge: .bottom).combined(with: .opacity))
+        )
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .strokeBorder(
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(0.20), location: 0.0),
+                            .init(color: .white.opacity(0.08), location: 0.5),
+                            .init(color: .white.opacity(0.05), location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 0.85
+                )
+        )
+        .shadow(color: Color.black.opacity(0.40), radius: 14, x: 0, y: 5)
+        .shadow(color: Color.black.opacity(0.20), radius: 3, x: 0, y: 1)
+    }
+
+    // MARK: - Left: Transport Controls
+    private var transportControlsZone: some View {
+        HStack(spacing: 9) {
+            // Shuffle
+            PlayerIconButton(
+                systemName: "shuffle",
+                size: 11,
+                isActive: player.isShuffle,
+                helpText: player.isShuffle ? "Shuffle: On" : "Shuffle: Off",
+                action: { player.isShuffle.toggle() }
+            )
+
+            // Previous
+            PlayerIconButton(
+                systemName: "backward.fill",
+                size: 12,
+                isActive: false,
+                isDisabled: player.currentTrack == nil && libraryTracks.isEmpty,
+                helpText: "Previous track",
+                action: { player.playPrevious() }
+            )
+
+            // Play / Pause prominent circular button
+            PlayPauseCircleButton(
+                isPlaying: player.isPlaying,
+                isEnabled: player.currentTrack != nil || !libraryTracks.isEmpty,
+                action: {
+                    if player.currentTrack != nil {
+                        player.togglePlayPause()
+                    } else if let first = libraryTracks.first {
+                        player.play(track: first, in: libraryTracks)
+                    }
+                }
+            )
+
+            // Next
+            PlayerIconButton(
+                systemName: "forward.fill",
+                size: 12,
+                isActive: false,
+                isDisabled: player.currentTrack == nil && libraryTracks.isEmpty,
+                helpText: "Next track",
+                action: { player.playNext() }
+            )
+
+            // Repeat
+            PlayerIconButton(
+                systemName: "repeat",
+                size: 11,
+                isActive: player.isRepeat,
+                helpText: player.isRepeat ? "Repeat: On" : "Repeat: Off",
+                action: { player.isRepeat.toggle() }
+            )
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    // MARK: - Center: Display Pod
+    private var centerDisplayPod: some View {
+        ZStack {
+            // Display pod inner glass styling
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.black.opacity(0.24))
+
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(0.12), location: 0.0),
+                            .init(color: .white.opacity(0.04), location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 0.8
+                )
+
+            if let track = player.currentTrack {
+                activeTrackDisplay(for: track)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+            } else {
+                idleDisplay
+                    .padding(.horizontal, 12)
+            }
+        }
+        .frame(minWidth: 240, maxWidth: 640)
+        .frame(height: 42)
+    }
+
+    @ViewBuilder
+    private func activeTrackDisplay(for track: Track) -> some View {
+        let isHiRes = track.bitsPerSample > 16 || track.sampleRate > 48000
+        HStack(spacing: 8) {
+            // Artwork thumbnail (clickable to open inspector)
+            Button(action: onOpenInspector) {
+                ZStack {
+                    if let img = player.currentCoverArt {
+                        Image(nsImage: img)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 34, height: 34)
+                            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    } else {
+                        TrackCoverThumbnail(track: track, size: 34, isPlaying: player.isPlaying)
+                    }
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .stroke(
+                            isArtworkHovered ? Color.white.opacity(0.40) : (player.isPlaying ? Color.white.opacity(0.25) : Color.white.opacity(0.12)),
+                            lineWidth: 0.8
+                        )
+                )
+                .scaleEffect(isArtworkHovered ? 1.04 : 1.0)
+                .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isArtworkHovered)
+            }
+            .buttonStyle(.plain)
+            .help("Click to view full metadata details & artwork")
+            .onHover { h in
+                isArtworkHovered = h
+                if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
+
+            // Metadata & Scrubber
+            VStack(alignment: .leading, spacing: 1.5) {
+                // Top row: Title, Artist, Badges
+                HStack(spacing: 5) {
+                    Text(track.title)
+                        .font(.system(size: 11.5, weight: .bold))
+                        .foregroundStyle(player.isPlaying ? .white : Color(white: 0.9))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    Text("•")
+                        .font(.system(size: 8))
+                        .foregroundStyle(.secondary)
+
+                    Text("\(track.artist) — \(track.album)")
+                        .font(.system(size: 10.5, weight: .regular))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    if isHiRes {
+                        Text("Hi-Res")
+                            .font(WalkmanFont.badge)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(WalkmanTheme.hiResGoldGradient)
+                            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                            .clipShape(RoundedRectangle(cornerRadius: 2.5, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+                                    .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
+                            )
+                            .fixedSize()
+                    }
+
+                    Text(track.format)
+                        .font(WalkmanFont.badge)
+                        .padding(.horizontal, 3.5)
+                        .padding(.vertical, 1)
+                        .background(isHiRes ? WalkmanTheme.hiResGold.opacity(0.16) : Color.white.opacity(0.10))
+                        .foregroundStyle(isHiRes ? WalkmanTheme.hiResGold : WalkmanTheme.silverLight)
+                        .clipShape(RoundedRectangle(cornerRadius: 2.5))
+                        .fixedSize()
+
+                    let specs = secondarySpecs(for: track)
+                    if !specs.isEmpty {
+                        Text(specs)
+                            .font(WalkmanFont.monoSmall)
+                            .foregroundStyle(isHiRes ? WalkmanTheme.hiResGold.opacity(0.85) : Color.white.opacity(0.40))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                }
+
+                // Bottom row: Timeline scrubber
+                HStack(spacing: 5) {
+                    let curTime = dragTime ?? progress.currentTime
+                    Text(formatTime(curTime))
+                        .font(WalkmanFont.monoSmall)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, alignment: .trailing)
+
+                    Slider(
+                        value: Binding(
+                            get: { dragTime ?? progress.currentTime },
+                            set: { newTime in dragTime = newTime }
+                        ),
+                        in: 0...max(1.0, progress.duration),
+                        onEditingChanged: { editing in
+                            if editing {
+                                player.isSeeking = true
+                            } else {
+                                if let target = dragTime {
+                                    player.seek(to: target)
+                                }
+                                dragTime = nil
+                            }
+                        }
+                    )
+                    .controlSize(.mini)
+                    .tint(isHiRes ? WalkmanTheme.hiResGold : WalkmanTheme.silver)
+
+                    Text(formatTime(progress.duration))
+                        .font(WalkmanFont.monoSmall)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, alignment: .leading)
+                }
+            }
+        }
+    }
+
+    private var idleDisplay: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "waveform")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(WalkmanTheme.silverMuted.opacity(0.6))
+
+            Text("Walkman Studio")
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(WalkmanTheme.silverLight)
+
+            Text("•")
+                .font(.system(size: 8))
+                .foregroundStyle(WalkmanTheme.silverMuted.opacity(0.4))
+
+            Text("Ready • Select a track to play")
+                .font(.system(size: 11))
+                .foregroundStyle(WalkmanTheme.silverMuted.opacity(0.7))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Right: Volume & Details
+    private var trailingControlsZone: some View {
+        HStack(spacing: 10) {
+            // Speaker Icon + Volume Slider
+            HStack(spacing: 5) {
+                Button(action: {
+                    if player.volume > 0.001 {
+                        lastNonZeroVolume = player.volume
+                        player.volume = 0.0
+                    } else {
+                        player.volume = lastNonZeroVolume > 0.05 ? lastNonZeroVolume : 0.8
+                    }
+                }) {
+                    Image(systemName: player.volume > 0.5 ? "speaker.wave.2.fill" : (player.volume > 0.001 ? "speaker.wave.1.fill" : "speaker.slash.fill"))
+                        .font(.system(size: 12))
+                        .foregroundStyle(player.volume > 0.001 ? WalkmanTheme.silverMuted : Color.white.opacity(0.4))
+                        .frame(width: 18, height: 18)
+                }
+                .buttonStyle(.plain)
+                .help(player.volume > 0.001 ? "Mute" : "Unmute")
+                .onHover { h in
+                    if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
+
+                Slider(value: $player.volume, in: 0...1)
+                    .controlSize(.mini)
+                    .tint(WalkmanTheme.silver)
+                    .frame(width: 68)
+            }
+
+            // Details Button
+            if !isInspectorPresented {
+                Button(action: onOpenInspector) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 11, weight: .medium))
+                        Text("Details")
+                            .font(WalkmanFont.subheadlineMedium)
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4.5)
+                    .background(Color.white.opacity(isDetailsHovered ? 0.14 : 0.07))
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(
+                                LinearGradient(
+                                    stops: [
+                                        .init(color: .white.opacity(isDetailsHovered ? 0.28 : 0.12), location: 0.0),
+                                        .init(color: .white.opacity(isDetailsHovered ? 0.14 : 0.06), location: 1.0)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ),
+                                lineWidth: 0.8
+                            )
+                    )
+                    .foregroundStyle(isDetailsHovered ? .white : WalkmanTheme.silverLight)
+                    .scaleEffect(isDetailsHovered ? 1.03 : 1.0)
+                }
+                .buttonStyle(.plain)
+                .fixedSize()
+                .help("View & edit metadata tags, hardware compliance, and artwork")
+                .onHover { h in
+                    withAnimation(.spring(response: 0.22, dampingFraction: 0.72)) {
+                        isDetailsHovered = h
+                    }
+                    if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .animation(.easeInOut(duration: 0.2), value: isInspectorPresented)
+    }
+}
+
+// MARK: - Subviews
+
+private struct PlayerIconButton: View {
+    let systemName: String
+    let size: CGFloat
+    let isActive: Bool
+    var isDisabled: Bool = false
+    let helpText: String
+    let action: () -> Void
+
+    @State private var isHovered: Bool = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: size, weight: isActive ? .bold : .medium))
+                .foregroundStyle(
+                    isDisabled ? Color.white.opacity(0.20) :
+                    (isActive ? WalkmanTheme.hiResGold : (isHovered ? .white : Color.white.opacity(0.65)))
+                )
+                .frame(width: 24, height: 24)
+                .scaleEffect(isHovered && !isDisabled ? 1.10 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .help(helpText)
+        .onHover { h in
+            guard !isDisabled else { return }
+            withAnimation(.spring(response: 0.22, dampingFraction: 0.72)) {
+                isHovered = h
+            }
+            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+    }
+}
+
+private struct PlayPauseCircleButton: View {
+    let isPlaying: Bool
+    let isEnabled: Bool
+    let action: () -> Void
+
+    @State private var isHovered: Bool = false
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: isEnabled ?
+                                (isHovered ? [Color.white, Color(white: 0.92)] : [Color(white: 0.95), Color(white: 0.82)]) :
+                                [Color.white.opacity(0.3), Color.white.opacity(0.2)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .frame(width: 32, height: 32)
+
+                // Specular top highlight
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(isHovered ? 0.45 : 0.25), location: 0.0),
+                            .init(color: .clear, location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 5)
+                    Spacer(minLength: 0)
+                }
+                .clipShape(Circle())
+
+                Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Color(red: 18 / 255, green: 18 / 255, blue: 22 / 255))
+                    .offset(x: isPlaying ? 0 : 1)
+            }
+            .overlay(
+                Circle()
+                    .stroke(Color.white.opacity(isHovered ? 0.45 : 0.25), lineWidth: 0.8)
+            )
+            .shadow(color: Color.black.opacity(isHovered ? 0.35 : 0.20), radius: isHovered ? 3.5 : 2, x: 0, y: 1.5)
+            .scaleEffect(isHovered && isEnabled ? 1.06 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .keyboardShortcut(.space, modifiers: [])
+        .help(isPlaying ? "Pause (Space)" : "Play (Space)")
+        .onHover { h in
+            guard isEnabled else { return }
+            withAnimation(.spring(response: 0.20, dampingFraction: 0.70)) {
+                isHovered = h
+            }
+            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
     }
 }
