@@ -143,7 +143,7 @@ Sony Walkman non-Android digital audio players deliver exceptional audio fidelit
 ### 14. Native Universal Binary & Modern Obsidian UI
 * **Zero Rosetta Dependency:** Native ARM64 compilation for Apple Silicon (M1, M2, M3, M4) alongside full 64-bit Intel (`x86_64`) compilation for legacy and current Intel MacBooks, MacBook Pros, MacBook Airs, iMacs, and Mac Pros.
 * **Flexible Packages:** Distributed as dedicated standalone `.dmg` packages for Apple Silicon and Intel, as well as an all-in-one Universal 2 `.dmg`.
-* **Sony Signature Series Aesthetic:** Brushed silver and matte dark obsidian palette inspired by the Sony Walkman Signature Series aluminum chassis, unified transparent titlebar, and smooth responsive navigation.
+* **Sony Signature Series Aesthetic & Tactile Design Language:** Brushed silver and matte dark obsidian palette inspired by the Sony Walkman Signature Series aluminum chassis, unified transparent titlebar, and smooth responsive navigation. Adheres strictly to the Walkman Studio Design System Language: zero background gradients, zero neon bloom or glow halos, and refined tactile physical controls. (See [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)).
 
 ---
 
