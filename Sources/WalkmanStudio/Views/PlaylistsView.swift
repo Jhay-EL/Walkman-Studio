@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 private enum RenameLocation {
     case row
@@ -12,6 +13,7 @@ public struct PlaylistsView: View {
     @State private var playlists: [Playlist] = []
     @State private var selectedPlaylist: Playlist?
     @State private var playlistTracks: [String] = []
+    @State private var resolvedPlaylistTracks: [(path: String, track: Track?)] = []
     @State private var editingPlaylistId: String? = nil
     @State private var editingPlaylistName: String = ""
     @State private var renameLocation: RenameLocation = .row
@@ -23,10 +25,21 @@ public struct PlaylistsView: View {
     @State private var isSaving: Bool = false
     @State private var cachedTrackLookup: [String: Track] = [:]
     
+    // Drag & Drop Reordering & Transfer State
+    @State private var draggedTrackIndex: Int? = nil
+    @State private var draggedTrackPath: String? = nil
+    @State private var dropTargetIndex: Int? = nil
+    
     public init(activeDrive: WalkmanDrive?, libraryTracks: [Track]) {
         self.activeDrive = activeDrive
         self.libraryTracks = libraryTracks
         _cachedTrackLookup = State(initialValue: PlaylistsView.buildLookupTable(tracks: libraryTracks))
+    }
+    
+    private func updateResolvedTracks() {
+        resolvedPlaylistTracks = playlistTracks.map { path in
+            (path: path, track: resolvedTrack(for: path))
+        }
     }
     
     private func loadPlaylists() {
@@ -75,6 +88,7 @@ public struct PlaylistsView: View {
             self.selectedPlaylist = sortedList.first
             self.playlistTracks = sortedList.first?.tracks ?? []
         }
+        self.updateResolvedTracks()
     }
     
     private static let trimChars = CharacterSet(charactersIn: "/ \t\r\n")
@@ -122,6 +136,7 @@ public struct PlaylistsView: View {
         guard let drive = activeDrive, let playlist = selectedPlaylist else { return }
         guard playlist.fullPath.isEmpty || playlist.fullPath.hasPrefix(drive.mountPoint) else { return }
         self.playlistTracks = newTracks
+        self.updateResolvedTracks()
         self.isSaving = true
         
         // Write back to the exact directory where the playlist lives (e.g. /Volumes/SD_CARD/MUSIC/)
@@ -180,58 +195,54 @@ public struct PlaylistsView: View {
     }
     
     private func sortTracksByTitle(ascending: Bool) {
-        let lookup = cachedTrackLookup
-        let sorted = playlistTracks.sorted { p1, p2 in
-            let k1 = PlaylistsView.normalizeKey(p1)
-            let k2 = PlaylistsView.normalizeKey(p2)
-            let t1 = lookup[k1]?.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            let t2 = lookup[k2]?.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            let name1 = (t1?.isEmpty == false ? t1! : (p1 as NSString).lastPathComponent)
-            let name2 = (t2?.isEmpty == false ? t2! : (p2 as NSString).lastPathComponent)
-            let cmp = name1.localizedStandardCompare(name2)
-            return ascending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
+        let items: [(path: String, title: String)] = playlistTracks.map { path in
+            let tr = resolvedTrack(for: path)
+            let t = tr?.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let name = (t?.isEmpty == false ? t! : (path as NSString).lastPathComponent)
+            return (path: path, title: name)
         }
+        let sorted = items.sorted {
+            let cmp = $0.title.localizedStandardCompare($1.title)
+            return ascending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
+        }.map(\.path)
         persistPlaylistChanges(newTracks: sorted)
     }
     
     private func sortTracksByArtist(ascending: Bool) {
-        let lookup = cachedTrackLookup
-        let sorted = playlistTracks.sorted { p1, p2 in
-            let k1 = PlaylistsView.normalizeKey(p1)
-            let k2 = PlaylistsView.normalizeKey(p2)
-            let a1 = lookup[k1]?.artist.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let a2 = lookup[k2]?.artist.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let cmp = a1.localizedStandardCompare(a2)
+        let items: [(path: String, artist: String, title: String)] = playlistTracks.map { path in
+            let tr = resolvedTrack(for: path)
+            let a = tr?.artist.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let t = tr?.title ?? (path as NSString).lastPathComponent
+            return (path: path, artist: a, title: t)
+        }
+        let sorted = items.sorted {
+            let cmp = $0.artist.localizedStandardCompare($1.artist)
             if cmp == .orderedSame {
-                let t1 = lookup[k1]?.title ?? (p1 as NSString).lastPathComponent
-                let t2 = lookup[k2]?.title ?? (p2 as NSString).lastPathComponent
-                return t1.localizedStandardCompare(t2) == .orderedAscending
+                return $0.title.localizedStandardCompare($1.title) == .orderedAscending
             }
             return ascending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
-        }
+        }.map(\.path)
         persistPlaylistChanges(newTracks: sorted)
     }
     
     private func sortTracksByAlbum() {
-        let lookup = cachedTrackLookup
-        let sorted = playlistTracks.sorted { p1, p2 in
-            let k1 = PlaylistsView.normalizeKey(p1)
-            let k2 = PlaylistsView.normalizeKey(p2)
-            let alb1 = lookup[k1]?.album.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let alb2 = lookup[k2]?.album.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let cmpAlb = alb1.localizedStandardCompare(alb2)
-            if cmpAlb != .orderedSame {
-                return cmpAlb == .orderedAscending
-            }
-            let n1 = Int(lookup[k1]?.trackNum.components(separatedBy: "/").first ?? "0") ?? 0
-            let n2 = Int(lookup[k2]?.trackNum.components(separatedBy: "/").first ?? "0") ?? 0
-            if n1 != n2 {
-                return n1 < n2
-            }
-            let t1 = lookup[k1]?.title ?? (p1 as NSString).lastPathComponent
-            let t2 = lookup[k2]?.title ?? (p2 as NSString).lastPathComponent
-            return t1.localizedStandardCompare(t2) == .orderedAscending
+        let items: [(path: String, album: String, trackNum: Int, title: String)] = playlistTracks.map { path in
+            let tr = resolvedTrack(for: path)
+            let alb = tr?.album.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let n = Int(tr?.trackNum.components(separatedBy: "/").first ?? "0") ?? 0
+            let t = tr?.title ?? (path as NSString).lastPathComponent
+            return (path: path, album: alb, trackNum: n, title: t)
         }
+        let sorted = items.sorted {
+            let cmp = $0.album.localizedStandardCompare($1.album)
+            if cmp != .orderedSame {
+                return cmp == .orderedAscending
+            }
+            if $0.trackNum != $1.trackNum {
+                return $0.trackNum < $1.trackNum
+            }
+            return $0.title.localizedStandardCompare($1.title) == .orderedAscending
+        }.map(\.path)
         persistPlaylistChanges(newTracks: sorted)
     }
     
@@ -251,6 +262,109 @@ public struct PlaylistsView: View {
     
     private func shuffleTracks() {
         persistPlaylistChanges(newTracks: playlistTracks.shuffled())
+    }
+    
+    // MARK: - Drag & Drop Organization & Transfer
+    
+    private func reorderTrack(from fromIndex: Int, to toIndex: Int) {
+        guard fromIndex >= 0, fromIndex < playlistTracks.count,
+              toIndex >= 0, toIndex < playlistTracks.count,
+              fromIndex != toIndex else { return }
+        
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
+            var updated = playlistTracks
+            let item = updated.remove(at: fromIndex)
+            updated.insert(item, at: toIndex)
+            persistPlaylistChanges(newTracks: updated)
+        }
+    }
+    
+    private func addTrackToPlaylist(_ rawTrackPath: String, playlist: Playlist) {
+        guard let drive = activeDrive else {
+            withAnimation {
+                messageBanner = "No active Walkman drive detected."
+            }
+            return
+        }
+        guard playlist.fullPath.isEmpty || playlist.fullPath.hasPrefix(drive.mountPoint) else { return }
+        
+        // Resolve canonical clean relative path if track exists in library
+        let trackPath: String
+        if let matched = libraryTracks.first(where: { $0.fullPath == rawTrackPath || $0.relativePath == rawTrackPath }) {
+            trackPath = matched.relativePath
+        } else {
+            trackPath = rawTrackPath
+        }
+        
+        let trackTitle = resolvedTrack(for: trackPath)?.title ?? (trackPath as NSString).lastPathComponent
+        
+        // If dropping on current playlist and it's already there
+        if playlist.id == selectedPlaylist?.id {
+            withAnimation {
+                messageBanner = "'\(trackTitle)' is already in '\(playlist.name)'"
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                if self.messageBanner?.contains("already in") == true {
+                    withAnimation { self.messageBanner = nil }
+                }
+            }
+            return
+        }
+        
+        var updatedTracks = playlist.tracks
+        let isDuplicate = updatedTracks.contains(trackPath)
+        updatedTracks.append(trackPath)
+        
+        let musicURL: URL
+        if !playlist.fullPath.isEmpty {
+            musicURL = URL(fileURLWithPath: playlist.fullPath).deletingLastPathComponent()
+        } else {
+            musicURL = URL(fileURLWithPath: drive.musicDir)
+        }
+        let filenameToSave = playlist.filename.isEmpty ? playlist.name : playlist.filename
+        
+        var metaLookup: [String: (duration: Int, title: String, artist: String)] = [:]
+        for (key, t) in cachedTrackLookup {
+            metaLookup[key] = (duration: Int(t.durationSeconds), title: t.title, artist: t.artist)
+        }
+        
+        do {
+            let savedURL = try WalkmanEngine.shared.writePlaylist(
+                musicDir: musicURL,
+                name: filenameToSave,
+                relativeTracks: updatedTracks,
+                trackMetadataLookup: metaLookup
+            )
+            
+            let updatedPl = Playlist(
+                name: playlist.name,
+                filename: savedURL.lastPathComponent,
+                trackCount: updatedTracks.count,
+                tracks: updatedTracks,
+                fullPath: savedURL.path
+            )
+            
+            if let idx = playlists.firstIndex(where: { $0.id == playlist.id }) {
+                playlists[idx] = updatedPl
+            }
+            
+            withAnimation {
+                if isDuplicate {
+                    messageBanner = "✓ Added another copy of '\(trackTitle)' to '\(playlist.name)' (\(updatedTracks.count) tracks)"
+                } else {
+                    messageBanner = "✓ Added '\(trackTitle)' to '\(playlist.name)' (\(updatedTracks.count) tracks)"
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+                if self.messageBanner?.contains("Added") == true {
+                    withAnimation { self.messageBanner = nil }
+                }
+            }
+        } catch {
+            withAnimation {
+                messageBanner = "Failed to add to '\(playlist.name)': \(error.localizedDescription)"
+            }
+        }
     }
     
     private func createNewPlaylist() {
@@ -424,360 +538,295 @@ public struct PlaylistsView: View {
             let sidebarWidth: CGFloat = isNarrow ? 180 : (isCompact ? 200 : 235)
             let colSpacing: CGFloat = isCompact ? 10 : 14
             
-            VStack(spacing: isCompact ? 10 : 14) {
-                // Header / Status Banner
-                HStack(alignment: .center, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack(spacing: 8) {
-                            Text("Walkman .M3U8 Playlists")
-                                .font(WalkmanFont.title3)
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
-                            
-                            if !isNarrow {
-                                Text("CRLF / Relative POSIX")
-                                    .font(WalkmanFont.badge)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Color.white.opacity(0.12))
-                                    .foregroundStyle(WalkmanTheme.silverLight)
-                                    .clipShape(Capsule())
-                            }
-                        }
-                        
-                        Text("Playlists stored in \(activeDrive?.name ?? "Drive")/MUSIC/ and /LEARNING/ for instant hardware discovery")
-                            .font(WalkmanFont.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                    
-                    Spacer(minLength: 8)
-                    
-                    if let banner = messageBanner {
-                        Text(banner)
-                            .font(WalkmanFont.subheadlineMedium)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(Color.white.opacity(0.12))
-                            .foregroundStyle(WalkmanTheme.silverLight)
-                            .clipShape(Capsule())
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                    
-                    Button(action: createNewPlaylist) {
-                        HStack(spacing: 5) {
-                            Image(systemName: "plus")
-                            Text(isNarrow ? "New" : "New Playlist")
-                                .lineLimit(1)
-                        }
-                        .font(WalkmanFont.calloutBold)
-                        .padding(.horizontal, isNarrow ? 10 : 14)
-                        .padding(.vertical, 7)
-                        .background(WalkmanTheme.silverGradient)
-                        .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(activeDrive == nil)
-                    .opacity(activeDrive == nil ? 0.5 : 1.0)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .help(activeDrive == nil ? "Connect a Walkman to create playlists" : "Create a new playlist on the Walkman")
-                }
-                .padding(.horizontal, 4)
+            VStack(spacing: 0) {
+                // Transparent Top Navigation Header
+                topHeaderView(isNarrow: isNarrow)
+                    .padding(.bottom, 12)
                 
-                // Main 2-Column Layout
+                // Symmetrical Hairline Separator Line (0.8pt)
+                Rectangle()
+                    .fill(Color.white.opacity(0.06))
+                    .frame(height: 0.8)
+                    .padding(.horizontal, 4)
+                    .padding(.bottom, 12)
+                
+                // Main 2-Column Studio Console Layout
                 HStack(spacing: colSpacing) {
                     // Left Column: Playlist List
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
                             Text("PLAYLISTS (\(playlists.count))")
                                 .font(WalkmanFont.sectionHeader)
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(WalkmanTheme.silverMuted)
                                 .lineLimit(1)
                             Spacer()
-                    }
-                    .padding(.horizontal, 8)
-                    
-                    if playlists.isEmpty {
-                        VStack(spacing: 10) {
-                            Spacer()
-                            Image(systemName: "music.note.list")
-                                .font(.system(size: 28))
-                                .foregroundStyle(.tertiary)
-                            Text("No Playlists Found")
-                                .font(WalkmanFont.calloutMedium)
-                                .foregroundStyle(.secondary)
-                            Text("Create one to organize your tracks")
-                                .font(WalkmanFont.subheadline)
-                                .foregroundStyle(.tertiary)
-                            
-                            Button(action: createNewPlaylist) {
-                                HStack(spacing: 5) {
-                                    Image(systemName: "plus")
-                                    Text("New Playlist")
-                                }
-                                .font(WalkmanFont.calloutBold)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(WalkmanTheme.silverGradient)
-                                .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(activeDrive == nil)
-                            .opacity(activeDrive == nil ? 0.5 : 1.0)
-                            
-                            Spacer()
                         }
-                        .frame(maxWidth: .infinity)
-                    } else {
-                        ScrollView {
-                            LazyVStack(spacing: 4) {
-                                ForEach(playlists) { pl in
-                                    let isSel = selectedPlaylist?.id == pl.id
-                                    let isEditingRow = (editingPlaylistId == pl.id && renameLocation == .row)
-                                    
-                                    if isEditingRow {
-                                        HStack(spacing: 6) {
-                                            Image(systemName: "list.bullet")
-                                                .font(.system(size: 12))
-                                                .foregroundStyle(WalkmanTheme.silverLight)
-                                            
-                                            TextField("Playlist Name", text: $editingPlaylistName)
-                                                .textFieldStyle(.plain)
-                                                .font(WalkmanFont.bodyMedium)
-                                                .foregroundStyle(.white)
-                                                .padding(.horizontal, 6)
-                                                .padding(.vertical, 4)
-                                                .background(WalkmanTheme.surface)
-                                                .clipShape(RoundedRectangle(cornerRadius: 5))
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: 5)
-                                                        .stroke(WalkmanTheme.silverLight.opacity(0.8), lineWidth: 1)
-                                                )
-                                                .focused($isRowRenameFocused)
-                                                .onSubmit {
-                                                    commitRename(for: pl)
+                        .padding(.horizontal, 8)
+                        
+                        if playlists.isEmpty {
+                            VStack(spacing: 12) {
+                                Spacer()
+                                Image(systemName: "music.note.list")
+                                    .font(.system(size: 28))
+                                    .foregroundStyle(WalkmanTheme.silverMuted)
+                                Text("No Playlists Found")
+                                    .font(WalkmanFont.calloutMedium)
+                                    .foregroundStyle(WalkmanTheme.silverLight)
+                                Text("Create one to organize your tracks")
+                                    .font(WalkmanFont.subheadline)
+                                    .foregroundStyle(WalkmanTheme.silverMuted)
+                                
+                                Button(action: createNewPlaylist) {
+                                    HStack(spacing: 5) {
+                                        Image(systemName: "plus")
+                                            .font(.system(size: 11, weight: .bold))
+                                        Text("New Playlist")
+                                            .font(.system(size: 12, weight: .semibold))
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                                }
+                                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 14))
+                                .disabled(activeDrive == nil)
+                                .opacity(activeDrive == nil ? 0.5 : 1.0)
+                                
+                                Spacer()
+                            }
+                            .frame(maxWidth: .infinity)
+                        } else {
+                            ScrollView {
+                                LazyVStack(spacing: 3) {
+                                    ForEach(playlists) { pl in
+                                        let isSel = selectedPlaylist?.id == pl.id
+                                        let isEditingRow = (editingPlaylistId == pl.id && renameLocation == .row)
+                                        
+                                        PlaylistListRowView(
+                                            playlist: pl,
+                                            isSelected: isSel,
+                                            isEditingRow: isEditingRow,
+                                            editingPlaylistName: $editingPlaylistName,
+                                            isRowRenameFocused: $isRowRenameFocused,
+                                            onSelect: {
+                                                if let editId = editingPlaylistId, let curPl = playlists.first(where: { $0.id == editId }) {
+                                                    commitRename(for: curPl)
                                                 }
-                                                .onExitCommand {
-                                                    cancelRename()
+                                                selectedPlaylist = pl
+                                                playlistTracks = pl.tracks
+                                                updateResolvedTracks()
+                                            },
+                                            onStartRename: {
+                                                startRenaming(pl, location: .row)
+                                            },
+                                            onCommitRename: {
+                                                commitRename(for: pl)
+                                            },
+                                            onCancelRename: {
+                                                cancelRename()
+                                            },
+                                            onDelete: {
+                                                deletePlaylist(pl)
+                                            },
+                                            onDropTrack: { droppedPath in
+                                                let pathToUse = droppedPath.isEmpty ? (draggedTrackPath ?? "") : droppedPath
+                                                if !pathToUse.isEmpty {
+                                                    addTrackToPlaylist(pathToUse, playlist: pl)
                                                 }
-                                            
-                                            Button(action: { commitRename(for: pl) }) {
-                                                Image(systemName: "checkmark")
-                                                    .font(.system(size: 10, weight: .bold))
-                                                    .foregroundStyle(.green)
+                                                draggedTrackIndex = nil
+                                                draggedTrackPath = nil
+                                                dropTargetIndex = nil
                                             }
-                                            .buttonStyle(.plain)
-                                            .help("Save Name (Return)")
-                                            
-                                            Button(action: cancelRename) {
-                                                Image(systemName: "xmark")
-                                                    .font(.system(size: 9, weight: .bold))
-                                                    .foregroundStyle(.secondary)
-                                            }
-                                            .buttonStyle(.plain)
-                                            .help("Cancel (Esc)")
-                                        }
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 6)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                                .fill(WalkmanTheme.cardHover)
                                         )
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                                .stroke(WalkmanTheme.silverLight.opacity(0.6), lineWidth: 1)
-                                        )
-                                    } else {
-                                        HStack(spacing: 10) {
-                                            Image(systemName: pl.isLanguageStudy ? "character.book.closed.fill" : "list.bullet")
-                                                .font(.system(size: 12))
-                                                .foregroundStyle(isSel ? WalkmanTheme.silverLight : (pl.isLanguageStudy ? WalkmanTheme.silverMuted : .secondary))
-                                            
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                HStack(spacing: 4) {
-                                                    Text(pl.name)
-                                                        .font(isSel ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
-                                                        .foregroundStyle(isSel ? .white : .primary)
-                                                        .lineLimit(1)
-                                                    
-                                                    if pl.isLanguageStudy {
-                                                        Text("LEARNING")
-                                                            .font(.system(size: 8, weight: .bold))
-                                                            .foregroundStyle(WalkmanTheme.silverLight)
-                                                            .padding(.horizontal, 4)
-                                                            .padding(.vertical, 1)
-                                                            .background(WalkmanTheme.cardHover)
-                                                            .clipShape(RoundedRectangle(cornerRadius: 3))
-                                                    }
-                                                }
-                                                
-                                                Text("\(pl.trackCount) tracks")
-                                                    .font(WalkmanFont.subheadline)
-                                                    .foregroundStyle(.secondary)
-                                            }
-                                            
-                                            Spacer()
-                                            
-                                            HStack(spacing: 6) {
-                                                Button(action: { startRenaming(pl, location: .row) }) {
-                                                    Image(systemName: "pencil")
-                                                        .font(.system(size: 11))
-                                                        .foregroundStyle(WalkmanTheme.silverLight)
-                                                }
-                                                .buttonStyle(.plain)
-                                                .help("Rename Playlist")
-                                                
-                                                Button(action: { deletePlaylist(pl) }) {
-                                                    Image(systemName: "trash")
-                                                        .font(.system(size: 11))
-                                                        .foregroundStyle(.tertiary)
-                                                }
-                                                .buttonStyle(.plain)
-                                                .help("Delete Playlist")
-                                            }
-                                            .opacity(isSel ? 1 : 0)
-                                        }
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 8)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                                .fill(isSel ? WalkmanTheme.cardHover : Color.clear)
-                                        )
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                                .stroke(isSel ? WalkmanTheme.silver.opacity(0.4) : Color.clear, lineWidth: 1)
-                                        )
-                                        .contentShape(Rectangle())
-                                        .onTapGesture {
-                                            if let editId = editingPlaylistId, let curPl = playlists.first(where: { $0.id == editId }) {
-                                                commitRename(for: curPl)
-                                            }
-                                            selectedPlaylist = pl
-                                            playlistTracks = pl.tracks
-                                        }
-                                        .contextMenu {
-                                            Button(action: { startRenaming(pl, location: .row) }) {
-                                                Label("Rename Playlist", systemImage: "pencil")
-                                            }
-                                            Divider()
-                                            Button(role: .destructive, action: { deletePlaylist(pl) }) {
-                                                Label("Delete Playlist", systemImage: "trash")
-                                            }
-                                        }
                                     }
                                 }
                             }
                         }
                     }
-                }
-                .padding(isCompact ? 10 : 12)
-                .frame(width: sidebarWidth)
-                .liquidGlass(cornerRadius: 12)
-                
-                // Right Column: Playlist Content / Editor
-                VStack(alignment: .leading, spacing: isCompact ? 10 : 12) {
-                    if let pl = selectedPlaylist {
-                        playlistDetailHeader(pl: pl)
-                        
-                        // Tracks List
-                        if playlistTracks.isEmpty {
+                    .padding(isCompact ? 10 : 12)
+                    .frame(width: sidebarWidth)
+                    .background(WalkmanTheme.card)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color.white.opacity(0.08), lineWidth: 0.85)
+                    )
+                    .shadow(color: Color.black.opacity(0.25), radius: 5, x: 0, y: 2)
+                    
+                    // Right Column: Playlist Content / Editor
+                    VStack(alignment: .leading, spacing: isCompact ? 10 : 12) {
+                        if let pl = selectedPlaylist {
+                            playlistDetailHeader(pl: pl)
+                            
+                            // Tracks List
+                            if playlistTracks.isEmpty {
+                                VStack(spacing: 12) {
+                                    Spacer()
+                                    Image(systemName: "tray")
+                                        .font(.system(size: 32))
+                                        .foregroundStyle(WalkmanTheme.silverMuted)
+                                    Text("This playlist is empty")
+                                        .font(WalkmanFont.bodyMedium)
+                                        .foregroundStyle(WalkmanTheme.silverLight)
+                                    Text("Click 'Add From Library' to populate this playlist")
+                                        .font(WalkmanFont.callout)
+                                        .foregroundStyle(WalkmanTheme.silverMuted)
+                                    
+                                    Button(action: { showAddTrackSheet = true }) {
+                                        HStack(spacing: 5) {
+                                            Image(systemName: "plus.circle")
+                                                .font(.system(size: 11, weight: .bold))
+                                            Text("Add From Library")
+                                                .font(.system(size: 12, weight: .semibold))
+                                        }
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 6)
+                                        .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                                    }
+                                    .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 14))
+                                    .padding(.top, 4)
+                                    
+                                    Spacer()
+                                }
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            } else {
+                                ScrollView {
+                                    LazyVStack(spacing: 3) {
+                                        ForEach(Array(resolvedPlaylistTracks.enumerated()), id: \.offset) { index, pair in
+                                            let trackPath = pair.path
+                                            let matchedTrack = pair.track
+                                            let isPlayingThis = (AudioPlayerService.shared.currentTrack?.relativePath == trackPath || AudioPlayerService.shared.currentTrack?.fullPath == matchedTrack?.fullPath) && AudioPlayerService.shared.isPlaying
+                                            let isDragSource = draggedTrackIndex == index
+                                            let isDropTarget = dropTargetIndex == index && draggedTrackIndex != nil && draggedTrackIndex != index
+                                            let showLineAbove = isDropTarget && (draggedTrackIndex ?? 0) > index
+                                            let showLineBelow = isDropTarget && (draggedTrackIndex ?? 0) < index
+                                            let otherPlaylists = playlists.filter { $0.id != selectedPlaylist?.id }
+                                            
+                                            VStack(spacing: 0) {
+                                                if showLineAbove {
+                                                    DropInsertionLine()
+                                                }
+                                                
+                                                PlaylistTrackRow(
+                                                    index: index,
+                                                    totalCount: resolvedPlaylistTracks.count,
+                                                    trackPath: trackPath,
+                                                    matchedTrack: matchedTrack,
+                                                    isPlayingThis: isPlayingThis,
+                                                    isDragSource: isDragSource,
+                                                    otherPlaylists: otherPlaylists,
+                                                    onPlay: {
+                                                        if let tr = matchedTrack {
+                                                            if isPlayingThis {
+                                                                AudioPlayerService.shared.pause()
+                                                            } else {
+                                                                AudioPlayerService.shared.play(track: tr, in: libraryTracks)
+                                                            }
+                                                        }
+                                                    },
+                                                    onStartDrag: {
+                                                        draggedTrackIndex = index
+                                                        draggedTrackPath = trackPath
+                                                    },
+                                                    onMoveUp: {
+                                                        if index > 0 {
+                                                            var updated = playlistTracks
+                                                            updated.swapAt(index, index - 1)
+                                                            persistPlaylistChanges(newTracks: updated)
+                                                        }
+                                                    },
+                                                    onMoveDown: {
+                                                        if index < playlistTracks.count - 1 {
+                                                            var updated = playlistTracks
+                                                            updated.swapAt(index, index + 1)
+                                                            persistPlaylistChanges(newTracks: updated)
+                                                        }
+                                                    },
+                                                    onMoveToTop: {
+                                                        if index > 0 {
+                                                            var updated = playlistTracks
+                                                            let item = updated.remove(at: index)
+                                                            updated.insert(item, at: 0)
+                                                            persistPlaylistChanges(newTracks: updated)
+                                                        }
+                                                    },
+                                                    onMoveToBottom: {
+                                                        if index < playlistTracks.count - 1 {
+                                                            var updated = playlistTracks
+                                                            let item = updated.remove(at: index)
+                                                            updated.append(item)
+                                                            persistPlaylistChanges(newTracks: updated)
+                                                        }
+                                                    },
+                                                    onRemove: {
+                                                        var updated = playlistTracks
+                                                        updated.remove(at: index)
+                                                        persistPlaylistChanges(newTracks: updated)
+                                                    },
+                                                    onAddToPlaylist: { targetPl in
+                                                        addTrackToPlaylist(trackPath, playlist: targetPl)
+                                                    }
+                                                )
+                                                .opacity(isDragSource ? 0.35 : 1.0)
+                                                .onDrop(of: [.plainText, .text], delegate: TrackDropDelegate(
+                                                    targetIndex: index,
+                                                    trackPath: trackPath,
+                                                    draggedIndex: $draggedTrackIndex,
+                                                    draggedPath: $draggedTrackPath,
+                                                    dropTargetIndex: $dropTargetIndex,
+                                                    onMove: { from, to in
+                                                        reorderTrack(from: from, to: to)
+                                                    }
+                                                ))
+                                                
+                                                if showLineBelow {
+                                                    DropInsertionLine()
+                                                }
+                                            }
+                                        }
+                                        
+                                        // Bottom drop target area to move track to the end of the playlist
+                                        Color.clear
+                                            .frame(height: 40)
+                                            .onDrop(of: [.plainText, .text], isTargeted: nil) { providers in
+                                                if let from = draggedTrackIndex {
+                                                    let to = playlistTracks.count - 1
+                                                    if from != to {
+                                                        reorderTrack(from: from, to: to)
+                                                    }
+                                                    draggedTrackIndex = nil
+                                                    draggedTrackPath = nil
+                                                    dropTargetIndex = nil
+                                                    return true
+                                                }
+                                                return false
+                                            }
+                                    }
+                                }
+                            }
+                        } else {
                             VStack(spacing: 8) {
                                 Spacer()
-                                Image(systemName: "tray")
-                                    .font(.system(size: 32))
-                                    .foregroundStyle(.tertiary)
-                                Text("This playlist is empty")
-                                    .font(WalkmanFont.bodyMedium)
-                                    .foregroundStyle(.secondary)
-                                Text("Click 'Add From Library' to populate this playlist")
+                                Image(systemName: "arrow.left")
+                                    .font(.system(size: 20))
+                                    .foregroundStyle(WalkmanTheme.silverMuted)
+                                Text("Select or create a playlist from the left")
                                     .font(WalkmanFont.callout)
-                                    .foregroundStyle(.tertiary)
+                                    .foregroundStyle(WalkmanTheme.silverMuted)
                                 Spacer()
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        } else {
-                            ScrollView {
-                                LazyVStack(spacing: 4) {
-                                    ForEach(Array(playlistTracks.enumerated()), id: \.offset) { index, trackPath in
-                                        let matchedTrack = resolvedTrack(for: trackPath)
-                                        let isPlayingThis = (AudioPlayerService.shared.currentTrack?.relativePath == trackPath || AudioPlayerService.shared.currentTrack?.fullPath == matchedTrack?.fullPath) && AudioPlayerService.shared.isPlaying
-                                        
-                                        PlaylistTrackRow(
-                                            index: index,
-                                            totalCount: playlistTracks.count,
-                                            trackPath: trackPath,
-                                            matchedTrack: matchedTrack,
-                                            isPlayingThis: isPlayingThis,
-                                            onPlay: {
-                                                if let tr = matchedTrack {
-                                                    if isPlayingThis {
-                                                        AudioPlayerService.shared.pause()
-                                                    } else {
-                                                        AudioPlayerService.shared.play(track: tr, in: libraryTracks)
-                                                    }
-                                                }
-                                            },
-                                            onMoveUp: {
-                                                if index > 0 {
-                                                    var updated = playlistTracks
-                                                    updated.swapAt(index, index - 1)
-                                                    persistPlaylistChanges(newTracks: updated)
-                                                }
-                                            },
-                                            onMoveDown: {
-                                                if index < playlistTracks.count - 1 {
-                                                    var updated = playlistTracks
-                                                    updated.swapAt(index, index + 1)
-                                                    persistPlaylistChanges(newTracks: updated)
-                                                }
-                                            },
-                                            onMoveToTop: {
-                                                if index > 0 {
-                                                    var updated = playlistTracks
-                                                    let item = updated.remove(at: index)
-                                                    updated.insert(item, at: 0)
-                                                    persistPlaylistChanges(newTracks: updated)
-                                                }
-                                            },
-                                            onMoveToBottom: {
-                                                if index < playlistTracks.count - 1 {
-                                                    var updated = playlistTracks
-                                                    let item = updated.remove(at: index)
-                                                    updated.append(item)
-                                                    persistPlaylistChanges(newTracks: updated)
-                                                }
-                                            },
-                                            onRemove: {
-                                                var updated = playlistTracks
-                                                updated.remove(at: index)
-                                                persistPlaylistChanges(newTracks: updated)
-                                            }
-                                        )
-                                    }
-                                }
-                            }
                         }
-                    } else {
-                        VStack(spacing: 8) {
-                            Spacer()
-                            Image(systemName: "arrow.left")
-                                .font(.system(size: 20))
-                                .foregroundStyle(WalkmanTheme.silverMuted)
-                            Text("Select or create a playlist from the left")
-                                .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(WalkmanTheme.card)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color.white.opacity(0.08), lineWidth: 0.85)
+                    )
+                    .shadow(color: Color.black.opacity(0.25), radius: 5, x: 0, y: 2)
                 }
-                .padding(14)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .liquidGlass(cornerRadius: 12)
             }
         }
         .onAppear {
@@ -785,13 +834,16 @@ public struct PlaylistsView: View {
                 cachedTrackLookup = PlaylistsView.buildLookupTable(tracks: libraryTracks)
             }
             loadPlaylists()
+            updateResolvedTracks()
         }
         .onChange(of: libraryTracks) {
             cachedTrackLookup = PlaylistsView.buildLookupTable(tracks: libraryTracks)
+            updateResolvedTracks()
         }
         .onChange(of: activeDrive?.mountPoint) {
             cachedTrackLookup = PlaylistsView.buildLookupTable(tracks: libraryTracks)
             loadPlaylists()
+            updateResolvedTracks()
         }
         .sheet(isPresented: $showAddTrackSheet) {
             AddTracksModal(
@@ -809,6 +861,66 @@ public struct PlaylistsView: View {
             )
         }
     }
+    
+    // MARK: - Top Navigation Header
+    
+    @ViewBuilder
+    private func topHeaderView(isNarrow: Bool) -> some View {
+        HStack(spacing: 12) {
+            // Left: Header Title
+            HStack(spacing: 8) {
+                Image(systemName: "music.note.list")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(WalkmanTheme.silverLight)
+                
+                Text("Playlists")
+                    .font(WalkmanFont.title3)
+                    .foregroundStyle(.white)
+            }
+            
+            // Middle: Status Message Banner if present
+            if let banner = messageBanner {
+                HStack(spacing: 5) {
+                    Image(systemName: banner.contains("error") || banner.contains("Failed") ? "exclamationmark.triangle.fill" : "info.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(banner.contains("error") || banner.contains("Failed") ? Color.red : WalkmanTheme.silverLight)
+                    Text(banner)
+                        .font(WalkmanFont.subheadlineMedium)
+                        .foregroundStyle(banner.contains("error") || banner.contains("Failed") ? Color.red : WalkmanTheme.silverLight)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4.5)
+                .background(Color.white.opacity(0.05))
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule().stroke(Color.white.opacity(0.08), lineWidth: 0.8)
+                )
+            }
+            
+            Spacer()
+            
+            // Right: New Playlist Action Button
+            Button(action: createNewPlaylist) {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .bold))
+                    Text(isNarrow ? "New" : "New Playlist")
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .frame(minHeight: 32)
+                .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+            }
+            .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 16))
+            .disabled(activeDrive == nil)
+            .opacity(activeDrive == nil ? 0.5 : 1.0)
+            .help("Create new .m3u8 playlist on Walkman")
+        }
+        .padding(.horizontal, 4)
+        .background(Color.clear)
     }
     
     // MARK: - Responsive Detail Header Subviews
@@ -940,13 +1052,13 @@ public struct PlaylistsView: View {
                 .textFieldStyle(.plain)
                 .font(WalkmanFont.title3)
                 .foregroundStyle(.white)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
                 .background(WalkmanTheme.surface)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(WalkmanTheme.silverLight.opacity(0.8), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.white.opacity(0.30), lineWidth: 1)
                 )
                 .focused($isHeaderRenameFocused)
                 .onSubmit { commitRename(for: pl) }
@@ -956,29 +1068,27 @@ public struct PlaylistsView: View {
             Button(action: { commitRename(for: pl) }) {
                 HStack(spacing: 4) {
                     Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .bold))
                     Text("Save")
+                        .font(.system(size: 12, weight: .semibold))
                         .lineLimit(1)
                 }
-                .font(WalkmanFont.calloutBold)
-                .padding(.horizontal, 10)
+                .padding(.horizontal, 11)
                 .padding(.vertical, 5)
-                .background(WalkmanTheme.silverGradient)
                 .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .fixedSize(horizontal: true, vertical: false)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 8))
+            .fixedSize(horizontal: true, vertical: false)
             
             Button(action: cancelRename) {
                 Text("Cancel")
                     .font(WalkmanFont.callout)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
+                    .foregroundStyle(WalkmanTheme.silverMuted)
+                    .padding(.horizontal, 9)
                     .padding(.vertical, 5)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
+            .fixedSize(horizontal: true, vertical: false)
         }
     }
     
@@ -1038,66 +1148,220 @@ public struct PlaylistsView: View {
     
     @ViewBuilder
     private var sortMenuButton: some View {
-        Menu {
-            Button(action: { sortTracksByTitle(ascending: true) }) {
-                Label("Title (A → Z)", systemImage: "textformat")
-            }
-            Button(action: { sortTracksByTitle(ascending: false) }) {
-                Label("Title (Z → A)", systemImage: "textformat")
-            }
-            Button(action: { sortTracksByArtist(ascending: true) }) {
-                Label("Artist (A → Z)", systemImage: "person")
-            }
-            Button(action: { sortTracksByAlbum() }) {
-                Label("Album & Track Number", systemImage: "square.stack")
-            }
-            Button(action: { sortTracksByFilename(ascending: true) }) {
-                Label("Filename (A → Z)", systemImage: "doc.text")
-            }
-            Divider()
-            Button(action: { reverseTrackOrder() }) {
-                Label("Reverse Current Order", systemImage: "arrow.up.arrow.down")
-            }
-            Button(action: { shuffleTracks() }) {
-                Label("Shuffle Order", systemImage: "shuffle")
-            }
-        } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "arrow.up.arrow.down")
-                Text("Sort")
-                    .lineLimit(1)
-            }
-            .font(WalkmanFont.calloutMedium)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(WalkmanTheme.card)
-            .foregroundStyle(WalkmanTheme.silverLight)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-            .fixedSize(horizontal: true, vertical: false)
-        }
-        .menuStyle(.borderlessButton)
-        .disabled(playlistTracks.isEmpty)
-        .fixedSize(horizontal: true, vertical: false)
+        PlaylistSortMenuButton(
+            isDisabled: playlistTracks.isEmpty,
+            onSortTitleAsc: { sortTracksByTitle(ascending: true) },
+            onSortTitleDesc: { sortTracksByTitle(ascending: false) },
+            onSortArtistAsc: { sortTracksByArtist(ascending: true) },
+            onSortAlbum: { sortTracksByAlbum() },
+            onSortFilenameAsc: { sortTracksByFilename(ascending: true) },
+            onReverseOrder: { reverseTrackOrder() },
+            onShuffleOrder: { shuffleTracks() }
+        )
     }
     
     @ViewBuilder
     private func addFromLibraryButton(compact: Bool = false) -> some View {
         Button(action: { showAddTrackSheet = true }) {
-            HStack(spacing: 5) {
-                Image(systemName: "plus.circle")
+            HStack(spacing: 5.5) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 11, weight: .semibold))
                 Text(compact ? "Add" : "Add From Library")
+                    .font(.system(size: 12.5, weight: .semibold))
                     .lineLimit(1)
             }
-            .font(WalkmanFont.calloutMedium)
-            .padding(.horizontal, compact ? 9 : 11)
+            .padding(.horizontal, compact ? 11 : 14)
             .padding(.vertical, 6)
-            .background(WalkmanTheme.card)
-            .foregroundStyle(WalkmanTheme.silverLight)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-            .fixedSize(horizontal: true, vertical: false)
+            .frame(minHeight: 32)
+            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+        }
+        .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 16))
+        .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
+// -----------------------------------------------------------------------------
+// PLAYLIST LIST ROW VIEW (TACTILE HOVER & LIQUID GLASS SELECTION + DROP TARGET)
+// -----------------------------------------------------------------------------
+private struct PlaylistListRowView: View {
+    let playlist: Playlist
+    let isSelected: Bool
+    let isEditingRow: Bool
+    @Binding var editingPlaylistName: String
+    var isRowRenameFocused: FocusState<Bool>.Binding
+    let onSelect: () -> Void
+    let onStartRename: () -> Void
+    let onCommitRename: () -> Void
+    let onCancelRename: () -> Void
+    let onDelete: () -> Void
+    var onDropTrack: ((String) -> Void)? = nil
+    
+    @State private var isHovered = false
+    @State private var isDropTargeted = false
+    
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 8) {
+                Image(systemName: isDropTargeted ? "plus.circle.fill" : "music.note.list")
+                    .font(.system(size: 13, weight: (isSelected || isDropTargeted) ? .semibold : .regular))
+                    .foregroundStyle(
+                        isDropTargeted ?
+                            WalkmanTheme.hiResGold :
+                            (isSelected ? WalkmanTheme.silverLight : (isHovered ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted))
+                    )
+                    .frame(width: 16)
+                
+                if isEditingRow {
+                    TextField("Playlist Name", text: $editingPlaylistName)
+                        .textFieldStyle(.plain)
+                        .font(WalkmanFont.calloutMedium)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(WalkmanTheme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 5)
+                                .stroke(Color.white.opacity(0.35), lineWidth: 1)
+                        )
+                        .focused(isRowRenameFocused)
+                        .onSubmit { onCommitRename() }
+                        .onExitCommand { onCancelRename() }
+                    
+                    Button(action: onCommitRename) {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                            .padding(4)
+                            .background(WalkmanTheme.silverGradient)
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Button(action: onCancelRename) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 10))
+                            .foregroundStyle(WalkmanTheme.silverMuted)
+                            .padding(4)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Text(playlist.name)
+                        .font(isSelected ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
+                        .foregroundStyle(
+                            isDropTargeted ?
+                                WalkmanTheme.hiResGoldLight :
+                                (isSelected ? Color.white : (isHovered ? Color.white : WalkmanTheme.silverLight))
+                        )
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    
+                    Spacer()
+                    
+                    if isDropTargeted {
+                        Text("+ Add")
+                            .font(.system(size: 10.5, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(WalkmanTheme.hiResGold)
+                            .clipShape(Capsule())
+                    } else {
+                        Text("\(playlist.trackCount)")
+                            .font(WalkmanFont.monoSmall)
+                            .foregroundStyle(isSelected ? WalkmanTheme.silverLight.opacity(0.9) : WalkmanTheme.silverMuted)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(
+                                isSelected ? Color.white.opacity(0.12) : Color.white.opacity(0.04)
+                            )
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(
+                ZStack {
+                    if isDropTargeted {
+                        WalkmanTheme.hiResGold.opacity(0.15)
+                    } else if isSelected {
+                        Color.white.opacity(0.12)
+                        VStack(spacing: 0) {
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .white.opacity(0.24), location: 0.0),
+                                    .init(color: .clear, location: 1.0)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .frame(height: 5.5)
+                            Spacer(minLength: 0)
+                        }
+                    } else if isHovered {
+                        Color.white.opacity(0.05)
+                    } else {
+                        Color.clear
+                    }
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(
+                        isDropTargeted ?
+                            WalkmanTheme.hiResGold.opacity(0.85) :
+                            (isSelected ?
+                                Color.white.opacity(0.24) :
+                                (isHovered ? Color.white.opacity(0.08) : Color.clear)),
+                        lineWidth: isDropTargeted ? 1.2 : 0.8
+                    )
+            )
+            .scaleEffect(isDropTargeted ? 1.03 : (isHovered && !isSelected ? 1.015 : 1.0))
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
-        .fixedSize(horizontal: true, vertical: false)
+        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .onDrop(of: [.plainText, .text], isTargeted: $isDropTargeted) { providers in
+            guard let onDropTrack = onDropTrack else { return false }
+            if let provider = providers.first {
+                _ = provider.loadObject(ofClass: NSString.self) { string, _ in
+                    if let path = string as? String {
+                        DispatchQueue.main.async {
+                            onDropTrack(path)
+                        }
+                    }
+                }
+                return true
+            }
+            return false
+        }
+        .onHover { hovering in
+            guard isHovered != hovering else { return }
+            isHovered = hovering
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.pop()
+            }
+        }
+        .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+        .contextMenu {
+            Button("Rename Playlist") {
+                onStartRename()
+            }
+            Divider()
+            Button(role: .destructive, action: onDelete) {
+                Label("Delete Playlist", systemImage: "trash")
+            }
+        }
     }
 }
 
@@ -1125,25 +1389,31 @@ private struct PlaylistTrackRow: View {
     let trackPath: String
     let matchedTrack: Track?
     let isPlayingThis: Bool
+    var isDragSource: Bool = false
+    let otherPlaylists: [Playlist]
     let onPlay: () -> Void
+    let onStartDrag: () -> Void
     let onMoveUp: () -> Void
     let onMoveDown: () -> Void
     let onMoveToTop: () -> Void
     let onMoveToBottom: () -> Void
     let onRemove: () -> Void
+    var onAddToPlaylist: ((Playlist) -> Void)? = nil
+    
+    @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 12) {
             Text(String(format: "%02d", index + 1))
                 .font(WalkmanFont.mono)
-                .foregroundStyle(WalkmanTheme.silverLight)
+                .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
                 .frame(width: 26, alignment: .trailing)
             
             // Play / Note button
             Button(action: onPlay) {
-                Image(systemName: isPlayingThis ? "speaker.wave.2.fill" : (matchedTrack != nil ? "play.circle" : "music.note"))
-                    .font(.system(size: 13))
-                    .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : .secondary)
+                Image(systemName: isPlayingThis ? "speaker.wave.2.fill" : (matchedTrack != nil ? "play.circle.fill" : "music.note"))
+                    .font(.system(size: 14))
+                    .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : (matchedTrack != nil ? WalkmanTheme.silverLight.opacity(isHovered ? 0.95 : 0.65) : WalkmanTheme.silverMuted.opacity(0.5)))
             }
             .buttonStyle(.plain)
             .disabled(matchedTrack == nil)
@@ -1152,8 +1422,8 @@ private struct PlaylistTrackRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 if let tr = matchedTrack, !tr.title.isEmpty {
                     Text(tr.title)
-                        .font(WalkmanFont.bodyMedium)
-                        .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : .white)
+                        .font(isPlayingThis ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
+                        .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : (isHovered ? Color.white : WalkmanTheme.silverLight))
                         .lineLimit(1)
                         .truncationMode(.tail)
                     
@@ -1161,26 +1431,26 @@ private struct PlaylistTrackRow: View {
                         if !tr.artist.isEmpty {
                             Text(tr.artist)
                                 .font(WalkmanFont.subheadline)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(WalkmanTheme.silverMuted)
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                         }
                         if !tr.album.isEmpty {
                             Text("•")
                                 .font(.system(size: 8))
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(WalkmanTheme.silverMuted.opacity(0.6))
                             Text(tr.album)
                                 .font(WalkmanFont.subheadline)
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(WalkmanTheme.silverMuted)
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                         } else {
                             Text("•")
                                 .font(.system(size: 8))
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(WalkmanTheme.silverMuted.opacity(0.6))
                             Text(trackPath)
                                 .font(WalkmanFont.monoSmall)
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(WalkmanTheme.silverMuted.opacity(0.8))
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                         }
@@ -1188,7 +1458,7 @@ private struct PlaylistTrackRow: View {
                 } else {
                     Text(trackPath)
                         .font(WalkmanFont.mono)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(isHovered ? Color.white : WalkmanTheme.silverLight)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
@@ -1196,40 +1466,92 @@ private struct PlaylistTrackRow: View {
             
             Spacer()
             
-            // Move Up
-            Button(action: onMoveUp) {
-                Image(systemName: "chevron.up")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+            // Action buttons on row: draggable handle button + remove button
+            HStack(spacing: 6) {
+                // Draggable Handle Button (hold & drag to reorder or transfer to another playlist)
+                TrackDragHandleButton(
+                    trackPath: trackPath,
+                    isRowHovered: isHovered,
+                    onStartDrag: onStartDrag
+                )
+                
+                // Remove
+                Button(action: onRemove) {
+                    Image(systemName: "xmark.circle")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.red.opacity(isHovered ? 0.9 : 0.6))
+                        .padding(4)
+                }
+                .buttonStyle(.plain)
+                .help("Remove from Playlist")
             }
-            .buttonStyle(.plain)
-            .disabled(index == 0)
-            .help("Move Up")
-            
-            // Move Down
-            Button(action: onMoveDown) {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .disabled(index == totalCount - 1)
-            .help("Move Down")
-            
-            // Remove
-            Button(action: onRemove) {
-                Image(systemName: "xmark.circle")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.red.opacity(0.8))
-            }
-            .buttonStyle(.plain)
-            .help("Remove from Playlist")
+            .opacity(isHovered || isPlayingThis || isDragSource ? 1.0 : 0.5)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(isPlayingThis ? WalkmanTheme.cardHover : WalkmanTheme.card.opacity(0.5))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .contentShape(Rectangle())
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            ZStack {
+                if isPlayingThis {
+                    WalkmanTheme.cardHover
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: .white.opacity(0.12), location: 0.0),
+                                .init(color: .clear, location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 5.5)
+                        Spacer(minLength: 0)
+                    }
+                } else if isHovered {
+                    Color.white.opacity(0.045)
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: .white.opacity(0.10), location: 0.0),
+                                .init(color: .clear, location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 5)
+                        Spacer(minLength: 0)
+                    }
+                } else {
+                    WalkmanTheme.card.opacity(0.40)
+                }
+            }
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(
+                    isPlayingThis ?
+                        Color.white.opacity(0.20) :
+                        (isHovered ? Color.white.opacity(0.09) : Color.white.opacity(0.03)),
+                    lineWidth: 0.85
+                )
+        )
+        .scaleEffect(isHovered && !isPlayingThis ? 1.008 : 1.0)
+        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .onHover { hovering in
+            guard isHovered != hovering else { return }
+            isHovered = hovering
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.pop()
+            }
+        }
+        .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
         .onTapGesture(count: 2) {
             onPlay()
         }
@@ -1237,6 +1559,19 @@ private struct PlaylistTrackRow: View {
             if matchedTrack != nil {
                 Button(action: onPlay) {
                     Label("Play Now", systemImage: "play.fill")
+                }
+                Divider()
+            }
+            
+            if !otherPlaylists.isEmpty {
+                Menu {
+                    ForEach(otherPlaylists) { pl in
+                        Button(pl.name) {
+                            onAddToPlaylist?(pl)
+                        }
+                    }
+                } label: {
+                    Label("Add to Another Playlist", systemImage: "text.badge.plus")
                 }
                 Divider()
             }
@@ -1267,6 +1602,551 @@ private struct PlaylistTrackRow: View {
                 Label("Remove from Playlist", systemImage: "trash")
             }
         }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// PLAYLIST SORT MENU BUTTON (CIRCULAR LIQUID GLASS BUTTON)
+// -----------------------------------------------------------------------------
+private struct PlaylistSortMenuButton: View {
+    let isDisabled: Bool
+    let onSortTitleAsc: () -> Void
+    let onSortTitleDesc: () -> Void
+    let onSortArtistAsc: () -> Void
+    let onSortAlbum: () -> Void
+    let onSortFilenameAsc: () -> Void
+    let onReverseOrder: () -> Void
+    let onShuffleOrder: () -> Void
+    
+    @State private var isHovered = false
+    
+    var body: some View {
+        Menu {
+            Button(action: onSortTitleAsc) {
+                Label("Title (A → Z)", systemImage: "textformat")
+            }
+            Button(action: onSortTitleDesc) {
+                Label("Title (Z → A)", systemImage: "textformat")
+            }
+            Button(action: onSortArtistAsc) {
+                Label("Artist (A → Z)", systemImage: "person")
+            }
+            Button(action: onSortAlbum) {
+                Label("Album & Track Number", systemImage: "square.stack")
+            }
+            Button(action: onSortFilenameAsc) {
+                Label("Filename (A → Z)", systemImage: "doc.text")
+            }
+            Divider()
+            Button(action: onReverseOrder) {
+                Label("Reverse Current Order", systemImage: "arrow.up.arrow.down")
+            }
+            Button(action: onShuffleOrder) {
+                Label("Shuffle Order", systemImage: "shuffle")
+            }
+        } label: {
+            ZStack {
+                // Circular glass body
+                Circle()
+                    .fill(Color.white.opacity(isHovered ? 0.12 : 0.05))
+                
+                // Top specular refraction sheen (Liquid Glass)
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(isHovered ? 0.32 : 0.14), location: 0.0),
+                            .init(color: .clear, location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 7)
+                    Spacer(minLength: 0)
+                }
+                .clipShape(Circle())
+                
+                // Sort icon only
+                Image(systemName: "arrow.up.arrow.down")
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(isHovered ? Color.white : WalkmanTheme.silverLight)
+            }
+            .frame(width: 32, height: 32)
+            .clipShape(Circle())
+            .overlay(
+                Circle()
+                    .stroke(
+                        Color.white.opacity(isHovered ? 0.24 : 0.10),
+                        lineWidth: 0.85
+                    )
+            )
+            .shadow(color: Color.black.opacity(isHovered ? 0.20 : 0.08), radius: isHovered ? 3.5 : 2, x: 0, y: 1)
+            .scaleEffect(isHovered && !isDisabled ? 1.03 : 1.0)
+        }
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .contentShape(Circle())
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.40 : 1.0)
+        .help("Sort playlist tracks")
+        .onHover { hovering in
+            guard !isDisabled else { return }
+            guard isHovered != hovering else { return }
+            isHovered = hovering
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.pop()
+            }
+        }
+        .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+    }
+}
+
+// -----------------------------------------------------------------------------
+// TRACK DRAG HANDLE BUTTON (HOLD & DRAG TO ORGANIZE OR DRAG TO ANOTHER PLAYLIST)
+// -----------------------------------------------------------------------------
+private struct TrackDragHandleButton: View {
+    let trackPath: String
+    let isRowHovered: Bool
+    let onStartDrag: () -> Void
+    
+    @State private var isButtonHovered: Bool = false
+    
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(
+                    isButtonHovered ?
+                        Color.white.opacity(0.15) :
+                        (isRowHovered ? Color.white.opacity(0.06) : Color.clear)
+                )
+            
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(
+                    isButtonHovered ?
+                        Color.white :
+                        (isRowHovered ? WalkmanTheme.silverLight.opacity(0.85) : WalkmanTheme.silverMuted.opacity(0.55))
+                )
+        }
+        .frame(width: 24, height: 24)
+        .overlay(
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .stroke(
+                    isButtonHovered ?
+                        Color.white.opacity(0.28) :
+                        (isRowHovered ? Color.white.opacity(0.12) : Color.clear),
+                    lineWidth: 0.8
+                )
+        )
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            isButtonHovered = hovering
+            if hovering {
+                NSCursor.openHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .onDisappear {
+            if isButtonHovered {
+                isButtonHovered = false
+                NSCursor.pop()
+            }
+        }
+        .onDrag {
+            onStartDrag()
+            return NSItemProvider(object: trackPath as NSString)
+        }
+        .help("Hold and drag to reorder within playlist, or drop onto another playlist")
+    }
+}
+
+// -----------------------------------------------------------------------------
+// DROP INSERTION LINE (GOLD SONY REFRACTION BEACON)
+// -----------------------------------------------------------------------------
+private struct DropInsertionLine: View {
+    var body: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(WalkmanTheme.hiResGold)
+                .frame(width: 5, height: 5)
+            
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            WalkmanTheme.hiResGold,
+                            WalkmanTheme.hiResGold.opacity(0.5),
+                            WalkmanTheme.hiResGold.opacity(0.05)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(height: 2)
+                .clipShape(Capsule())
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 1.5)
+        .shadow(color: Color.black.opacity(0.25), radius: 2, y: 1)
+        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+    }
+}
+
+// -----------------------------------------------------------------------------
+// TRACK DROP DELEGATE (REORDERING WITHIN PLAYLIST)
+// -----------------------------------------------------------------------------
+private struct TrackDropDelegate: DropDelegate {
+    let targetIndex: Int
+    let trackPath: String
+    @Binding var draggedIndex: Int?
+    @Binding var draggedPath: String?
+    @Binding var dropTargetIndex: Int?
+    let onMove: (Int, Int) -> Void
+    
+    func dropEntered(info: DropInfo) {
+        guard let from = draggedIndex, from != targetIndex else { return }
+        dropTargetIndex = targetIndex
+    }
+    
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        return DropProposal(operation: .move)
+    }
+    
+    func performDrop(info: DropInfo) -> Bool {
+        guard let from = draggedIndex else {
+            draggedIndex = nil
+            draggedPath = nil
+            dropTargetIndex = nil
+            return false
+        }
+        
+        let to = targetIndex
+        draggedIndex = nil
+        draggedPath = nil
+        dropTargetIndex = nil
+        
+        if from != to {
+            onMove(from, to)
+        }
+        return true
+    }
+    
+    func dropExited(info: DropInfo) {
+        if dropTargetIndex == targetIndex {
+            dropTargetIndex = nil
+        }
+    }
+}
+
+private struct ModalFilterOption: Identifiable {
+    let id: String
+    let title: String
+    let icon: String?
+    let isHiRes: Bool
+}
+
+private let modalFormatOptions: [ModalFilterOption] = [
+    ModalFilterOption(id: "ALL", title: "All Formats", icon: nil, isHiRes: false),
+    ModalFilterOption(id: "FLAC", title: "FLAC", icon: nil, isHiRes: false),
+    ModalFilterOption(id: "MP3", title: "MP3", icon: nil, isHiRes: false),
+    ModalFilterOption(id: "HI-RES", title: "Hi-Res", icon: "waveform", isHiRes: true)
+]
+
+// -----------------------------------------------------------------------------
+// MODAL BROWSING MODE SEGMENTED BAR (LIQUID GLASS SLIDING PILL)
+// -----------------------------------------------------------------------------
+private struct ModalBrowsingModeSegmentedBarView: View {
+    @Binding var selectedMode: AddBrowsingMode
+    let onSelectMode: (AddBrowsingMode) -> Void
+    
+    @Namespace private var highlightNamespace
+    @State private var activeHighlightId: String = AddBrowsingMode.songs.rawValue
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(AddBrowsingMode.allCases) { m in
+                ModalBrowsingModeTabPillView(
+                    mode: m,
+                    isSelected: activeHighlightId == m.rawValue,
+                    namespace: highlightNamespace,
+                    onSelect: {
+                        guard selectedMode != m else { return }
+                        withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+                            activeHighlightId = m.rawValue
+                        }
+                        onSelectMode(m)
+                    }
+                )
+            }
+        }
+        .padding(3)
+        .background(Color.white.opacity(0.04))
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
+        )
+        .fixedSize(horizontal: true, vertical: false)
+        .onAppear {
+            activeHighlightId = selectedMode.rawValue
+        }
+        .onChange(of: selectedMode) { _, newMode in
+            if activeHighlightId != newMode.rawValue {
+                withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+                    activeHighlightId = newMode.rawValue
+                }
+            }
+        }
+    }
+}
+
+private struct ModalBrowsingModeTabPillView: View {
+    let mode: AddBrowsingMode
+    let isSelected: Bool
+    let namespace: Namespace.ID
+    let onSelect: () -> Void
+    
+    @State private var isHovered = false
+    
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 5) {
+                Image(systemName: mode.icon)
+                    .font(.system(size: 11, weight: isSelected ? .bold : .semibold))
+                Text(mode.rawValue)
+                    .font(.system(size: 12, weight: isSelected ? .bold : .medium))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .padding(.horizontal, 13)
+            .padding(.vertical, 6.5)
+            .frame(minHeight: 30)
+            .fixedSize(horizontal: true, vertical: false)
+            .foregroundStyle(
+                isSelected ? Color.white : (isHovered ? Color.white : Color.white.opacity(0.70))
+            )
+            .background(
+                ZStack {
+                    if isSelected {
+                        ModalActivePillBackground(isHiRes: false, isHovered: isHovered)
+                            .matchedGeometryEffect(id: "modalBrowsingTabHighlight", in: namespace)
+                    } else if isHovered {
+                        ModalHoverPillBackground()
+                    } else {
+                        Color.white.opacity(0.001)
+                    }
+                }
+            )
+            .scaleEffect(isHovered ? 1.03 : 1.0)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .contentShape(Capsule())
+        .onHover { hovering in
+            guard isHovered != hovering else { return }
+            isHovered = hovering
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.pop()
+            }
+        }
+        .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+    }
+}
+
+// -----------------------------------------------------------------------------
+// MODAL FORMAT SEGMENTED BAR (LIQUID GLASS SLIDING PILL)
+// -----------------------------------------------------------------------------
+private struct ModalFormatSegmentedBarView: View {
+    let options: [ModalFilterOption]
+    @Binding var selectedFormat: String
+    let onSelectFormat: (String) -> Void
+    
+    @Namespace private var highlightNamespace
+    @State private var activeHighlightId: String = "ALL"
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(options) { opt in
+                ModalFormatTabPillView(
+                    option: opt,
+                    isSelected: activeHighlightId == opt.id,
+                    namespace: highlightNamespace,
+                    onSelect: {
+                        guard selectedFormat != opt.id else { return }
+                        withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+                            activeHighlightId = opt.id
+                        }
+                        onSelectFormat(opt.id)
+                    }
+                )
+            }
+        }
+        .padding(3)
+        .background(Color.white.opacity(0.04))
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
+        )
+        .fixedSize(horizontal: true, vertical: false)
+        .onAppear {
+            activeHighlightId = selectedFormat
+        }
+        .onChange(of: selectedFormat) { _, newFormat in
+            if activeHighlightId != newFormat {
+                withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+                    activeHighlightId = newFormat
+                }
+            }
+        }
+    }
+}
+
+private struct ModalFormatTabPillView: View {
+    let option: ModalFilterOption
+    let isSelected: Bool
+    let namespace: Namespace.ID
+    let onSelect: () -> Void
+    
+    @State private var isHovered = false
+    
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 5) {
+                if let icon = option.icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 10, weight: isSelected ? .bold : .semibold))
+                }
+                Text(option.title)
+                    .font(.system(size: 11.5, weight: isSelected ? .bold : .medium))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 5)
+            .frame(minHeight: 28)
+            .fixedSize(horizontal: true, vertical: false)
+            .foregroundStyle(
+                isSelected ?
+                    (option.isHiRes ? WalkmanTheme.hiResGoldLight : Color.white) :
+                    (isHovered ? Color.white : Color.white.opacity(0.70))
+            )
+            .background(
+                ZStack {
+                    if isSelected {
+                        ModalActivePillBackground(isHiRes: option.isHiRes, isHovered: isHovered)
+                            .matchedGeometryEffect(id: "modalFormatTabHighlight", in: namespace)
+                    } else if isHovered {
+                        ModalHoverPillBackground()
+                    } else {
+                        Color.white.opacity(0.001)
+                    }
+                }
+            )
+            .scaleEffect(isHovered ? 1.03 : 1.0)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .contentShape(Capsule())
+        .onHover { hovering in
+            guard isHovered != hovering else { return }
+            isHovered = hovering
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.pop()
+            }
+        }
+        .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+    }
+}
+
+private struct ModalActivePillBackground: View {
+    let isHiRes: Bool
+    let isHovered: Bool
+    
+    var body: some View {
+        ZStack {
+            Color.white.opacity(isHiRes ? 0.13 : 0.16)
+            VStack(spacing: 0) {
+                LinearGradient(
+                    stops: [
+                        .init(color: .white.opacity(isHovered ? 0.42 : 0.35), location: 0.0),
+                        .init(color: .clear, location: 1.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 5.5)
+                Spacer(minLength: 0)
+            }
+        }
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(
+                    isHiRes ? WalkmanTheme.hiResGold.opacity(0.55) : Color.white.opacity(isHovered ? 0.45 : 0.34),
+                    lineWidth: 0.85
+                )
+        )
+        .shadow(
+            color: Color.black.opacity(0.25),
+            radius: 3,
+            x: 0,
+            y: 1
+        )
+    }
+}
+
+private struct ModalHoverPillBackground: View {
+    var body: some View {
+        ZStack {
+            Color.white.opacity(0.09)
+            VStack(spacing: 0) {
+                LinearGradient(
+                    stops: [
+                        .init(color: .white.opacity(0.20), location: 0.0),
+                        .init(color: .clear, location: 1.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 5)
+                Spacer(minLength: 0)
+            }
+        }
+        .clipShape(Capsule())
+        .overlay(
+            Capsule().stroke(Color.white.opacity(0.22), lineWidth: 0.85)
+        )
+        .shadow(
+            color: Color.black.opacity(0.15),
+            radius: 2,
+            x: 0,
+            y: 1
+        )
     }
 }
 
@@ -1587,19 +2467,18 @@ private struct AddTracksModal: View {
             VStack(spacing: 10) {
                 HStack(spacing: 12) {
                     // Mode Picker (Songs / Recently Added / By Album / By Artist)
-                    Picker("", selection: $mode) {
-                        ForEach(AddBrowsingMode.allCases) { m in
-                            Label(m.rawValue, systemImage: m.icon).tag(m)
+                    ModalBrowsingModeSegmentedBarView(
+                        selectedMode: $mode,
+                        onSelectMode: { newMode in
+                            mode = newMode
                         }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 440)
+                    )
                     
-                    // Search Field
-                    HStack(spacing: 6) {
+                    // Search Field (Liquid Glass Capsule)
+                    HStack(spacing: 8) {
                         Image(systemName: "magnifyingglass")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(search.isEmpty ? WalkmanTheme.silverMuted : WalkmanTheme.silverLight)
                         
                         TextField(
                             (mode == .songs || mode == .recentlyAdded) ? "Search songs by title, artist, album..." :
@@ -1608,33 +2487,52 @@ private struct AddTracksModal: View {
                             text: $search
                         )
                         .textFieldStyle(.plain)
-                        .font(.system(size: 12))
+                        .font(.system(size: 12.5))
                         
                         if !search.isEmpty {
                             Button(action: { search = "" }) {
                                 Image(systemName: "xmark.circle.fill")
                                     .font(.system(size: 12))
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(WalkmanTheme.silverMuted)
                             }
                             .buttonStyle(.plain)
                         }
                     }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 6)
-                    .background(Color.white.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .frame(minHeight: 34)
+                    .background(
+                        ZStack {
+                            Color.white.opacity(0.06)
+                            VStack(spacing: 0) {
+                                LinearGradient(
+                                    stops: [
+                                        .init(color: .white.opacity(0.14), location: 0.0),
+                                        .init(color: .clear, location: 1.0)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                                .frame(height: 7)
+                                Spacer(minLength: 0)
+                            }
+                        }
+                    )
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule().stroke(search.isEmpty ? Color.white.opacity(0.12) : Color.white.opacity(0.30), lineWidth: 0.85)
+                    )
                 }
                 
                 // Secondary Filter Controls: Format Picker & Toggle
                 HStack(spacing: 14) {
-                    Picker("", selection: $formatFilter) {
-                        Text("All Formats").tag("ALL")
-                        Text("FLAC").tag("FLAC")
-                        Text("MP3").tag("MP3")
-                        Text("Hi-Res").tag("HI-RES")
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 250)
+                    ModalFormatSegmentedBarView(
+                        options: modalFormatOptions,
+                        selectedFormat: $formatFilter,
+                        onSelectFormat: { newFmt in
+                            formatFilter = newFmt
+                        }
+                    )
                     
                     Toggle(isOn: $hideExisting) {
                         HStack(spacing: 5) {
@@ -1650,7 +2548,7 @@ private struct AddTracksModal: View {
                     
                     Text(resultsCountLabel)
                         .font(WalkmanFont.mono)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
                 }
             }
             .padding(.horizontal, 20)
@@ -1853,12 +2751,10 @@ private struct AddTracksModal: View {
                             selectAllVisible()
                         }
                         .font(WalkmanFont.subheadline)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3.5)
-                        .background(Color.white.opacity(0.06))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
                         .foregroundStyle(WalkmanTheme.silverLight)
-                        .clipShape(RoundedRectangle(cornerRadius: 5))
-                        .buttonStyle(.plain)
+                        .buttonStyle(LiquidGlassButtonStyle(variant: .subtle, cornerRadius: 8))
                     }
                 }
                 
@@ -1871,10 +2767,8 @@ private struct AddTracksModal: View {
                 .font(WalkmanFont.calloutMedium)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 7)
-                .background(Color.white.opacity(0.08))
-                .foregroundStyle(.white.opacity(0.85))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .buttonStyle(.plain)
+                .foregroundStyle(WalkmanTheme.silverLight)
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 14))
                 .keyboardShortcut(.cancelAction)
                 
                 if !selectedTrackPaths.isEmpty {
@@ -1894,11 +2788,9 @@ private struct AddTracksModal: View {
                         }
                         .padding(.horizontal, 18)
                         .padding(.vertical, 7)
-                        .background(WalkmanTheme.silverGradient)
                         .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 14))
                     .keyboardShortcut(.defaultAction)
                 } else {
                     Button(action: onDismiss) {
@@ -1912,17 +2804,15 @@ private struct AddTracksModal: View {
                         }
                         .padding(.horizontal, 20)
                         .padding(.vertical, 7)
-                        .background(addedInSessionPaths.isEmpty ? AnyShapeStyle(Color.white.opacity(0.12)) : AnyShapeStyle(WalkmanTheme.silverGradient))
-                        .foregroundStyle(addedInSessionPaths.isEmpty ? .white : Color(red: 20/255, green: 20/255, blue: 24/255))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .foregroundStyle(addedInSessionPaths.isEmpty ? WalkmanTheme.silverLight : Color(red: 20/255, green: 20/255, blue: 24/255))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(LiquidGlassButtonStyle(variant: addedInSessionPaths.isEmpty ? .glass : .prominent, cornerRadius: 14))
                     .keyboardShortcut(.defaultAction)
                 }
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
-            .background(Color(red: 16/255, green: 16/255, blue: 18/255))
+            .background(WalkmanTheme.card)
         }
         .frame(minWidth: 720, idealWidth: 920, maxWidth: 1180, minHeight: 560, idealHeight: 700, maxHeight: 900)
         .background(WalkmanTheme.background)
@@ -1944,6 +2834,8 @@ private struct ModalTrackRow: View {
     let onToggleSelect: () -> Void
     let onInstantAdd: () -> Void
     let onTogglePlay: () -> Void
+    
+    @State private var isHovered = false
     
     private var isHiRes: Bool {
         track.bitsPerSample > 16 || track.sampleRate > 48000
@@ -1975,7 +2867,7 @@ private struct ModalTrackRow: View {
                 HStack(spacing: 6) {
                     Text(track.title)
                         .font(isSelected ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
-                        .foregroundStyle(isSelected ? .white : .primary)
+                        .foregroundStyle(isSelected ? .white : (isHovered ? .white : .primary))
                         .lineLimit(1)
                     
                     if isHiRes {
@@ -1991,7 +2883,7 @@ private struct ModalTrackRow: View {
                 
                 Text("\(track.artist) — \(track.album)")
                     .font(WalkmanFont.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(WalkmanTheme.silverMuted)
                     .lineLimit(1)
             }
             
@@ -2017,7 +2909,7 @@ private struct ModalTrackRow: View {
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
                 .background(Color.white.opacity(0.06))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(WalkmanTheme.silverMuted)
                 .clipShape(RoundedRectangle(cornerRadius: 3))
             
             Text(formattedDuration)
@@ -2048,12 +2940,10 @@ private struct ModalTrackRow: View {
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4.5)
-                    .background(WalkmanTheme.silverGradient)
                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .fixedSize(horizontal: true, vertical: false)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 6))
+                .fixedSize(horizontal: true, vertical: false)
                 .help("Add track instantly to playlist on Walkman")
             }
         }
@@ -2061,13 +2951,30 @@ private struct ModalTrackRow: View {
         .padding(.vertical, 7)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isSelected ? WalkmanTheme.cardHover : Color.white.opacity(0.02))
+                .fill(isSelected ? WalkmanTheme.cardHover : (isHovered ? Color.white.opacity(0.04) : Color.white.opacity(0.015)))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(isSelected ? WalkmanTheme.silver.opacity(0.35) : Color.white.opacity(0.04), lineWidth: 1)
+                .stroke(isSelected ? WalkmanTheme.silver.opacity(0.35) : (isHovered ? Color.white.opacity(0.08) : Color.white.opacity(0.04)), lineWidth: 1)
         )
+        .scaleEffect(isHovered && !isSelected ? 1.01 : 1.0)
         .contentShape(Rectangle())
+        .onHover { hovering in
+            guard isHovered != hovering else { return }
+            isHovered = hovering
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.pop()
+            }
+        }
+        .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
         .onTapGesture {
             onToggleSelect()
         }
@@ -2082,6 +2989,8 @@ private struct ModalAlbumRow: View {
     let selectedCount: Int
     let onToggleSelect: () -> Void
     let onInstantAdd: () -> Void
+    
+    @State private var isHovered = false
     
     private var remainingCount: Int {
         album.trackCount - selectedCount
@@ -2103,7 +3012,7 @@ private struct ModalAlbumRow: View {
                 HStack(spacing: 6) {
                     Text(album.name)
                         .font(WalkmanFont.bodyBold)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(isHovered ? Color.white : .white)
                         .lineLimit(1)
                     
                     if album.isHiRes {
@@ -2119,7 +3028,7 @@ private struct ModalAlbumRow: View {
                 
                 Text(album.artist)
                     .font(WalkmanFont.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(WalkmanTheme.silverMuted)
                     .lineLimit(1)
                 
                 HStack(spacing: 8) {
@@ -2177,11 +3086,9 @@ private struct ModalAlbumRow: View {
                     }
                     .padding(.horizontal, 11)
                     .padding(.vertical, 6)
-                    .background(WalkmanTheme.silverGradient)
                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 6))
                 .help("Add all unadded tracks of this album directly to playlist")
             }
         }
@@ -2189,13 +3096,30 @@ private struct ModalAlbumRow: View {
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isAllSelected ? WalkmanTheme.cardHover : Color.white.opacity(0.02))
+                .fill(isAllSelected ? WalkmanTheme.cardHover : (isHovered ? Color.white.opacity(0.04) : Color.white.opacity(0.02)))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(isAllSelected ? WalkmanTheme.silver.opacity(0.35) : Color.white.opacity(0.04), lineWidth: 1)
+                .stroke(isAllSelected ? WalkmanTheme.silver.opacity(0.35) : (isHovered ? Color.white.opacity(0.08) : Color.white.opacity(0.04)), lineWidth: 1)
         )
+        .scaleEffect(isHovered && !isAllSelected ? 1.01 : 1.0)
         .contentShape(Rectangle())
+        .onHover { hovering in
+            guard isHovered != hovering else { return }
+            isHovered = hovering
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.pop()
+            }
+        }
+        .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
         .onTapGesture {
             onToggleSelect()
         }
@@ -2210,6 +3134,8 @@ private struct ModalArtistRow: View {
     let selectedCount: Int
     let onToggleSelect: () -> Void
     let onInstantAdd: () -> Void
+    
+    @State private var isHovered = false
     
     private var remainingCount: Int {
         artist.trackCount - selectedCount
@@ -2227,13 +3153,13 @@ private struct ModalArtistRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(artist.name)
                     .font(WalkmanFont.bodyBold)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(isHovered ? Color.white : .white)
                     .lineLimit(1)
                 
                 HStack(spacing: 6) {
                     Text("\(artist.albumCount) albums • \(artist.trackCount) songs")
                         .font(WalkmanFont.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
                     
                     if isAllInPlaylist {
                         Text("•")
@@ -2277,11 +3203,9 @@ private struct ModalArtistRow: View {
                     }
                     .padding(.horizontal, 11)
                     .padding(.vertical, 6)
-                    .background(WalkmanTheme.silverGradient)
                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 6))
                 .help("Add all unadded songs by this artist directly to playlist")
             }
         }
@@ -2289,13 +3213,30 @@ private struct ModalArtistRow: View {
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isAllSelected ? WalkmanTheme.cardHover : Color.white.opacity(0.02))
+                .fill(isAllSelected ? WalkmanTheme.cardHover : (isHovered ? Color.white.opacity(0.04) : Color.white.opacity(0.02)))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(isAllSelected ? WalkmanTheme.silver.opacity(0.35) : Color.white.opacity(0.04), lineWidth: 1)
+                .stroke(isAllSelected ? WalkmanTheme.silver.opacity(0.35) : (isHovered ? Color.white.opacity(0.08) : Color.white.opacity(0.04)), lineWidth: 1)
         )
+        .scaleEffect(isHovered && !isAllSelected ? 1.01 : 1.0)
         .contentShape(Rectangle())
+        .onHover { hovering in
+            guard isHovered != hovering else { return }
+            isHovered = hovering
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.pop()
+            }
+        }
+        .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
         .onTapGesture {
             onToggleSelect()
         }
