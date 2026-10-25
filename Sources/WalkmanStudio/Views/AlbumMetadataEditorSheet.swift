@@ -346,22 +346,22 @@ public struct AlbumMetadataEditorSheet: View {
 
             // Main Content Area
             ScrollView {
-                VStack(spacing: 16) {
+                VStack(spacing: 18) {
                     // Top Section: Album Artwork + Album-Wide Tags
-                    HStack(alignment: .top, spacing: 20) {
+                    HStack(alignment: .top, spacing: 22) {
                         artworkColumn
-                            .frame(width: 230)
+                            .frame(width: 255)
 
                         albumTagsColumn
                     }
-                    .padding(14)
+                    .padding(16)
                     .liquidGlass(cornerRadius: 14, borderOpacity: 0.28)
 
                     // Bottom Section: Tracklist & Track Numbers
                     tracklistSection
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 14)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 16)
             }
 
             Divider()
@@ -370,7 +370,7 @@ public struct AlbumMetadataEditorSheet: View {
             // Footer Bar
             footerBar
         }
-        .frame(minWidth: 880, idealWidth: 940, maxWidth: 1040, minHeight: 580, idealHeight: 680, maxHeight: 820)
+        .frame(minWidth: 1040, idealWidth: 1120, maxWidth: 1240, minHeight: 700, idealHeight: 780, maxHeight: 900)
         .background(
             ZStack {
                 WalkmanTheme.card.opacity(0.88)
@@ -452,30 +452,30 @@ public struct AlbumMetadataEditorSheet: View {
 
     // MARK: - Artwork Column
     private var artworkColumn: some View {
-        VStack(spacing: 9) {
+        VStack(spacing: 12) {
             ZStack {
                 if let img = coverImage {
                     Image(nsImage: img)
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 200, height: 200)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .frame(width: 230, height: 230)
+                        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                         .shadow(color: Color.black.opacity(0.35), radius: 8, x: 0, y: 4)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            RoundedRectangle(cornerRadius: 11, style: .continuous)
                                 .stroke(isTargeted ? WalkmanTheme.silver : Color.white.opacity(0.15), lineWidth: isTargeted ? 2 : 1)
                         )
                 } else {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        RoundedRectangle(cornerRadius: 11, style: .continuous)
                             .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
                             .foregroundStyle(isTargeted ? WalkmanTheme.silver : Color.white.opacity(0.22))
-                            .frame(width: 200, height: 200)
+                            .frame(width: 230, height: 230)
                             .background(Color.white.opacity(0.02))
 
-                        VStack(spacing: 6) {
+                        VStack(spacing: 7) {
                             Image(systemName: "photo.badge.plus")
-                                .font(.system(size: 32))
+                                .font(.system(size: 36))
                                 .foregroundStyle(WalkmanTheme.silverMuted)
                             Text("Drop Artwork")
                                 .font(WalkmanFont.calloutMedium)
@@ -526,9 +526,9 @@ public struct AlbumMetadataEditorSheet: View {
 
             // Compliance status pill
             if let st = validationStatus {
-                HStack(spacing: 4) {
+                HStack(spacing: 5) {
                     Image(systemName: st.valid ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(st.valid ? Color.green : Color.orange)
                     Text(st.message)
                         .font(WalkmanFont.monoSmall)
@@ -538,16 +538,16 @@ public struct AlbumMetadataEditorSheet: View {
             }
 
             // Artwork Action Buttons
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 Button(action: selectArtworkFile) {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 5) {
                         Image(systemName: "folder")
-                            .font(.system(size: 10))
+                            .font(.system(size: 11))
                         Text("Choose...")
                             .font(WalkmanFont.subheadlineMedium)
                     }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
                     .background(Color.white.opacity(0.08))
                     .foregroundStyle(WalkmanTheme.silverLight)
                     .clipShape(Capsule())
@@ -602,7 +602,7 @@ public struct AlbumMetadataEditorSheet: View {
 
     // MARK: - Album Tags Column
     private var albumTagsColumn: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("ALBUM PROPERTIES (APPLIED TO ALL TRACKS)")
                     .font(WalkmanFont.sectionHeader)
@@ -611,7 +611,7 @@ public struct AlbumMetadataEditorSheet: View {
                 Spacer()
 
                 Button(action: fetchOnlineAlbumMetadata) {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 5) {
                         if isFetchingOnlineInfo {
                             ProgressView()
                                 .scaleEffect(0.55)
@@ -620,13 +620,13 @@ public struct AlbumMetadataEditorSheet: View {
                                 .font(WalkmanFont.subheadlineMedium)
                         } else {
                             Image(systemName: "sparkles")
-                                .font(.system(size: 11))
+                                .font(.system(size: 11.5))
                             Text("Auto-Fill Album Info")
                                 .font(WalkmanFont.subheadlineMedium)
                         }
                     }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
                     .background(Color.white.opacity(0.08))
                     .foregroundStyle(WalkmanTheme.silverLight)
                     .clipShape(Capsule())
@@ -642,17 +642,17 @@ public struct AlbumMetadataEditorSheet: View {
 
             AlbumInputField(label: "Album Title", text: $albumName)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 5) {
                 AlbumInputField(label: "Album Artist", text: $albumArtist)
 
                 Toggle("Apply this artist to all track tags", isOn: $applyArtistToAll)
                     .font(WalkmanFont.subheadline)
                     .toggleStyle(.checkbox)
                     .foregroundStyle(WalkmanTheme.silverMuted)
-                    .padding(.top, 2)
+                    .padding(.top, 3)
             }
 
-            HStack(spacing: 12) {
+            HStack(spacing: 14) {
                 AlbumInputField(label: "Release Year", text: $year)
                 AlbumInputField(label: "Genre", text: $genre)
             }
@@ -677,16 +677,16 @@ public struct AlbumMetadataEditorSheet: View {
                 Spacer()
 
                 // Quick Action Buttons
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Button(action: autoNumberTracks) {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 5) {
                             Image(systemName: "list.number")
-                                .font(.system(size: 10))
+                                .font(.system(size: 11))
                             Text("Auto-Number (1..N)")
-                                .font(WalkmanFont.subheadlineMedium)
+                                .font(WalkmanFont.calloutMedium)
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4.5)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
                         .background(Color.white.opacity(0.07))
                         .foregroundStyle(WalkmanTheme.silverLight)
                         .clipShape(Capsule())
@@ -699,14 +699,14 @@ public struct AlbumMetadataEditorSheet: View {
                     .help("Automatically renumbers all tracks from 1 to \(trackRows.count)")
 
                     Button(action: padTrackNumbers) {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 5) {
                             Image(systemName: "number")
-                                .font(.system(size: 10))
+                                .font(.system(size: 11))
                             Text("Pad (01..N)")
-                                .font(WalkmanFont.subheadlineMedium)
+                                .font(WalkmanFont.calloutMedium)
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4.5)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
                         .background(Color.white.opacity(0.07))
                         .foregroundStyle(WalkmanTheme.silverLight)
                         .clipShape(Capsule())
@@ -720,8 +720,8 @@ public struct AlbumMetadataEditorSheet: View {
 
                     Button(action: sortTracksByTrackNum) {
                         Image(systemName: "arrow.up.arrow.down")
-                            .font(.system(size: 10))
-                            .frame(width: 24, height: 24)
+                            .font(.system(size: 11.5))
+                            .frame(width: 28, height: 28)
                             .background(Color.white.opacity(0.07))
                             .foregroundStyle(WalkmanTheme.silverLight)
                             .clipShape(Circle())
@@ -735,8 +735,8 @@ public struct AlbumMetadataEditorSheet: View {
 
                     Button(action: sortTracksByTitle) {
                         Image(systemName: "textformat.abc")
-                            .font(.system(size: 10))
-                            .frame(width: 24, height: 24)
+                            .font(.system(size: 11.5))
+                            .frame(width: 28, height: 28)
                             .background(Color.white.opacity(0.07))
                             .foregroundStyle(WalkmanTheme.silverLight)
                             .clipShape(Circle())
@@ -757,12 +757,12 @@ public struct AlbumMetadataEditorSheet: View {
                     Text("#")
                         .font(WalkmanFont.sectionHeader)
                         .foregroundStyle(.tertiary)
-                        .frame(width: 44, alignment: .center)
+                        .frame(width: 50, alignment: .center)
 
                     Text("Order")
                         .font(WalkmanFont.sectionHeader)
                         .foregroundStyle(.tertiary)
-                        .frame(width: 42, alignment: .center)
+                        .frame(width: 48, alignment: .center)
 
                     Text("Track Title")
                         .font(WalkmanFont.sectionHeader)
@@ -773,7 +773,7 @@ public struct AlbumMetadataEditorSheet: View {
                         Text("Track Artist")
                             .font(WalkmanFont.sectionHeader)
                             .foregroundStyle(.tertiary)
-                            .frame(width: 220, alignment: .leading)
+                            .frame(width: 240, alignment: .leading)
                     }
 
                     Text("Format")
@@ -786,8 +786,8 @@ public struct AlbumMetadataEditorSheet: View {
                         .foregroundStyle(.tertiary)
                         .frame(width: 60, alignment: .trailing)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
                 .background(Color.white.opacity(0.035))
 
                 Divider()
@@ -813,9 +813,9 @@ public struct AlbumMetadataEditorSheet: View {
                     }
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
                     .stroke(Color.white.opacity(0.08), lineWidth: 0.8)
             )
         }
@@ -873,9 +873,9 @@ public struct AlbumMetadataEditorSheet: View {
                 Button("Cancel") {
                     onDismiss()
                 }
-                .font(WalkmanFont.subheadlineMedium)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 7)
+                .font(WalkmanFont.calloutMedium)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8.5)
                 .background(Color.white.opacity(isCancelHovered ? 0.12 : 0.06))
                 .clipShape(Capsule())
                 .overlay(
@@ -893,7 +893,7 @@ public struct AlbumMetadataEditorSheet: View {
                 }
 
                 Button(action: saveAlbumChanges) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 7) {
                         if isSaving {
                             ProgressView()
                                 .scaleEffect(0.65)
@@ -901,13 +901,13 @@ public struct AlbumMetadataEditorSheet: View {
                             Text("Saving Album...")
                         } else {
                             Image(systemName: "checkmark")
-                                .font(.system(size: 11, weight: .bold))
+                                .font(.system(size: 12, weight: .bold))
                             Text("Save Album (\(trackRows.count) Tracks)")
                         }
                     }
-                    .font(WalkmanFont.calloutBold)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 7.5)
+                    .font(WalkmanFont.headline)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 9.5)
                     .background(
                         ZStack {
                             WalkmanTheme.silverGradient
@@ -920,7 +920,7 @@ public struct AlbumMetadataEditorSheet: View {
                                     startPoint: .top,
                                     endPoint: .bottom
                                 )
-                                .frame(height: 5)
+                                .frame(height: 5.5)
                                 Spacer(minLength: 0)
                             }
                             .clipShape(Capsule())
@@ -945,8 +945,8 @@ public struct AlbumMetadataEditorSheet: View {
                     if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 22)
+            .padding(.vertical, 14)
         }
     }
 }
@@ -968,51 +968,51 @@ private struct TrackRowView: View {
             // Track Number TextField
             TextField("", text: $row.trackNum)
                 .textFieldStyle(.plain)
-                .font(WalkmanFont.mono)
+                .font(.system(size: 13, weight: .medium, design: .monospaced))
                 .multilineTextAlignment(.center)
-                .padding(.vertical, 4.5)
+                .padding(.vertical, 6.5)
                 .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
                         .stroke(Color.white.opacity(0.10), lineWidth: 0.7)
                 )
-                .frame(width: 44)
+                .frame(width: 50)
 
             // Reorder Up/Down buttons
-            HStack(spacing: 2) {
+            HStack(spacing: 3) {
                 Button(action: onMoveUp) {
                     Image(systemName: "chevron.up")
-                        .font(.system(size: 8.5, weight: .bold))
-                        .frame(width: 18, height: 18)
+                        .font(.system(size: 10, weight: .bold))
+                        .frame(width: 22, height: 22)
                         .background(Color.white.opacity(0.06))
-                        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .disabled(index == 0)
 
                 Button(action: onMoveDown) {
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 8.5, weight: .bold))
-                        .frame(width: 18, height: 18)
+                        .font(.system(size: 10, weight: .bold))
+                        .frame(width: 22, height: 22)
                         .background(Color.white.opacity(0.06))
-                        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .disabled(index == totalCount - 1)
             }
-            .frame(width: 42)
+            .frame(width: 48)
 
             // Title TextField
             TextField("", text: $row.title)
                 .textFieldStyle(.plain)
-                .font(WalkmanFont.bodyMedium)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
+                .font(.system(size: 13.5, weight: .medium))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
                 .background(Color.white.opacity(0.04))
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
                         .stroke(Color.white.opacity(0.08), lineWidth: 0.7)
                 )
                 .frame(maxWidth: .infinity)
@@ -1021,16 +1021,16 @@ private struct TrackRowView: View {
             if !applyArtistToAll {
                 TextField("", text: $row.artist)
                     .textFieldStyle(.plain)
-                    .font(WalkmanFont.callout)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
+                    .font(.system(size: 13, weight: .regular))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
                     .background(Color.white.opacity(0.04))
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
                             .stroke(Color.white.opacity(0.08), lineWidth: 0.7)
                     )
-                    .frame(width: 220)
+                    .frame(width: 240)
             }
 
             // Format
@@ -1045,8 +1045,8 @@ private struct TrackRowView: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 60, alignment: .trailing)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
         .background(isHovered ? Color.white.opacity(0.045) : (index % 2 == 1 ? Color.white.opacity(0.015) : Color.clear))
         .onHover { h in
             withAnimation(.spring(response: 0.20, dampingFraction: 0.75)) {
@@ -1064,32 +1064,32 @@ private struct AlbumInputField: View {
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3.5) {
+        VStack(alignment: .leading, spacing: 4.5) {
             Text(label)
                 .font(WalkmanFont.subheadlineMedium)
                 .foregroundStyle(isFocused ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
 
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 TextField("", text: $text)
                     .textFieldStyle(.plain)
-                    .font(WalkmanFont.bodyMedium)
+                    .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(Color.white)
                     .focused($isFocused)
 
                 if !text.isEmpty && isFocused {
                     Button(action: { text = "" }) {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 11))
+                            .font(.system(size: 12.5))
                             .foregroundStyle(Color.white.opacity(0.40))
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6.5)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
             .background(
                 ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .fill(isFocused ? Color.white.opacity(0.08) : Color.white.opacity(0.045))
 
                     VStack(spacing: 0) {
@@ -1101,14 +1101,14 @@ private struct AlbumInputField: View {
                             startPoint: .top,
                             endPoint: .bottom
                         )
-                        .frame(height: 4)
+                        .frame(height: 5)
                         Spacer(minLength: 0)
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .stroke(
                         isFocused ? Color.white.opacity(0.35) : (isHovered ? Color.white.opacity(0.18) : Color.white.opacity(0.09)),
                         lineWidth: 0.8
@@ -1125,7 +1125,7 @@ private struct AlbumIconSquareButton: View {
     let icon: String
     var isDestructive: Bool = false
     var isDisabled: Bool = false
-    let helpText: String
+    var helpText: String = ""
     let action: () -> Void
 
     @State private var isHovered: Bool = false
@@ -1133,21 +1133,21 @@ private struct AlbumIconSquareButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 11))
+                .font(.system(size: 12))
                 .foregroundStyle(
                     isDestructive ?
                         Color(red: 255/255, green: 120/255, blue: 110/255) :
                         (isHovered ? .white : WalkmanTheme.silverLight)
                 )
-                .frame(width: 26, height: 26)
+                .frame(width: 30, height: 30)
                 .background(
                     isDestructive ?
                         Color.red.opacity(isHovered ? 0.20 : 0.10) :
                         Color.white.opacity(isHovered ? 0.12 : 0.06)
                 )
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
                         .stroke(
                             isDestructive ? Color.red.opacity(0.25) : Color.white.opacity(isHovered ? 0.22 : 0.10),
                             lineWidth: 0.8
@@ -1177,14 +1177,14 @@ private struct SheetCloseButton: View {
             ZStack {
                 Circle()
                     .fill(Color.white.opacity(isHovered ? 0.14 : 0.07))
-                    .frame(width: 24, height: 24)
+                    .frame(width: 28, height: 28)
 
                 Circle()
                     .stroke(Color.white.opacity(isHovered ? 0.25 : 0.12), lineWidth: 0.8)
-                    .frame(width: 24, height: 24)
+                    .frame(width: 28, height: 28)
 
                 Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(isHovered ? Color.white : Color.white.opacity(0.65))
             }
             .scaleEffect(isHovered ? 1.08 : 1.0)

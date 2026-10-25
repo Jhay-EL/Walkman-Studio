@@ -391,7 +391,7 @@ public struct SongMetadataEditorSheet: View {
 
             // Tab Content
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 16) {
                     switch selectedTab {
                     case .tags:
                         tagsAndSpecsTab
@@ -401,8 +401,8 @@ public struct SongMetadataEditorSheet: View {
                         lyricsTab
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 10)
             }
 
             Divider()
@@ -411,7 +411,7 @@ public struct SongMetadataEditorSheet: View {
             // Footer Bar
             footerBar
         }
-        .frame(minWidth: 840, idealWidth: 900, maxWidth: 980, minHeight: 520, idealHeight: 620, maxHeight: 760)
+        .frame(minWidth: 960, idealWidth: 1040, maxWidth: 1160, minHeight: 660, idealHeight: 740, maxHeight: 860)
         .background(
             ZStack {
                 WalkmanTheme.card.opacity(0.88)
@@ -505,37 +505,37 @@ public struct SongMetadataEditorSheet: View {
 
     // MARK: - Hero Summary Card
     private var heroSummaryCard: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 16) {
             // Artwork thumbnail
             ZStack {
                 if let img = coverImage {
                     Image(nsImage: img)
                         .resizable()
                         .scaledToFill()
-                        .frame(width: 54, height: 54)
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .frame(width: 60, height: 60)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 } else {
-                    TrackCoverThumbnail(track: track, size: 54)
+                    TrackCoverThumbnail(track: track, size: 60)
                 }
             }
             .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(Color.white.opacity(0.14), lineWidth: 0.8)
             )
             .shadow(color: Color.black.opacity(0.35), radius: 6, x: 0, y: 2)
 
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 3.5) {
+                HStack(spacing: 7) {
                     Text(title.isEmpty ? track.filename : title)
-                        .font(.system(size: 14.5, weight: .bold))
+                        .font(.system(size: 15.5, weight: .bold))
                         .foregroundStyle(.white)
                         .lineLimit(1)
 
                     if isHiRes {
                         Text("Hi-Res")
                             .font(WalkmanFont.badge)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1.5)
+                            .padding(.horizontal, 5.5)
+                            .padding(.vertical, 2)
                             .background(WalkmanTheme.hiResGoldGradient)
                             .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                             .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
@@ -550,15 +550,15 @@ public struct SongMetadataEditorSheet: View {
                 let dispArtist = artist.isEmpty ? track.artist : artist
                 let dispAlbum = album.isEmpty ? track.album : album
                 Text("\(dispArtist) — \(dispAlbum)")
-                    .font(WalkmanFont.subheadline)
+                    .font(WalkmanFont.body)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
 
                 HStack(spacing: 6) {
                     Text(track.format)
                         .font(WalkmanFont.badge)
-                        .padding(.horizontal, 4.5)
-                        .padding(.vertical, 1.5)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
                         .background(Color.white.opacity(0.08))
                         .foregroundStyle(.secondary)
                         .clipShape(RoundedRectangle(cornerRadius: 3))
@@ -579,7 +579,7 @@ public struct SongMetadataEditorSheet: View {
             Spacer()
 
             // Actions: Preview & Trim & Cut
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 let isThisPlaying = (player.currentTrack?.id == track.id && player.isPlaying)
                 LiquidGlassActionButton(
                     icon: isThisPlaying ? "pause.fill" : "play.fill",
@@ -601,7 +601,7 @@ public struct SongMetadataEditorSheet: View {
                 )
             }
         }
-        .padding(12)
+        .padding(14)
         .liquidGlass(cornerRadius: 12, borderOpacity: 0.28)
         .padding(.horizontal, 20)
         .padding(.top, 10)
@@ -682,13 +682,13 @@ public struct SongMetadataEditorSheet: View {
 
             HStack(alignment: .top, spacing: 24) {
                 // Artwork display with drag & drop
-                VStack(spacing: 10) {
+                VStack(spacing: 12) {
                     ZStack {
                         if let img = coverImage {
                             Image(nsImage: img)
                                 .resizable()
                                 .scaledToFit()
-                                .frame(width: 250, height: 250)
+                                .frame(width: 270, height: 270)
                                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                                 .shadow(color: Color.black.opacity(0.4), radius: 10, x: 0, y: 5)
                                 .overlay(
@@ -700,12 +700,12 @@ public struct SongMetadataEditorSheet: View {
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                                     .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
                                     .foregroundStyle(isTargeted ? WalkmanTheme.silver : Color.white.opacity(0.25))
-                                    .frame(width: 250, height: 250)
+                                    .frame(width: 270, height: 270)
                                     .background(Color.white.opacity(0.02))
 
                                 VStack(spacing: 8) {
                                     Image(systemName: "photo.badge.plus")
-                                        .font(.system(size: 36))
+                                        .font(.system(size: 38))
                                         .foregroundStyle(WalkmanTheme.silverMuted)
                                     Text("Drop Artwork Here")
                                         .font(WalkmanFont.calloutMedium)
@@ -879,12 +879,12 @@ public struct SongMetadataEditorSheet: View {
             TextEditor(text: $lyricsDraft)
                 .font(WalkmanFont.mono)
                 .scrollContentBackground(.hidden)
-                .padding(10)
-                .frame(minHeight: 220, maxHeight: 340)
+                .padding(12)
+                .frame(minHeight: 280, maxHeight: 440)
                 .background(Color.white.opacity(0.04))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
                 )
                 .onChange(of: lyricsDraft) { _, _ in
@@ -949,9 +949,9 @@ public struct SongMetadataEditorSheet: View {
             Button("Cancel") {
                 onDismiss()
             }
-            .font(WalkmanFont.subheadlineMedium)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 7)
+            .font(WalkmanFont.calloutMedium)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 8.5)
             .background(Color.white.opacity(isCancelHovered ? 0.12 : 0.06))
             .clipShape(Capsule())
             .overlay(
@@ -969,7 +969,7 @@ public struct SongMetadataEditorSheet: View {
             }
 
             Button(action: saveAllChanges) {
-                HStack(spacing: 6) {
+                HStack(spacing: 7) {
                     if isSaving {
                         ProgressView()
                             .scaleEffect(0.65)
@@ -977,13 +977,13 @@ public struct SongMetadataEditorSheet: View {
                         Text("Saving...")
                     } else {
                         Image(systemName: "checkmark")
-                            .font(.system(size: 11, weight: .bold))
+                            .font(.system(size: 12, weight: .bold))
                         Text("Save Metadata")
                     }
                 }
-                .font(WalkmanFont.calloutBold)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 7.5)
+                .font(WalkmanFont.headline)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 9.5)
                 .background(
                     ZStack {
                         WalkmanTheme.silverGradient
@@ -996,7 +996,7 @@ public struct SongMetadataEditorSheet: View {
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
-                            .frame(height: 5)
+                            .frame(height: 5.5)
                             Spacer(minLength: 0)
                         }
                         .clipShape(Capsule())
@@ -1021,8 +1021,8 @@ public struct SongMetadataEditorSheet: View {
                 if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 22)
+        .padding(.vertical, 14)
     }
 }
 
@@ -1033,7 +1033,7 @@ private struct EditorSegmentedBar: View {
     @Namespace private var tabNamespace
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 5) {
             ForEach(SongMetadataEditorSheet.EditorTab.allCases) { tab in
                 EditorTabButton(
                     tab: tab,
@@ -1047,7 +1047,7 @@ private struct EditorSegmentedBar: View {
                 )
             }
         }
-        .padding(3)
+        .padding(4)
         .background(Color.white.opacity(0.04))
         .clipShape(Capsule())
         .overlay(
@@ -1067,15 +1067,15 @@ private struct EditorTabButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
+            HStack(spacing: 7) {
                 Image(systemName: tab.icon)
-                    .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
+                    .font(.system(size: 12.5, weight: isSelected ? .semibold : .medium))
                 Text(tab.rawValue)
-                    .font(.system(size: 11.5, weight: isSelected ? .semibold : .regular))
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
             }
             .foregroundStyle(isSelected ? Color.white : (isHovered ? Color.white : Color.white.opacity(0.65)))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 8)
             .background(
                 ZStack {
                     if isSelected {
@@ -1092,7 +1092,7 @@ private struct EditorTabButton: View {
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
-                            .frame(height: 5.5)
+                            .frame(height: 6)
                             Spacer(minLength: 0)
                         }
                         .clipShape(Capsule())
@@ -1133,32 +1133,32 @@ private struct EditorField: View {
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3.5) {
+        VStack(alignment: .leading, spacing: 4.5) {
             Text(label)
                 .font(WalkmanFont.subheadlineMedium)
                 .foregroundStyle(isFocused ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
 
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 TextField("", text: $text)
                     .textFieldStyle(.plain)
-                    .font(WalkmanFont.bodyMedium)
+                    .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(Color.white)
                     .focused($isFocused)
 
                 if !text.isEmpty && isFocused {
                     Button(action: { text = "" }) {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 11))
+                            .font(.system(size: 12.5))
                             .foregroundStyle(Color.white.opacity(0.40))
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6.5)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
             .background(
                 ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .fill(isFocused ? Color.white.opacity(0.08) : Color.white.opacity(0.045))
 
                     VStack(spacing: 0) {
@@ -1170,14 +1170,14 @@ private struct EditorField: View {
                             startPoint: .top,
                             endPoint: .bottom
                         )
-                        .frame(height: 4)
+                        .frame(height: 5)
                         Spacer(minLength: 0)
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .stroke(
                         isFocused ? Color.white.opacity(0.35) : (isHovered ? Color.white.opacity(0.18) : Color.white.opacity(0.09)),
                         lineWidth: 0.8
@@ -1202,14 +1202,14 @@ private struct LiquidGlassActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 5) {
+            HStack(spacing: 6) {
                 Image(systemName: icon)
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 11.5, weight: .bold))
                 Text(label)
-                    .font(WalkmanFont.subheadlineMedium)
+                    .font(.system(size: 12.5, weight: .medium))
             }
-            .padding(.horizontal, 11)
-            .padding(.vertical, 5.5)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7.5)
             .background(
                 ZStack {
                     if isProminent {
@@ -1276,14 +1276,14 @@ private struct SheetCloseButton: View {
             ZStack {
                 Circle()
                     .fill(Color.white.opacity(isHovered ? 0.14 : 0.07))
-                    .frame(width: 24, height: 24)
+                    .frame(width: 28, height: 28)
 
                 Circle()
                     .stroke(Color.white.opacity(isHovered ? 0.25 : 0.12), lineWidth: 0.8)
-                    .frame(width: 24, height: 24)
+                    .frame(width: 28, height: 28)
 
                 Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(isHovered ? Color.white : Color.white.opacity(0.65))
             }
             .scaleEffect(isHovered ? 1.08 : 1.0)
