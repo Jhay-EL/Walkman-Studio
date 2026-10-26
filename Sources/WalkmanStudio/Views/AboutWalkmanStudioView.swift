@@ -444,7 +444,7 @@ public struct AboutWalkmanStudioView: View {
                                     )
                             }
                             
-                            Text("GitHub: @Jhay-EL • Software Engineer & Audiophile")
+                            Text("GitHub: @Jhay-EL • UX/UI Designer & Software Developer")
                                 .font(WalkmanFont.subheadlineMedium)
                                 .foregroundStyle(.secondary)
                         }
@@ -452,7 +452,7 @@ public struct AboutWalkmanStudioView: View {
                         Spacer()
                     }
                     
-                    Text("Walkman Studio was designed and engineered from the ground up to solve the challenges of using modern macOS with Sony Walkman digital audio players. It automates strict ID3v2.3 tagging, Baseline RGB JPEG cover art conversion, synchronized lyrics synchronization, dual-partition routing, and AppleDouble ghost file cleanup.")
+                    Text("Walkman Studio was designed and engineered from the ground up to solve the challenges of using modern macOS with Sony Walkman digital audio players. It automates strict ID3v2.3 & FLAC tagging, Baseline RGB JPEG cover art conversion, Sony 12 Tone / SenseMe acoustic analysis, synchronized .LRC lyrics, batch metadata editing, dual-partition storage routing, and AppleDouble ghost file cleanup.")
                         .font(WalkmanFont.callout)
                         .foregroundStyle(.secondary)
                         .lineSpacing(2)
