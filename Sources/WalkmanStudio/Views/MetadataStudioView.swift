@@ -761,7 +761,7 @@ public struct MetadataStudioView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.top, 36)
+            .padding(.top, 48)
             .padding(.bottom, 24)
         }
         .contentMargins(.top, 0, for: .scrollContent)
@@ -770,13 +770,14 @@ public struct MetadataStudioView: View {
             LinearGradient(
                 stops: [
                     .init(color: WalkmanTheme.background, location: 0.0),
-                    .init(color: WalkmanTheme.background, location: 0.7),
+                    .init(color: WalkmanTheme.background, location: 0.65),
                     .init(color: WalkmanTheme.background.opacity(0.0), location: 1.0)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .frame(height: 28)
+            .frame(maxWidth: .infinity)
+            .frame(height: 48)
             .allowsHitTesting(false)
             .ignoresSafeArea(edges: .top)
         }
