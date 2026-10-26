@@ -761,7 +761,7 @@ public struct MetadataStudioView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.top, 12)
+            .padding(.top, 2)
             .padding(.bottom, 24)
         }
         .contentMargins(.top, 0, for: .scrollContent)
