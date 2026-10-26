@@ -761,10 +761,25 @@ public struct MetadataStudioView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.top, 10)
+            .padding(.top, 36)
             .padding(.bottom, 24)
         }
         .contentMargins(.top, 0, for: .scrollContent)
+        .ignoresSafeArea(edges: .top)
+        .overlay(alignment: .top) {
+            LinearGradient(
+                stops: [
+                    .init(color: WalkmanTheme.background, location: 0.0),
+                    .init(color: WalkmanTheme.background, location: 0.7),
+                    .init(color: WalkmanTheme.background.opacity(0.0), location: 1.0)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 28)
+            .allowsHitTesting(false)
+            .ignoresSafeArea(edges: .top)
+        }
         .onAppear { loadTrack(force: true) }
         .onChange(of: track) { loadTrack(force: true) }
         .onReceive(NotificationCenter.default.publisher(for: .trackMetadataDidUpdate)) { notif in
