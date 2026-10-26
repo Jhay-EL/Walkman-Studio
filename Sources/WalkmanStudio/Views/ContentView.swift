@@ -512,7 +512,7 @@ public struct ContentView: View {
                         },
                         onOpenAbout: { self.showAboutSheet = true }
                     )
-                    .navigationSplitViewColumnWidth(min: 260, ideal: 260, max: 280)
+                    .navigationSplitViewColumnWidth(min: 240, ideal: 245, max: 270)
                     .transaction { transaction in
                         transaction.animation = nil
                     }
@@ -698,7 +698,8 @@ public struct ContentView: View {
                                 .padding(14)
                             }
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                        .clipped()
                         
                         // Audio Preview & Playback Bar (Floating Liquid Glass Container)
                         HStack {
@@ -719,8 +720,9 @@ public struct ContentView: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 12)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
                     .background(WalkmanTheme.background.ignoresSafeArea())
+                    .clipped()
                     .inspector(isPresented: $showInspector) {
                         MetadataStudioView(
                             track: selectedTrack,
@@ -731,7 +733,7 @@ public struct ContentView: View {
                                 }
                             }
                         )
-                        .inspectorColumnWidth(min: 280, ideal: 320, max: 380)
+                        .inspectorColumnWidth(min: 260, ideal: 280, max: 340)
                     }
                     .toolbar {
                         Spacer()

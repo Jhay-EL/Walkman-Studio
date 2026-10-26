@@ -78,99 +78,114 @@ public struct TransferQueueView: View {
         }
     }
 
+    private var modeButtonsView: some View {
+        HStack(spacing: 3) {
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    targetMode = .music
+                }
+            }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "music.note")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text("Music Library (/MUSIC)")
+                        .font(WalkmanFont.calloutBold)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(targetMode == .music ? Color.white.opacity(0.14) : Color.clear)
+                )
+                .foregroundStyle(targetMode == .music ? .white : .secondary)
+            }
+            .buttonStyle(.plain)
+
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    targetMode = .learning
+                    if selectedPreset == "flac_16" || selectedPreset == "flac_24_96" {
+                        selectedPreset = "copy_optimize"
+                    }
+                }
+            }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "character.book.closed.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text("Language Study & Audiobooks (/LEARNING)")
+                        .font(WalkmanFont.calloutBold)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(targetMode == .learning ? WalkmanTheme.hiResGold.opacity(0.2) : Color.clear)
+                )
+                .foregroundStyle(targetMode == .learning ? WalkmanTheme.hiResGold : .secondary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(3)
+        .background(Color.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    private var modeInformationalPill: some View {
+        Group {
+            if targetMode == .learning {
+                HStack(spacing: 5) {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 9))
+                        .foregroundStyle(WalkmanTheme.hiResGold)
+                    Text("DPC Speed (0.5x–2.0x) • A-B Repeat • Quick Replay (3s/10s)")
+                        .font(WalkmanFont.monoSmall)
+                        .foregroundStyle(WalkmanTheme.hiResGold.opacity(0.95))
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(WalkmanTheme.hiResGold.opacity(0.12))
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule().stroke(WalkmanTheme.hiResGold.opacity(0.25), lineWidth: 0.8)
+                )
+            } else {
+                HStack(spacing: 5) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 9))
+                        .foregroundStyle(WalkmanTheme.silverMuted)
+                    Text("Standard Walkman Library • Playlists • Hi-Res Audio")
+                        .font(WalkmanFont.monoSmall)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color.white.opacity(0.04))
+                .clipShape(Capsule())
+            }
+        }
+    }
+
     public var body: some View {
         ZStack {
             VStack(spacing: 10) {
                 // -------------------------------------------------------------
                 // PANEL 0: DESTINATION MODE SELECTOR (Music vs Language Study)
                 // -------------------------------------------------------------
-                HStack(spacing: 10) {
-                    HStack(spacing: 3) {
-                        Button(action: {
-                            withAnimation(.easeInOut(duration: 0.15)) {
-                                targetMode = .music
-                            }
-                        }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "music.note")
-                                    .font(.system(size: 11, weight: .semibold))
-                                Text("Music Library (/MUSIC)")
-                                    .font(WalkmanFont.calloutBold)
-                            }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 6)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .fill(targetMode == .music ? Color.white.opacity(0.14) : Color.clear)
-                            )
-                            .foregroundStyle(targetMode == .music ? .white : .secondary)
-                        }
-                        .buttonStyle(.plain)
-
-                        Button(action: {
-                            withAnimation(.easeInOut(duration: 0.15)) {
-                                targetMode = .learning
-                                if selectedPreset == "flac_16" || selectedPreset == "flac_24_96" {
-                                    selectedPreset = "copy_optimize"
-                                }
-                            }
-                        }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "character.book.closed.fill")
-                                    .font(.system(size: 11, weight: .semibold))
-                                Text("Language Study & Audiobooks (/LEARNING)")
-                                    .font(WalkmanFont.calloutBold)
-                            }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 6)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .fill(targetMode == .learning ? WalkmanTheme.hiResGold.opacity(0.2) : Color.clear)
-                            )
-                            .foregroundStyle(targetMode == .learning ? WalkmanTheme.hiResGold : .secondary)
-                        }
-                        .buttonStyle(.plain)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) {
+                        modeButtonsView
+                        Spacer()
+                        modeInformationalPill
                     }
-                    .padding(3)
-                    .background(Color.white.opacity(0.04))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                    )
-
-                    Spacer()
-
-                    // Informational pill based on selected mode
-                    if targetMode == .learning {
-                        HStack(spacing: 5) {
-                            Image(systemName: "bolt.fill")
-                                .font(.system(size: 9))
-                                .foregroundStyle(WalkmanTheme.hiResGold)
-                            Text("DPC Speed (0.5x–2.0x) • A-B Repeat • Quick Replay (3s/10s)")
-                                .font(WalkmanFont.monoSmall)
-                                .foregroundStyle(WalkmanTheme.hiResGold.opacity(0.95))
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(WalkmanTheme.hiResGold.opacity(0.12))
-                        .clipShape(Capsule())
-                        .overlay(
-                            Capsule().stroke(WalkmanTheme.hiResGold.opacity(0.25), lineWidth: 0.8)
-                        )
-                    } else {
-                        HStack(spacing: 5) {
-                            Image(systemName: "sparkles")
-                                .font(.system(size: 9))
-                                .foregroundStyle(WalkmanTheme.silverMuted)
-                            Text("Standard Walkman Library • Playlists • Hi-Res Audio")
-                                .font(WalkmanFont.monoSmall)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(Color.white.opacity(0.04))
-                        .clipShape(Capsule())
+                    VStack(alignment: .leading, spacing: 8) {
+                        modeButtonsView
+                        modeInformationalPill
                     }
                 }
                 .padding(.horizontal, 16)

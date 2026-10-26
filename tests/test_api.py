@@ -67,7 +67,11 @@ def test_api_library_and_playlists():
 
 
 def test_api_senseme_endpoints():
-    analyzed_flac = "/Users/workstation/Desktop/06. ILYSB (STRIPPED) 12 tone Senseme analyzed.flac"
+    candidate_paths = [
+        Path("/Users/workstation/Desktop/06. ILYSB (STRIPPED) 12 tone Senseme analyzed.flac"),
+        Path("/Volumes/SD_CARD/MUSIC/LANY/Make Out/06. ILYSB (STRIPPED).flac"),
+    ]
+    analyzed_flac = str(next(p for p in candidate_paths if p.exists()))
     res = client.get(f"/api/senseme/inspect?file_path={analyzed_flac}")
     assert res.status_code == 200
     data = res.json()
@@ -87,9 +91,13 @@ def test_api_senseme_endpoints():
 
 
 def test_api_transfer_with_senseme():
+    candidate_paths = [
+        Path("/Users/workstation/Desktop/06. ILYSB (STRIPPED) 12 tone Senseme analyzed.flac"),
+        Path("/Volumes/SD_CARD/MUSIC/LANY/Make Out/06. ILYSB (STRIPPED).flac"),
+    ]
+    source_flac = str(next(p for p in candidate_paths if p.exists()))
     with tempfile.TemporaryDirectory() as tmp_dir:
         mount = Path(tmp_dir)
-        source_flac = "/Users/workstation/Desktop/06. ILYSB (STRIPPED) 12 tone Senseme analyzed.flac"
         res = client.post("/api/transfer", json={
             "source_files": [source_flac],
             "target_mount": str(mount),

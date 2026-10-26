@@ -404,7 +404,7 @@ public struct DuplicatesView: View {
         .padding(.vertical, 6)
         .background(Color.white.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .frame(minWidth: 160, idealWidth: 260, maxWidth: 360)
+        .frame(minWidth: 100, idealWidth: 240, maxWidth: 360)
     }
 
     private var sortMenu: some View {
@@ -515,6 +515,25 @@ public struct DuplicatesView: View {
 
                     autoResolveQualityButton
                 }
+            }
+
+            // Ultra-compact 3-row layout for very narrow center pane
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    searchBar
+                        .frame(maxWidth: .infinity)
+                    sortMenu
+                }
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        scopeSelector
+                        Divider().frame(height: 18).overlay(Color.white.opacity(0.1))
+                        filterChipsGroup
+                    }
+                }
+
+                autoResolveQualityButton
             }
         }
     }
@@ -735,120 +754,26 @@ private struct DuplicateGroupCard: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Card Header
-            HStack(spacing: 14) {
-                if let firstTrack = group.items.first?.track {
-                    TrackCoverThumbnail(track: firstTrack, size: 46)
-                        .fixedSize(horizontal: true, vertical: false)
+            // Card Header (Responsive Wide & Compact layouts)
+            ViewThatFits(in: .horizontal) {
+                // Wide single-row layout
+                HStack(spacing: 12) {
+                    groupThumbnailAndTitle
+                    Spacer(minLength: 8)
+                    groupTagsAndAction
                 }
 
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 8) {
-                        Text(group.title)
-                            .font(WalkmanFont.headline)
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-
-                        if group.items.contains(where: { $0.isHiRes }) {
-                            HiResBadge()
-                                .fixedSize(horizontal: true, vertical: false)
-                        }
+                // Compact two-row layout
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 12) {
+                        groupThumbnailAndTitle
+                        Spacer(minLength: 8)
+                        groupCopyCountView
                     }
-
-                    Text(group.artist)
-                        .font(WalkmanFont.callout)
-                        .foregroundStyle(WalkmanTheme.silverMuted)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 8)
-
-                // Group Tags & Action
-                HStack(spacing: 8) {
-                    // Match Reason Badge
-                    HStack(spacing: 4) {
-                        Image(systemName: group.matchReason.icon)
-                        Text(group.matchReason.rawValue)
-                    }
-                    .font(WalkmanFont.badge)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3.5)
-                    .background(reasonColor(group.matchReason).opacity(0.18))
-                    .foregroundStyle(reasonColor(group.matchReason))
-                    .clipShape(Capsule())
-                    .fixedSize(horizontal: true, vertical: false)
-
-                    if group.isCrossDrive && group.matchReason != .crossDrive {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                            Text("Cross-Drive")
-                        }
-                        .font(WalkmanFont.badge)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3.5)
-                        .background(WalkmanTheme.hiResGold.opacity(0.18))
-                        .foregroundStyle(WalkmanTheme.hiResGold)
-                        .clipShape(Capsule())
-                        .fixedSize(horizontal: true, vertical: false)
-                    }
-
-                    if group.hasQualityDifference {
-                        HStack(spacing: 4) {
-                            Image(systemName: "sparkles")
-                            Text("Quality Mismatch")
-                        }
-                        .font(WalkmanFont.badge)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3.5)
-                        .background(Color.cyan.opacity(0.18))
-                        .foregroundStyle(Color.cyan)
-                        .clipShape(Capsule())
-                        .fixedSize(horizontal: true, vertical: false)
-                    }
-
-                    // Count and recoverable space
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text("\(group.items.count) copies")
-                            .font(WalkmanFont.pillCounter)
-                            .foregroundStyle(WalkmanTheme.silver)
-                            .lineLimit(1)
-                        if group.recoverableBytes > 0 {
-                            Text("+\(formatBytes(group.recoverableBytes)) freeable")
-                                .font(WalkmanFont.badge)
-                                .foregroundStyle(Color.green)
-                                .lineLimit(1)
-                        }
-                    }
-                    .padding(.leading, 4)
-                    .fixedSize(horizontal: true, vertical: false)
-
-                    // Quick Header Action: "Keep Best Quality" or "Keep SD Card Copy"
-                    if let best = group.suggestedItemToKeep {
-                        Button(action: { onKeepOnly(best) }) {
-                            HStack(spacing: 5) {
-                                Image(systemName: "checkmark.circle.fill")
-                                if group.hasQualityDifference {
-                                    Text("Keep Best Quality")
-                                } else if group.isCrossDrive {
-                                    Text("Keep on SD Card")
-                                } else {
-                                    Text("Keep Best Copy")
-                                }
-                            }
-                            .font(WalkmanFont.calloutMedium)
-                            .lineLimit(1)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(WalkmanTheme.silverGradient)
-                            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        .help("Keeps this recommended copy and deletes all other duplicate copies in this group")
-                        .fixedSize(horizontal: true, vertical: false)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        groupBadgesAndAction
                     }
                 }
-                .fixedSize(horizontal: true, vertical: false)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -885,6 +810,130 @@ private struct DuplicateGroupCard: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(group.isCrossDrive ? WalkmanTheme.hiResGold.opacity(0.3) : Color.white.opacity(0.08), lineWidth: 1)
         )
+    }
+
+    private var groupThumbnailAndTitle: some View {
+        HStack(spacing: 12) {
+            if let firstTrack = group.items.first?.track {
+                TrackCoverThumbnail(track: firstTrack, size: 42)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 8) {
+                    Text(group.title)
+                        .font(WalkmanFont.headline)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+
+                    if group.items.contains(where: { $0.isHiRes }) {
+                        HiResBadge()
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                }
+
+                Text(group.artist)
+                    .font(WalkmanFont.callout)
+                    .foregroundStyle(WalkmanTheme.silverMuted)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private var groupCopyCountView: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            Text("\(group.items.count) copies")
+                .font(WalkmanFont.pillCounter)
+                .foregroundStyle(WalkmanTheme.silver)
+                .lineLimit(1)
+            if group.recoverableBytes > 0 {
+                Text("+\(formatBytes(group.recoverableBytes)) freeable")
+                    .font(WalkmanFont.badge)
+                    .foregroundStyle(Color.green)
+                    .lineLimit(1)
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var groupBadgesAndAction: some View {
+        HStack(spacing: 8) {
+            // Match Reason Badge
+            HStack(spacing: 4) {
+                Image(systemName: group.matchReason.icon)
+                Text(group.matchReason.rawValue)
+            }
+            .font(WalkmanFont.badge)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3.5)
+            .background(reasonColor(group.matchReason).opacity(0.18))
+            .foregroundStyle(reasonColor(group.matchReason))
+            .clipShape(Capsule())
+            .fixedSize(horizontal: true, vertical: false)
+
+            if group.isCrossDrive && group.matchReason != .crossDrive {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                    Text("Cross-Drive")
+                }
+                .font(WalkmanFont.badge)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3.5)
+                .background(WalkmanTheme.hiResGold.opacity(0.18))
+                .foregroundStyle(WalkmanTheme.hiResGold)
+                .clipShape(Capsule())
+                .fixedSize(horizontal: true, vertical: false)
+            }
+
+            if group.hasQualityDifference {
+                HStack(spacing: 4) {
+                    Image(systemName: "sparkles")
+                    Text("Quality Mismatch")
+                }
+                .font(WalkmanFont.badge)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3.5)
+                .background(Color.cyan.opacity(0.18))
+                .foregroundStyle(Color.cyan)
+                .clipShape(Capsule())
+                .fixedSize(horizontal: true, vertical: false)
+            }
+
+            // Quick Header Action: "Keep Best Quality" or "Keep SD Card Copy"
+            if let best = group.suggestedItemToKeep {
+                Button(action: { onKeepOnly(best) }) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "checkmark.circle.fill")
+                        if group.hasQualityDifference {
+                            Text("Keep Best Quality")
+                        } else if group.isCrossDrive {
+                            Text("Keep on SD Card")
+                        } else {
+                            Text("Keep Best Copy")
+                        }
+                    }
+                    .font(WalkmanFont.calloutMedium)
+                    .lineLimit(1)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(WalkmanTheme.silverGradient)
+                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .help("Keeps this recommended copy and deletes all other duplicate copies in this group")
+                .fixedSize(horizontal: true, vertical: false)
+            }
+        }
+    }
+
+    private var groupTagsAndAction: some View {
+        HStack(spacing: 8) {
+            groupBadgesAndAction
+            groupCopyCountView
+                .padding(.leading, 4)
+        }
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
 

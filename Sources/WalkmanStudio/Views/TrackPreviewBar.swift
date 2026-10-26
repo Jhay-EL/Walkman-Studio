@@ -169,7 +169,7 @@ public struct TrackPreviewBar: View {
                     .padding(.horizontal, 12)
             }
         }
-        .frame(minWidth: 240, maxWidth: 640)
+        .frame(minWidth: 140, maxWidth: 640)
         .frame(height: 42)
     }
 
@@ -303,7 +303,7 @@ public struct TrackPreviewBar: View {
             Slider(value: $player.volume, in: 0...1)
                 .controlSize(.mini)
                 .tint(WalkmanTheme.silver)
-                .frame(width: 76)
+                .frame(width: 60)
         }
         .fixedSize(horizontal: true, vertical: false)
     }

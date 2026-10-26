@@ -319,6 +319,9 @@ public final class LibraryScanner: @unchecked Sendable {
                     finalTracks.append(contentsOf: newRows)
                 }
 
+                // Schedule background backfill for any cached tracks missing SenseMe metadata
+                self.scheduleSenseMeBackfill(tracks: finalTracks)
+
                 continuation.resume(returning: (
                     tracks: finalTracks,
                     albums: albumsSet.sorted(),
@@ -468,6 +471,77 @@ public final class LibraryScanner: @unchecked Sendable {
             sqlite3_bind_text(stmt, 7, pStr, -1, nil)
             sqlite3_step(stmt)
             sqlite3_finalize(stmt)
+        }
+    }
+
+    private static let backfillQueue = DispatchQueue(label: "com.walkmanstudio.senseme.backfill", qos: .utility)
+    private static var isBackfilling = false
+
+    public func scheduleSenseMeBackfill(tracks: [Track]) {
+        Self.backfillQueue.async { [weak self] in
+            guard let self = self else { return }
+            if Self.isBackfilling { return }
+            Self.isBackfilling = true
+            defer { Self.isBackfilling = false }
+
+            let unverified = tracks.filter { !$0.isSenseMeAnalyzed }
+            guard !unverified.isEmpty else { return }
+
+            var batch: [(path: String, info: SenseMeInfo)] = []
+
+            for tr in unverified {
+                let url = URL(fileURLWithPath: tr.fullPath)
+                guard FileManager.default.fileExists(atPath: tr.fullPath) else { continue }
+                let info = SenseMeEngine.shared.inspect(fileURL: url)
+                if info.isAnalyzed {
+                    batch.append((tr.fullPath, info))
+                }
+
+                if batch.count >= 50 {
+                    self.batchUpdateSenseMe(batch)
+                    batch.removeAll()
+                }
+            }
+            if !batch.isEmpty {
+                self.batchUpdateSenseMe(batch)
+            }
+        }
+    }
+
+    private func batchUpdateSenseMe(_ rows: [(path: String, info: SenseMeInfo)]) {
+        guard let db = getDB() else { return }
+        defer { sqlite3_close(db) }
+        sqlite3_exec(db, "BEGIN TRANSACTION;", nil, nil, nil)
+        let sql = """
+        UPDATE tracks_cache
+        SET is_senseme = 1,
+            senseme_bpm = ?,
+            senseme_valence = ?,
+            senseme_arousal = ?,
+            senseme_channels = ?,
+            senseme_highlight_sec = ?
+        WHERE full_path = ?;
+        """
+        var stmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+            for row in rows {
+                let channelsStr = (row.info.channels.joined(separator: ",") as NSString).utf8String
+                let pStr = (row.path as NSString).utf8String
+                sqlite3_bind_double(stmt, 1, row.info.bpm)
+                sqlite3_bind_double(stmt, 2, row.info.valence)
+                sqlite3_bind_double(stmt, 3, row.info.arousal)
+                sqlite3_bind_text(stmt, 4, channelsStr, -1, nil)
+                sqlite3_bind_double(stmt, 5, row.info.highlightSec)
+                sqlite3_bind_text(stmt, 6, pStr, -1, nil)
+                sqlite3_step(stmt)
+                sqlite3_reset(stmt)
+            }
+            sqlite3_finalize(stmt)
+        }
+        sqlite3_exec(db, "COMMIT;", nil, nil, nil)
+
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: NSNotification.Name("SenseMeCacheUpdated"), object: nil)
         }
     }
 

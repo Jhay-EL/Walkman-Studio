@@ -241,7 +241,7 @@ public struct ArtistsView: View {
                         }
                     }
                 }
-                .frame(minWidth: 190, idealWidth: 230, maxWidth: 260)
+                .frame(minWidth: 170, idealWidth: 200, maxWidth: 240)
                 .background(Color.clear)
                 
                 // Vertical Hairline Divider between Master List & Detail Console
@@ -424,6 +424,7 @@ public struct ArtistsView: View {
         ViewThatFits(in: .horizontal) {
             wideTopToolbarLayout
             compactTopToolbarLayout
+            narrowTopToolbarLayout
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 9)
@@ -433,7 +434,7 @@ public struct ArtistsView: View {
     private var wideTopToolbarLayout: some View {
         HStack(spacing: 8) {
             searchFieldView
-                .frame(minWidth: 160, idealWidth: 214, maxWidth: 240)
+                .frame(minWidth: 110, idealWidth: 190, maxWidth: 240)
             
             artistFormatSegmentedBar
                 .fixedSize(horizontal: true, vertical: false)
@@ -461,7 +462,7 @@ public struct ArtistsView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 searchFieldView
-                    .frame(minWidth: 140, maxWidth: 220)
+                    .frame(minWidth: 90, maxWidth: .infinity)
                 
                 Spacer(minLength: 4)
                 
@@ -478,6 +479,38 @@ public struct ArtistsView: View {
                         trackCountPill(for: artist)
                             .fixedSize(horizontal: true, vertical: false)
                     }
+                }
+            }
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                artistFormatSegmentedBar
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(.vertical, 1)
+            }
+        }
+    }
+    
+    private var narrowTopToolbarLayout: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                searchFieldView
+                    .frame(minWidth: 80, maxWidth: .infinity)
+                
+                Spacer(minLength: 4)
+                
+                artistCountPill
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            
+            if let artist = activeArtist {
+                HStack(spacing: 8) {
+                    artistActionButtons(for: artist)
+                        .fixedSize(horizontal: true, vertical: false)
+                    
+                    Spacer(minLength: 4)
+                    
+                    trackCountPill(for: artist)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
             }
             

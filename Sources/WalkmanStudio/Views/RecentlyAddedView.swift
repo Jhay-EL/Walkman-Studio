@@ -202,6 +202,7 @@ public struct RecentlyAddedView: View {
             ViewThatFits(in: .horizontal) {
                 wideToolbarLayout
                 compactToolbarLayout
+                narrowToolbarLayout
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
@@ -256,7 +257,7 @@ public struct RecentlyAddedView: View {
     private var wideToolbarLayout: some View {
         HStack(spacing: 8) {
             searchFieldView
-                .frame(minWidth: 140, maxWidth: 200)
+                .frame(minWidth: 110, maxWidth: 200)
             
             formatSegmentedBar
                 .fixedSize(horizontal: true, vertical: false)
@@ -275,7 +276,7 @@ public struct RecentlyAddedView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 searchFieldView
-                    .frame(maxWidth: .infinity)
+                    .frame(minWidth: 80, maxWidth: .infinity)
                 
                 Spacer(minLength: 4)
                 
@@ -284,6 +285,32 @@ public struct RecentlyAddedView: View {
                 
                 statusIndicatorView
                     .fixedSize(horizontal: true, vertical: false)
+            }
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                formatSegmentedBar
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(.vertical, 1)
+            }
+        }
+    }
+    
+    private var narrowToolbarLayout: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                searchFieldView
+                    .frame(minWidth: 80, maxWidth: .infinity)
+                
+                Spacer(minLength: 4)
+                
+                statusIndicatorView
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            
+            HStack(spacing: 8) {
+                playbackControlsView
+                    .fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: 0)
             }
             
             ScrollView(.horizontal, showsIndicators: false) {
@@ -516,14 +543,14 @@ public struct RecentlyAddedView: View {
                     .font(WalkmanFont.monoSmall)
                     .foregroundStyle(WalkmanTheme.silverMuted)
             }
-            .width(min: 30, ideal: 38, max: 50)
+            .width(min: 26, ideal: 34, max: 44)
             
             TableColumn("Title", value: \.title) { item in
                 let track = item.track
                 let isCurrent = player.currentTrack?.id == track.id
                 let isPlayingThis = isCurrent && player.isPlaying
                 
-                HStack(spacing: 9) {
+                HStack(spacing: 8) {
                     Button(action: {
                         if isPlayingThis {
                             player.pause()
@@ -531,7 +558,7 @@ public struct RecentlyAddedView: View {
                             player.play(track: track, in: currentPlaybackQueue)
                         }
                     }) {
-                        TrackCoverThumbnail(track: track, size: 32, isPlaying: isPlayingThis)
+                        TrackCoverThumbnail(track: track, size: 30, isPlaying: isPlayingThis)
                     }
                     .buttonStyle(.plain)
                     .help(isPlayingThis ? "Pause" : "Play preview")
@@ -559,7 +586,7 @@ public struct RecentlyAddedView: View {
                     }
                 }
             }
-            .width(min: 170, ideal: 260)
+            .width(min: 130, ideal: 220)
             
             TableColumn("Artist", value: \.artist) { item in
                 Text(item.artist.isEmpty ? "Unknown Artist" : item.artist)
@@ -567,7 +594,7 @@ public struct RecentlyAddedView: View {
                     .foregroundStyle(Color.white.opacity(0.85))
                     .lineLimit(1)
             }
-            .width(min: 110, ideal: 160)
+            .width(min: 90, ideal: 140)
             
             TableColumn("Album", value: \.album) { item in
                 Text(item.album.isEmpty ? "—" : item.album)
@@ -575,7 +602,7 @@ public struct RecentlyAddedView: View {
                     .foregroundStyle(Color.secondary)
                     .lineLimit(1)
             }
-            .width(min: 120, ideal: 180)
+            .width(min: 90, ideal: 150)
             
             TableColumn("Format", value: \.format) { item in
                 HStack(spacing: 4.5) {
@@ -626,7 +653,7 @@ public struct RecentlyAddedView: View {
                     }
                 }
             }
-            .width(min: 90, ideal: 110, max: 130)
+            .width(min: 65, ideal: 90, max: 120)
 
             TableColumn("SenseMe") { item in
                 if item.track.isSenseMeAnalyzed {
@@ -652,7 +679,7 @@ public struct RecentlyAddedView: View {
                         .foregroundStyle(Color.secondary.opacity(0.35))
                 }
             }
-            .width(min: 70, ideal: 84, max: 96)
+            .width(min: 60, ideal: 76, max: 90)
             
             TableColumn("Date Added", value: \.dateAdded) { item in
                 Text(formatDateAdded(item.dateAdded))
@@ -660,14 +687,14 @@ public struct RecentlyAddedView: View {
                     .foregroundStyle(Color.secondary)
                     .lineLimit(1)
             }
-            .width(min: 110, ideal: 135, max: 165)
+            .width(min: 85, ideal: 115, max: 150)
             
             TableColumn("Duration", value: \.durationSeconds) { item in
                 Text(formatDuration(item.durationSeconds))
                     .font(WalkmanFont.monoSmall)
                     .foregroundStyle(WalkmanTheme.silverMuted)
             }
-            .width(min: 55, ideal: 65, max: 80)
+            .width(min: 50, ideal: 60, max: 75)
         }
         .contextMenu(forSelectionType: RankedTrack.ID.self) { items in
             if let id = items.first, let item = displayedTracks.first(where: { $0.id == id }) {

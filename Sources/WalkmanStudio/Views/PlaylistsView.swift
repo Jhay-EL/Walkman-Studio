@@ -533,9 +533,9 @@ public struct PlaylistsView: View {
     public var body: some View {
         GeometryReader { geo in
             let totalWidth = geo.size.width
-            let isCompact = totalWidth < 760
-            let isNarrow = totalWidth < 620
-            let sidebarWidth: CGFloat = isNarrow ? 180 : (isCompact ? 200 : 235)
+            let isCompact = totalWidth < 840
+            let isNarrow = totalWidth < 680
+            let sidebarWidth: CGFloat = isNarrow ? 170 : (isCompact ? 190 : 220)
             let colSpacing: CGFloat = isCompact ? 10 : 14
             
             VStack(spacing: 0) {
@@ -891,6 +891,7 @@ public struct PlaylistsView: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4.5)
+                .frame(maxWidth: 240)
                 .background(Color.white.opacity(0.05))
                 .clipShape(Capsule())
                 .overlay(

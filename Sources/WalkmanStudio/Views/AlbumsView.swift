@@ -369,6 +369,7 @@ public struct AlbumsView: View {
         ViewThatFits(in: .horizontal) {
             wideToolbarLayout
             compactToolbarLayout
+            narrowToolbarLayout
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -386,7 +387,7 @@ public struct AlbumsView: View {
     private var wideToolbarLayout: some View {
         HStack(spacing: 8) {
             searchFieldView
-                .frame(minWidth: 160, maxWidth: 220)
+                .frame(minWidth: 110, maxWidth: 220)
             
             formatSegmentedBar
                 .fixedSize(horizontal: true, vertical: false)
@@ -405,7 +406,30 @@ public struct AlbumsView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 searchFieldView
-                    .frame(maxWidth: .infinity)
+                    .frame(minWidth: 80, maxWidth: .infinity)
+                
+                albumCountPill
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    formatSegmentedBar
+                        .fixedSize(horizontal: true, vertical: false)
+                    
+                    filterMenuButton
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .padding(.vertical, 1)
+            }
+        }
+    }
+    
+    private var narrowToolbarLayout: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                searchFieldView
+                    .frame(minWidth: 80, maxWidth: .infinity)
                 
                 albumCountPill
                     .fixedSize(horizontal: true, vertical: false)

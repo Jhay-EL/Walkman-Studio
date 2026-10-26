@@ -18,6 +18,12 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# Ensure parent directory is in sys.path so 'import backend' always works
+_backend_dir = Path(__file__).resolve().parent
+_project_dir = _backend_dir.parent
+if str(_project_dir) not in sys.path:
+    sys.path.insert(0, str(_project_dir))
+
 import mutagen
 from mutagen.flac import FLAC
 from mutagen.id3 import GEOB, ID3, PRIV, ID3NoHeaderError
@@ -53,7 +59,8 @@ def build_smfm_payload(
     bpm: float,
     mood_scores: List[int],
     highlight_ms: int,
-    template_bytes: Optional[bytes] = None
+    template_bytes: Optional[bytes] = None,
+    raw_bpm: Optional[float] = None,
 ) -> bytes:
     """
     Constructs a 100% hardware-compatible Sony 12 Tone / SenseMe SMFM binary block.
@@ -65,7 +72,7 @@ def build_smfm_payload(
         template_bytes = get_template_bytes()
 
     # 1. GBPM (4 bytes: packed float BE)
-    bpm_float = float(bpm / 2.0 if bpm > 75.0 else bpm)
+    bpm_float = float(raw_bpm if raw_bpm is not None else bpm)
     gbpm_data = struct.pack(">f", bpm_float)
     gbpm_chunk = make_chunk_header(b"GBPM", len(gbpm_data)) + gbpm_data
 
@@ -268,6 +275,49 @@ def inject_flac_smfm(file_path: str | Path, smfm_payload: bytes) -> None:
     shutil.move(str(tmp_path), str(path))
 
 
+def strip_flac_smfm(file_path: str | Path) -> bool:
+    """Removes any existing SMFM APPLICATION block from a FLAC file."""
+    path = Path(file_path)
+    with open(path, "rb") as f:
+        magic = f.read(4)
+        if magic != b"fLaC":
+            return False
+        blocks: List[Tuple[int, bytes]] = []
+        is_last = False
+        found_smfm = False
+        while not is_last:
+            h = f.read(4)
+            if len(h) < 4:
+                break
+            is_last = bool(h[0] & 0x80)
+            btype = h[0] & 0x7F
+            blen = (h[1] << 16) | (h[2] << 8) | h[3]
+            bdata = f.read(blen)
+            if btype == 2 and bdata.startswith(b"SMFM"):
+                found_smfm = True
+                continue
+            blocks.append((btype, bdata))
+        audio_frames = f.read()
+
+    if not found_smfm or not blocks:
+        return False
+
+    tmp_path = path.with_suffix(".flac.tmp")
+    with open(tmp_path, "wb") as f:
+        f.write(b"fLaC")
+        for i, (btype, bdata) in enumerate(blocks):
+            last_flag = 0x80 if (i == len(blocks) - 1) else 0x00
+            b0 = last_flag | (btype & 0x7F)
+            blen = len(bdata)
+            header = bytes([b0, (blen >> 16) & 0xFF, (blen >> 8) & 0xFF, blen & 0xFF])
+            f.write(header)
+            f.write(bdata)
+        f.write(audio_frames)
+
+    shutil.move(str(tmp_path), str(path))
+    return True
+
+
 def read_flac_smfm(file_path: str | Path) -> Optional[bytes]:
     """Fast inspection of FLAC headers for SMFM APPLICATION block."""
     path = Path(file_path)
@@ -283,9 +333,12 @@ def read_flac_smfm(file_path: str | Path) -> Optional[bytes]:
             is_last = bool(h[0] & 0x80)
             btype = h[0] & 0x7F
             blen = (h[1] << 16) | (h[2] << 8) | h[3]
-            bdata = f.read(blen)
-            if btype == 2 and bdata.startswith(b"SMFM"):
-                return bdata
+            if btype == 2:
+                bdata = f.read(blen)
+                if bdata.startswith(b"SMFM"):
+                    return bdata
+            else:
+                f.seek(blen, 1)
     return None
 
 
@@ -328,15 +381,17 @@ def read_mp3_smfm(file_path: str | Path) -> Optional[bytes]:
     except Exception:
         return None
 
-    # Check GEOB frames
+    # Check GEOB frames (support our injector 'SMFM' and Sony Music Center 'USR_SMFMF'/'application/SMFMF')
     for frame in audio.getall("GEOB"):
-        if frame.desc == "SMFM" and frame.data and frame.data.startswith(b"SMFM"):
-            return frame.data
+        if frame.data:
+            if frame.data.startswith(b"SMFM") or frame.data.startswith(b"GBPM"):
+                return frame.data
 
     # Check PRIV frames
     for frame in audio.getall("PRIV"):
-        if frame.owner in ("SMFM", "Sony Corporation") and frame.data and frame.data.startswith(b"SMFM"):
-            return frame.data
+        if frame.data:
+            if frame.data.startswith(b"SMFM") or frame.data.startswith(b"GBPM"):
+                return frame.data
 
     return None
 
@@ -424,7 +479,8 @@ def analyze_and_inject(file_path: str | Path) -> Dict[str, Any]:
     payload = build_smfm_payload(
         bpm=dsp_result.bpm,
         mood_scores=dsp_result.mood_scores,
-        highlight_ms=dsp_result.highlight_ms
+        highlight_ms=dsp_result.highlight_ms,
+        raw_bpm=dsp_result.raw_bpm,
     )
 
     # 3. Inject into file format

@@ -312,7 +312,7 @@ def analyze_audio_track(audio_path: str | Path) -> AudioAnalysisResult:
     if s9 >= 65 and "Electronic" not in channels:
         channels.append("Electronic")
 
-    raw_bpm = float(bpm / 2.0 if bpm > 75.0 else bpm)
+    raw_bpm = float(bpm)
 
     return AudioAnalysisResult(
         bpm=round(bpm, 1),

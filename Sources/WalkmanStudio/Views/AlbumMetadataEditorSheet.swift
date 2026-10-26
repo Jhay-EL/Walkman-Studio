@@ -12,6 +12,7 @@ public struct AlbumMetadataEditorSheet: View {
         public var trackNum: String
         public var title: String
         public var artist: String
+        public var isSenseMeAnalyzed: Bool
     }
 
     // Album-wide tags
@@ -39,6 +40,8 @@ public struct AlbumMetadataEditorSheet: View {
     @State private var saveStatus: String = ""
     @State private var errorMessage: String? = nil
     @State private var isFetchingOnlineInfo: Bool = false
+    @State private var isAnalyzingSenseMe: Bool = false
+    @State private var senseMeProgress: (current: Int, total: Int, title: String)? = nil
 
     // Hover states
     @State private var isCancelHovered: Bool = false
@@ -63,11 +66,13 @@ public struct AlbumMetadataEditorSheet: View {
         self.applyArtistToAll = (!isVarious && uniqueArtists.count <= 1)
 
         self.trackRows = album.tracks.map { tr in
-            EditableTrackRow(
+            let isSenseMe = tr.isSenseMeAnalyzed || SenseMeEngine.shared.inspect(fileURL: URL(fileURLWithPath: tr.fullPath)).isAnalyzed
+            return EditableTrackRow(
                 track: tr,
                 trackNum: tr.trackNum,
                 title: tr.title,
-                artist: tr.artist
+                artist: tr.artist,
+                isSenseMeAnalyzed: isSenseMe
             )
         }
 
@@ -234,6 +239,63 @@ public struct AlbumMetadataEditorSheet: View {
         let targetIndex = up ? index - 1 : index + 1
         guard targetIndex >= 0 && targetIndex < trackRows.count else { return }
         trackRows.swapAt(index, targetIndex)
+    }
+
+    private var unanalyzedTracksCount: Int {
+        trackRows.filter { !$0.isSenseMeAnalyzed }.count
+    }
+
+    private func analyzeAlbumSenseMe() {
+        guard !isAnalyzingSenseMe && !trackRows.isEmpty else { return }
+        let targets = trackRows.filter { !$0.isSenseMeAnalyzed }
+        let toAnalyze = targets.isEmpty ? trackRows : targets
+        guard !toAnalyze.isEmpty else { return }
+
+        isAnalyzingSenseMe = true
+        senseMeProgress = (0, toAnalyze.count, toAnalyze[0].title)
+
+        Task {
+            for (idx, row) in toAnalyze.enumerated() {
+                await MainActor.run {
+                    self.senseMeProgress = (idx + 1, toAnalyze.count, row.title)
+                }
+                let url = URL(fileURLWithPath: row.track.fullPath)
+                if let info = try? await SenseMeEngine.shared.analyzeAndInject(fileURL: url) {
+                    LibraryScanner.shared.updateCachedSenseMe(fullPath: row.track.fullPath, info: info)
+                    await MainActor.run {
+                        if let i = self.trackRows.firstIndex(where: { $0.id == row.id }) {
+                            self.trackRows[i].isSenseMeAnalyzed = true
+                        }
+                    }
+                }
+            }
+            await MainActor.run {
+                self.isAnalyzingSenseMe = false
+                self.senseMeProgress = nil
+            }
+        }
+    }
+
+    private func analyzeSingleTrack(_ row: EditableTrackRow) {
+        guard !isAnalyzingSenseMe else { return }
+        isAnalyzingSenseMe = true
+        senseMeProgress = (1, 1, row.title)
+
+        Task {
+            let url = URL(fileURLWithPath: row.track.fullPath)
+            if let info = try? await SenseMeEngine.shared.analyzeAndInject(fileURL: url) {
+                LibraryScanner.shared.updateCachedSenseMe(fullPath: row.track.fullPath, info: info)
+                await MainActor.run {
+                    if let i = self.trackRows.firstIndex(where: { $0.id == row.id }) {
+                        self.trackRows[i].isSenseMeAnalyzed = true
+                    }
+                }
+            }
+            await MainActor.run {
+                self.isAnalyzingSenseMe = false
+                self.senseMeProgress = nil
+            }
+        }
     }
 
     private func saveAlbumChanges() {
@@ -747,6 +809,37 @@ public struct AlbumMetadataEditorSheet: View {
                     }
                     .buttonStyle(.plain)
                     .help("Sort list by track title")
+
+                    Button(action: analyzeAlbumSenseMe) {
+                        HStack(spacing: 5) {
+                            if isAnalyzingSenseMe, let prog = senseMeProgress {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .scaleEffect(0.65)
+                                Text("\(prog.current)/\(prog.total)")
+                                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            } else {
+                                Image(systemName: "waveform.path.ecg")
+                                    .font(.system(size: 11, weight: .semibold))
+                                Text("Analyze SenseMe\(unanalyzedTracksCount > 0 ? " (\(unanalyzedTracksCount))" : "")")
+                                    .font(WalkmanFont.calloutMedium)
+                            }
+                        }
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule()
+                                .fill(Color(red: 255/255, green: 145/255, blue: 0/255).opacity(0.18))
+                        )
+                        .overlay(
+                            Capsule()
+                                .stroke(Color(red: 255/255, green: 165/255, blue: 30/255).opacity(0.55), lineWidth: 0.8)
+                        )
+                        .foregroundStyle(Color(red: 255/255, green: 195/255, blue: 80/255))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isAnalyzingSenseMe || trackRows.isEmpty)
+                    .help("Analyze album tracks for Sony 12 Tone / SenseMe and embed hardware-compatible metadata")
                 }
             }
 
@@ -781,6 +874,11 @@ public struct AlbumMetadataEditorSheet: View {
                         .foregroundStyle(.tertiary)
                         .frame(width: 60, alignment: .center)
 
+                    Text("SenseMe")
+                        .font(WalkmanFont.sectionHeader)
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 65, alignment: .center)
+
                     Text("Duration")
                         .font(WalkmanFont.sectionHeader)
                         .foregroundStyle(.tertiary)
@@ -803,6 +901,7 @@ public struct AlbumMetadataEditorSheet: View {
                             applyArtistToAll: applyArtistToAll,
                             onMoveUp: { moveTrack(from: index, up: true) },
                             onMoveDown: { moveTrack(from: index, up: false) },
+                            onAnalyzeSenseMe: { analyzeSingleTrack(row) },
                             formatDuration: formatDuration
                         )
 
@@ -959,6 +1058,7 @@ private struct TrackRowView: View {
     let applyArtistToAll: Bool
     let onMoveUp: () -> Void
     let onMoveDown: () -> Void
+    let onAnalyzeSenseMe: () -> Void
     let formatDuration: (Double) -> String
 
     @State private var isHovered: Bool = false
@@ -1039,6 +1139,27 @@ private struct TrackRowView: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 60, alignment: .center)
 
+            // SenseMe Badge
+            if row.isSenseMeAnalyzed {
+                HStack(spacing: 2.5) {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 7))
+                    Text("12 TONE")
+                        .font(WalkmanFont.badge)
+                }
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(Color(red: 255/255, green: 145/255, blue: 0/255).opacity(0.18)))
+                .overlay(Capsule().stroke(Color(red: 255/255, green: 165/255, blue: 30/255).opacity(0.5), lineWidth: 0.8))
+                .foregroundStyle(Color(red: 255/255, green: 195/255, blue: 80/255))
+                .frame(width: 65, alignment: .center)
+            } else {
+                Text("—")
+                    .font(WalkmanFont.monoSmall)
+                    .foregroundStyle(Color.secondary.opacity(0.4))
+                    .frame(width: 65, alignment: .center)
+            }
+
             // Duration
             Text(formatDuration(row.track.durationSeconds))
                 .font(WalkmanFont.monoSmall)
@@ -1048,6 +1169,11 @@ private struct TrackRowView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 6)
         .background(isHovered ? Color.white.opacity(0.045) : (index % 2 == 1 ? Color.white.opacity(0.015) : Color.clear))
+        .contextMenu {
+            Button(action: onAnalyzeSenseMe) {
+                Label(row.isSenseMeAnalyzed ? "Re-Analyze SenseMe (12 Tone)" : "Analyze SenseMe (12 Tone)", systemImage: "waveform.path.ecg")
+            }
+        }
         .onHover { h in
             withAnimation(.spring(response: 0.20, dampingFraction: 0.75)) {
                 isHovered = h

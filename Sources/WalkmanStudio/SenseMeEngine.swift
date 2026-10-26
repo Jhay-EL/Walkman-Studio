@@ -116,7 +116,21 @@ public final class SenseMeEngine: @unchecked Sendable {
             offset += frameLen
 
             if frameIDStr == "GEOB" || frameIDStr == "PRIV" {
-                // Check if frameData contains SMFM payload
+                // 1. Check for SMFM prefix followed by GBPM chunk
+                if let smfmRange = frameData.range(of: Data([0x53, 0x4D, 0x46, 0x4D, 0x47, 0x42, 0x50, 0x4D])) {
+                    let payload = frameData.subdata(in: smfmRange.lowerBound..<frameData.count)
+                    if let parsed = parseSMFMPayload(data: payload) {
+                        return parsed
+                    }
+                }
+                // 2. Check for Sony Music Center direct GBPM chunk (starts with GBPMSTAE)
+                if let gbpmRange = frameData.range(of: Data([0x47, 0x42, 0x50, 0x4D, 0x53, 0x54, 0x41, 0x45])) {
+                    let payload = frameData.subdata(in: gbpmRange.lowerBound..<frameData.count)
+                    if let parsed = parseSMFMPayload(data: payload) {
+                        return parsed
+                    }
+                }
+                // 3. Fallback check for any SMFM marker
                 if let smfmRange = frameData.range(of: Data([0x53, 0x4D, 0x46, 0x4D])) {
                     let payload = frameData.subdata(in: smfmRange.lowerBound..<frameData.count)
                     if let parsed = parseSMFMPayload(data: payload) {
@@ -131,8 +145,20 @@ public final class SenseMeEngine: @unchecked Sendable {
 
     public func inspectM4A(fileURL: URL) -> SenseMeInfo {
         guard let data = try? Data(contentsOf: fileURL, options: .mappedIfSafe) else { return .notAnalyzed }
+        if let smfmRange = data.range(of: Data([0x53, 0x4D, 0x46, 0x4D, 0x47, 0x42, 0x50, 0x4D])) {
+            let sub = data.subdata(in: smfmRange.lowerBound..<min(smfmRange.lowerBound + 12000, data.count))
+            if let parsed = parseSMFMPayload(data: sub) {
+                return parsed
+            }
+        }
+        if let gbpmRange = data.range(of: Data([0x47, 0x42, 0x50, 0x4D, 0x53, 0x54, 0x41, 0x45])) {
+            let sub = data.subdata(in: gbpmRange.lowerBound..<min(gbpmRange.lowerBound + 12000, data.count))
+            if let parsed = parseSMFMPayload(data: sub) {
+                return parsed
+            }
+        }
         if let smfmRange = data.range(of: Data([0x53, 0x4D, 0x46, 0x4D])) {
-            let sub = data.subdata(in: smfmRange.lowerBound..<min(smfmRange.lowerBound + 3270, data.count))
+            let sub = data.subdata(in: smfmRange.lowerBound..<min(smfmRange.lowerBound + 12000, data.count))
             if let parsed = parseSMFMPayload(data: sub) {
                 return parsed
             }
@@ -441,35 +467,117 @@ public final class SenseMeEngine: @unchecked Sendable {
     // -----------------------------------------------------------------------
     // 5. High-Level DSP Analysis & Injection Execution
     // -----------------------------------------------------------------------
-    public func analyzeAndInject(fileURL: URL) async throws -> SenseMeInfo {
-        let currentDir = FileManager.default.currentDirectoryPath
-        let possiblePythons = [
-            currentDir + "/venv/bin/python3",
-            FileManager.default.homeDirectoryForCurrentUser.path + "/.walkman_venv/bin/python3",
+    public func findBackendScript() -> (parentDir: URL, scriptURL: URL)? {
+        let fm = FileManager.default
+
+        // 1. Check in Bundle.main.resourceURL (inside .app bundle Contents/Resources/backend)
+        if let resURL = Bundle.main.resourceURL {
+            let scriptInRes = resURL.appendingPathComponent("backend/senseme_engine.py")
+            if fm.fileExists(atPath: scriptInRes.path) {
+                return (resURL, scriptInRes)
+            }
+        }
+
+        // 2. Check in Bundle.main.bundleURL's parent directory (when running app next to project root)
+        let bundleParent = Bundle.main.bundleURL.deletingLastPathComponent()
+        let scriptInParent = bundleParent.appendingPathComponent("backend/senseme_engine.py")
+        if fm.fileExists(atPath: scriptInParent.path) {
+            return (bundleParent, scriptInParent)
+        }
+
+        // 3. Check current working directory
+        let cwdURL = URL(fileURLWithPath: fm.currentDirectoryPath)
+        let scriptInCwd = cwdURL.appendingPathComponent("backend/senseme_engine.py")
+        if fm.fileExists(atPath: scriptInCwd.path) {
+            return (cwdURL, scriptInCwd)
+        }
+
+        // 4. Check known project workspace directory
+        let knownProject = URL(fileURLWithPath: "/Users/workstation/Documents/Projects/walkman-studio")
+        let scriptInKnown = knownProject.appendingPathComponent("backend/senseme_engine.py")
+        if fm.fileExists(atPath: scriptInKnown.path) {
+            return (knownProject, scriptInKnown)
+        }
+
+        return nil
+    }
+
+    public func findWorkingPython() -> String? {
+        let fm = FileManager.default
+        let home = fm.homeDirectoryForCurrentUser.path
+        let bundleParent = Bundle.main.bundleURL.deletingLastPathComponent().path
+        let cwd = fm.currentDirectoryPath
+
+        let candidates = [
+            home + "/.walkman_venv/bin/python3",
+            bundleParent + "/venv/bin/python3",
+            "/Users/workstation/Documents/Projects/walkman-studio/venv/bin/python3",
+            cwd + "/venv/bin/python3",
+            home + "/venv/bin/python3",
+            home + "/.venv/bin/python3",
             "/opt/homebrew/bin/python3",
+            "/opt/homebrew/bin/python3.12",
+            "/opt/homebrew/bin/python3.11",
             "/usr/local/bin/python3",
             "/usr/bin/python3"
         ]
 
-        var pythonBin: String? = nil
-        for p in possiblePythons {
-            if FileManager.default.fileExists(atPath: p) {
-                pythonBin = p
-                break
+        var existingCandidates: [String] = []
+        for path in candidates {
+            if fm.isExecutableFile(atPath: path) && !existingCandidates.contains(path) {
+                existingCandidates.append(path)
             }
         }
 
-        guard let py = pythonBin else {
-            throw NSError(domain: "SenseMeEngine", code: 2, userInfo: [NSLocalizedDescriptionKey: "Python 3 environment not found for 12 Tone DSP analysis"])
+        // 1. First preference: candidates that successfully import numpy and scipy
+        for py in existingCandidates {
+            if testPythonHasNumpy(py) {
+                return py
+            }
+        }
+
+        // 2. Fallback to first existing candidate
+        return existingCandidates.first
+    }
+
+    private func testPythonHasNumpy(_ pythonPath: String) -> Bool {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: pythonPath)
+        proc.arguments = ["-c", "import numpy, scipy"]
+        proc.standardOutput = Pipe()
+        proc.standardError = Pipe()
+        do {
+            try proc.run()
+            proc.waitUntilExit()
+            return proc.terminationStatus == 0
+        } catch {
+            return false
+        }
+    }
+
+    public func analyzeAndInject(fileURL: URL) async throws -> SenseMeInfo {
+        guard let (backendParentDir, scriptURL) = findBackendScript() else {
+            throw NSError(domain: "SenseMeEngine", code: 1, userInfo: [NSLocalizedDescriptionKey: "Sony 12 Tone backend engine (backend/senseme_engine.py) could not be located."])
+        }
+
+        guard let py = findWorkingPython() else {
+            throw NSError(domain: "SenseMeEngine", code: 2, userInfo: [NSLocalizedDescriptionKey: "Python 3 environment with NumPy & SciPy not found for 12 Tone DSP analysis."])
         }
 
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let proc = Process()
                 proc.executableURL = URL(fileURLWithPath: py)
-                proc.currentDirectoryURL = URL(fileURLWithPath: currentDir)
+                proc.currentDirectoryURL = backendParentDir
+
+                var env = ProcessInfo.processInfo.environment
+                env["PYTHONPATH"] = backendParentDir.path
+                let extraPaths = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+                env["PATH"] = extraPaths + (env["PATH"].map { ":" + $0 } ?? "")
+                proc.environment = env
+
                 proc.arguments = [
-                    "-m", "backend.senseme_engine",
+                    scriptURL.path,
                     "analyze", fileURL.path,
                     "--inject"
                 ]

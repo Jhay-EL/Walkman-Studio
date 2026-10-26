@@ -165,6 +165,7 @@ public struct LibraryView: View {
             ViewThatFits(in: .horizontal) {
                 wideToolbarLayout
                 compactToolbarLayout
+                narrowToolbarLayout
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
@@ -215,14 +216,14 @@ public struct LibraryView: View {
     // -------------------------------------------------------------------------
     
     private var wideToolbarLayout: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             searchFieldView
-                .frame(minWidth: 150, maxWidth: 240)
+                .frame(minWidth: 110, maxWidth: 220)
             
             formatSegmentedBar
                 .fixedSize(horizontal: true, vertical: false)
             
-            Spacer(minLength: 6)
+            Spacer(minLength: 4)
             
             playbackControlsView
                 .fixedSize(horizontal: true, vertical: false)
@@ -236,7 +237,7 @@ public struct LibraryView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 searchFieldView
-                    .frame(maxWidth: .infinity)
+                    .frame(minWidth: 80, maxWidth: .infinity)
                 
                 Spacer(minLength: 4)
                 
@@ -245,6 +246,32 @@ public struct LibraryView: View {
                 
                 statusIndicatorView
                     .fixedSize(horizontal: true, vertical: false)
+            }
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                formatSegmentedBar
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(.vertical, 1)
+            }
+        }
+    }
+    
+    private var narrowToolbarLayout: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                searchFieldView
+                    .frame(minWidth: 80, maxWidth: .infinity)
+                
+                Spacer(minLength: 4)
+                
+                statusIndicatorView
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            
+            HStack(spacing: 8) {
+                playbackControlsView
+                    .fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: 0)
             }
             
             ScrollView(.horizontal, showsIndicators: false) {
@@ -360,8 +387,12 @@ public struct LibraryView: View {
                     } else {
                         Image(systemName: "waveform.path.ecg")
                             .font(.system(size: 11, weight: .semibold))
-                        Text("Analyze SenseMe")
-                            .font(WalkmanFont.calloutMedium)
+                        ViewThatFits(in: .horizontal) {
+                            Text("Analyze SenseMe")
+                                .font(WalkmanFont.calloutMedium)
+                            Text("SenseMe")
+                                .font(WalkmanFont.calloutMedium)
+                        }
                     }
                 }
                 .padding(.horizontal, 11)
@@ -503,13 +534,13 @@ public struct LibraryView: View {
                     .font(WalkmanFont.monoSmall)
                     .foregroundStyle(WalkmanTheme.silverMuted)
             }
-            .width(min: 30, ideal: 38, max: 50)
+            .width(min: 26, ideal: 34, max: 44)
             
             TableColumn("Title", value: \.title) { track in
                 let isCurrent = player.currentTrack?.id == track.id
                 let isPlayingThis = isCurrent && player.isPlaying
                 
-                HStack(spacing: 9) {
+                HStack(spacing: 8) {
                     Button(action: {
                         if isPlayingThis {
                             player.pause()
@@ -517,7 +548,7 @@ public struct LibraryView: View {
                             player.play(track: track, in: visibleTracks)
                         }
                     }) {
-                        TrackCoverThumbnail(track: track, size: 32, isPlaying: isPlayingThis)
+                        TrackCoverThumbnail(track: track, size: 30, isPlaying: isPlayingThis)
                     }
                     .buttonStyle(.plain)
                     .help(isPlayingThis ? "Pause" : "Play preview")
@@ -545,7 +576,7 @@ public struct LibraryView: View {
                     }
                 }
             }
-            .width(min: 170, ideal: 260)
+            .width(min: 130, ideal: 220)
             
             TableColumn("Artist", value: \.artist) { track in
                 Text(track.artist.isEmpty ? "Unknown Artist" : track.artist)
@@ -553,7 +584,7 @@ public struct LibraryView: View {
                     .foregroundStyle(Color.white.opacity(0.85))
                     .lineLimit(1)
             }
-            .width(min: 110, ideal: 160)
+            .width(min: 90, ideal: 140)
             
             TableColumn("Album", value: \.album) { track in
                 Text(track.album.isEmpty ? "—" : track.album)
@@ -561,7 +592,7 @@ public struct LibraryView: View {
                     .foregroundStyle(Color.secondary)
                     .lineLimit(1)
             }
-            .width(min: 120, ideal: 180)
+            .width(min: 90, ideal: 150)
             
             TableColumn("Format", value: \.format) { track in
                 let hiRes = isHiRes(track)
@@ -614,7 +645,7 @@ public struct LibraryView: View {
                     }
                 }
             }
-            .width(min: 75, ideal: 100, max: 120)
+            .width(min: 65, ideal: 85, max: 110)
 
             TableColumn("SenseMe") { track in
                 if track.isSenseMeAnalyzed {
@@ -640,21 +671,21 @@ public struct LibraryView: View {
                         .foregroundStyle(Color.secondary.opacity(0.35))
                 }
             }
-            .width(min: 70, ideal: 84, max: 96)
+            .width(min: 60, ideal: 76, max: 90)
             
             TableColumn("Duration", value: \.durationSeconds) { track in
                 Text(formatDuration(track.durationSeconds))
                     .font(WalkmanFont.monoSmall)
                     .foregroundStyle(Color.white.opacity(0.85))
             }
-            .width(min: 60, ideal: 72, max: 90)
+            .width(min: 50, ideal: 64, max: 80)
             
             TableColumn("Bitrate", value: \.bitrateKbps) { track in
                 Text(track.bitrateKbps > 0 ? "\(track.bitrateKbps)k" : "—")
                     .font(WalkmanFont.monoSmall)
                     .foregroundStyle(Color.secondary)
             }
-            .width(min: 60, ideal: 72, max: 90)
+            .width(min: 50, ideal: 64, max: 80)
         }
         .contextMenu(forSelectionType: Track.ID.self) { selection in
             if let firstId = selection.first, let track = tracks.first(where: { $0.id == firstId }) {

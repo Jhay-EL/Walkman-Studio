@@ -48,9 +48,9 @@ public struct DeviceOverviewView: View {
     public var body: some View {
         GeometryReader { geo in
             let width = geo.size.width
-            let isCompact = width < 760
-            let isNarrow = width < 520
-            let isSmallest = width < 380
+            let isCompact = width < 880
+            let isNarrow = width < 580
+            let isSmallest = width < 420
             
             ZStack(alignment: .top) {
                 // macOS 27 Golden Gate Ambient Atmosphere (Caustic Lighting behind Liquid Glass)
@@ -419,16 +419,9 @@ public struct DeviceOverviewView: View {
             }
             .padding(.horizontal, 4)
             
-            if isCompact {
-                VStack(spacing: 12) {
-                    internalDriveCard
-                    microsdDriveCard
-                }
-            } else {
-                HStack(spacing: 14) {
-                    internalDriveCard
-                    microsdDriveCard
-                }
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 300, maximum: .infinity), spacing: 12)], spacing: 12) {
+                internalDriveCard
+                microsdDriveCard
             }
         }
     }

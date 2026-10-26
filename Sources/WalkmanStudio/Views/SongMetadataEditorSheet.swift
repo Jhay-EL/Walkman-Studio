@@ -53,6 +53,11 @@ public struct SongMetadataEditorSheet: View {
     @State private var lyricsStatusMessage: String? = nil
     @State private var lyricsErrorMessage: String? = nil
 
+    // SenseMe state
+    @State private var isAnalyzingSenseMe: Bool = false
+    @State private var senseMeInfo: SenseMeInfo? = nil
+    @State private var isSenseMeAnalyzed: Bool = false
+
     // Save state
     @State private var isSaving: Bool = false
     @State private var statusMessage: String? = nil
@@ -92,12 +97,15 @@ public struct SongMetadataEditorSheet: View {
             let val = art != nil ? WalkmanEngine.shared.isBaselineRGBJPEG(data: art!) : nil
             let img = art != nil ? NSImage(data: art!) : nil
             let meta = AudioTagger.shared.readMetadata(fileURL: url)
+            let sInfo = SenseMeEngine.shared.inspect(fileURL: url)
 
             DispatchQueue.main.async {
                 self.originalCoverData = art
                 self.coverData = art
                 self.coverImage = img
                 self.validationStatus = val
+                self.senseMeInfo = sInfo
+                self.isSenseMeAnalyzed = sInfo.isAnalyzed || self.track.isSenseMeAnalyzed
 
                 self.originalLyrics = lyr
                 self.lyrics = lyr
@@ -273,6 +281,55 @@ public struct SongMetadataEditorSheet: View {
         }
     }
 
+    private func analyzeSongSenseMe() {
+        guard !isAnalyzingSenseMe else { return }
+        isAnalyzingSenseMe = true
+        statusMessage = "Analyzing 12 Tone acoustic features..."
+        isError = false
+        let url = URL(fileURLWithPath: track.fullPath)
+
+        Task {
+            do {
+                let info = try await SenseMeEngine.shared.analyzeAndInject(fileURL: url)
+                LibraryScanner.shared.updateCachedSenseMe(fullPath: track.fullPath, info: info)
+                await MainActor.run {
+                    self.senseMeInfo = info
+                    self.isSenseMeAnalyzed = true
+                    self.isAnalyzingSenseMe = false
+                    self.statusMessage = "12 Tone metadata injected successfully!"
+                    self.isError = false
+                    
+                    var updatedTrack = self.track
+                    updatedTrack.isSenseMeAnalyzed = true
+                    updatedTrack.senseMeBpm = info.bpm
+                    updatedTrack.senseMeValence = info.valence
+                    updatedTrack.senseMeArousal = info.arousal
+                    updatedTrack.senseMeChannels = info.channels
+                    updatedTrack.senseMeHighlightSec = info.highlightSec
+                    self.onSavedTrack?(updatedTrack)
+
+                    NotificationCenter.default.post(
+                        name: .trackMetadataDidUpdate,
+                        object: nil,
+                        userInfo: ["trackId": self.track.id, "track": updatedTrack]
+                    )
+
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+                        if self.statusMessage == "12 Tone metadata injected successfully!" {
+                            self.statusMessage = nil
+                        }
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.isAnalyzingSenseMe = false
+                    self.statusMessage = "SenseMe analysis failed: \(error.localizedDescription)"
+                    self.isError = true
+                }
+            }
+        }
+    }
+
     private func saveAllChanges() {
         guard !isSaving else { return }
         isSaving = true
@@ -325,6 +382,14 @@ public struct SongMetadataEditorSheet: View {
                 updatedTrack.trackNum = saveTrackNum
                 updatedTrack.year = saveYear
                 updatedTrack.genre = saveGenre
+                updatedTrack.isSenseMeAnalyzed = self.isSenseMeAnalyzed
+                if let s = self.senseMeInfo, s.isAnalyzed {
+                    updatedTrack.senseMeBpm = s.bpm
+                    updatedTrack.senseMeValence = s.valence
+                    updatedTrack.senseMeArousal = s.arousal
+                    updatedTrack.senseMeChannels = s.channels
+                    updatedTrack.senseMeHighlightSec = s.highlightSec
+                }
                 if self.isCoverArtModified {
                     updatedTrack.hasArtwork = (saveCover != nil)
                 }
@@ -641,6 +706,71 @@ public struct SongMetadataEditorSheet: View {
                     EditorField(label: "Year", text: $year)
                     EditorField(label: "Genre", text: $genre)
                 }
+            }
+
+            // SONY 12 TONE / SENSEME
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("SONY 12 TONE / SENSEME")
+                        .font(WalkmanFont.sectionHeader)
+                        .foregroundStyle(.tertiary)
+                        .padding(.top, 4)
+
+                    Spacer()
+
+                    LiquidGlassActionButton(
+                        icon: isAnalyzingSenseMe ? "arrow.triangle.2.circlepath" : "waveform.path.ecg",
+                        label: isAnalyzingSenseMe ? "Analyzing..." : (isSenseMeAnalyzed ? "Re-Analyze SenseMe" : "Analyze SenseMe (12 Tone)"),
+                        isDisabled: isAnalyzingSenseMe,
+                        action: analyzeSongSenseMe
+                    )
+                    .help("Extract 12-Tone chroma, tempo, mood, and channels, then embed hardware-compatible SenseMe metadata")
+                }
+
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(isSenseMeAnalyzed ? Color(red: 255/255, green: 145/255, blue: 0/255).opacity(0.18) : Color.white.opacity(0.04))
+                            .frame(width: 32, height: 32)
+                        Image(systemName: isSenseMeAnalyzed ? "checkmark.circle.fill" : (isAnalyzingSenseMe ? "arrow.triangle.2.circlepath" : "circle.dashed"))
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(isSenseMeAnalyzed ? Color(red: 255/255, green: 185/255, blue: 50/255) : Color.white.opacity(0.3))
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(isSenseMeAnalyzed ? "SenseMe Analyzed" : (isAnalyzingSenseMe ? "Analyzing Acoustic Features..." : "Not Analyzed"))
+                            .font(WalkmanFont.bodyBold)
+                            .foregroundStyle(isSenseMeAnalyzed ? Color.white : Color.secondary)
+                        Text(isSenseMeAnalyzed ? "12 Tone acoustic metadata is embedded in audio file" : "No 12 Tone metadata embedded in file")
+                            .font(WalkmanFont.subheadline)
+                            .foregroundStyle(isSenseMeAnalyzed ? WalkmanTheme.silverMuted : Color.white.opacity(0.35))
+                    }
+
+                    Spacer()
+
+                    if isSenseMeAnalyzed {
+                        HStack(spacing: 4) {
+                            Image(systemName: "bolt.fill")
+                                .font(.system(size: 9, weight: .bold))
+                            Text("12 TONE")
+                                .font(WalkmanFont.badge)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color(red: 255/255, green: 145/255, blue: 0/255).opacity(0.18)))
+                        .overlay(Capsule().stroke(Color(red: 255/255, green: 165/255, blue: 30/255).opacity(0.55), lineWidth: 0.8))
+                        .foregroundStyle(Color(red: 255/255, green: 195/255, blue: 80/255))
+                    } else if !isAnalyzingSenseMe {
+                        Text("NOT ANALYZED")
+                            .font(WalkmanFont.badge)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(Color.white.opacity(0.05)))
+                            .foregroundStyle(Color.secondary)
+                    }
+                }
+                .padding(12)
+                .liquidGlass(cornerRadius: 10, borderOpacity: 0.22)
             }
 
             // Audio Specs Card
