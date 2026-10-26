@@ -64,3 +64,45 @@ def test_api_library_and_playlists():
         res_clean = client.post("/api/clean-eject", json={"mount_point": str(mount)})
         assert res_clean.status_code == 200
         assert res_clean.json()["status"] == "ok"
+
+
+def test_api_senseme_endpoints():
+    analyzed_flac = "/Users/workstation/Desktop/06. ILYSB (STRIPPED) 12 tone Senseme analyzed.flac"
+    res = client.get(f"/api/senseme/inspect?file_path={analyzed_flac}")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["isAnalyzed"] is True
+    assert data["bpm"] == 84.0
+    assert len(data["moodScores"]) == 10
+
+    # Test batch
+    res_batch = client.post("/api/senseme/batch", json={
+        "file_paths": [analyzed_flac],
+        "inject": False
+    })
+    assert res_batch.status_code == 200
+    bdata = res_batch.json()
+    assert len(bdata["results"]) == 1
+    assert bdata["results"][0]["status"] == "ok"
+
+
+def test_api_transfer_with_senseme():
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        mount = Path(tmp_dir)
+        source_flac = "/Users/workstation/Desktop/06. ILYSB (STRIPPED) 12 tone Senseme analyzed.flac"
+        res = client.post("/api/transfer", json={
+            "source_files": [source_flac],
+            "target_mount": str(mount),
+            "preset": "copy",
+            "auto_senseme": True,
+        })
+        assert res.status_code == 200
+        data = res.json()
+        assert data["total"] == 1
+        assert data["results"][0]["success"] is True
+        target_path = data["results"][0]["target"]
+        assert Path(target_path).exists()
+
+        inspect_res = client.get(f"/api/senseme/inspect?file_path={target_path}")
+        assert inspect_res.status_code == 200
+        assert inspect_res.json()["isAnalyzed"] is True

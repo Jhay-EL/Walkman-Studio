@@ -31,6 +31,8 @@ public struct LibraryView: View {
     @State private var displayedTracks: [Track] = []
     @State private var sortedBaseTracks: [Track] = []
     @State private var visibleTrackIds: Set<String> = []
+    @State private var isBatchAnalyzing: Bool = false
+    @State private var batchProgress: (current: Int, total: Int, trackTitle: String)? = nil
     
     public init(
         tracks: [Track],
@@ -342,6 +344,34 @@ public struct LibraryView: View {
             .buttonStyle(LiquidGlassButtonStyle(variant: .capsule, cornerRadius: 17))
             .disabled(visibleTracks.isEmpty)
             .help("Shuffle and play visible tracks")
+
+            Button(action: {
+                let targets = tracks.filter { selectedTrackId == $0.id }
+                let toAnalyze = targets.isEmpty ? visibleTracks.filter { !$0.isSenseMeAnalyzed } : targets
+                analyzeTracksSenseMe(toAnalyze.isEmpty ? visibleTracks : toAnalyze)
+            }) {
+                HStack(spacing: 5) {
+                    if isBatchAnalyzing, let prog = batchProgress {
+                        ProgressView()
+                            .controlSize(.small)
+                            .scaleEffect(0.7)
+                        Text("\(prog.current)/\(prog.total)")
+                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    } else {
+                        Image(systemName: "waveform.path.ecg")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text("Analyze SenseMe")
+                            .font(WalkmanFont.calloutMedium)
+                    }
+                }
+                .padding(.horizontal, 11)
+                .padding(.vertical, 7)
+                .frame(minHeight: 34)
+                .foregroundStyle(Color(red: 255/255, green: 195/255, blue: 80/255))
+            }
+            .buttonStyle(LiquidGlassButtonStyle(variant: .capsule, cornerRadius: 17))
+            .disabled(isBatchAnalyzing || visibleTracks.isEmpty)
+            .help("Analyze tracks for Sony 12 Tone / SenseMe Channels")
         }
     }
     
@@ -585,6 +615,32 @@ public struct LibraryView: View {
                 }
             }
             .width(min: 75, ideal: 100, max: 120)
+
+            TableColumn("SenseMe") { track in
+                if track.isSenseMeAnalyzed {
+                    HStack(spacing: 3) {
+                        Image(systemName: "waveform.path.ecg")
+                            .font(.system(size: 7.5, weight: .bold))
+                        Text("12 TONE")
+                            .font(WalkmanFont.badge)
+                    }
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule().fill(Color(red: 255/255, green: 145/255, blue: 0/255).opacity(0.18))
+                    )
+                    .overlay(
+                        Capsule().stroke(Color(red: 255/255, green: 165/255, blue: 30/255).opacity(0.55), lineWidth: 0.8)
+                    )
+                    .foregroundStyle(Color(red: 255/255, green: 195/255, blue: 80/255))
+                    .help("Sony 12 Tone / SenseMe Analyzed • \(track.senseMeChannels.joined(separator: ", "))")
+                } else {
+                    Text("—")
+                        .font(WalkmanFont.monoSmall)
+                        .foregroundStyle(Color.secondary.opacity(0.35))
+                }
+            }
+            .width(min: 70, ideal: 84, max: 96)
             
             TableColumn("Duration", value: \.durationSeconds) { track in
                 Text(formatDuration(track.durationSeconds))
@@ -635,6 +691,14 @@ public struct LibraryView: View {
                 Button("Inspect in Sidebar") {
                     onInspectTrack(track)
                 }
+
+                Button {
+                    let targets = tracks.filter { selection.contains($0.id) }
+                    let toAnalyze = targets.isEmpty ? [track] : targets
+                    analyzeTracksSenseMe(toAnalyze)
+                } label: {
+                    Label(selection.count > 1 ? "Analyze \(selection.count) Tracks for SenseMe (12 Tone)..." : "Analyze for SenseMe (12 Tone)...", systemImage: "waveform.path.ecg")
+                }
                 
                 Divider()
                 
@@ -670,6 +734,41 @@ public struct LibraryView: View {
             }
         }
         .tableScrollBottomInset(88)
+    }
+
+    private func analyzeTracksSenseMe(_ tracksToAnalyze: [Track]) {
+        guard !isBatchAnalyzing && !tracksToAnalyze.isEmpty else { return }
+        isBatchAnalyzing = true
+        batchProgress = (0, tracksToAnalyze.count, tracksToAnalyze[0].title)
+
+        Task {
+            for (idx, tr) in tracksToAnalyze.enumerated() {
+                await MainActor.run {
+                    self.batchProgress = (idx + 1, tracksToAnalyze.count, tr.title)
+                }
+                let url = URL(fileURLWithPath: tr.fullPath)
+                if let info = try? await SenseMeEngine.shared.analyzeAndInject(fileURL: url) {
+                    LibraryScanner.shared.updateCachedSenseMe(fullPath: tr.fullPath, info: info)
+                    await MainActor.run {
+                        if let index = self.displayedTracks.firstIndex(where: { $0.id == tr.id }) {
+                            self.displayedTracks[index].isSenseMeAnalyzed = true
+                            self.displayedTracks[index].senseMeBpm = info.bpm
+                            self.displayedTracks[index].senseMeValence = info.valence
+                            self.displayedTracks[index].senseMeArousal = info.arousal
+                            self.displayedTracks[index].senseMeChannels = info.channels
+                            self.displayedTracks[index].senseMeHighlightSec = info.highlightSec
+                        }
+                    }
+                }
+            }
+            await MainActor.run {
+                self.isBatchAnalyzing = false
+                self.batchProgress = nil
+                if let first = tracksToAnalyze.first {
+                    self.onInspectTrack(first)
+                }
+            }
+        }
     }
 }
 

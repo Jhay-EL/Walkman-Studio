@@ -8,3 +8,5 @@ pywebview>=5.0.0
 pydantic>=2.0.0
 pytest>=8.0.0
 httpx>=0.27.0
+numpy>=1.26.0
+scipy>=1.12.0

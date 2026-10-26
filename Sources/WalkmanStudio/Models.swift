@@ -81,6 +81,12 @@ public struct Track: Identifiable, Hashable, Sendable {
     public var hasArtwork: Bool
     public let sizeBytes: Int64
     public var dateAdded: Date
+    public var isSenseMeAnalyzed: Bool
+    public var senseMeBpm: Double?
+    public var senseMeValence: Double?
+    public var senseMeArousal: Double?
+    public var senseMeChannels: [String]
+    public var senseMeHighlightSec: Double?
 
     public init(
         filename: String,
@@ -99,7 +105,13 @@ public struct Track: Identifiable, Hashable, Sendable {
         bitsPerSample: Int,
         hasArtwork: Bool,
         sizeBytes: Int64,
-        dateAdded: Date = Date()
+        dateAdded: Date = Date(),
+        isSenseMeAnalyzed: Bool = false,
+        senseMeBpm: Double? = nil,
+        senseMeValence: Double? = nil,
+        senseMeArousal: Double? = nil,
+        senseMeChannels: [String] = [],
+        senseMeHighlightSec: Double? = nil
     ) {
         self.filename = filename
         self.relativePath = relativePath
@@ -118,6 +130,12 @@ public struct Track: Identifiable, Hashable, Sendable {
         self.hasArtwork = hasArtwork
         self.sizeBytes = sizeBytes
         self.dateAdded = dateAdded
+        self.isSenseMeAnalyzed = isSenseMeAnalyzed
+        self.senseMeBpm = senseMeBpm
+        self.senseMeValence = senseMeValence
+        self.senseMeArousal = senseMeArousal
+        self.senseMeChannels = senseMeChannels
+        self.senseMeHighlightSec = senseMeHighlightSec
     }
 }
 

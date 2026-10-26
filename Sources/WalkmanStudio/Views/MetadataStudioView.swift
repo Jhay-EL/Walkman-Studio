@@ -16,6 +16,9 @@ public struct MetadataStudioView: View {
     @State private var verifiedMetadata: AudioFileMetadata? = nil
     @State private var cachedLyricLines: [ParsedLyricLine] = []
     @State private var isLyricsCopied: Bool = false
+    @State private var senseMeInfo: SenseMeInfo? = nil
+    @State private var isAnalyzingSenseMe: Bool = false
+    @State private var senseMeError: String? = nil
     
     public init(
         track: Track?,
@@ -285,6 +288,9 @@ public struct MetadataStudioView: View {
             lyrics = nil
             verifiedMetadata = nil
             cachedLyricLines = []
+            senseMeInfo = nil
+            isAnalyzingSenseMe = false
+            senseMeError = nil
             return
         }
         
@@ -299,6 +305,9 @@ public struct MetadataStudioView: View {
                 lyrics = nil
                 verifiedMetadata = nil
                 cachedLyricLines = []
+                senseMeInfo = nil
+                isAnalyzingSenseMe = false
+                senseMeError = nil
             }
             
             let url = URL(fileURLWithPath: tr.fullPath)
@@ -312,6 +321,7 @@ public struct MetadataStudioView: View {
                 let meta = AudioTagger.shared.readMetadata(fileURL: url)
                 let rawLyrics = lyr ?? meta?.lyrics
                 let parsedLines = Self.parseLyrics(rawLyrics)
+                let senseMe = SenseMeEngine.shared.inspect(fileURL: url)
                 
                 DispatchQueue.main.async {
                     guard self.track?.id == tr.id else { return }
@@ -321,6 +331,7 @@ public struct MetadataStudioView: View {
                     self.lyrics = rawLyrics
                     self.verifiedMetadata = meta
                     self.cachedLyricLines = parsedLines
+                    self.senseMeInfo = senseMe
                 }
             }
         }
@@ -338,6 +349,29 @@ public struct MetadataStudioView: View {
         guard let tr = track else { return }
         let url = URL(fileURLWithPath: tr.fullPath)
         NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    private func analyzeSenseMe(for tr: Track) {
+        guard !isAnalyzingSenseMe else { return }
+        isAnalyzingSenseMe = true
+        senseMeError = nil
+        let url = URL(fileURLWithPath: tr.fullPath)
+        Task {
+            do {
+                let info = try await SenseMeEngine.shared.analyzeAndInject(fileURL: url)
+                await MainActor.run {
+                    self.senseMeInfo = info
+                    LibraryScanner.shared.updateCachedSenseMe(fullPath: tr.fullPath, info: info)
+                    self.isAnalyzingSenseMe = false
+                    self.onSaved?()
+                }
+            } catch {
+                await MainActor.run {
+                    self.senseMeError = error.localizedDescription
+                    self.isAnalyzingSenseMe = false
+                }
+            }
+        }
     }
 
     private func copyLyricsToClipboard() {
@@ -552,7 +586,175 @@ public struct MetadataStudioView: View {
                         )
                     }
 
-                    // 4. LYRICS CONTAINER
+                    // 4. SONY 12 TONE / SENSEME CARD
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            sectionHeader(title: "Sony 12 Tone / SensMe", icon: "waveform.path.ecg")
+                            Spacer()
+                            if let sInfo = senseMeInfo, sInfo.isAnalyzed {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 9, weight: .bold))
+                                    Text("Analyzed")
+                                        .font(WalkmanFont.badge)
+                                }
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2.5)
+                                .background(Capsule().fill(Color(red: 255/255, green: 145/255, blue: 0/255).opacity(0.18)))
+                                .overlay(Capsule().stroke(Color(red: 255/255, green: 165/255, blue: 30/255).opacity(0.55), lineWidth: 0.8))
+                                .foregroundStyle(Color(red: 255/255, green: 195/255, blue: 80/255))
+                            } else {
+                                Text("Not Analyzed")
+                                    .font(WalkmanFont.badge)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2.5)
+                                    .background(Capsule().fill(Color.white.opacity(0.05)))
+                                    .foregroundStyle(Color.secondary)
+                            }
+                        }
+
+                        if let sInfo = senseMeInfo, sInfo.isAnalyzed {
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack(spacing: 8) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("TEMPO (GBPM)")
+                                            .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                                            .foregroundStyle(Color.secondary)
+                                        Text("\(sInfo.bpm > 0 ? String(format: "%.1f", sInfo.bpm) : "—") BPM")
+                                            .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                            .foregroundStyle(.white)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("SENSEME MOOD")
+                                            .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                                            .foregroundStyle(Color.secondary)
+                                        Text("V: \(sInfo.valence >= 0 ? "+" : "")\(String(format: "%.2f", sInfo.valence))  A: \(sInfo.arousal >= 0 ? "+" : "")\(String(format: "%.2f", sInfo.arousal))")
+                                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                            .foregroundStyle(Color(red: 255/255, green: 195/255, blue: 80/255))
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+
+                                if sInfo.highlightSec > 0 {
+                                    HStack(spacing: 8) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("SABI CHORUS HOOK")
+                                                .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                                                .foregroundStyle(Color.secondary)
+                                            Text(formatDuration(sInfo.highlightSec))
+                                                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                                .foregroundStyle(.white)
+                                        }
+                                        Spacer()
+                                        Button(action: {
+                                            player.play(track: tr, in: [tr])
+                                            player.seek(to: sInfo.highlightSec)
+                                        }) {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "play.fill")
+                                                    .font(.system(size: 8))
+                                                Text("Preview Hook")
+                                                    .font(.system(size: 10.5, weight: .medium))
+                                            }
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                        }
+                                        .buttonStyle(LiquidGlassButtonStyle(variant: .capsule, cornerRadius: 10))
+                                        .help("Jump to Sabi chorus highlight preview (Walkman ZAPPIN)")
+                                    }
+                                }
+
+                                if !sInfo.channels.isEmpty {
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text("CHANNELS")
+                                            .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                                            .foregroundStyle(Color.secondary)
+                                        ScrollView(.horizontal, showsIndicators: false) {
+                                            HStack(spacing: 5) {
+                                                ForEach(sInfo.channels, id: \.self) { ch in
+                                                    Text(ch)
+                                                        .font(.system(size: 10, weight: .medium))
+                                                        .padding(.horizontal, 7)
+                                                        .padding(.vertical, 3)
+                                                        .background(Color.white.opacity(0.08))
+                                                        .foregroundStyle(Color.white.opacity(0.9))
+                                                        .clipShape(Capsule())
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Button(action: {
+                                    analyzeSenseMe(for: tr)
+                                }) {
+                                    HStack(spacing: 5) {
+                                        if isAnalyzingSenseMe {
+                                            ProgressView()
+                                                .controlSize(.small)
+                                                .scaleEffect(0.7)
+                                            Text("Re-analyzing...")
+                                                .font(WalkmanFont.calloutMedium)
+                                        } else {
+                                            Image(systemName: "arrow.clockwise")
+                                                .font(.system(size: 10))
+                                            Text("Re-Analyze 12 Tone")
+                                                .font(WalkmanFont.calloutMedium)
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 6)
+                                }
+                                .buttonStyle(LiquidGlassButtonStyle(variant: .capsule, cornerRadius: 8))
+                                .disabled(isAnalyzingSenseMe)
+                            }
+                            .padding(12)
+                            .liquidGlass(cornerRadius: 12)
+                        } else {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Acoustic 12 Tone analysis & SensMe metadata are not embedded in this file.")
+                                    .font(WalkmanFont.subheadline)
+                                    .foregroundStyle(Color.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+
+                                if let err = senseMeError {
+                                    Text(err)
+                                        .font(.system(size: 10.5))
+                                        .foregroundStyle(Color.red.opacity(0.9))
+                                }
+
+                                Button(action: {
+                                    analyzeSenseMe(for: tr)
+                                }) {
+                                    HStack(spacing: 6) {
+                                        if isAnalyzingSenseMe {
+                                            ProgressView()
+                                                .controlSize(.small)
+                                                .scaleEffect(0.7)
+                                            Text("Analyzing 12 Tone DSP...")
+                                                .font(WalkmanFont.calloutMedium)
+                                        } else {
+                                            Image(systemName: "waveform.path.ecg")
+                                                .font(.system(size: 11, weight: .semibold))
+                                            Text("Analyze for SenseMe (12 Tone)")
+                                                .font(WalkmanFont.calloutMedium)
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 7)
+                                    .foregroundStyle(Color(red: 255/255, green: 195/255, blue: 80/255))
+                                }
+                                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 8))
+                                .disabled(isAnalyzingSenseMe)
+                            }
+                            .padding(12)
+                            .liquidGlass(cornerRadius: 12)
+                        }
+                    }
+
+                    // 5. LYRICS CONTAINER
                     VStack(alignment: .leading, spacing: 8) {
                         sectionHeader(title: "Lyrics", icon: "quote.bubble.fill")
                         

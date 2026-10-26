@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from backend import walkman_engine
+from backend import senseme_engine, senseme_dsp, walkman_engine
 
 app = FastAPI(
     title="Sony Walkman Studio API",
@@ -73,6 +73,17 @@ class TransferRequest(BaseModel):
     preset: str = "copy"  # copy, flac_16, flac_24, mp3_320
     custom_artist: Optional[str] = None
     custom_album: Optional[str] = None
+    auto_senseme: bool = True
+
+
+class SenseMeAnalyzeRequest(BaseModel):
+    file_path: str
+    inject: bool = True
+
+
+class SenseMeBatchRequest(BaseModel):
+    file_paths: List[str]
+    inject: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -232,6 +243,22 @@ def transfer_audio_files(payload: TransferRequest):
                 cover_art_bytes=cover_bytes,
             )
 
+            # 7. Sony 12 Tone / SenseMe Injection
+            if payload.auto_senseme and target_path.suffix.lower() in (".flac", ".mp3", ".m4a"):
+                try:
+                    chk = senseme_engine.is_senseme_analyzed(target_path)
+                    if not chk.get("is_analyzed"):
+                        if target_path.suffix.lower() == ".flac" and src_path.suffix.lower() == ".flac":
+                            existing_smfm = senseme_engine.read_flac_smfm(src_path)
+                            if existing_smfm:
+                                senseme_engine.inject_flac_smfm(target_path, existing_smfm)
+                            else:
+                                senseme_engine.analyze_and_inject(target_path)
+                        else:
+                            senseme_engine.analyze_and_inject(target_path)
+                except Exception as sense_err:
+                    print(f"[Transfer] SenseMe auto-injection warning for {target_path}: {sense_err}")
+
             results.append({
                 "source": src_file,
                 "target": str(target_path),
@@ -389,6 +416,73 @@ def clean_and_eject(payload: CleanEjectRequest):
         "clean_results": clean_res,
         "unmount_results": unmount_res,
     }
+
+
+# ---------------------------------------------------------------------------
+# 7. Sony 12 Tone Analysis & SensMe Endpoints
+# ---------------------------------------------------------------------------
+@app.get("/api/senseme/inspect")
+def inspect_senseme(file_path: str = Query(...)):
+    """Fast inspection of audio file headers for embedded Sony 12 Tone / SenseMe metadata."""
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Audio file not found")
+    try:
+        return senseme_engine.is_senseme_analyzed(file_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/senseme/analyze")
+def analyze_senseme(payload: SenseMeAnalyzeRequest):
+    """Executes 12 Tone DSP analysis and optionally injects the SMFM block into audio file metadata."""
+    if not os.path.exists(payload.file_path):
+        raise HTTPException(status_code=404, detail="Audio file not found")
+    try:
+        if payload.inject:
+            return senseme_engine.analyze_and_inject(payload.file_path)
+        else:
+            dsp_res = senseme_dsp.analyze_audio_track(payload.file_path)
+            return {
+                "isAnalyzed": False,
+                "bpm": dsp_res.bpm,
+                "rawBpm": dsp_res.raw_bpm,
+                "valence": dsp_res.valence,
+                "arousal": dsp_res.arousal,
+                "moodScores": dsp_res.mood_scores,
+                "channels": dsp_res.channels,
+                "highlightSec": dsp_res.highlight_sec,
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/senseme/batch")
+def batch_analyze_senseme(payload: SenseMeBatchRequest):
+    """Batch processes multiple audio files with 12 Tone DSP analysis & metadata injection."""
+    results = []
+    for fp in payload.file_paths:
+        if os.path.exists(fp):
+            try:
+                if payload.inject:
+                    res = senseme_engine.analyze_and_inject(fp)
+                else:
+                    dsp_res = senseme_dsp.analyze_audio_track(fp)
+                    res = {
+                        "isAnalyzed": False,
+                        "bpm": dsp_res.bpm,
+                        "rawBpm": dsp_res.raw_bpm,
+                        "valence": dsp_res.valence,
+                        "arousal": dsp_res.arousal,
+                        "moodScores": dsp_res.mood_scores,
+                        "channels": dsp_res.channels,
+                        "highlightSec": dsp_res.highlight_sec,
+                    }
+                results.append({"file_path": fp, "status": "ok", "result": res})
+            except Exception as e:
+                results.append({"file_path": fp, "status": "error", "error": str(e)})
+        else:
+            results.append({"file_path": fp, "status": "error", "error": "File not found"})
+    return {"results": results}
 
 
 # ---------------------------------------------------------------------------

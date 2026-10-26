@@ -627,6 +627,32 @@ public struct RecentlyAddedView: View {
                 }
             }
             .width(min: 90, ideal: 110, max: 130)
+
+            TableColumn("SenseMe") { item in
+                if item.track.isSenseMeAnalyzed {
+                    HStack(spacing: 3) {
+                        Image(systemName: "waveform.path.ecg")
+                            .font(.system(size: 7.5, weight: .bold))
+                        Text("12 TONE")
+                            .font(WalkmanFont.badge)
+                    }
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule().fill(Color(red: 255/255, green: 145/255, blue: 0/255).opacity(0.18))
+                    )
+                    .overlay(
+                        Capsule().stroke(Color(red: 255/255, green: 165/255, blue: 30/255).opacity(0.55), lineWidth: 0.8)
+                    )
+                    .foregroundStyle(Color(red: 255/255, green: 195/255, blue: 80/255))
+                    .help("Sony 12 Tone / SenseMe Analyzed • \(item.track.senseMeChannels.joined(separator: ", "))")
+                } else {
+                    Text("—")
+                        .font(WalkmanFont.monoSmall)
+                        .foregroundStyle(Color.secondary.opacity(0.35))
+                }
+            }
+            .width(min: 70, ideal: 84, max: 96)
             
             TableColumn("Date Added", value: \.dateAdded) { item in
                 Text(formatDateAdded(item.dateAdded))

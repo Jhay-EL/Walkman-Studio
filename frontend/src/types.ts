@@ -27,6 +27,12 @@ export interface Track {
   bits_per_sample: number;
   has_artwork: boolean;
   size_bytes: number;
+  is_senseme?: boolean;
+  senseme_bpm?: number;
+  senseme_valence?: number;
+  senseme_arousal?: number;
+  senseme_channels?: string[];
+  senseme_highlight_sec?: number;
 }
 
 export interface LibraryData {

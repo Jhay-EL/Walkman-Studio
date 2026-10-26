@@ -26,6 +26,7 @@ public struct TransferQueueView: View {
     @State private var autoFetchMetadata: Bool = true
     @State private var saveFolderJpg: Bool = true
     @State private var normalizeVolume: Bool = false
+    @State private var autoSenseMe: Bool = true
 
     // Batch & In-Flight Status
     @State private var isBatchOptimizing: Bool = false
@@ -427,6 +428,12 @@ public struct TransferQueueView: View {
                                 isOn: $normalizeVolume,
                                 help: "Normalizes track loudness using EBU R128 standard during transcoding",
                                 disabled: selectedPreset == "copy_optimize" || selectedPreset == "copy_raw"
+                            )
+                            toggleChip(
+                                title: "12 Tone / SenseMe",
+                                icon: "waveform.path.badge.plus",
+                                isOn: $autoSenseMe,
+                                help: "Injects Sony 12 Tone Analysis (SenseMe) metadata so the Walkman illuminates the SenseMe channel indicator"
                             )
                         }
                     }
@@ -1395,6 +1402,22 @@ public struct TransferQueueView: View {
                                 )
                             } catch {
                                 print("[TransferQueue] Error writing metadata to \(dest.lastPathComponent): \(error)")
+                            }
+                        }
+                    }
+
+                    // 2b. Sony 12 Tone Analysis / SenseMe Injection
+                    if autoSenseMe {
+                        let destExt = dest.pathExtension.lowercased()
+                        if destExt == "flac" || destExt == "mp3" || destExt == "m4a" || destExt == "alac" {
+                            let inspectRes = SenseMeEngine.shared.inspect(fileURL: dest)
+                            if !inspectRes.isAnalyzed {
+                                if destExt == "flac", src.pathExtension.lowercased() == "flac",
+                                   let existingPayload = SenseMeEngine.shared.extractPayload(fileURL: src) {
+                                    try? SenseMeEngine.shared.injectFLAC(fileURL: dest, payload: existingPayload)
+                                } else {
+                                    _ = try? await SenseMeEngine.shared.analyzeAndInject(fileURL: dest)
+                                }
                             }
                         }
                     }

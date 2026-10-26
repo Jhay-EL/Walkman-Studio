@@ -44,6 +44,12 @@ public final class LibraryScanner: @unchecked Sendable {
             CREATE INDEX IF NOT EXISTS idx_cache_path ON tracks_cache(full_path);
         """, nil, nil, nil)
         sqlite3_exec(db, "ALTER TABLE tracks_cache ADD COLUMN date_added REAL DEFAULT 0;", nil, nil, nil)
+        sqlite3_exec(db, "ALTER TABLE tracks_cache ADD COLUMN is_senseme INTEGER DEFAULT 0;", nil, nil, nil)
+        sqlite3_exec(db, "ALTER TABLE tracks_cache ADD COLUMN senseme_bpm REAL DEFAULT 0;", nil, nil, nil)
+        sqlite3_exec(db, "ALTER TABLE tracks_cache ADD COLUMN senseme_valence REAL DEFAULT 0;", nil, nil, nil)
+        sqlite3_exec(db, "ALTER TABLE tracks_cache ADD COLUMN senseme_arousal REAL DEFAULT 0;", nil, nil, nil)
+        sqlite3_exec(db, "ALTER TABLE tracks_cache ADD COLUMN senseme_channels TEXT DEFAULT '';", nil, nil, nil)
+        sqlite3_exec(db, "ALTER TABLE tracks_cache ADD COLUMN senseme_highlight_sec REAL DEFAULT 0;", nil, nil, nil)
         return db
     }
 
@@ -77,7 +83,8 @@ public final class LibraryScanner: @unchecked Sendable {
                 if let db = self.getDB() {
                     let query = """
                     SELECT full_path, mtime, size, format, title, artist, album, track_num, year, genre,
-                           duration_seconds, bitrate_kbps, sample_rate, bits_per_sample, has_artwork, relative_path, date_added
+                           duration_seconds, bitrate_kbps, sample_rate, bits_per_sample, has_artwork, relative_path, date_added,
+                           is_senseme, senseme_bpm, senseme_valence, senseme_arousal, senseme_channels, senseme_highlight_sec
                     FROM tracks_cache
                     WHERE full_path LIKE ?;
                     """
@@ -109,6 +116,14 @@ public final class LibraryScanner: @unchecked Sendable {
                                 let effectiveAdded = dateAddedSec > 0 ? dateAddedSec : mtime
                                 let dateAdded = Date(timeIntervalSince1970: effectiveAdded > 0 ? effectiveAdded : CFAbsoluteTimeGetCurrent() + 978307200.0)
 
+                                let isSenseMe = sqlite3_column_int(stmt, 17) != 0
+                                let sBpm = sqlite3_column_double(stmt, 18)
+                                let sValence = sqlite3_column_double(stmt, 19)
+                                let sArousal = sqlite3_column_double(stmt, 20)
+                                let channelsStr = sqlite3_column_text(stmt, 21).map { String(cString: $0) } ?? ""
+                                let sChannels = channelsStr.isEmpty ? [] : channelsStr.components(separatedBy: ",")
+                                let sHighlight = sqlite3_column_double(stmt, 22)
+
                                 let cleanTitle = WalkmanEngine.sanitizeWalkmanText(title)
                                 let cleanArtist = WalkmanEngine.sanitizeWalkmanText(artist, stripExplicitMarkers: false)
                                 let cleanAlbum = WalkmanEngine.sanitizeWalkmanText(album)
@@ -131,7 +146,13 @@ public final class LibraryScanner: @unchecked Sendable {
                                     bitsPerSample: bitsPerSample,
                                     hasArtwork: hasArt,
                                     sizeBytes: size,
-                                    dateAdded: dateAdded
+                                    dateAdded: dateAdded,
+                                    isSenseMeAnalyzed: isSenseMe,
+                                    senseMeBpm: sBpm > 0 ? sBpm : nil,
+                                    senseMeValence: isSenseMe ? sValence : nil,
+                                    senseMeArousal: isSenseMe ? sArousal : nil,
+                                    senseMeChannels: sChannels,
+                                    senseMeHighlightSec: sHighlight > 0 ? sHighlight : nil
                                 )
                                 cachedTracks[fPath] = tr
                             }
@@ -223,8 +244,9 @@ public final class LibraryScanner: @unchecked Sendable {
 
                     let insertSql = """
                     INSERT OR REPLACE INTO tracks_cache
-                    (full_path, mtime, size, format, title, artist, album, track_num, year, genre, duration_seconds, bitrate_kbps, sample_rate, bits_per_sample, has_artwork, relative_path, date_added)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    (full_path, mtime, size, format, title, artist, album, track_num, year, genre, duration_seconds, bitrate_kbps, sample_rate, bits_per_sample, has_artwork, relative_path, date_added,
+                     is_senseme, senseme_bpm, senseme_valence, senseme_arousal, senseme_channels, senseme_highlight_sec)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                     """
                     var insStmt: OpaquePointer?
                     if let db = db {
@@ -253,6 +275,7 @@ public final class LibraryScanner: @unchecked Sendable {
                             let yStr = (parsed.year as NSString).utf8String
                             let gStr = (parsed.genre as NSString).utf8String
                             let rStr = (parsed.relativePath as NSString).utf8String
+                            let cStr = (parsed.senseMeChannels.joined(separator: ",") as NSString).utf8String
 
                             sqlite3_bind_text(insStmt, 1, pStr, -1, nil)
                             sqlite3_bind_double(insStmt, 2, item.mtime)
@@ -267,6 +290,16 @@ public final class LibraryScanner: @unchecked Sendable {
                             sqlite3_bind_double(insStmt, 11, parsed.durationSeconds)
                             sqlite3_bind_int(insStmt, 12, Int32(parsed.bitrateKbps))
                             sqlite3_bind_int(insStmt, 13, Int32(parsed.sampleRate))
+                            sqlite3_bind_int(insStmt, 14, Int32(parsed.bitsPerSample))
+                            sqlite3_bind_int(insStmt, 15, parsed.hasArtwork ? 1 : 0)
+                            sqlite3_bind_text(insStmt, 16, rStr, -1, nil)
+                            sqlite3_bind_double(insStmt, 17, parsed.dateAdded.timeIntervalSince1970)
+                            sqlite3_bind_int(insStmt, 18, parsed.isSenseMeAnalyzed ? 1 : 0)
+                            sqlite3_bind_double(insStmt, 19, parsed.senseMeBpm ?? 0)
+                            sqlite3_bind_double(insStmt, 20, parsed.senseMeValence ?? 0)
+                            sqlite3_bind_double(insStmt, 21, parsed.senseMeArousal ?? 0)
+                            sqlite3_bind_text(insStmt, 22, cStr, -1, nil)
+                            sqlite3_bind_double(insStmt, 23, parsed.senseMeHighlightSec ?? 0)
                             sqlite3_bind_int(insStmt, 14, Int32(parsed.bitsPerSample))
                             sqlite3_bind_int(insStmt, 15, parsed.hasArtwork ? 1 : 0)
                             sqlite3_bind_text(insStmt, 16, rStr, -1, nil)
@@ -345,6 +378,8 @@ public final class LibraryScanner: @unchecked Sendable {
             }
         }
 
+        let senseMe = SenseMeEngine.shared.inspect(fileURL: URL(fileURLWithPath: path))
+
         if let info = AudioTagger.shared.readMetadata(fileURL: URL(fileURLWithPath: path)) {
             let effTitle = WalkmanEngine.sanitizeWalkmanText(info.title.isEmpty ? defTitle : info.title)
             let effArtist = WalkmanEngine.sanitizeWalkmanText(info.artist.isEmpty ? defArtist : info.artist, stripExplicitMarkers: false)
@@ -366,7 +401,13 @@ public final class LibraryScanner: @unchecked Sendable {
                 bitsPerSample: info.bitsPerSample,
                 hasArtwork: info.hasArtwork,
                 sizeBytes: size,
-                dateAdded: dateAdded
+                dateAdded: dateAdded,
+                isSenseMeAnalyzed: senseMe.isAnalyzed,
+                senseMeBpm: senseMe.bpm > 0 ? senseMe.bpm : nil,
+                senseMeValence: senseMe.isAnalyzed ? senseMe.valence : nil,
+                senseMeArousal: senseMe.isAnalyzed ? senseMe.arousal : nil,
+                senseMeChannels: senseMe.channels,
+                senseMeHighlightSec: senseMe.highlightSec > 0 ? senseMe.highlightSec : nil
             )
         }
 
@@ -391,8 +432,43 @@ public final class LibraryScanner: @unchecked Sendable {
             bitsPerSample: 16,
             hasArtwork: true,
             sizeBytes: size,
-            dateAdded: dateAdded
+            dateAdded: dateAdded,
+            isSenseMeAnalyzed: senseMe.isAnalyzed,
+            senseMeBpm: senseMe.bpm > 0 ? senseMe.bpm : nil,
+            senseMeValence: senseMe.isAnalyzed ? senseMe.valence : nil,
+            senseMeArousal: senseMe.isAnalyzed ? senseMe.arousal : nil,
+            senseMeChannels: senseMe.channels,
+            senseMeHighlightSec: senseMe.highlightSec > 0 ? senseMe.highlightSec : nil
         )
+    }
+
+    public func updateCachedSenseMe(fullPath: String, info: SenseMeInfo) {
+        guard let db = getDB() else { return }
+        defer { sqlite3_close(db) }
+        let sql = """
+        UPDATE tracks_cache
+        SET is_senseme = ?,
+            senseme_bpm = ?,
+            senseme_valence = ?,
+            senseme_arousal = ?,
+            senseme_channels = ?,
+            senseme_highlight_sec = ?
+        WHERE full_path = ?;
+        """
+        var stmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+            let channelsStr = (info.channels.joined(separator: ",") as NSString).utf8String
+            let pStr = (fullPath as NSString).utf8String
+            sqlite3_bind_int(stmt, 1, info.isAnalyzed ? 1 : 0)
+            sqlite3_bind_double(stmt, 2, info.bpm)
+            sqlite3_bind_double(stmt, 3, info.valence)
+            sqlite3_bind_double(stmt, 4, info.arousal)
+            sqlite3_bind_text(stmt, 5, channelsStr, -1, nil)
+            sqlite3_bind_double(stmt, 6, info.highlightSec)
+            sqlite3_bind_text(stmt, 7, pStr, -1, nil)
+            sqlite3_step(stmt)
+            sqlite3_finalize(stmt)
+        }
     }
 
     public func updateCachedMetadata(fullPath: String, year: String?, genre: String?) {

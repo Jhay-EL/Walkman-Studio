@@ -89,4 +89,27 @@ export const api = {
     });
     return res.data;
   },
+
+  async inspectSenseMe(filePath: string) {
+    const res = await axios.get(`${API_BASE}/senseme/inspect`, {
+      params: { file_path: filePath },
+    });
+    return res.data;
+  },
+
+  async analyzeSenseMe(filePath: string, inject = true) {
+    const res = await axios.post(`${API_BASE}/senseme/analyze`, {
+      file_path: filePath,
+      inject,
+    });
+    return res.data;
+  },
+
+  async batchAnalyzeSenseMe(filePaths: string[], inject = true) {
+    const res = await axios.post(`${API_BASE}/senseme/batch`, {
+      file_paths: filePaths,
+      inject,
+    });
+    return res.data;
+  },
 };

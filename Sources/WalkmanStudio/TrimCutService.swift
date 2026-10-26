@@ -47,15 +47,15 @@ public enum AudioChannelMode: String, CaseIterable, Identifiable, Sendable {
 
     public var title: String {
         switch self {
-        case .original: return "Original (Keep Source Channels)"
-        case .swapLR: return "Invert L & R (Swap Stereo Channels)"
-        case .mono: return "Downmix to Mono (1 Channel)"
+        case .original: return "Original (Keep Source)"
+        case .swapLR: return "Invert L & R (Swap Stereo)"
+        case .mono: return "Downmix to Mono (1 Ch)"
         case .stereo: return "Stereo (2 Channels)"
-        case .leftOnly: return "Left Channel Only (L → Both)"
-        case .rightOnly: return "Right Channel Only (R → Both)"
-        case .muteLeft: return "Mute Left Channel (Keep Right)"
-        case .muteRight: return "Mute Right Channel (Keep Left)"
-        case .invertPhase: return "Invert Phase (180° Polarity Flip)"
+        case .leftOnly: return "Left Only (L → Both)"
+        case .rightOnly: return "Right Only (R → Both)"
+        case .muteLeft: return "Mute Left Channel"
+        case .muteRight: return "Mute Right Channel"
+        case .invertPhase: return "Invert Phase (-180°)"
         }
     }
 
@@ -351,11 +351,12 @@ public final class TrimCutService: @unchecked Sendable {
             }
         }
 
-        // Temporary file for atomic write
+        // Temporary file on fast local SSD for optimal encoding and atomic write
         let ext = finalDestinationURL.pathExtension.lowercased()
-        let tempDir = sourceURL.deletingLastPathComponent()
-        let tempFilename = ".\(UUID().uuidString).tmp.\(ext)"
+        let tempDir = FileManager.default.temporaryDirectory
+        let tempFilename = "walkman_trim_\(UUID().uuidString).\(ext)"
         let tempURL = tempDir.appendingPathComponent(tempFilename)
+        try? FileManager.default.removeItem(at: tempURL)
 
         progressHandler("Building audio filter graph...")
 
@@ -495,25 +496,17 @@ public final class TrimCutService: @unchecked Sendable {
 
         progressHandler("Finalizing file...")
 
-        // Move temp file to final location
-        if options.destination == .overwrite {
-            // Atomic replacement
-            if FileManager.default.fileExists(atPath: finalDestinationURL.path) {
-                _ = try? FileManager.default.replaceItem(at: finalDestinationURL, withItemAt: tempURL, backupItemName: nil, options: [], resultingItemURL: nil)
-                if FileManager.default.fileExists(atPath: tempURL.path) {
-                    try? FileManager.default.removeItem(at: finalDestinationURL)
-                    try FileManager.default.moveItem(at: tempURL, to: finalDestinationURL)
-                }
-            } else {
-                try FileManager.default.moveItem(at: tempURL, to: finalDestinationURL)
-            }
-            LibraryScanner.shared.removeFromCache(fullPath: finalDestinationURL.path)
-        } else {
-            if FileManager.default.fileExists(atPath: finalDestinationURL.path) {
-                try? FileManager.default.removeItem(at: finalDestinationURL)
-            }
-            try FileManager.default.moveItem(at: tempURL, to: finalDestinationURL)
+        progressHandler("Saving to Walkman storage...")
+
+        // Safely transfer to final location across volumes (FAT32/exFAT compatible)
+        if FileManager.default.fileExists(atPath: finalDestinationURL.path) {
+            try FileManager.default.removeItem(at: finalDestinationURL)
         }
+        try FileManager.default.copyItem(at: tempURL, to: finalDestinationURL)
+        try? FileManager.default.removeItem(at: tempURL)
+
+        // Clear cache and flush to disk
+        LibraryScanner.shared.removeFromCache(fullPath: finalDestinationURL.path)
 
         // Clean any ghost macOS dotfiles
         let dotfile = finalDestinationURL.deletingLastPathComponent().appendingPathComponent("._" + finalDestinationURL.lastPathComponent)

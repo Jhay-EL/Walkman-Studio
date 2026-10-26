@@ -237,7 +237,6 @@ public struct TrimAndCutSheet: View {
     @State private var isPlaying: Bool = false
     @State private var currentTime: Double = 0.0
     @State private var isLoopingSelection: Bool = false
-    @State private var isPlayingFromStart: Bool = false
     @State private var isAuditioningResult: Bool = false
     @State private var volume: Float = 0.8
 
@@ -441,7 +440,7 @@ public struct TrimAndCutSheet: View {
     // MARK: - Hero Track Summary
     private var heroTrackSummary: some View {
         HStack(spacing: 14) {
-            TrackCoverThumbnail(track: track, size: 60)
+            TrackCoverThumbnail(track: track, size: 56)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -512,26 +511,6 @@ public struct TrimAndCutSheet: View {
             }
 
             Spacer()
-
-            // Quick Play/Pause Hero Button
-            Button(action: togglePlayPause) {
-                HStack(spacing: 6) {
-                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 11, weight: .bold))
-                    Text(isPlaying ? "Pause Preview" : "Play Full Track")
-                        .font(WalkmanFont.bodyMedium)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7.5)
-                .background(isPlaying ? WalkmanTheme.silverGradient : LinearGradient(colors: [Color.white.opacity(0.12), Color.white.opacity(0.08)], startPoint: .top, endPoint: .bottom))
-                .foregroundStyle(isPlaying ? Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255) : .white)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .stroke(Color.white.opacity(0.12), lineWidth: 0.8)
-                )
-            }
-            .buttonStyle(.plain)
         }
         .padding(12)
         .liquidGlass(cornerRadius: 12)
@@ -540,66 +519,86 @@ public struct TrimAndCutSheet: View {
     // MARK: - Mode Selector Deck
     private var modeSelectorDeck: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
-                // Trim Mode Option
-                Button(action: { mode = .trim }) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "scissors")
-                            .font(.system(size: 15, weight: .semibold))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Trim Mode")
-                                .font(WalkmanFont.headline)
-                            Text("Keep Selection [Start → End]")
-                                .font(WalkmanFont.mono)
-                                .opacity(0.85)
+            HStack(spacing: 6) {
+                // Outer Track
+                HStack(spacing: 4) {
+                    // Trim Mode Option
+                    Button(action: {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.75)) {
+                            mode = .trim
                         }
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "scissors")
+                                .font(.system(size: 13, weight: .semibold))
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("Trim Mode")
+                                    .font(WalkmanFont.headline)
+                                Text("Keep Selected [Start → End]")
+                                    .font(WalkmanFont.monoSmall)
+                                    .opacity(0.85)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 14)
+                        .background(mode == .trim ? WalkmanTheme.silverGradient : LinearGradient(colors: [Color.clear], startPoint: .top, endPoint: .bottom))
+                        .foregroundStyle(mode == .trim ? Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255) : Color.white.opacity(0.75))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(mode == .trim ? Color.clear : Color.white.opacity(0.06), lineWidth: 0.8)
+                        )
+                        .shadow(color: Color.black.opacity(mode == .trim ? 0.20 : 0), radius: 3, y: 1)
+                        .contentShape(Rectangle())
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 11)
-                    .padding(.horizontal, 16)
-                    .background(mode == .trim ? WalkmanTheme.silverGradient : LinearGradient(colors: [Color.white.opacity(0.05), Color.white.opacity(0.02)], startPoint: .top, endPoint: .bottom))
-                    .foregroundStyle(mode == .trim ? Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255) : .white)
-                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .stroke(mode == .trim ? Color.clear : Color.white.opacity(0.10), lineWidth: 1)
-                    )
-                    .shadow(color: Color.black.opacity(mode == .trim ? 0.20 : 0), radius: 3, y: 1)
-                }
-                .buttonStyle(.plain)
+                    .buttonStyle(.plain)
 
-                // Cut Mode Option
-                Button(action: { mode = .cut }) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "scissors.badge.ellipsis")
-                            .font(.system(size: 15, weight: .semibold))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Cut Mode")
-                                .font(WalkmanFont.headline)
-                            Text("Remove Selection & Splice")
-                                .font(WalkmanFont.mono)
-                                .opacity(0.85)
+                    // Cut Mode Option
+                    Button(action: {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.75)) {
+                            mode = .cut
                         }
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "scissors.badge.ellipsis")
+                                .font(.system(size: 13, weight: .semibold))
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("Cut Mode")
+                                    .font(WalkmanFont.headline)
+                                Text("Remove Selected & Splice")
+                                    .font(WalkmanFont.monoSmall)
+                                    .opacity(0.85)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 14)
+                        .background(mode == .cut ? WalkmanTheme.silverGradient : LinearGradient(colors: [Color.clear], startPoint: .top, endPoint: .bottom))
+                        .foregroundStyle(mode == .cut ? Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255) : Color.white.opacity(0.75))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(mode == .cut ? Color.clear : Color.white.opacity(0.06), lineWidth: 0.8)
+                        )
+                        .shadow(color: Color.black.opacity(mode == .cut ? 0.20 : 0), radius: 3, y: 1)
+                        .contentShape(Rectangle())
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 11)
-                    .padding(.horizontal, 16)
-                    .background(mode == .cut ? WalkmanTheme.silverGradient : LinearGradient(colors: [Color.white.opacity(0.05), Color.white.opacity(0.02)], startPoint: .top, endPoint: .bottom))
-                    .foregroundStyle(mode == .cut ? Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255) : .white)
-                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .stroke(mode == .cut ? Color.clear : Color.white.opacity(0.10), lineWidth: 1)
-                    )
-                    .shadow(color: Color.black.opacity(mode == .cut ? 0.20 : 0), radius: 3, y: 1)
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
+                .padding(3)
+                .background(Color.white.opacity(0.04))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 0.8)
+                )
             }
 
             // Description Helper
             HStack(spacing: 6) {
                 Image(systemName: "info.circle")
-                    .font(.system(size: 11.5))
+                    .font(.system(size: 11))
                     .foregroundStyle(WalkmanTheme.silverMuted)
                 Text(mode.description)
                     .font(WalkmanFont.body)
@@ -939,6 +938,7 @@ public struct TrimAndCutSheet: View {
                 )
             }
             .frame(height: 135)
+            .clipped()
 
             // Mathematically Precise Dynamic Timeline Ruler Canvas
             accurateTimelineRuler
@@ -1038,6 +1038,7 @@ public struct TrimAndCutSheet: View {
             )
         }
         .frame(height: 18)
+        .clipped()
     }
 
     // MARK: - Mathematically Precise Timeline Ruler Canvas
@@ -1114,6 +1115,7 @@ public struct TrimAndCutSheet: View {
             }
         }
         .frame(height: 20)
+        .clipped()
     }
 
     // MARK: - Zoom Pan Controls Bar
@@ -1219,141 +1221,152 @@ public struct TrimAndCutSheet: View {
         return windowStartTime + fraction * windowDuration
     }
 
-    // MARK: - Transport Deck with "Play from Start Marker"
+    // MARK: - In-Sheet Playback & Preview Transport Deck
     private var transportDeck: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 16) {
             // Playhead Time Readout
             VStack(alignment: .leading, spacing: 2) {
                 Text("PLAYHEAD")
                     .font(WalkmanFont.badge)
                     .foregroundStyle(WalkmanTheme.silverMuted)
-                Text(formatTime(currentTime))
-                    .font(Font.system(size: 15, weight: .bold, design: .monospaced))
-                    .foregroundStyle(.white)
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text(formatTime(currentTime))
+                        .font(Font.system(size: 16, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.white)
+                    Text("/ " + formatTime(totalDuration))
+                        .font(WalkmanFont.monoSmall)
+                        .foregroundStyle(.secondary)
+                }
             }
-            .frame(width: 95, alignment: .leading)
+            .frame(minWidth: 145, alignment: .leading)
 
             Spacer()
 
-            // Main Transport Buttons
-            HStack(spacing: 8) {
-                // Seek to 0:00
-                Button(action: { seekTo(time: 0) }) {
-                    Image(systemName: "backward.to.line.fill")
-                        .font(.system(size: 13))
-                }
-                .buttonStyle(.plain)
-                .help("Jump to beginning (0:00)")
-
-                // Jump Playhead to Start Marker
+            // Core Playback Transport Controls (Clean & Standard)
+            HStack(spacing: 10) {
+                // Jump to Start Marker
                 Button(action: { seekTo(time: startTime) }) {
-                    HStack(spacing: 3) {
-                        Image(systemName: "arrow.left.to.line.compact")
-                            .font(.system(size: 11, weight: .bold))
-                        Text("Start")
-                            .font(WalkmanFont.pillCounter)
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    Image(systemName: "backward.end.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .help("Jump playhead to Start Marker")
+                .buttonStyle(StudioTactileButtonStyle(
+                    bg: Color.white.opacity(0.06),
+                    hoverBg: Color.white.opacity(0.12),
+                    pressedBg: Color.white.opacity(0.18),
+                    fgColor: WalkmanTheme.silverLight,
+                    cornerRadius: 6
+                ))
+                .help("Jump playhead to Start Marker (\(formatTime(startTime)))")
 
                 // Step -5s
                 Button(action: { seekTo(time: max(0, currentTime - 5.0)) }) {
                     Image(systemName: "gobackward.5")
-                        .font(.system(size: 13))
+                        .font(.system(size: 14))
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(StudioTactileButtonStyle(
+                    bg: Color.white.opacity(0.06),
+                    hoverBg: Color.white.opacity(0.12),
+                    pressedBg: Color.white.opacity(0.18),
+                    fgColor: WalkmanTheme.silverLight,
+                    cornerRadius: 6
+                ))
                 .help("Rewind 5 seconds")
 
-                // Main Play / Pause
+                // Main Play / Pause Button
                 Button(action: togglePlayPause) {
-                    Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 34))
-                        .foregroundStyle(WalkmanTheme.silverGradient)
-                        .shadow(color: Color.black.opacity(0.25), radius: 3, y: 1)
+                    ZStack {
+                        Circle()
+                            .fill(WalkmanTheme.silverGradient)
+                            .frame(width: 40, height: 40)
+                            .shadow(color: Color.black.opacity(0.35), radius: 4, y: 1.5)
+
+                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255))
+                            .offset(x: isPlaying ? 0 : 1)
+                    }
+                    .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
-                .help("Play / Pause from current playhead (Space)")
+                .keyboardShortcut(.space, modifiers: [])
+                .help("Play / Pause from current position (Space)")
 
                 // Step +5s
                 Button(action: { seekTo(time: min(totalDuration, currentTime + 5.0)) }) {
                     Image(systemName: "goforward.5")
-                        .font(.system(size: 13))
+                        .font(.system(size: 14))
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(StudioTactileButtonStyle(
+                    bg: Color.white.opacity(0.06),
+                    hoverBg: Color.white.opacity(0.12),
+                    pressedBg: Color.white.opacity(0.18),
+                    fgColor: WalkmanTheme.silverLight,
+                    cornerRadius: 6
+                ))
                 .help("Forward 5 seconds")
 
-                // Jump Playhead to End Marker
+                // Jump to End Marker
                 Button(action: { seekTo(time: endTime) }) {
-                    HStack(spacing: 3) {
-                        Text("End")
-                            .font(WalkmanFont.pillCounter)
-                        Image(systemName: "arrow.right.to.line.compact")
-                            .font(.system(size: 11, weight: .bold))
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    Image(systemName: "forward.end.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .help("Jump playhead to End Marker")
+                .buttonStyle(StudioTactileButtonStyle(
+                    bg: Color.white.opacity(0.06),
+                    hoverBg: Color.white.opacity(0.12),
+                    pressedBg: Color.white.opacity(0.18),
+                    fgColor: WalkmanTheme.silverLight,
+                    cornerRadius: 6
+                ))
+                .help("Jump playhead to End Marker (\(formatTime(endTime)))")
             }
-            .foregroundStyle(WalkmanTheme.silverLight)
 
             Spacer()
 
-            // Play from Start Marker, Audition, and Loop Controls
-            HStack(spacing: 9) {
-                // Play from Start Marker Button
-                Button(action: playFromStartMarker) {
-                    HStack(spacing: 6) {
-                        Image(systemName: isPlayingFromStart ? "pause.fill" : "play.fill")
-                            .font(.system(size: 11, weight: .bold))
-                        Text(isPlayingFromStart ? "Playing Range" : "Play from Start Marker")
-                            .font(WalkmanFont.headline)
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7.5)
-                    .background(isPlayingFromStart ? WalkmanTheme.hiResGoldGradient : WalkmanTheme.silverGradient)
-                    .foregroundStyle(Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255))
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    .shadow(color: Color.black.opacity(0.20), radius: 2.5, y: 1)
-                }
-                .buttonStyle(.plain)
-                .help("Starts playback at the Start Marker and plays strictly between Start and End markers")
-
+            // Audition Result, Loop & Volume
+            HStack(spacing: 10) {
                 // Audition Result Button
                 Button(action: toggleAuditionResult) {
-                    HStack(spacing: 5) {
+                    HStack(spacing: 6) {
                         Image(systemName: isAuditioningResult ? "stop.fill" : (mode == .trim ? "waveform.badge.magnifyingglass" : "scissors"))
-                            .font(.system(size: 10, weight: .bold))
-                        Text(isAuditioningResult ? "Stop" : (mode == .trim ? "Audition" : "Cut Audition"))
+                            .font(.system(size: 11, weight: .bold))
+                        Text(isAuditioningResult ? "Stop Audition" : (mode == .trim ? "Audition Trim" : "Audition Cut"))
                             .font(WalkmanFont.bodyMedium)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7.5)
+                    .padding(.horizontal, 13)
+                    .padding(.vertical, 7)
                     .background(isAuditioningResult ? WalkmanTheme.hiResGoldGradient : LinearGradient(colors: [Color.white.opacity(0.10), Color.white.opacity(0.06)], startPoint: .top, endPoint: .bottom))
                     .foregroundStyle(isAuditioningResult ? Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255) : .white)
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
+                            .stroke(isAuditioningResult ? Color.clear : Color.white.opacity(0.10), lineWidth: 0.8)
                     )
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(mode == .trim ? "Play strictly the selected region [Start → End]" : "Play track preview with the cut section skipped!")
+                .help(mode == .trim ? "Audition trimmed result with fades & effects applied" : "Audition track with the cut section skipped")
 
                 // Loop Toggle
                 Button(action: { isLoopingSelection.toggle() }) {
                     Image(systemName: isLoopingSelection ? "repeat.1" : "repeat")
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(isLoopingSelection ? WalkmanTheme.hiResGoldLight : .secondary)
-                        .frame(width: 26, height: 26)
+                        .frame(width: 28, height: 28)
+                        .background(isLoopingSelection ? WalkmanTheme.hiResGold.opacity(0.15) : Color.white.opacity(0.04))
+                        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .stroke(isLoopingSelection ? WalkmanTheme.hiResGoldLight.opacity(0.4) : Color.white.opacity(0.08), lineWidth: 0.8)
+                        )
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help("Loop playback continuously between Start and End markers")
@@ -1371,31 +1384,47 @@ public struct TrimAndCutSheet: View {
                 }
             }
         }
-        .padding(12)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
         .liquidGlass(cornerRadius: 12)
     }
 
-    // MARK: - Marker Stepper Controls (2 Columns)
+    // MARK: - Marker Fine-Tuning Deck (2 Symmetrical Columns)
     private var markerControlsDeck: some View {
         HStack(spacing: 12) {
             // Start Marker Card
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Image(systemName: "chevron.right.square.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(WalkmanTheme.hiResGoldLight)
-                    Text("START MARKER")
-                        .font(WalkmanFont.badge)
-                        .foregroundStyle(WalkmanTheme.silverMuted)
+                    HStack(spacing: 6) {
+                        Image(systemName: "chevron.right.square.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(WalkmanTheme.hiResGoldLight)
+                        Text("START MARKER")
+                            .font(WalkmanFont.badge)
+                            .foregroundStyle(WalkmanTheme.silverMuted)
+                    }
 
                     Spacer()
 
-                    Button("Set to 0:00") {
-                        startTime = 0.0
+                    Button(action: { adjustStartTime(by: -startTime) }) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "arrow.counterclockwise")
+                                .font(.system(size: 9))
+                            Text("Reset (0:00)")
+                                .font(WalkmanFont.monoSmall)
+                        }
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3.5)
+                        .contentShape(Rectangle())
                     }
-                    .font(WalkmanFont.mono)
-                    .buttonStyle(.plain)
-                    .foregroundStyle(WalkmanTheme.silverLight)
+                    .buttonStyle(StudioTactileButtonStyle(
+                        bg: Color.white.opacity(0.04),
+                        hoverBg: Color.white.opacity(0.12),
+                        pressedBg: Color.white.opacity(0.20),
+                        fgColor: WalkmanTheme.silverLight,
+                        cornerRadius: 4
+                    ))
+                    .help("Reset Start Marker to beginning (0:00.000)")
                 }
 
                 HStack(alignment: .center) {
@@ -1405,47 +1434,40 @@ public struct TrimAndCutSheet: View {
 
                     Spacer()
 
-                    // Play from Start Marker shortcut
-                    Button(action: playFromStartMarker) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "play.fill")
-                                .font(.system(size: 10))
-                            Text("Play Here")
-                        }
-                        .font(WalkmanFont.bodyMedium)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(WalkmanTheme.hiResGoldGradient)
-                        .foregroundStyle(Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255))
-                        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Seek playhead to Start Marker and play")
-
-                    Button(action: { startTime = max(0, min(currentTime, endTime - 0.01)) }) {
-                        HStack(spacing: 4) {
+                    // Single clean button: Set to Playhead
+                    Button(action: {
+                        adjustStartTime(by: currentTime - startTime)
+                        seekTo(time: startTime)
+                    }) {
+                        HStack(spacing: 5) {
                             Image(systemName: "mappin.and.ellipse")
-                                .font(.system(size: 10))
-                            Text("Playhead")
+                                .font(.system(size: 11))
+                                .foregroundStyle(WalkmanTheme.hiResGoldLight)
+                            Text("Set to Playhead")
+                                .font(WalkmanFont.bodyMedium)
                         }
-                        .font(WalkmanFont.bodyMedium)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 5.5)
+                        .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .help("Set Start Marker to current playback cursor")
+                    .buttonStyle(StudioTactileButtonStyle(
+                        bg: Color.white.opacity(0.08),
+                        hoverBg: Color.white.opacity(0.16),
+                        pressedBg: Color.white.opacity(0.24),
+                        fgColor: .white,
+                        cornerRadius: 6
+                    ))
+                    .help("Set Start Marker to current Playhead cursor (\(formatTime(currentTime)))")
                 }
 
                 // Fine-tuning buttons
                 HStack(spacing: 5) {
-                    stepperBtn(title: "-5s") { startTime = max(0, startTime - 5.0) }
-                    stepperBtn(title: "-1s") { startTime = max(0, startTime - 1.0) }
-                    stepperBtn(title: "-0.1s") { startTime = max(0, startTime - 0.1) }
-                    stepperBtn(title: "+0.1s") { startTime = min(endTime - 0.05, startTime + 0.1) }
-                    stepperBtn(title: "+1s") { startTime = min(endTime - 0.05, startTime + 1.0) }
-                    stepperBtn(title: "+5s") { startTime = min(endTime - 0.05, startTime + 5.0) }
+                    stepperBtn(title: "-5s") { adjustStartTime(by: -5.0) }
+                    stepperBtn(title: "-1s") { adjustStartTime(by: -1.0) }
+                    stepperBtn(title: "-0.1s") { adjustStartTime(by: -0.1) }
+                    stepperBtn(title: "+0.1s") { adjustStartTime(by: 0.1) }
+                    stepperBtn(title: "+1s") { adjustStartTime(by: 1.0) }
+                    stepperBtn(title: "+5s") { adjustStartTime(by: 5.0) }
                 }
             }
             .padding(12)
@@ -1454,21 +1476,36 @@ public struct TrimAndCutSheet: View {
             // End Marker Card
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Image(systemName: "chevron.left.square.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(WalkmanTheme.hiResGoldLight)
-                    Text("END MARKER")
-                        .font(WalkmanFont.badge)
-                        .foregroundStyle(WalkmanTheme.silverMuted)
+                    HStack(spacing: 6) {
+                        Image(systemName: "chevron.left.square.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(WalkmanTheme.hiResGoldLight)
+                        Text("END MARKER")
+                            .font(WalkmanFont.badge)
+                            .foregroundStyle(WalkmanTheme.silverMuted)
+                    }
 
                     Spacer()
 
-                    Button("Set to End") {
-                        endTime = totalDuration
+                    Button(action: { adjustEndTime(by: totalDuration - endTime) }) {
+                        HStack(spacing: 3) {
+                            Text("Set to End")
+                                .font(WalkmanFont.monoSmall)
+                            Image(systemName: "arrow.forward.to.line")
+                                .font(.system(size: 9))
+                        }
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3.5)
+                        .contentShape(Rectangle())
                     }
-                    .font(WalkmanFont.mono)
-                    .buttonStyle(.plain)
-                    .foregroundStyle(WalkmanTheme.silverLight)
+                    .buttonStyle(StudioTactileButtonStyle(
+                        bg: Color.white.opacity(0.04),
+                        hoverBg: Color.white.opacity(0.12),
+                        pressedBg: Color.white.opacity(0.20),
+                        fgColor: WalkmanTheme.silverLight,
+                        cornerRadius: 4
+                    ))
+                    .help("Set End Marker to track end (\(formatTime(totalDuration)))")
                 }
 
                 HStack(alignment: .center) {
@@ -1478,47 +1515,40 @@ public struct TrimAndCutSheet: View {
 
                     Spacer()
 
-                    // Play Pre-roll shortcut
-                    Button(action: playPreRollToEnd) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "play.fill")
-                                .font(.system(size: 10))
-                            Text("Last 3s")
-                        }
-                        .font(WalkmanFont.bodyMedium)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(Color.white.opacity(0.12))
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Play the last 3 seconds leading up to End Marker to check cut boundary")
-
-                    Button(action: { endTime = min(totalDuration, max(currentTime, startTime + 0.01)) }) {
-                        HStack(spacing: 4) {
+                    // Single clean button: Set to Playhead
+                    Button(action: {
+                        adjustEndTime(by: currentTime - endTime)
+                        seekTo(time: endTime)
+                    }) {
+                        HStack(spacing: 5) {
                             Image(systemName: "mappin.and.ellipse")
-                                .font(.system(size: 10))
-                            Text("Playhead")
+                                .font(.system(size: 11))
+                                .foregroundStyle(WalkmanTheme.hiResGoldLight)
+                            Text("Set to Playhead")
+                                .font(WalkmanFont.bodyMedium)
                         }
-                        .font(WalkmanFont.bodyMedium)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 5.5)
+                        .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .help("Set End Marker to current playback cursor")
+                    .buttonStyle(StudioTactileButtonStyle(
+                        bg: Color.white.opacity(0.08),
+                        hoverBg: Color.white.opacity(0.16),
+                        pressedBg: Color.white.opacity(0.24),
+                        fgColor: .white,
+                        cornerRadius: 6
+                    ))
+                    .help("Set End Marker to current Playhead cursor (\(formatTime(currentTime)))")
                 }
 
                 // Fine-tuning buttons
                 HStack(spacing: 5) {
-                    stepperBtn(title: "-5s") { endTime = max(startTime + 0.05, endTime - 5.0) }
-                    stepperBtn(title: "-1s") { endTime = max(startTime + 0.05, endTime - 1.0) }
-                    stepperBtn(title: "-0.1s") { endTime = max(startTime + 0.05, endTime - 0.1) }
-                    stepperBtn(title: "+0.1s") { endTime = min(totalDuration, endTime + 0.1) }
-                    stepperBtn(title: "+1s") { endTime = min(totalDuration, endTime + 1.0) }
-                    stepperBtn(title: "+5s") { endTime = min(totalDuration, endTime + 5.0) }
+                    stepperBtn(title: "-5s") { adjustEndTime(by: -5.0) }
+                    stepperBtn(title: "-1s") { adjustEndTime(by: -1.0) }
+                    stepperBtn(title: "-0.1s") { adjustEndTime(by: -0.1) }
+                    stepperBtn(title: "+0.1s") { adjustEndTime(by: 0.1) }
+                    stepperBtn(title: "+1s") { adjustEndTime(by: 1.0) }
+                    stepperBtn(title: "+5s") { adjustEndTime(by: 5.0) }
                 }
             }
             .padding(12)
@@ -1533,14 +1563,64 @@ public struct TrimAndCutSheet: View {
                 .fontWeight(.medium)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 7)
-                .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .stroke(Color.white.opacity(0.08), lineWidth: 0.8)
-                )
+                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(StudioTactileButtonStyle(
+            bg: Color.white.opacity(0.06),
+            hoverBg: Color.white.opacity(0.14),
+            pressedBg: Color.white.opacity(0.24),
+            fgColor: .white,
+            cornerRadius: 5
+        ))
+    }
+
+
+    private func adjustStartTime(by delta: Double) {
+        let newStart = max(0.0, min(endTime - 0.05, startTime + delta))
+        startTime = newStart
+        dspController.startTime = newStart
+
+        // Move the playhead to the adjusted start marker so user sees and hears the adjustment!
+        if !isPlaying {
+            seekTo(time: newStart)
+        }
+
+        // When zoomed in, keep the start marker visible inside viewport
+        if zoomScale > 1.01 {
+            if newStart < windowStartTime {
+                withAnimation(.easeOut(duration: 0.15)) {
+                    windowStartTime = max(0.0, newStart - windowDuration * 0.1)
+                }
+            } else if newStart > windowStartTime + windowDuration {
+                withAnimation(.easeOut(duration: 0.15)) {
+                    windowStartTime = min(maxWindowStartTime, newStart - windowDuration * 0.9)
+                }
+            }
+        }
+    }
+
+    private func adjustEndTime(by delta: Double) {
+        let newEnd = max(startTime + 0.05, min(totalDuration, endTime + delta))
+        endTime = newEnd
+        dspController.endTime = newEnd
+
+        // Move the playhead to the adjusted end marker so user sees and hears the boundary!
+        if !isPlaying {
+            seekTo(time: newEnd)
+        }
+
+        // When zoomed in, keep the end marker visible inside viewport
+        if zoomScale > 1.01 {
+            if newEnd > windowStartTime + windowDuration {
+                withAnimation(.easeOut(duration: 0.15)) {
+                    windowStartTime = min(maxWindowStartTime, newEnd - windowDuration * 0.9)
+                }
+            } else if newEnd < windowStartTime {
+                withAnimation(.easeOut(duration: 0.15)) {
+                    windowStartTime = max(0.0, newEnd - windowDuration * 0.1)
+                }
+            }
+        }
     }
 
     // MARK: - Duration Metrics Strip
@@ -1600,112 +1680,48 @@ public struct TrimAndCutSheet: View {
                 .foregroundStyle(WalkmanTheme.silverMuted)
 
             HStack(spacing: 12) {
-                // Channel Routing Selector
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Image(systemName: channelMode.icon)
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(WalkmanTheme.silverLight)
-                        Text("Channel Configuration")
-                            .font(WalkmanFont.bodyMedium)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Picker("", selection: $channelMode) {
-                        ForEach(AudioChannelMode.allCases) { opt in
-                            Text(opt.title).tag(opt)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-
-                    // Visual routing indicator
+                // Left Card: Channels & Level
+                VStack(alignment: .leading, spacing: 9) {
                     HStack(spacing: 6) {
-                        switch channelMode {
-                        case .original:
-                            Text("Source layout preserved (\(sourceChannels == 1 ? "Mono" : "Stereo"))")
-                        case .swapLR:
-                            Text("Swaps channels: [ Left ] ⇄ [ Right ]")
-                                .foregroundStyle(WalkmanTheme.hiResGoldLight)
-                        case .mono:
-                            Text("Downmixes to 1-channel Mono: [ (L + R) / 2 ]")
-                                .foregroundStyle(WalkmanTheme.silverLight)
-                        case .stereo:
-                            Text("Forces 2-channel Stereo output")
-                        case .leftOnly:
-                            Text("Duplicates Left channel: [ L ] → Both Ears")
-                        case .rightOnly:
-                            Text("Duplicates Right channel: [ R ] → Both Ears")
-                        case .muteLeft:
-                            Text("Mutes Left channel: [ Muted ] | [ Right ]")
-                                .foregroundStyle(Color.red.opacity(0.85))
-                        case .muteRight:
-                            Text("Mutes Right channel: [ Left ] | [ Muted ]")
-                                .foregroundStyle(Color.red.opacity(0.85))
-                        case .invertPhase:
-                            Text("Inverts electrical phase: -180° Polarity Flip")
-                                .foregroundStyle(Color.orange)
-                        }
+                        Image(systemName: "speaker.wave.2.fill")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(WalkmanTheme.hiResGoldLight)
+                        Text("AUDIO CHANNELS & LEVEL")
+                            .font(WalkmanFont.badge)
+                            .foregroundStyle(WalkmanTheme.silverLight)
+                        Spacer()
                     }
-                    .font(WalkmanFont.monoSmall)
-                    .foregroundStyle(.tertiary)
-                    .padding(.top, 2)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
-                .background(Color.white.opacity(0.04))
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
 
-                // Fades & Transitions
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Smooth Transitions (Fades)")
-                        .font(WalkmanFont.bodyMedium)
-                        .foregroundStyle(.secondary)
-
-                    HStack(spacing: 10) {
-                        // Fade In
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Fade In")
+                    HStack(spacing: 12) {
+                        // Channel Mode Column
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("CHANNEL CONFIGURATION")
                                 .font(WalkmanFont.badge)
                                 .foregroundStyle(WalkmanTheme.silverMuted)
-                            Picker("", selection: $fadeInDuration) {
-                                Text("None (0s)").tag(0.0)
-                                Text("0.10s").tag(0.10)
-                                Text("0.25s").tag(0.25)
-                                Text("0.50s").tag(0.50)
-                                Text("1.00s").tag(1.00)
-                                Text("2.00s").tag(2.00)
-                                Text("3.00s").tag(3.00)
-                                Text("5.00s").tag(5.00)
+
+                            Picker("", selection: $channelMode) {
+                                ForEach(AudioChannelMode.allCases) { opt in
+                                    Text(opt.title).tag(opt)
+                                }
                             }
                             .labelsHidden()
                             .pickerStyle(.menu)
-                        }
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
-                        // Fade Out
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Fade Out")
+                            Text(channelModeSubtitle)
+                                .font(WalkmanFont.monoSmall)
+                                .foregroundStyle(channelMode == .original ? Color.secondary : WalkmanTheme.hiResGoldLight)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                        // Gain / Boost Column
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("GAIN / BOOST")
                                 .font(WalkmanFont.badge)
                                 .foregroundStyle(WalkmanTheme.silverMuted)
-                            Picker("", selection: $fadeOutDuration) {
-                                Text("None (0s)").tag(0.0)
-                                Text("0.10s").tag(0.10)
-                                Text("0.25s").tag(0.25)
-                                Text("0.50s").tag(0.50)
-                                Text("1.00s").tag(1.00)
-                                Text("2.00s").tag(2.00)
-                                Text("3.00s").tag(3.00)
-                                Text("5.00s").tag(5.00)
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                        }
 
-                        // Gain / Boost
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Gain / Boost")
-                                .font(WalkmanFont.badge)
-                                .foregroundStyle(WalkmanTheme.silverMuted)
                             Picker("", selection: $gainDb) {
                                 Text("-12 dB").tag(-12.0)
                                 Text("-6 dB").tag(-6.0)
@@ -1720,17 +1736,159 @@ public struct TrimAndCutSheet: View {
                             }
                             .labelsHidden()
                             .pickerStyle(.menu)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                            Text(gainSubtitle)
+                                .font(WalkmanFont.monoSmall)
+                                .foregroundStyle(gainDb == 0 ? Color.secondary : (gainDb > 0 ? Color.green : Color.orange))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .padding(12)
                 .background(Color.white.opacity(0.04))
                 .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
+
+                // Right Card: Smooth Transitions (Fades)
+                VStack(alignment: .leading, spacing: 9) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "waveform.path")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(WalkmanTheme.hiResGoldLight)
+                        Text("SMOOTH TRANSITIONS (FADES)")
+                            .font(WalkmanFont.badge)
+                            .foregroundStyle(WalkmanTheme.silverLight)
+                        Spacer()
+                    }
+
+                    HStack(spacing: 12) {
+                        // Fade In Column
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("FADE IN")
+                                .font(WalkmanFont.badge)
+                                .foregroundStyle(WalkmanTheme.silverMuted)
+
+                            Picker("", selection: $fadeInDuration) {
+                                Text("None (0s)").tag(0.0)
+                                Text("0.10s").tag(0.10)
+                                Text("0.25s").tag(0.25)
+                                Text("0.50s").tag(0.50)
+                                Text("1.00s").tag(1.00)
+                                Text("2.00s").tag(2.00)
+                                Text("3.00s").tag(3.00)
+                                Text("5.00s").tag(5.00)
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                            Text(fadeInSubtitle)
+                                .font(WalkmanFont.monoSmall)
+                                .foregroundStyle(fadeInDuration == 0 ? Color.secondary : WalkmanTheme.hiResGoldLight)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                        // Fade Out Column
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("FADE OUT")
+                                .font(WalkmanFont.badge)
+                                .foregroundStyle(WalkmanTheme.silverMuted)
+
+                            Picker("", selection: $fadeOutDuration) {
+                                Text("None (0s)").tag(0.0)
+                                Text("0.10s").tag(0.10)
+                                Text("0.25s").tag(0.25)
+                                Text("0.50s").tag(0.50)
+                                Text("1.00s").tag(1.00)
+                                Text("2.00s").tag(2.00)
+                                Text("3.00s").tag(3.00)
+                                Text("5.00s").tag(5.00)
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                            Text(fadeOutSubtitle)
+                                .font(WalkmanFont.monoSmall)
+                                .foregroundStyle(fadeOutDuration == 0 ? Color.secondary : WalkmanTheme.hiResGoldLight)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(12)
+                .background(Color.white.opacity(0.04))
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
             }
         }
         .padding(14)
         .liquidGlass(cornerRadius: 12)
+    }
+
+    private var channelModeSubtitle: String {
+        switch channelMode {
+        case .original:
+            return "Preserve layout (\(sourceChannels == 1 ? "Mono" : "Stereo"))"
+        case .swapLR:
+            return "Stereo: [ Left ] ⇄ [ Right ]"
+        case .mono:
+            return "Downmix: [ (L + R) / 2 ]"
+        case .stereo:
+            return "Force 2-channel stereo"
+        case .leftOnly:
+            return "Duplicate: [ L ] → Both Ears"
+        case .rightOnly:
+            return "Duplicate: [ R ] → Both Ears"
+        case .muteLeft:
+            return "Mute Left: [ Off ] | [ Right ]"
+        case .muteRight:
+            return "Mute Right: [ Left ] | [ Off ]"
+        case .invertPhase:
+            return "Invert phase: -180° polarity"
+        }
+    }
+
+    private var gainSubtitle: String {
+        if gainDb == 0 {
+            return "0 dB (Unity level / 1.0x)"
+        } else if gainDb > 0 {
+            let mult = pow(10.0, gainDb / 20.0)
+            return String(format: "+%.0f dB (%.1fx volume boost)", gainDb, mult)
+        } else {
+            let mult = pow(10.0, gainDb / 20.0)
+            return String(format: "%.0f dB (%.2fx attenuation)", gainDb, mult)
+        }
+    }
+
+    private var fadeInSubtitle: String {
+        if fadeInDuration == 0 {
+            return "None (Immediate start)"
+        } else {
+            return String(format: "%.2fs linear attack fade", fadeInDuration)
+        }
+    }
+
+    private var fadeOutSubtitle: String {
+        if fadeOutDuration == 0 {
+            return "None (Immediate end)"
+        } else {
+            return String(format: "%.2fs linear release fade", fadeOutDuration)
+        }
     }
 
     // MARK: - Destination Deck
@@ -1838,10 +1996,14 @@ public struct TrimAndCutSheet: View {
             .font(WalkmanFont.bodyMedium)
             .padding(.horizontal, 20)
             .padding(.vertical, 8.5)
-            .background(Color.white.opacity(0.08))
-            .foregroundStyle(.secondary)
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+            .buttonStyle(StudioTactileButtonStyle(
+                bg: Color.white.opacity(0.08),
+                hoverBg: Color.white.opacity(0.14),
+                pressedBg: Color.white.opacity(0.20),
+                fgColor: .secondary,
+                cornerRadius: 7
+            ))
             .disabled(isProcessing)
 
             Button(action: executeProcess) {
@@ -1850,7 +2012,7 @@ public struct TrimAndCutSheet: View {
                         ProgressView()
                             .scaleEffect(0.65)
                             .frame(width: 14, height: 14)
-                        Text("Processing...")
+                        Text(statusMessage ?? "Processing...")
                     } else {
                         Image(systemName: "checkmark")
                             .font(.system(size: 12, weight: .bold))
@@ -1860,12 +2022,9 @@ public struct TrimAndCutSheet: View {
                 .font(WalkmanFont.headline)
                 .padding(.horizontal, 24)
                 .padding(.vertical, 9.5)
-                .background(WalkmanTheme.silverGradient)
-                .foregroundStyle(Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255))
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .shadow(color: Color.black.opacity(0.25), radius: 4, y: 1.5)
+                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(StudioTactileGoldButtonStyle(cornerRadius: 7))
             .disabled(isProcessing)
             .keyboardShortcut(.defaultAction)
         }
@@ -1995,7 +2154,7 @@ public struct TrimAndCutSheet: View {
             }
 
             // Check boundary limits during playback
-            if self.isPlayingFromStart || self.isAuditioningResult {
+            if self.isAuditioningResult {
                 if self.mode == .trim {
                     if cur >= self.endTime {
                         if self.isLoopingSelection {
@@ -2003,7 +2162,6 @@ public struct TrimAndCutSheet: View {
                         } else {
                             self.previewPlayer?.pause()
                             self.isPlaying = false
-                            self.isPlayingFromStart = false
                             self.isAuditioningResult = false
                             self.dspController.isAuditioning = false
                             self.dspController.isPlaying = false
@@ -2020,7 +2178,6 @@ public struct TrimAndCutSheet: View {
                         } else {
                             self.previewPlayer?.pause()
                             self.isPlaying = false
-                            self.isPlayingFromStart = false
                             self.isAuditioningResult = false
                             self.dspController.isAuditioning = false
                             self.dspController.isPlaying = false
@@ -2051,9 +2208,9 @@ public struct TrimAndCutSheet: View {
             timeObserverToken = nil
         }
         previewPlayer?.pause()
+        previewPlayer?.replaceCurrentItem(with: nil)
         previewPlayer = nil
         isPlaying = false
-        isPlayingFromStart = false
         isAuditioningResult = false
         dspController.isAuditioning = false
         dspController.isPlaying = false
@@ -2061,7 +2218,6 @@ public struct TrimAndCutSheet: View {
 
     private func togglePlayPause() {
         guard let p = previewPlayer else { return }
-        isPlayingFromStart = false
         isAuditioningResult = false
         dspController.isAuditioning = false
         if isPlaying {
@@ -2079,53 +2235,16 @@ public struct TrimAndCutSheet: View {
         }
     }
 
-    /// Plays audio starting exactly at the Start Marker and tracks to the End Marker
-    private func playFromStartMarker() {
-        guard let p = previewPlayer else { return }
-        if isPlayingFromStart && isPlaying {
-            p.pause()
-            isPlaying = false
-            isPlayingFromStart = false
-            dspController.isAuditioning = false
-            dspController.isPlaying = false
-        } else {
-            isPlayingFromStart = true
-            isAuditioningResult = true
-            dspController.isAuditioning = true
-            dspController.isPlaying = true
-            seekTo(time: startTime)
-            centerOnStartMarker()
-            p.play()
-            isPlaying = true
-        }
-    }
-
-    /// Plays pre-roll (last 3 seconds) before the End Marker to audition boundary
-    private func playPreRollToEnd() {
-        guard let p = previewPlayer else { return }
-        isPlayingFromStart = true
-        isAuditioningResult = true
-        dspController.isAuditioning = true
-        dspController.isPlaying = true
-        let preRollTime = max(startTime, endTime - 3.0)
-        seekTo(time: preRollTime)
-        centerOnEndMarker()
-        p.play()
-        isPlaying = true
-    }
-
     private func toggleAuditionResult() {
         guard let p = previewPlayer else { return }
         if isAuditioningResult && isPlaying {
             p.pause()
             isPlaying = false
             isAuditioningResult = false
-            isPlayingFromStart = false
             dspController.isAuditioning = false
             dspController.isPlaying = false
         } else {
             isAuditioningResult = true
-            isPlayingFromStart = true
             dspController.isAuditioning = true
             dspController.isPlaying = true
             if mode == .trim {
@@ -2151,11 +2270,8 @@ public struct TrimAndCutSheet: View {
     private func executeProcess() {
         guard !isProcessing else { return }
 
-        // Pause preview player before processing
-        previewPlayer?.pause()
-        isPlaying = false
-        isPlayingFromStart = false
-        isAuditioningResult = false
+        // Completely release preview audio player and open file locks before processing
+        teardownPlayer()
 
         errorMessage = nil
         statusMessage = "Preparing audio processor..."
@@ -2234,6 +2350,8 @@ public struct TrimAndCutSheet: View {
                     self.isProcessing = false
                     self.statusMessage = nil
                     self.errorMessage = error.localizedDescription
+                    // Re-setup preview player so user can continue editing or retry
+                    self.setupInitialState()
                 }
             }
         }
@@ -2286,6 +2404,109 @@ private struct SheetCloseButton: View {
                 isHovered = h
             }
             if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+    }
+}
+
+// MARK: - Studio Tactile Button Styles (Full-Frame Interactive Hit-Testing)
+private struct StudioTactileButtonStyle: ButtonStyle {
+    var bg: Color = Color.white.opacity(0.07)
+    var hoverBg: Color = Color.white.opacity(0.14)
+    var pressedBg: Color = Color.white.opacity(0.24)
+    var fgColor: Color = .white
+    var cornerRadius: CGFloat = 5
+    var borderNormal: Color = Color.white.opacity(0.09)
+    var borderHover: Color = Color.white.opacity(0.26)
+
+    func makeBody(configuration: Configuration) -> some View {
+        StudioTactileButtonBody(
+            configuration: configuration,
+            bg: bg,
+            hoverBg: hoverBg,
+            pressedBg: pressedBg,
+            fgColor: fgColor,
+            cornerRadius: cornerRadius,
+            borderNormal: borderNormal,
+            borderHover: borderHover
+        )
+    }
+
+    private struct StudioTactileButtonBody: View {
+        let configuration: Configuration
+        let bg: Color
+        let hoverBg: Color
+        let pressedBg: Color
+        let fgColor: Color
+        let cornerRadius: CGFloat
+        let borderNormal: Color
+        let borderHover: Color
+
+        @State private var isHovered: Bool = false
+
+        var body: some View {
+            configuration.label
+                .foregroundStyle(fgColor)
+                .background(
+                    configuration.isPressed ? pressedBg : (isHovered ? hoverBg : bg)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .stroke(isHovered ? borderHover : borderNormal, lineWidth: 0.8)
+                )
+                .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+                .contentShape(Rectangle())
+                .onHover { hovering in
+                    guard isHovered != hovering else { return }
+                    isHovered = hovering
+                    if hovering {
+                        NSCursor.pointingHand.push()
+                    } else {
+                        NSCursor.pop()
+                    }
+                }
+                .animation(.easeOut(duration: 0.10), value: configuration.isPressed)
+                .animation(.easeOut(duration: 0.12), value: isHovered)
+        }
+    }
+}
+
+private struct StudioTactileGoldButtonStyle: ButtonStyle {
+    var cornerRadius: CGFloat = 5
+
+    func makeBody(configuration: Configuration) -> some View {
+        StudioTactileGoldButtonBody(configuration: configuration, cornerRadius: cornerRadius)
+    }
+
+    private struct StudioTactileGoldButtonBody: View {
+        let configuration: Configuration
+        let cornerRadius: CGFloat
+        @State private var isHovered: Bool = false
+
+        var body: some View {
+            configuration.label
+                .foregroundStyle(Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255))
+                .background(WalkmanTheme.hiResGoldGradient)
+                .opacity(configuration.isPressed ? 0.85 : 1.0)
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .stroke(WalkmanTheme.hiResGoldLight.opacity(isHovered ? 0.85 : 0.45), lineWidth: 0.8)
+                )
+                .scaleEffect(configuration.isPressed ? 0.95 : (isHovered ? 1.02 : 1.0))
+                .shadow(color: Color.black.opacity(isHovered ? 0.35 : 0.18), radius: isHovered ? 4 : 2, y: 1)
+                .contentShape(Rectangle())
+                .onHover { hovering in
+                    guard isHovered != hovering else { return }
+                    isHovered = hovering
+                    if hovering {
+                        NSCursor.pointingHand.push()
+                    } else {
+                        NSCursor.pop()
+                    }
+                }
+                .animation(.easeOut(duration: 0.10), value: configuration.isPressed)
+                .animation(.easeOut(duration: 0.12), value: isHovered)
         }
     }
 }

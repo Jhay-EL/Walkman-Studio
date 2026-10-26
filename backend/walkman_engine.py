@@ -746,6 +746,19 @@ def _get_cache_conn():
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cache_path ON tracks_cache(full_path)")
+    for col in [
+        ("date_added", "REAL DEFAULT 0"),
+        ("is_senseme", "INTEGER DEFAULT 0"),
+        ("senseme_bpm", "REAL DEFAULT 0"),
+        ("senseme_valence", "REAL DEFAULT 0"),
+        ("senseme_arousal", "REAL DEFAULT 0"),
+        ("senseme_channels", "TEXT DEFAULT ''"),
+        ("senseme_highlight_sec", "REAL DEFAULT 0"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE tracks_cache ADD COLUMN {col[0]} {col[1]}")
+        except sqlite3.OperationalError:
+            pass
     conn.commit()
     return conn
 
@@ -784,12 +797,37 @@ def _enrich_library_worker(pending_paths: List[str]):
                         bitrate = getattr(mut.info, "bitrate", 0)
                         sample_rate = getattr(mut.info, "sample_rate", 44100)
 
+                is_sm = 0
+                sm_bpm = 0.0
+                sm_val = 0.0
+                sm_aro = 0.0
+                sm_ch = ""
+                sm_hl = 0.0
+                try:
+                    from backend import senseme_engine
+                    sm_res = senseme_engine.is_senseme_analyzed(full_path)
+                    if sm_res.get("is_analyzed"):
+                        is_sm = 1
+                        sm_bpm = sm_res.get("bpm", 0.0)
+                        sm_val = sm_res.get("valence", 0.0)
+                        sm_aro = sm_res.get("arousal", 0.0)
+                        sm_ch = ",".join(sm_res.get("channels", []))
+                        sm_hl = sm_res.get("highlight_sec", 0.0)
+                except Exception:
+                    pass
+
                 updates.append((
                     round(duration, 2),
                     round(bitrate / 1000) if bitrate else 0,
                     sample_rate,
                     bits_per_sample,
                     1 if has_art else 0,
+                    is_sm,
+                    sm_bpm,
+                    sm_val,
+                    sm_aro,
+                    sm_ch,
+                    sm_hl,
                     full_path,
                 ))
                 if len(updates) >= 50:
@@ -799,7 +837,13 @@ def _enrich_library_worker(pending_paths: List[str]):
                             bitrate_kbps = ?,
                             sample_rate = ?,
                             bits_per_sample = ?,
-                            has_artwork = CASE WHEN has_artwork = 1 THEN 1 ELSE ? END
+                            has_artwork = CASE WHEN has_artwork = 1 THEN 1 ELSE ? END,
+                            is_senseme = ?,
+                            senseme_bpm = ?,
+                            senseme_valence = ?,
+                            senseme_arousal = ?,
+                            senseme_channels = ?,
+                            senseme_highlight_sec = ?
                         WHERE full_path = ?
                     """, updates)
                     conn.commit()
@@ -814,7 +858,13 @@ def _enrich_library_worker(pending_paths: List[str]):
                     bitrate_kbps = ?,
                     sample_rate = ?,
                     bits_per_sample = ?,
-                    has_artwork = CASE WHEN has_artwork = 1 THEN 1 ELSE ? END
+                    has_artwork = CASE WHEN has_artwork = 1 THEN 1 ELSE ? END,
+                    is_senseme = ?,
+                    senseme_bpm = ?,
+                    senseme_valence = ?,
+                    senseme_arousal = ?,
+                    senseme_channels = ?,
+                    senseme_highlight_sec = ?
                 WHERE full_path = ?
             """, updates)
             conn.commit()
@@ -838,7 +888,7 @@ def scan_walkman_library(drive_mount: str | Path) -> Dict[str, Any]:
 
     # Read existing cache into memory for instant lookup
     cursor.execute(
-        "SELECT full_path, mtime, size, format, title, artist, album, track_num, year, genre, duration_seconds, bitrate_kbps, sample_rate, bits_per_sample, has_artwork, relative_path FROM tracks_cache"
+        "SELECT full_path, mtime, size, format, title, artist, album, track_num, year, genre, duration_seconds, bitrate_kbps, sample_rate, bits_per_sample, has_artwork, relative_path, is_senseme, senseme_bpm, senseme_valence, senseme_arousal, senseme_channels, senseme_highlight_sec FROM tracks_cache"
     )
     cached_map = {row[0]: row for row in cursor.fetchall()}
 
@@ -867,7 +917,14 @@ def scan_walkman_library(drive_mount: str | Path) -> Dict[str, Any]:
             # 1. Fast Cache Hit Check
             cached = cached_map.get(full_path)
             if cached:
-                (_, mtime, size, fmt, title, artist, album, track_num, year, genre, duration, bitrate, sample_rate, bits_per_sample, has_art, rel_path) = cached
+                (_, mtime, size, fmt, title, artist, album, track_num, year, genre, duration, bitrate, sample_rate, bits_per_sample, has_art, rel_path) = cached[:16]
+                is_sm = cached[16] if len(cached) > 16 else 0
+                sm_bpm = cached[17] if len(cached) > 17 else 0.0
+                sm_val = cached[18] if len(cached) > 18 else 0.0
+                sm_aro = cached[19] if len(cached) > 19 else 0.0
+                sm_ch = [c for c in (cached[20] or "").split(",") if c] if len(cached) > 20 else []
+                sm_hl = cached[21] if len(cached) > 21 else 0.0
+
                 artists_set.add(artist)
                 albums_set.add(f"{artist} - {album}")
                 tracks.append({
@@ -887,6 +944,12 @@ def scan_walkman_library(drive_mount: str | Path) -> Dict[str, Any]:
                     "bits_per_sample": bits_per_sample,
                     "has_artwork": bool(has_art),
                     "size_bytes": size,
+                    "is_senseme": bool(is_sm),
+                    "senseme_bpm": sm_bpm,
+                    "senseme_valence": sm_val,
+                    "senseme_arousal": sm_aro,
+                    "senseme_channels": sm_ch,
+                    "senseme_highlight_sec": sm_hl,
                 })
                 if duration == 0.0:
                     enrich_queue.append(full_path)
