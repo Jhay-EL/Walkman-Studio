@@ -29,8 +29,35 @@
 - **File System Sanitation**: Paths on FAT32/exFAT drives must never contain invalid characters (`\ / : * ? " < > |`), and macOS AppleDouble dot-files (`._*`) / `.DS_Store` must be cleaned.
 
 ## 3. UI & Architecture Guidelines
-- **Track Detail Pane (Inspector Sidebar)**: View-only pane. Do not place analysis or destructive action buttons in this sidebar. Rich acoustic analysis (12 Tone / SenseMe) should only be displayed if the track is already analyzed.
+- **Track Detail Pane (Inspector Sidebar)**: View-only pane. Do not place analysis or destructive action buttons in this sidebar. Rich acoustic analysis (12 Tone / SenseMe) should only be displayed if the track is already analyzed. Do NOT add playback bars or scrubbers to this pane.
 - **Batch Operations**: Analysis, sync, and conversions belong in the Library toolbar, table context menus, and Transfer Queue.
 
 ## 4. No Screenshots / Snapshots Rule
 - **Zero Screenshots / Snapshots**: Do NOT take screenshots or UI snapshots of the app to confirm changes. The user will manually inspect and confirm changes in the running application to keep interactions fast and efficient.
+
+## 5. Track Detail Pane Layout Lock (Permanently Frozen)
+> [!IMPORTANT]
+> **DO NOT MODIFY THIS LAYOUT UNDER ANY CIRCUMSTANCES.**
+> The vertical layout, resting padding, safe area bypass, and scroll fade overlay of `MetadataStudioView` are finalized and permanently locked:
+> - **Top Padding**: Strictly `60pt` (`.padding(.top, 60)`), preserving an exact `42pt` gap between the window toolbar buttons (`y = 18pt`) and the track title.
+> - **Content Margins**: Strictly `.contentMargins(.top, 0, for: .scrollContent)`.
+> - **Safe Area Bypass**: Strictly `.ignoresSafeArea(edges: .top)` on `ScrollView`.
+> - **Top Fade Overlay**: Strictly a full-width linear gradient overlay with:
+>   ```swift
+>   .overlay(alignment: .top) {
+>       LinearGradient(
+>           stops: [
+>               .init(color: WalkmanTheme.background, location: 0.0),
+>               .init(color: WalkmanTheme.background, location: 0.65),
+>               .init(color: WalkmanTheme.background.opacity(0.0), location: 1.0)
+>           ],
+>           startPoint: .top,
+>           endPoint: .bottom
+>       )
+>       .frame(maxWidth: .infinity)
+>       .frame(height: 58)
+>       .allowsHitTesting(false)
+>       .ignoresSafeArea(edges: .top)
+>   }
+>   ```
+> - **Zero Playbar**: Never re-introduce `LiveMiniScrubber` or playback progress controls into the Track Detail Pane.
