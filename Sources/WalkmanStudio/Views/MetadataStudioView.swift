@@ -407,9 +407,6 @@ public struct MetadataStudioView: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         
-                        // Mini Playback Scrubber (isolated live leaf component)
-                        LiveMiniScrubber(trackId: tr.id)
-                        
                         // Audio Badges Row
                         HStack(spacing: 6) {
                             if isHiRes {
@@ -764,9 +761,11 @@ public struct MetadataStudioView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.top, 8)
+            .padding(.top, 10)
             .padding(.bottom, 24)
         }
+        .contentMargins(.top, 0, for: .scrollContent)
+        .ignoresSafeArea(edges: .top)
         .onAppear { loadTrack(force: true) }
         .onChange(of: track) { loadTrack(force: true) }
         .onReceive(NotificationCenter.default.publisher(for: .trackMetadataDidUpdate)) { notif in
@@ -934,57 +933,6 @@ private struct AudioSpecRow: View {
 
 
 // MARK: - Isolated Live Components
-
-private struct LiveMiniScrubber: View {
-    let trackId: String
-    @ObservedObject private var progress = AudioPlayerService.shared.progress
-    @ObservedObject private var player = AudioPlayerService.shared
-    
-    private func formatDuration(_ seconds: Double) -> String {
-        if seconds <= 0 { return "0:00" }
-        let mins = Int(seconds) / 60
-        let secs = Int(seconds) % 60
-        return String(format: "%d:%02d", mins, secs)
-    }
-    
-    var body: some View {
-        let isThisPlaying = (player.currentTrack?.id == trackId && player.isPlaying)
-        if isThisPlaying && progress.duration > 0 {
-            VStack(spacing: 4) {
-                GeometryReader { geo in
-                    let pct = max(0, min(1, progress.currentTime / max(progress.duration, 1)))
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(Color.white.opacity(0.12))
-                            .frame(height: 3)
-                        
-                        Capsule()
-                            .fill(
-                                LinearGradient(
-                                    colors: [WalkmanTheme.hiResGold, WalkmanTheme.hiResGoldLight],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .frame(width: max(0, geo.size.width * CGFloat(pct)), height: 3)
-                    }
-                }
-                .frame(height: 3)
-                
-                HStack {
-                    Text(formatDuration(progress.currentTime))
-                        .font(.system(size: 9.5, weight: .medium, design: .monospaced))
-                        .foregroundStyle(WalkmanTheme.hiResGoldLight)
-                    Spacer()
-                    Text(formatDuration(progress.duration))
-                        .font(.system(size: 9.5, weight: .regular, design: .monospaced))
-                        .foregroundStyle(Color.secondary)
-                }
-            }
-            .padding(.top, 2)
-        }
-    }
-}
 
 private struct LiveLyricsReader: View {
     let lines: [MetadataStudioView.ParsedLyricLine]
