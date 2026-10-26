@@ -49,7 +49,7 @@ public struct DeviceOverviewView: View {
         GeometryReader { geo in
             let width = geo.size.width
             let isCompact = width < 880
-            let isNarrow = width < 580
+            let isNarrow = width < 640
             let isSmallest = width < 420
             
             ZStack(alignment: .top) {
@@ -63,7 +63,7 @@ public struct DeviceOverviewView: View {
                             deviceSwitcherBar
                         }
                         heroHeaderView(isCompact: isCompact, isNarrow: isNarrow, isSmallest: isSmallest)
-                        storageAllocationSection(isCompact: isCompact)
+                        storageAllocationSection(isNarrow: isNarrow)
                         quickWorkflowsSection(isCompact: isCompact)
                         hardwareComplianceSection(isNarrow: isNarrow)
                     }
@@ -405,7 +405,7 @@ public struct DeviceOverviewView: View {
     // STORAGE ALLOCATION
     // -------------------------------------------------------------------------
     @ViewBuilder
-    private func storageAllocationSection(isCompact: Bool) -> some View {
+    private func storageAllocationSection(isNarrow: Bool) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Image(systemName: "internaldrive.fill")
@@ -418,9 +418,16 @@ public struct DeviceOverviewView: View {
             }
             .padding(.horizontal, 4)
             
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 300, maximum: .infinity), spacing: 12)], spacing: 12) {
-                internalDriveCard
-                microsdDriveCard
+            if isNarrow {
+                VStack(spacing: 12) {
+                    internalDriveCard
+                    microsdDriveCard
+                }
+            } else {
+                HStack(spacing: 12) {
+                    internalDriveCard
+                    microsdDriveCard
+                }
             }
         }
     }

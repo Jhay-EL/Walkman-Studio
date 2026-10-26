@@ -72,19 +72,39 @@ public struct WindowConfigurator: NSViewRepresentable {
             }
         }
         
-        // Lock leading sidebar split view item so opening the inspector never shrinks or animates the sidebar
+        // Configure split view holding priorities so:
+        // 1. Sidebar (leading) is rigid at 260pt.
+        // 2. Main Content (center) absorbs all size changes without clipping.
+        // 3. Inspector (trailing) is rigid at its configured width.
         if let contentView = window.contentView {
-            configureSplitViews(in: contentView)
+            configureSplitViews(in: contentView, isRoot: true)
         }
     }
     
-    private func configureSplitViews(in view: NSView) {
+    private func configureSplitViews(in view: NSView, isRoot: Bool = true) {
         if let splitView = view as? NSSplitView, splitView.isVertical, splitView.subviews.count >= 2 {
-            splitView.setHoldingPriority(.defaultHigh, forSubviewAt: 0)
-            splitView.setHoldingPriority(.defaultLow, forSubviewAt: 1)
+            if isRoot {
+                // Outermost split view (Sidebar vs Detail):
+                // Sidebar (subview 0) is held rigid at fixed 260pt width.
+                // Detail container (subview 1) absorbs all window resizing.
+                splitView.setHoldingPriority(.defaultHigh, forSubviewAt: 0)
+                splitView.setHoldingPriority(.defaultLow, forSubviewAt: 1)
+                
+                // Recurse into subviews marking isRoot as false
+                for sub in splitView.subviews {
+                    configureSplitViews(in: sub, isRoot: false)
+                }
+                return
+            } else {
+                // Inner split view (Main Content vs Trailing Inspector):
+                // Main Content (subview 0) absorbs size changes fluidly with zero resistance or clipping.
+                // Trailing Inspector (subview 1) is held rigid at its configured column width.
+                splitView.setHoldingPriority(.defaultLow, forSubviewAt: 0)
+                splitView.setHoldingPriority(.defaultHigh, forSubviewAt: 1)
+            }
         }
         for sub in view.subviews {
-            configureSplitViews(in: sub)
+            configureSplitViews(in: sub, isRoot: isRoot)
         }
     }
 }
