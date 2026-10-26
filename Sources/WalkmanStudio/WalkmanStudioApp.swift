@@ -33,9 +33,9 @@ public struct WindowConfigurator: NSViewRepresentable {
         window.isOpaque = true
         window.backgroundColor = NSColor(red: 16/255, green: 17/255, blue: 20/255, alpha: 1.0)
         
-        // Enforce 1690x800 minimum window size constraint so buttons, navigation, and labels display properly
-        let minW: CGFloat = 1690
-        let minH: CGFloat = 800
+        // Enforce 1320x720 minimum window size constraint to support 13" Intel and Apple Silicon MacBooks seamlessly
+        let minW: CGFloat = 1320
+        let minH: CGFloat = 720
         window.minSize = NSSize(width: minW, height: minH)
         window.contentMinSize = NSSize(width: minW, height: minH)
         
@@ -88,10 +88,10 @@ struct WalkmanStudioApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .frame(minWidth: 1690, idealWidth: 1720, minHeight: 800, idealHeight: 920)
+                .frame(minWidth: 1320, idealWidth: 1440, minHeight: 720, idealHeight: 880)
                 .background(WindowConfigurator())
         }
-        .defaultSize(width: 1720, height: 920)
+        .defaultSize(width: 1440, height: 880)
         .windowToolbarStyle(.unified(showsTitle: false))
         .commands {
             SidebarCommands()
