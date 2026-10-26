@@ -761,10 +761,11 @@ public struct MetadataStudioView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.top, 2)
+            .padding(.top, 28)
             .padding(.bottom, 24)
         }
         .contentMargins(.top, 0, for: .scrollContent)
+        .ignoresSafeArea(edges: .top)
         .onAppear { loadTrack(force: true) }
         .onChange(of: track) { loadTrack(force: true) }
         .onReceive(NotificationCenter.default.publisher(for: .trackMetadataDidUpdate)) { notif in
