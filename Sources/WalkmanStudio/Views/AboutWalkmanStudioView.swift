@@ -121,15 +121,12 @@ public struct AboutWalkmanStudioView: View {
                         .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
                 )
             }
-            .padding(.top, -10)
-            .padding(.bottom, 14)
-            
-            // Developer Attribution & Action Card
-            developerHeaderCard
+            .padding(.top, -12)
+            .padding(.bottom, 16)
             
             // Liquid Glass Segmented Pill Bar
             AboutSegmentedBar(selectedTab: $selectedTab)
-                .padding(.bottom, 14)
+                .padding(.bottom, 16)
             
             // Tab Content
             Group {
@@ -144,12 +141,12 @@ public struct AboutWalkmanStudioView: View {
                     developerTabView
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .padding(.horizontal, 24)
             
             Divider()
                 .overlay(Color.white.opacity(0.08))
-                .padding(.top, 10)
+                .padding(.top, 8)
             
             // Bottom Action Footer
             HStack(alignment: .center) {
@@ -163,10 +160,10 @@ public struct AboutWalkmanStudioView: View {
                 PrimaryDoneButton(action: onDismiss)
             }
             .padding(.horizontal, 24)
-            .padding(.vertical, 14)
+            .padding(.vertical, 12)
         }
-        // Studio Window Dimensions (Generous, High-Precision macOS Layout)
-        .frame(width: 780, height: 750)
+        // Studio Window Dimensions (Optimized macOS Modal Layout)
+        .frame(width: 780, height: 650)
         .background(
             ZStack {
                 WalkmanTheme.card.opacity(0.88)
@@ -207,83 +204,6 @@ public struct AboutWalkmanStudioView: View {
                 .allowsHitTesting(false)
         )
         .shadow(color: Color.black.opacity(0.45), radius: 24, x: 0, y: 10)
-    }
-    
-    // MARK: - Developer Attribution Card
-    private var developerHeaderCard: some View {
-        HStack(spacing: 14) {
-            // Developer Avatar
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color(red: 45 / 255, green: 50 / 255, blue: 64 / 255),
-                                Color(red: 24 / 255, green: 26 / 255, blue: 34 / 255)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 46, height: 46)
-                    .overlay(
-                        Circle()
-                            .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
-                    )
-                
-                Image(systemName: "person.crop.circle.fill")
-                    .font(.system(size: 26))
-                    .foregroundStyle(WalkmanTheme.silverLight)
-            }
-            
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 7) {
-                    Text("Developer:")
-                        .font(WalkmanFont.subheadlineMedium)
-                        .foregroundStyle(.secondary)
-                    
-                    Text("John Lloyd Malabanan")
-                        .font(WalkmanFont.bodyBold)
-                        .foregroundStyle(.primary)
-                    
-                    Text("(@Jhay-EL)")
-                        .font(WalkmanFont.monoSmall)
-                        .foregroundStyle(WalkmanTheme.silverMuted)
-                }
-                
-                Text("Creator and Lead Software Engineer of Walkman Studio")
-                    .font(WalkmanFont.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            
-            Spacer()
-            
-            // Direct Link Buttons: GitHub & Buy Me a Coffee
-            HStack(spacing: 10) {
-                TactileLinkButton(
-                    title: "GitHub",
-                    icon: "chevron.left.forwardslash.chevron.right",
-                    url: "https://github.com/Jhay-EL"
-                )
-                
-                TactileLinkButton(
-                    title: "Buy Me a Coffee",
-                    icon: "cup.and.saucer.fill",
-                    url: "https://www.buymeacoffee.com/jhayel",
-                    isAccent: true
-                )
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color.white.opacity(0.035))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.85)
-        )
-        .padding(.horizontal, 24)
-        .padding(.bottom, 14)
     }
     
     // MARK: - Tab 0: Hardware View
@@ -472,9 +392,9 @@ public struct AboutWalkmanStudioView: View {
     // MARK: - Tab 3: Developer & Support View
     private var developerTabView: some View {
         ScrollView(.vertical, showsIndicators: true) {
-            VStack(spacing: 14) {
+            VStack(spacing: 12) {
                 // Developer Profile Hero Card
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 14) {
                         ZStack {
                             Circle()
@@ -488,18 +408,18 @@ public struct AboutWalkmanStudioView: View {
                                         endPoint: .bottomTrailing
                                     )
                                 )
-                                .frame(width: 54, height: 54)
+                                .frame(width: 48, height: 48)
                                 .overlay(
                                     Circle()
                                         .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
                                 )
                             
                             Image(systemName: "person.crop.circle.fill")
-                                .font(.system(size: 34))
+                                .font(.system(size: 30))
                                 .foregroundStyle(WalkmanTheme.silverLight)
                         }
                         
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: 3) {
                             HStack(spacing: 8) {
                                 Text("John Lloyd Malabanan")
                                     .font(WalkmanFont.title2)
@@ -529,9 +449,9 @@ public struct AboutWalkmanStudioView: View {
                     Text("Walkman Studio was designed and engineered from the ground up to solve the challenges of using modern macOS with Sony Walkman digital audio players. It automates strict ID3v2.3 tagging, Baseline RGB JPEG cover art conversion, synchronized lyrics synchronization, dual-partition routing, and AppleDouble ghost file cleanup.")
                         .font(WalkmanFont.callout)
                         .foregroundStyle(.secondary)
-                        .lineSpacing(3)
+                        .lineSpacing(2)
                 }
-                .padding(16)
+                .padding(14)
                 .background(Color.white.opacity(0.035))
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(
@@ -542,10 +462,10 @@ public struct AboutWalkmanStudioView: View {
                 // Links Grid
                 HStack(spacing: 12) {
                     // GitHub Profile Card
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 8) {
                             Image(systemName: "chevron.left.forwardslash.chevron.right")
-                                .font(.system(size: 14, weight: .bold))
+                                .font(.system(size: 13, weight: .bold))
                                 .foregroundStyle(WalkmanTheme.silverLight)
                             
                             Text("GitHub Profile")
@@ -564,7 +484,7 @@ public struct AboutWalkmanStudioView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                         
-                        Spacer(minLength: 6)
+                        Spacer(minLength: 4)
                         
                         TactileLinkButton(
                             title: "github.com/Jhay-EL",
@@ -572,7 +492,7 @@ public struct AboutWalkmanStudioView: View {
                             url: "https://github.com/Jhay-EL"
                         )
                     }
-                    .padding(14)
+                    .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.white.opacity(0.03))
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -582,10 +502,10 @@ public struct AboutWalkmanStudioView: View {
                     )
                     
                     // Walkman Studio Repo Card
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 8) {
                             Image(systemName: "folder.fill")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(WalkmanTheme.silverLight)
                             
                             Text("Project Repository")
@@ -604,7 +524,7 @@ public struct AboutWalkmanStudioView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
                         
-                        Spacer(minLength: 6)
+                        Spacer(minLength: 4)
                         
                         TactileLinkButton(
                             title: "Jhay-EL/Walkman-Studio",
@@ -612,7 +532,7 @@ public struct AboutWalkmanStudioView: View {
                             url: "https://github.com/Jhay-EL/Walkman-Studio"
                         )
                     }
-                    .padding(14)
+                    .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.white.opacity(0.03))
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -623,14 +543,14 @@ public struct AboutWalkmanStudioView: View {
                 }
                 
                 // Buy Me a Coffee Support Banner
-                HStack(spacing: 14) {
+                HStack(spacing: 12) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .fill(Color(red: 255 / 255, green: 221 / 255, blue: 0 / 255).opacity(0.18))
-                            .frame(width: 48, height: 48)
+                            .frame(width: 44, height: 44)
                         
                         Image(systemName: "cup.and.saucer.fill")
-                            .font(.system(size: 22, weight: .bold))
+                            .font(.system(size: 20, weight: .bold))
                             .foregroundStyle(Color(red: 255 / 255, green: 221 / 255, blue: 0 / 255))
                     }
                     
@@ -668,7 +588,7 @@ public struct AboutWalkmanStudioView: View {
                         isAccent: true
                     )
                 }
-                .padding(14)
+                .padding(12)
                 .background(Color(red: 255 / 255, green: 221 / 255, blue: 0 / 255).opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(
@@ -711,9 +631,9 @@ public struct AboutWalkmanStudioView: View {
                     }
                 }
                 .padding(.horizontal, 10)
-                .padding(.vertical, 6)
+                .padding(.vertical, 4)
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, 2)
         }
     }
 }
