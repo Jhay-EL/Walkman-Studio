@@ -512,8 +512,10 @@ public struct ContentView: View {
                         },
                         onOpenAbout: { self.showAboutSheet = true }
                     )
-                    .navigationSplitViewColumnWidth(min: 260, ideal: 275, max: 320)
-                    .animation(nil, value: showInspector)
+                    .navigationSplitViewColumnWidth(min: 260, ideal: 260, max: 280)
+                    .transaction { transaction in
+                        transaction.animation = nil
+                    }
                     .toolbarBackground(.hidden, for: .windowToolbar)
                 } detail: {
                     ZStack(alignment: .bottom) {
@@ -708,9 +710,7 @@ public struct ContentView: View {
                                     if let cur = player.currentTrack {
                                         self.selectedTrackId = cur.id
                                     }
-                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                        self.showInspector = true
-                                    }
+                                    self.showInspector = true
                                 }
                             )
                             .frame(maxWidth: 1040)
@@ -764,6 +764,7 @@ public struct ContentView: View {
                     }
                     .toolbarBackground(.hidden, for: .windowToolbar)
                 }
+                .navigationSplitViewStyle(.prominentDetail)
                 .toolbarBackground(.hidden, for: .windowToolbar)
             }
         }
