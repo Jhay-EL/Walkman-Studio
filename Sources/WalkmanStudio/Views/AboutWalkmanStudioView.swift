@@ -51,6 +51,20 @@ public struct AboutWalkmanStudioView: View {
         return NSImage(contentsOfFile: "assets/icon.png")
     }
     
+    private var appLogoImage: NSImage? {
+        if let bundleURL = Bundle.main.url(forResource: "walkman_logo_emblem", withExtension: "png"),
+           let img = NSImage(contentsOf: bundleURL) {
+            return img
+        }
+        if let localImg = NSImage(contentsOfFile: "assets/walkman_logo_emblem.png") {
+            return localImg
+        }
+        if let studioImg = NSImage(contentsOfFile: "frontend/icon.icon/Assets/Studio.png") {
+            return studioImg
+        }
+        return appIcon
+    }
+    
     private func openURL(_ urlString: String) {
         if let url = URL(string: urlString) {
             NSWorkspace.shared.open(url)
@@ -68,32 +82,24 @@ public struct AboutWalkmanStudioView: View {
             .padding(.horizontal, 20)
             
             // Hero App Header (Apple macOS 27 Liquid Glass Style)
-            VStack(spacing: 7) {
-                if let icon = appIcon {
+            VStack(spacing: 8) {
+                if let logo = appLogoImage {
+                    Image(nsImage: logo)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 92, height: 92)
+                        .shadow(color: Color.black.opacity(0.40), radius: 12, x: 0, y: 6)
+                } else if let icon = appIcon {
                     Image(nsImage: icon)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .frame(width: 74, height: 74)
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .stroke(Color.white.opacity(0.14), lineWidth: 0.85)
-                        )
-                        .shadow(color: Color.black.opacity(0.35), radius: 10, x: 0, y: 5)
+                        .frame(width: 92, height: 92)
+                        .shadow(color: Color.black.opacity(0.40), radius: 12, x: 0, y: 6)
                 } else {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(WalkmanTheme.silverGradient)
-                            .frame(width: 74, height: 74)
-                        Text("W.")
-                            .font(.system(size: 32, weight: .black, design: .rounded))
-                            .foregroundStyle(Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255))
-                    }
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(Color.white.opacity(0.14), lineWidth: 0.85)
-                    )
-                    .shadow(color: Color.black.opacity(0.35), radius: 10, x: 0, y: 5)
+                    Text("W.")
+                        .font(.system(size: 48, weight: .black, design: .rounded))
+                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .shadow(color: WalkmanTheme.hiResGold.opacity(0.35), radius: 10)
                 }
                 
                 Text("Walkman Studio")
@@ -121,7 +127,7 @@ public struct AboutWalkmanStudioView: View {
                         .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
                 )
             }
-            .padding(.top, -12)
+            .padding(.top, -18)
             .padding(.bottom, 16)
             
             // Liquid Glass Segmented Pill Bar

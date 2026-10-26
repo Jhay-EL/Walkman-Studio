@@ -58,6 +58,16 @@ fi
 if [ -f "$DIR/assets/hires_audio_logo.svg" ]; then
     cp "$DIR/assets/hires_audio_logo.svg" "$RESOURCES_DIR/hires_audio_logo.svg"
 fi
+if [ -f "$DIR/assets/walkman_logo_emblem.png" ]; then
+    cp "$DIR/assets/walkman_logo_emblem.png" "$RESOURCES_DIR/walkman_logo_emblem.png"
+fi
+
+# Copy Backend Python Engine & Resources for local 12 Tone SenseMe DSP
+if [ -d "$DIR/backend" ]; then
+    echo "Bundling backend engine into $RESOURCES_DIR/backend..."
+    mkdir -p "$RESOURCES_DIR/backend"
+    cp -R "$DIR/backend/"* "$RESOURCES_DIR/backend/"
+fi
 
 # Create Info.plist
 cat << EOF > "$APP_BUNDLE/Contents/Info.plist"
