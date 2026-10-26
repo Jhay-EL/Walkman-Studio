@@ -1990,21 +1990,24 @@ public struct TrimAndCutSheet: View {
 
             Spacer()
 
-            Button("Cancel") {
-                onDismiss()
+            Button(action: onDismiss) {
+                Text("Cancel")
+                    .font(WalkmanFont.bodyMedium)
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 9.5)
+                    .contentShape(Rectangle())
             }
-            .font(WalkmanFont.bodyMedium)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 8.5)
-            .contentShape(Rectangle())
             .buttonStyle(StudioTactileButtonStyle(
                 bg: Color.white.opacity(0.08),
-                hoverBg: Color.white.opacity(0.14),
-                pressedBg: Color.white.opacity(0.20),
-                fgColor: .secondary,
-                cornerRadius: 7
+                hoverBg: Color.white.opacity(0.16),
+                pressedBg: Color.white.opacity(0.24),
+                fgColor: WalkmanTheme.silverLight,
+                cornerRadius: 7,
+                borderNormal: Color.white.opacity(0.12),
+                borderHover: Color.white.opacity(0.26)
             ))
             .disabled(isProcessing)
+            .keyboardShortcut(.cancelAction)
 
             Button(action: executeProcess) {
                 HStack(spacing: 7) {
