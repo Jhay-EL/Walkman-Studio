@@ -71,6 +71,21 @@ public struct WindowConfigurator: NSViewRepresentable {
                 }
             }
         }
+        
+        // Lock leading sidebar split view item so opening the inspector never shrinks or animates the sidebar
+        if let contentView = window.contentView {
+            configureSplitViews(in: contentView)
+        }
+    }
+    
+    private func configureSplitViews(in view: NSView) {
+        if let splitView = view as? NSSplitView, splitView.isVertical, splitView.subviews.count >= 2 {
+            splitView.setHoldingPriority(.defaultHigh, forSubviewAt: 0)
+            splitView.setHoldingPriority(.defaultLow, forSubviewAt: 1)
+        }
+        for sub in view.subviews {
+            configureSplitViews(in: sub)
+        }
     }
 }
 

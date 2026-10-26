@@ -512,10 +512,8 @@ public struct ContentView: View {
                         },
                         onOpenAbout: { self.showAboutSheet = true }
                     )
-                    .navigationSplitViewColumnWidth(min: 240, ideal: 245, max: 270)
-                    .transaction { transaction in
-                        transaction.animation = nil
-                    }
+                    .frame(width: 260)
+                    .navigationSplitViewColumnWidth(min: 260, ideal: 260, max: 260)
                     .toolbarBackground(.hidden, for: .windowToolbar)
                 } detail: {
                     ZStack(alignment: .bottom) {
@@ -699,7 +697,6 @@ public struct ContentView: View {
                             }
                         }
                         .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
-                        .clipped()
                         
                         // Audio Preview & Playback Bar (Floating Liquid Glass Container)
                         HStack {
@@ -722,7 +719,6 @@ public struct ContentView: View {
                     }
                     .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
                     .background(WalkmanTheme.background.ignoresSafeArea())
-                    .clipped()
                     .inspector(isPresented: $showInspector) {
                         MetadataStudioView(
                             track: selectedTrack,
@@ -733,7 +729,7 @@ public struct ContentView: View {
                                 }
                             }
                         )
-                        .inspectorColumnWidth(min: 260, ideal: 280, max: 340)
+                        .inspectorColumnWidth(min: 280, ideal: 300, max: 320)
                     }
                     .toolbar {
                         Spacer()
@@ -766,7 +762,7 @@ public struct ContentView: View {
                     }
                     .toolbarBackground(.hidden, for: .windowToolbar)
                 }
-                .navigationSplitViewStyle(.prominentDetail)
+                .navigationSplitViewStyle(.balanced)
                 .toolbarBackground(.hidden, for: .windowToolbar)
             }
         }

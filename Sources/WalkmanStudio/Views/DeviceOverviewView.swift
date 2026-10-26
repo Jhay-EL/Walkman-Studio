@@ -69,11 +69,10 @@ public struct DeviceOverviewView: View {
                     }
                     .padding(isNarrow ? 12 : 18)
                     .padding(.bottom, 88)
-                    .frame(width: max(0, width), alignment: .top)
+                    .frame(maxWidth: .infinity, alignment: .top)
                 }
             }
         }
-        .clipped()
         .onAppear {
             syncStats()
         }
