@@ -761,7 +761,7 @@ public struct MetadataStudioView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.top, 48)
+            .padding(.top, 60)
             .padding(.bottom, 24)
         }
         .contentMargins(.top, 0, for: .scrollContent)
@@ -777,7 +777,7 @@ public struct MetadataStudioView: View {
                 endPoint: .bottom
             )
             .frame(maxWidth: .infinity)
-            .frame(height: 48)
+            .frame(height: 58)
             .allowsHitTesting(false)
             .ignoresSafeArea(edges: .top)
         }
