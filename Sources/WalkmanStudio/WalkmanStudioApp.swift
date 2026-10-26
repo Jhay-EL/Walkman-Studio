@@ -130,7 +130,9 @@ struct WalkmanStudioApp: App {
         .windowToolbarStyle(.unified(showsTitle: false))
         .commands {
             SidebarCommands()
-            InspectorCommands()
+            if #available(macOS 14.0, *) {
+                InspectorCommands()
+            }
             CommandGroup(replacing: .appInfo) {
                 Button("About Walkman Studio") {
                     NotificationCenter.default.post(name: .showAboutWalkmanStudio, object: nil)

@@ -764,7 +764,7 @@ public struct MetadataStudioView: View {
             .padding(.top, 60)
             .padding(.bottom, 24)
         }
-        .contentMargins(.top, 0, for: .scrollContent)
+        .metadataScrollContentMargins()
         .ignoresSafeArea(edges: .top)
         .overlay(alignment: .top) {
             LinearGradient(
@@ -1060,5 +1060,16 @@ private struct LiveLyricsReader: View {
                         .stroke(WalkmanTheme.hiResGold.opacity(0.25), lineWidth: 0.8)
                 ) : nil
         )
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func metadataScrollContentMargins() -> some View {
+        if #available(macOS 14.0, *) {
+            self.contentMargins(.top, 0, for: .scrollContent)
+        } else {
+            self
+        }
     }
 }

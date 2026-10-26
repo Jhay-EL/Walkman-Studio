@@ -719,7 +719,7 @@ public struct ContentView: View {
                     }
                     .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
                     .background(WalkmanTheme.background.ignoresSafeArea())
-                    .inspector(isPresented: $showInspector) {
+                    .adaptiveInspector(isPresented: $showInspector) {
                         MetadataStudioView(
                             track: selectedTrack,
                             onSaved: { refreshLibrary() },
@@ -729,7 +729,6 @@ public struct ContentView: View {
                                 }
                             }
                         )
-                        .inspectorColumnWidth(min: 280, ideal: 300, max: 320)
                     }
                     .toolbar {
                         Spacer()
@@ -839,6 +838,33 @@ public struct ContentView: View {
                     albumToEdit = nil
                 }
             )
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func adaptiveInspector<Content: View>(
+        isPresented: Binding<Bool>,
+        @ViewBuilder content: @escaping () -> Content
+    ) -> some View {
+        if #available(macOS 14.0, *) {
+            self.inspector(isPresented: isPresented) {
+                content()
+                    .inspectorColumnWidth(min: 280, ideal: 300, max: 320)
+            }
+        } else {
+            HStack(spacing: 0) {
+                self
+                if isPresented.wrappedValue {
+                    Divider()
+                        .overlay(Color.white.opacity(0.08))
+                    content()
+                        .frame(width: 300)
+                        .background(WalkmanTheme.background)
+                        .transition(.move(edge: .trailing))
+                }
+            }
         }
     }
 }

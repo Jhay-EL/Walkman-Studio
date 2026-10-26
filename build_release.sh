@@ -205,7 +205,7 @@ cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
     <tr>
       <td><strong><code>Walkman-Studio-2.1.0-universal.dmg</code></strong></td>
       <td>Universal 2 (<code>arm64</code> + <code>x86_64</code>)</td>
-      <td>Universal package running natively on all Macs (macOS 14.0+)</td>
+      <td>Universal package running natively on all Macs (macOS 13.0+)</td>
     </tr>
   </tbody>
 </table>

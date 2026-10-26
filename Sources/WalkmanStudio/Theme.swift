@@ -430,4 +430,21 @@ public extension View {
     func tableScrollBottomInset(_ inset: CGFloat = 88) -> some View {
         self.background(TableScrollInsetModifier(bottomInset: inset))
     }
+
+    // MARK: - Backward Compatibility for macOS 13 (Ventura)
+    @_disfavoredOverload
+    @ViewBuilder
+    func onChange<V: Equatable>(of value: V, _ action: @escaping () -> Void) -> some View {
+        self.onChange(of: value) { _ in
+            action()
+        }
+    }
+
+    @_disfavoredOverload
+    @ViewBuilder
+    func onChange<V: Equatable>(of value: V, _ action: @escaping (_ oldValue: V, _ newValue: V) -> Void) -> some View {
+        self.onChange(of: value) { newValue in
+            action(newValue, newValue)
+        }
+    }
 }
