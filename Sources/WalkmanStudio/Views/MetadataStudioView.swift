@@ -526,38 +526,7 @@ public struct MetadataStudioView: View {
                         }
                     }
                     
-                    // 3. QUICK STATS 2x2 GRID (Optimized layout, Title Case labels)
-                    LazyVGrid(
-                        columns: [
-                            GridItem(.flexible(), spacing: 8),
-                            GridItem(.flexible(), spacing: 8)
-                        ],
-                        spacing: 8
-                    ) {
-                        StatTile(
-                            icon: "clock",
-                            label: "Duration",
-                            value: formatDuration(tr.durationSeconds)
-                        )
-                        StatTile(
-                            icon: "speedometer",
-                            label: "Bitrate",
-                            value: tr.bitrateKbps > 0 ? "\(tr.bitrateKbps) kbps" : "Lossless"
-                        )
-                        StatTile(
-                            icon: "waveform",
-                            label: "Quality",
-                            value: formatQuality(tr),
-                            highlight: isHiRes
-                        )
-                        StatTile(
-                            icon: "internaldrive",
-                            label: "File Size",
-                            value: formatSize(tr.sizeBytes)
-                        )
-                    }
-
-                    // 4. LYRICS CONTAINER
+                    // 3. LYRICS CONTAINER
                     VStack(alignment: .leading, spacing: 8) {
                         sectionHeader(title: "Lyrics", icon: "quote.bubble.fill")
                         
@@ -593,7 +562,7 @@ public struct MetadataStudioView: View {
                         }
                     }
 
-                    // 5. SONY 12 TONE / SENSEME (Simple Status Only)
+                    // 4. SONY 12 TONE / SENSEME (Simple Status Only)
                     VStack(alignment: .leading, spacing: 8) {
                         sectionHeader(title: "Sony 12 Tone / SenseMe", icon: "waveform.path.ecg")
 
@@ -647,7 +616,7 @@ public struct MetadataStudioView: View {
                         .liquidGlass(cornerRadius: 12)
                     }
 
-                    // 6. TAGS & METADATA
+                    // 5. TAGS & METADATA
                     VStack(alignment: .leading, spacing: 8) {
                         sectionHeader(title: "Tags & Metadata", icon: "tag.fill")
                         
@@ -701,8 +670,39 @@ public struct MetadataStudioView: View {
                         .padding(.vertical, 4)
                         .liquidGlass(cornerRadius: 12)
                     }
+
+                    // 7. QUICK STATS 2x2 GRID (under Audio Properties)
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.flexible(), spacing: 8),
+                            GridItem(.flexible(), spacing: 8)
+                        ],
+                        spacing: 8
+                    ) {
+                        StatTile(
+                            icon: "clock",
+                            label: "Duration",
+                            value: formatDuration(tr.durationSeconds)
+                        )
+                        StatTile(
+                            icon: "speedometer",
+                            label: "Bitrate",
+                            value: tr.bitrateKbps > 0 ? "\(tr.bitrateKbps) kbps" : "Lossless"
+                        )
+                        StatTile(
+                            icon: "waveform",
+                            label: "Quality",
+                            value: formatQuality(tr),
+                            highlight: isHiRes
+                        )
+                        StatTile(
+                            icon: "internaldrive",
+                            label: "File Size",
+                            value: formatSize(tr.sizeBytes)
+                        )
+                    }
                     
-                    // 7. FILE LOCATION
+                    // 8. FILE LOCATION
                     VStack(alignment: .leading, spacing: 8) {
                         sectionHeader(title: "File Location", icon: "folder.fill")
                         
@@ -1004,7 +1004,7 @@ private struct LiveLyricsReader: View {
                 }
                 .padding(8)
             }
-            .frame(maxHeight: 200)
+            .frame(maxHeight: 280)
             .liquidGlass(cornerRadius: 10)
             .contextMenu {
                 Button(action: onCopy) {
