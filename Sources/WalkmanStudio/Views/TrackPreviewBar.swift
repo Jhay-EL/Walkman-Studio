@@ -7,10 +7,15 @@ public struct TrackPreviewBar: View {
     var libraryTracks: [Track] = []
     var isInspectorPresented: Bool = false
     let onOpenInspector: () -> Void
+    var onOpenFullScreen: () -> Void = {}
 
     @State private var dragTime: Double? = nil
     @State private var isArtworkHovered: Bool = false
     @State private var lastNonZeroVolume: Float = 0.8
+    @State private var isVolumeExpanded: Bool = false
+    @State private var isVolumeHovered: Bool = false
+    @State private var isVolumeSpeakerHovered: Bool = false
+    @State private var isEnlargeHovered: Bool = false
 
     private func formatTime(_ seconds: Double) -> String {
         if seconds.isNaN || seconds.isInfinite || seconds < 0 { return "0:00" }
@@ -81,24 +86,31 @@ public struct TrackPreviewBar: View {
         )
         .shadow(color: Color.black.opacity(0.45), radius: 22, x: 0, y: 8)
         .shadow(color: Color.black.opacity(0.20), radius: 4, x: 0, y: 1.5)
+        .onExitCommand {
+            if isVolumeExpanded {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
+                    isVolumeExpanded = false
+                }
+            }
+        }
     }
 
     // MARK: - Left: Transport Controls
     private var transportControlsZone: some View {
-        HStack(spacing: 9) {
+        HStack(spacing: 10) {
             // Shuffle
-            PlayerIconButton(
+            LiquidGlassPlayerButton(
                 systemName: "shuffle",
-                size: 11,
+                size: 13,
                 isActive: player.isShuffle,
                 helpText: player.isShuffle ? "Shuffle: On" : "Shuffle: Off",
                 action: { player.isShuffle.toggle() }
             )
 
             // Previous
-            PlayerIconButton(
+            LiquidGlassPlayerButton(
                 systemName: "backward.fill",
-                size: 12,
+                size: 14.5,
                 isActive: false,
                 isDisabled: player.currentTrack == nil && libraryTracks.isEmpty,
                 helpText: "Previous track",
@@ -119,9 +131,9 @@ public struct TrackPreviewBar: View {
             )
 
             // Next
-            PlayerIconButton(
+            LiquidGlassPlayerButton(
                 systemName: "forward.fill",
-                size: 12,
+                size: 14.5,
                 isActive: false,
                 isDisabled: player.currentTrack == nil && libraryTracks.isEmpty,
                 helpText: "Next track",
@@ -129,9 +141,9 @@ public struct TrackPreviewBar: View {
             )
 
             // Repeat
-            PlayerIconButton(
+            LiquidGlassPlayerButton(
                 systemName: "repeat",
-                size: 11,
+                size: 13,
                 isActive: player.isRepeat,
                 helpText: player.isRepeat ? "Repeat: On" : "Repeat: Off",
                 action: { player.isRepeat.toggle() }
@@ -171,6 +183,14 @@ public struct TrackPreviewBar: View {
         }
         .frame(minWidth: 140, maxWidth: 640)
         .frame(height: 42)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if isVolumeExpanded {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
+                    isVolumeExpanded = false
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -278,40 +298,243 @@ public struct TrackPreviewBar: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - Right: Volume Control
+    // MARK: - Right: Responsive Apple-Style Volume & Enlarge Controls
     private var trailingControlsZone: some View {
         HStack(spacing: 6) {
-            Button(action: {
-                if player.volume > 0.001 {
-                    lastNonZeroVolume = player.volume
-                    player.volume = 0.0
-                } else {
-                    player.volume = lastNonZeroVolume > 0.05 ? lastNonZeroVolume : 0.8
-                }
-            }) {
-                Image(systemName: player.volume > 0.5 ? "speaker.wave.2.fill" : (player.volume > 0.001 ? "speaker.wave.1.fill" : "speaker.slash.fill"))
-                    .font(.system(size: 12))
-                    .foregroundStyle(player.volume > 0.001 ? WalkmanTheme.silverMuted : Color.white.opacity(0.4))
-                    .frame(width: 18, height: 18)
-            }
-            .buttonStyle(.plain)
-            .help(player.volume > 0.001 ? "Mute" : "Unmute")
-            .onHover { h in
-                if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-            }
+            // Fluid responsive volume adjustment capsule
+            volumeControlPod
 
-            Slider(value: $player.volume, in: 0...1)
-                .controlSize(.mini)
-                .tint(WalkmanTheme.silver)
-                .frame(width: 60)
+            // Enlarge Button (Full Screen Now Playing with Artwork & Live Lyrics)
+            enlargeButton
         }
         .fixedSize(horizontal: true, vertical: false)
     }
+
+    private var enlargeButton: some View {
+        Button(action: onOpenFullScreen) {
+            ZStack {
+                // Liquid glass background capsule
+                Capsule()
+                    .fill(Color.white.opacity(isEnlargeHovered ? 0.12 : 0.05))
+
+                // Specular top highlight sheen
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(isEnlargeHovered ? 0.28 : 0.10), location: 0.0),
+                            .init(color: .clear, location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 7)
+                    Spacer(minLength: 0)
+                }
+                .clipShape(Capsule())
+
+                // Hairline border
+                Capsule()
+                    .strokeBorder(
+                        Color.white.opacity(isEnlargeHovered ? 0.24 : 0.10),
+                        lineWidth: 0.85
+                    )
+
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(isEnlargeHovered ? .white : WalkmanTheme.silverLight)
+            }
+            .frame(width: 30, height: 30)
+            .shadow(color: Color.black.opacity(isEnlargeHovered ? 0.28 : 0.0), radius: 4, x: 0, y: 1.5)
+            .scaleEffect(isEnlargeHovered ? 1.07 : 1.0)
+            .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isEnlargeHovered)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(TactilePlayerButtonStyle())
+        .help("Full Screen Player (Artwork & Live Lyrics)")
+        .onHover { h in
+            isEnlargeHovered = h
+            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+    }
+
+    private var speakerIconName: String {
+        if player.volume <= 0.001 {
+            return "speaker.slash.fill"
+        } else if player.volume < 0.5 {
+            return "speaker.wave.1.fill"
+        } else {
+            return "speaker.wave.2.fill"
+        }
+    }
+
+    private func toggleMute() {
+        if player.volume > 0.001 {
+            lastNonZeroVolume = player.volume
+            player.volume = 0.0
+        } else {
+            player.volume = lastNonZeroVolume > 0.05 ? lastNonZeroVolume : 0.8
+        }
+    }
+
+    @ViewBuilder
+    private var volumeControlPod: some View {
+        HStack(spacing: isVolumeExpanded ? 8 : 0) {
+            if isVolumeExpanded {
+                VolumeCapsuleSlider(volume: $player.volume)
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity.combined(with: .scale(scale: 0.85, anchor: .trailing)),
+                            removal: .opacity.combined(with: .scale(scale: 0.85, anchor: .trailing))
+                        )
+                    )
+            }
+
+            // Speaker Icon Button
+            Button(action: {
+                if NSEvent.modifierFlags.contains(.option) {
+                    toggleMute()
+                } else if !isVolumeExpanded {
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
+                        isVolumeExpanded = true
+                    }
+                } else {
+                    if player.volume <= 0.001 {
+                        toggleMute()
+                    } else {
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
+                            isVolumeExpanded = false
+                        }
+                    }
+                }
+            }) {
+                Image(systemName: speakerIconName)
+                    .font(.system(size: 13, weight: isVolumeExpanded ? .semibold : .medium))
+                    .foregroundStyle(
+                        player.volume <= 0.001
+                            ? Color.white.opacity(0.45)
+                            : (isVolumeSpeakerHovered || isVolumeHovered ? .white : WalkmanTheme.silverLight)
+                    )
+                    .frame(width: 26, height: 26)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(TactilePlayerButtonStyle())
+            .help(
+                isVolumeExpanded
+                    ? (player.volume <= 0.001 ? "Unmute" : "Close Volume Slider (⌥+Click to Mute)")
+                    : "Adjust Volume (Click to expand, ⌥+Click to Mute)"
+            )
+            .onHover { h in
+                isVolumeSpeakerHovered = h
+                if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
+        }
+        .padding(.leading, isVolumeExpanded ? 10 : 3)
+        .padding(.trailing, isVolumeExpanded ? 8 : 3)
+        .padding(.vertical, 3)
+        .frame(height: 30)
+        .background(
+            ZStack {
+                if isVolumeExpanded {
+                    Capsule()
+                        .fill(Color.white.opacity(0.12))
+
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(0.20), location: 0.0),
+                            .init(color: .white.opacity(0.04), location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .clipShape(Capsule())
+                } else {
+                    Capsule()
+                        .fill(Color.white.opacity(isVolumeHovered ? 0.09 : 0.05))
+
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: .white.opacity(isVolumeHovered ? 0.22 : 0.08), location: 0.0),
+                                .init(color: .clear, location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 7)
+                        Spacer(minLength: 0)
+                    }
+                    .clipShape(Capsule())
+                }
+            }
+        )
+        .overlay(
+            Capsule()
+                .strokeBorder(
+                    Color.white.opacity(isVolumeExpanded ? 0.24 : (isVolumeHovered ? 0.20 : 0.10)),
+                    lineWidth: 0.85
+                )
+        )
+        .clipShape(Capsule())
+        .onHover { h in
+            withAnimation(.easeInOut(duration: 0.16)) {
+                isVolumeHovered = h
+            }
+        }
+    }
 }
 
-// MARK: - Subviews
+// MARK: - Subviews & Styles
 
-private struct PlayerIconButton: View {
+struct TactilePlayerButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.90 : 1.0)
+            .animation(.spring(response: 0.18, dampingFraction: 0.65), value: configuration.isPressed)
+    }
+}
+
+private struct VolumeCapsuleSlider: View {
+    @Binding var volume: Float
+    let totalWidth: CGFloat = 82
+    let trackHeight: CGFloat = 6
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let clampedVol = CGFloat(max(0.0, min(1.0, volume)))
+            let fillWidth = max(0, w * clampedVol)
+
+            ZStack(alignment: .leading) {
+                // Background Track (unfilled)
+                Capsule()
+                    .fill(Color.white.opacity(0.26))
+                    .frame(height: trackHeight)
+
+                // Filled Active Level Track
+                Rectangle()
+                    .fill(Color.white)
+                    .frame(width: fillWidth, height: trackHeight)
+            }
+            .frame(height: trackHeight)
+            .clipShape(Capsule())
+            .frame(maxHeight: .infinity, alignment: .center)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        let newPct = Float(max(0.0, min(1.0, value.location.x / w)))
+                        volume = newPct
+                    }
+            )
+        }
+        .frame(width: totalWidth, height: 22)
+        .onHover { h in
+            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+    }
+}
+
+private struct LiquidGlassPlayerButton: View {
     let systemName: String
     let size: CGFloat
     let isActive: Bool
@@ -323,23 +546,48 @@ private struct PlayerIconButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: size, weight: isActive ? .bold : .medium))
-                .foregroundStyle(
-                    isDisabled ? Color.white.opacity(0.20) :
-                    (isActive ? WalkmanTheme.hiResGold : (isHovered ? .white : Color.white.opacity(0.65)))
-                )
-                .frame(width: 24, height: 24)
-                .scaleEffect(isHovered && !isDisabled ? 1.10 : 1.0)
+            ZStack {
+                // Liquid glass background capsule on hover
+                Capsule()
+                    .fill(Color.white.opacity(isHovered && !isDisabled ? 0.11 : 0.0))
+
+                if isHovered && !isDisabled {
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: .white.opacity(0.22), location: 0.0),
+                                .init(color: .clear, location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 6)
+                        Spacer(minLength: 0)
+                    }
+                    .clipShape(Capsule())
+
+                    Capsule()
+                        .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.8)
+                }
+
+                Image(systemName: systemName)
+                    .font(.system(size: size, weight: isActive ? .bold : .medium))
+                    .foregroundStyle(
+                        isDisabled ? Color.white.opacity(0.20) :
+                        (isActive ? WalkmanTheme.hiResGold : (isHovered ? .white : Color.white.opacity(0.70)))
+                    )
+            }
+            .frame(width: 30, height: 30)
+            .scaleEffect(isHovered && !isDisabled ? 1.08 : 1.0)
+            .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(TactilePlayerButtonStyle())
         .disabled(isDisabled)
         .help(helpText)
         .onHover { h in
             guard !isDisabled else { return }
-            withAnimation(.spring(response: 0.22, dampingFraction: 0.72)) {
-                isHovered = h
-            }
+            isHovered = h
             if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
     }
@@ -359,50 +607,49 @@ private struct PlayPauseCircleButton: View {
                     .fill(
                         LinearGradient(
                             colors: isEnabled ?
-                                (isHovered ? [Color.white, Color(white: 0.92)] : [Color(white: 0.95), Color(white: 0.82)]) :
+                                (isHovered ? [Color.white, Color(white: 0.94)] : [Color(white: 0.96), Color(white: 0.84)]) :
                                 [Color.white.opacity(0.3), Color.white.opacity(0.2)],
                             startPoint: .top,
                             endPoint: .bottom
                         )
                     )
-                    .frame(width: 32, height: 32)
+                    .frame(width: 36, height: 36)
 
                 // Specular top highlight
                 VStack(spacing: 0) {
                     LinearGradient(
                         stops: [
-                            .init(color: .white.opacity(isHovered ? 0.45 : 0.25), location: 0.0),
+                            .init(color: .white.opacity(isHovered ? 0.50 : 0.30), location: 0.0),
                             .init(color: .clear, location: 1.0)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
-                    .frame(height: 5)
+                    .frame(height: 6)
                     Spacer(minLength: 0)
                 }
                 .clipShape(Circle())
 
                 Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: 14.5, weight: .bold))
                     .foregroundStyle(Color(red: 18 / 255, green: 18 / 255, blue: 22 / 255))
                     .offset(x: isPlaying ? 0 : 1)
             }
             .overlay(
                 Circle()
-                    .stroke(Color.white.opacity(isHovered ? 0.45 : 0.25), lineWidth: 0.8)
+                    .stroke(Color.white.opacity(isHovered ? 0.50 : 0.30), lineWidth: 0.85)
             )
-            .shadow(color: Color.black.opacity(isHovered ? 0.35 : 0.20), radius: isHovered ? 3.5 : 2, x: 0, y: 1.5)
-            .scaleEffect(isHovered && isEnabled ? 1.06 : 1.0)
+            .shadow(color: Color.black.opacity(isHovered ? 0.35 : 0.20), radius: isHovered ? 4 : 2, x: 0, y: 1.5)
+            .scaleEffect(isHovered && isEnabled ? 1.07 : 1.0)
+            .animation(.spring(response: 0.20, dampingFraction: 0.70), value: isHovered)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(TactilePlayerButtonStyle())
         .disabled(!isEnabled)
         .keyboardShortcut(.space, modifiers: [])
         .help(isPlaying ? "Pause (Space)" : "Play (Space)")
         .onHover { h in
             guard isEnabled else { return }
-            withAnimation(.spring(response: 0.20, dampingFraction: 0.70)) {
-                isHovered = h
-            }
+            isHovered = h
             if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
     }
