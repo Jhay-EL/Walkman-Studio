@@ -10,6 +10,7 @@ public struct PlaylistsView: View {
     let activeDrive: WalkmanDrive?
     let libraryTracks: [Track]
     
+    @ObservedObject private var player = AudioPlayerService.shared
     @State private var playlists: [Playlist] = []
     @State private var selectedPlaylist: Playlist?
     @State private var playlistTracks: [String] = []
@@ -20,9 +21,7 @@ public struct PlaylistsView: View {
     @FocusState private var isRowRenameFocused: Bool
     @FocusState private var isHeaderRenameFocused: Bool
     @State private var showAddTrackSheet: Bool = false
-    @State private var searchTrackQuery: String = ""
     @State private var messageBanner: String?
-    @State private var isSaving: Bool = false
     @State private var cachedTrackLookup: [String: Track] = [:]
     
     // Drag & Drop Reordering & Transfer State
@@ -145,11 +144,11 @@ public struct PlaylistsView: View {
     private func persistPlaylistChanges(newTracks: [String], isManualSave: Bool = false) {
         guard let drive = activeDrive, let playlist = selectedPlaylist else { return }
         guard playlist.fullPath.isEmpty || playlist.fullPath.hasPrefix(drive.mountPoint) else { return }
+        
+        // 1. Instant optimistic in-memory UI update
         self.playlistTracks = newTracks
         self.updateResolvedTracks()
-        self.isSaving = true
         
-        // Write back to the exact directory where the playlist lives (e.g. /Volumes/SD_CARD/MUSIC/)
         let musicURL: URL
         if !playlist.fullPath.isEmpty {
             musicURL = URL(fileURLWithPath: playlist.fullPath).deletingLastPathComponent()
@@ -159,47 +158,59 @@ public struct PlaylistsView: View {
         
         let filenameToSave = playlist.filename.isEmpty ? playlist.name : playlist.filename
         
-        // Build metadata lookup table mapping normalized relative path and filename to (duration, title, artist)
-        var metaLookup: [String: (duration: Int, title: String, artist: String)] = [:]
-        for (key, t) in cachedTrackLookup {
-            metaLookup[key] = (duration: Int(t.durationSeconds), title: t.title, artist: t.artist)
+        if let idx = playlists.firstIndex(where: { $0.id == playlist.id }) {
+            let optimistic = Playlist(
+                name: playlist.name,
+                filename: filenameToSave,
+                trackCount: newTracks.count,
+                tracks: newTracks,
+                fullPath: playlist.fullPath
+            )
+            playlists[idx] = optimistic
+            selectedPlaylist = optimistic
         }
         
-        do {
-            let savedURL = try WalkmanEngine.shared.writePlaylist(
-                musicDir: musicURL,
-                name: filenameToSave,
-                relativeTracks: newTracks,
-                trackMetadataLookup: metaLookup
-            )
-            self.isSaving = false
-            if let idx = playlists.firstIndex(where: { $0.id == playlist.id }) {
-                let updated = Playlist(
-                    name: playlist.name,
-                    filename: savedURL.lastPathComponent,
-                    trackCount: newTracks.count,
-                    tracks: newTracks,
-                    fullPath: savedURL.path
+        // 2. Perform write and disk sync in background
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let savedURL = try WalkmanEngine.shared.writePlaylist(
+                    musicDir: musicURL,
+                    name: filenameToSave,
+                    relativeTracks: newTracks
                 )
-                playlists[idx] = updated
-                selectedPlaylist = updated
-            }
-            withAnimation {
-                if isManualSave {
-                    messageBanner = "✓ Saved '\(filenameToSave)' to Walkman (\(newTracks.count) \(newTracks.count == 1 ? "track" : "tracks"))"
-                } else {
-                    messageBanner = "Saved to Walkman (\(newTracks.count) \(newTracks.count == 1 ? "track" : "tracks"))"
+                DispatchQueue.main.async {
+                    if let idx = self.playlists.firstIndex(where: { $0.id == playlist.id }) {
+                        let finalPl = Playlist(
+                            name: playlist.name,
+                            filename: savedURL.lastPathComponent,
+                            trackCount: newTracks.count,
+                            tracks: newTracks,
+                            fullPath: savedURL.path
+                        )
+                        self.playlists[idx] = finalPl
+                        if self.selectedPlaylist?.id == playlist.id {
+                            self.selectedPlaylist = finalPl
+                        }
+                    }
+                    withAnimation {
+                        if isManualSave {
+                            self.messageBanner = "✓ Saved '\(filenameToSave)' to Walkman (\(newTracks.count) \(newTracks.count == 1 ? "track" : "tracks"))"
+                        } else {
+                            self.messageBanner = "Saved to Walkman (\(newTracks.count) \(newTracks.count == 1 ? "track" : "tracks"))"
+                        }
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + (isManualSave ? 4 : 3)) {
+                        if self.messageBanner?.contains("Saved") == true {
+                            withAnimation { self.messageBanner = nil }
+                        }
+                    }
                 }
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + (isManualSave ? 4 : 3)) {
-                if self.messageBanner?.contains("Saved") == true {
-                    withAnimation { self.messageBanner = nil }
+            } catch {
+                DispatchQueue.main.async {
+                    withAnimation {
+                        self.messageBanner = "Save error: \(error.localizedDescription)"
+                    }
                 }
-            }
-        } catch {
-            self.isSaving = false
-            withAnimation {
-                messageBanner = "Save error: \(error.localizedDescription)"
             }
         }
     }
@@ -308,56 +319,13 @@ public struct PlaylistsView: View {
         
         let trackTitle = resolvedTrack(for: trackPath)?.title ?? (trackPath as NSString).lastPathComponent
         
-        // If dropping on current playlist and it's already there
-        if playlist.id == selectedPlaylist?.id {
-            withAnimation {
-                messageBanner = "'\(trackTitle)' is already in '\(playlist.name)'"
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                if self.messageBanner?.contains("already in") == true {
-                    withAnimation { self.messageBanner = nil }
-                }
-            }
-            return
-        }
-        
         var updatedTracks = playlist.tracks
         let isDuplicate = updatedTracks.contains(trackPath)
         updatedTracks.append(trackPath)
         
-        let musicURL: URL
-        if !playlist.fullPath.isEmpty {
-            musicURL = URL(fileURLWithPath: playlist.fullPath).deletingLastPathComponent()
-        } else {
-            musicURL = URL(fileURLWithPath: drive.musicDir)
-        }
-        let filenameToSave = playlist.filename.isEmpty ? playlist.name : playlist.filename
-        
-        var metaLookup: [String: (duration: Int, title: String, artist: String)] = [:]
-        for (key, t) in cachedTrackLookup {
-            metaLookup[key] = (duration: Int(t.durationSeconds), title: t.title, artist: t.artist)
-        }
-        
-        do {
-            let savedURL = try WalkmanEngine.shared.writePlaylist(
-                musicDir: musicURL,
-                name: filenameToSave,
-                relativeTracks: updatedTracks,
-                trackMetadataLookup: metaLookup
-            )
-            
-            let updatedPl = Playlist(
-                name: playlist.name,
-                filename: savedURL.lastPathComponent,
-                trackCount: updatedTracks.count,
-                tracks: updatedTracks,
-                fullPath: savedURL.path
-            )
-            
-            if let idx = playlists.firstIndex(where: { $0.id == playlist.id }) {
-                playlists[idx] = updatedPl
-            }
-            
+        // If adding to the currently selected playlist, use persistPlaylistChanges for unified reactive state
+        if playlist.id == selectedPlaylist?.id {
+            persistPlaylistChanges(newTracks: updatedTracks)
             withAnimation {
                 if isDuplicate {
                     messageBanner = "✓ Added another copy of '\(trackTitle)' to '\(playlist.name)' (\(updatedTracks.count) tracks)"
@@ -370,9 +338,66 @@ public struct PlaylistsView: View {
                     withAnimation { self.messageBanner = nil }
                 }
             }
-        } catch {
-            withAnimation {
-                messageBanner = "Failed to add to '\(playlist.name)': \(error.localizedDescription)"
+            return
+        }
+        
+        // Target is another playlist in sidebar: update in memory and save in background
+        let musicURL: URL
+        if !playlist.fullPath.isEmpty {
+            musicURL = URL(fileURLWithPath: playlist.fullPath).deletingLastPathComponent()
+        } else {
+            musicURL = URL(fileURLWithPath: drive.musicDir)
+        }
+        let filenameToSave = playlist.filename.isEmpty ? playlist.name : playlist.filename
+        
+        if let idx = playlists.firstIndex(where: { $0.id == playlist.id }) {
+            let optimistic = Playlist(
+                name: playlist.name,
+                filename: filenameToSave,
+                trackCount: updatedTracks.count,
+                tracks: updatedTracks,
+                fullPath: playlist.fullPath
+            )
+            playlists[idx] = optimistic
+        }
+        
+        withAnimation {
+            if isDuplicate {
+                messageBanner = "✓ Added another copy of '\(trackTitle)' to '\(playlist.name)' (\(updatedTracks.count) tracks)"
+            } else {
+                messageBanner = "✓ Added '\(trackTitle)' to '\(playlist.name)' (\(updatedTracks.count) tracks)"
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+            if self.messageBanner?.contains("Added") == true {
+                withAnimation { self.messageBanner = nil }
+            }
+        }
+        
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let savedURL = try WalkmanEngine.shared.writePlaylist(
+                    musicDir: musicURL,
+                    name: filenameToSave,
+                    relativeTracks: updatedTracks
+                )
+                DispatchQueue.main.async {
+                    if let idx = self.playlists.firstIndex(where: { $0.id == playlist.id }) {
+                        self.playlists[idx] = Playlist(
+                            name: playlist.name,
+                            filename: savedURL.lastPathComponent,
+                            trackCount: updatedTracks.count,
+                            tracks: updatedTracks,
+                            fullPath: savedURL.path
+                        )
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    withAnimation {
+                        self.messageBanner = "Failed to add to '\(playlist.name)': \(error.localizedDescription)"
+                    }
+                }
             }
         }
     }
@@ -469,7 +494,14 @@ public struct PlaylistsView: View {
         guard editingPlaylistId == playlist.id else { return }
         
         let trimmed = editingPlaylistName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let clean = WalkmanEngine.shared.sanitizeFilename(trimmed)
+        var clean = WalkmanEngine.shared.sanitizeFilename(trimmed)
+        while clean.lowercased().hasSuffix(".m3u8") {
+            clean = String(clean.dropLast(5))
+        }
+        while clean.lowercased().hasSuffix(".m3u") {
+            clean = String(clean.dropLast(4))
+        }
+        clean = clean.trimmingCharacters(in: .whitespacesAndNewlines)
         
         // If empty or identical to current name, just exit rename mode
         if clean.isEmpty || clean == playlist.name {
@@ -529,15 +561,34 @@ public struct PlaylistsView: View {
         if editingPlaylistId == playlist.id {
             cancelRename()
         }
-        try? FileManager.default.removeItem(atPath: playlist.fullPath)
-        let dotPath = (playlist.fullPath as NSString).deletingLastPathComponent + "/._" + (playlist.fullPath as NSString).lastPathComponent
-        try? FileManager.default.removeItem(atPath: dotPath)
-        sync()
-        if selectedPlaylist?.id == playlist.id {
-            selectedPlaylist = nil
-            playlistTracks = []
+        
+        let pathToDelete = playlist.fullPath
+        let dotPath = (pathToDelete as NSString).deletingLastPathComponent + "/._" + (pathToDelete as NSString).lastPathComponent
+        
+        // 1. Optimistic in-memory update
+        if let idx = playlists.firstIndex(where: { $0.id == playlist.id }) {
+            playlists.remove(at: idx)
+            if selectedPlaylist?.id == playlist.id {
+                if playlists.indices.contains(idx) {
+                    selectedPlaylist = playlists[idx]
+                    playlistTracks = playlists[idx].tracks
+                } else if let last = playlists.last {
+                    selectedPlaylist = last
+                    playlistTracks = last.tracks
+                } else {
+                    selectedPlaylist = nil
+                    playlistTracks = []
+                }
+                updateResolvedTracks()
+            }
         }
-        loadPlaylists()
+        
+        // 2. Background disk deletion and sync
+        DispatchQueue.global(qos: .userInitiated).async {
+            try? FileManager.default.removeItem(atPath: pathToDelete)
+            try? FileManager.default.removeItem(atPath: dotPath)
+            sync()
+        }
     }
     
     public var body: some View {
@@ -863,7 +914,6 @@ public struct PlaylistsView: View {
                 cachedTrackLookup = PlaylistsView.buildLookupTable(tracks: libraryTracks)
             }
             loadPlaylists()
-            updateResolvedTracks()
         }
         .onChange(of: libraryTracks) {
             cachedTrackLookup = PlaylistsView.buildLookupTable(tracks: libraryTracks)
@@ -872,7 +922,6 @@ public struct PlaylistsView: View {
         .onChange(of: activeDrive?.mountPoint) {
             cachedTrackLookup = PlaylistsView.buildLookupTable(tracks: libraryTracks)
             loadPlaylists()
-            updateResolvedTracks()
         }
         .sheet(isPresented: $showAddTrackSheet) {
             AddTracksModal(
@@ -1406,7 +1455,6 @@ private struct PlaylistListRowView: View {
                         lineWidth: isDropTargeted ? 1.2 : 0.8
                     )
             )
-            .scaleEffect(isDropTargeted ? 1.03 : (isHovered && !isSelected ? 1.015 : 1.0))
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -1623,7 +1671,6 @@ private struct PlaylistTrackRow: View {
                     lineWidth: 0.85
                 )
         )
-        .scaleEffect(isHovered && !isPlayingThis ? 1.008 : 1.0)
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onHover { hovering in
             guard isHovered != hovering else { return }
@@ -2247,7 +2294,7 @@ private struct ModalAlbumItem: Identifiable {
     let tracks: [Track]
     var trackCount: Int { tracks.count }
     var representativeTrack: Track? { tracks.first }
-    var isHiRes: Bool { tracks.contains { $0.bitsPerSample > 16 || $0.sampleRate > 48000 } }
+    var isHiRes: Bool { tracks.contains { $0.isHiRes } }
 }
 
 private struct ModalArtistItem: Identifiable {
@@ -2276,30 +2323,18 @@ private struct AddTracksModal: View {
     
     @State private var cachedAlbums: [ModalAlbumItem] = []
     @State private var cachedArtists: [ModalArtistItem] = []
+    @State private var cachedExistingSet: Set<String> = []
+    @State private var cachedRecentTracks: [Track] = []
     
-    private func normalizeTrackKey(_ path: String) -> String {
-        var s = path.replacingOccurrences(of: "\\", with: "/")
-            .trimmingCharacters(in: CharacterSet(charactersIn: "/ \t\r\n"))
-            .lowercased()
-        while s.hasPrefix("./") {
-            s = String(s.dropFirst(2)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        }
-        if s.hasPrefix("music/") {
-            s = String(s.dropFirst(6)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        }
-        return s
-    }
-    
-    private var normalizedExistingSet: Set<String> {
-        var set = Set(existingPlaylistPaths.map { normalizeTrackKey($0) })
-        for p in addedInSessionPaths {
-            set.insert(normalizeTrackKey(p))
-        }
-        return set
-    }
+    private static let friendlyDateFormatter: DateFormatter = {
+        let df = DateFormatter()
+        df.dateStyle = .medium
+        df.timeStyle = .none
+        return df
+    }()
     
     private func isPathInPlaylist(_ path: String) -> Bool {
-        normalizedExistingSet.contains(normalizeTrackKey(path))
+        cachedExistingSet.contains(PlaylistsView.normalizeKey(path))
     }
     
     private func isTrackInPlaylist(_ track: Track) -> Bool {
@@ -2310,6 +2345,7 @@ private struct AddTracksModal: View {
         let key = track.relativePath
         guard !isTrackInPlaylist(track) else { return }
         addedInSessionPaths.insert(key)
+        cachedExistingSet.insert(PlaylistsView.normalizeKey(key))
         selectedTrackPaths.remove(key)
         onAddTracks([key], false)
     }
@@ -2319,13 +2355,10 @@ private struct AddTracksModal: View {
         guard !unadded.isEmpty else { return }
         for p in unadded {
             addedInSessionPaths.insert(p)
+            cachedExistingSet.insert(PlaylistsView.normalizeKey(p))
             selectedTrackPaths.remove(p)
         }
         onAddTracks(unadded, false)
-    }
-    
-    private func isHiRes(_ track: Track) -> Bool {
-        return track.bitsPerSample > 16 || track.sampleRate > 48000
     }
     
     private func formatDuration(_ seconds: Double) -> String {
@@ -2382,10 +2415,7 @@ private struct AddTracksModal: View {
         } else if cal.isDateInYesterday(date) {
             return "Yesterday"
         } else {
-            let df = DateFormatter()
-            df.dateStyle = .medium
-            df.timeStyle = .none
-            return df.string(from: date)
+            return Self.friendlyDateFormatter.string(from: date)
         }
     }
     
@@ -2393,7 +2423,7 @@ private struct AddTracksModal: View {
         let q = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let sourceList: [Track]
         if mode == .recentlyAdded {
-            sourceList = tracks.sorted { $0.dateAdded > $1.dateAdded }
+            sourceList = cachedRecentTracks
         } else {
             sourceList = tracks
         }
@@ -2402,7 +2432,7 @@ private struct AddTracksModal: View {
                 return false
             }
             if formatFilter == "HI-RES" {
-                if tr.bitsPerSample <= 16 && tr.sampleRate <= 48000 { return false }
+                if !tr.isHiRes { return false }
             } else if formatFilter != "ALL" {
                 if tr.format != formatFilter { return false }
             }
@@ -2425,7 +2455,7 @@ private struct AddTracksModal: View {
                     return false
                 }
                 if formatFilter == "HI-RES" {
-                    if tr.bitsPerSample <= 16 && tr.sampleRate <= 48000 { return false }
+                    if !tr.isHiRes { return false }
                 } else if formatFilter != "ALL" {
                     if tr.format != formatFilter { return false }
                 }
@@ -2451,7 +2481,7 @@ private struct AddTracksModal: View {
                     return false
                 }
                 if formatFilter == "HI-RES" {
-                    if tr.bitsPerSample <= 16 && tr.sampleRate <= 48000 { return false }
+                    if !tr.isHiRes { return false }
                 } else if formatFilter != "ALL" {
                     if tr.format != formatFilter { return false }
                 }
@@ -2906,6 +2936,8 @@ private struct AddTracksModal: View {
         .frame(minWidth: 720, idealWidth: 920, maxWidth: 1180, minHeight: 560, idealHeight: 700, maxHeight: 900)
         .background(WalkmanTheme.background)
         .onAppear {
+            cachedExistingSet = Set(existingPlaylistPaths.map { PlaylistsView.normalizeKey($0) })
+            cachedRecentTracks = tracks.sorted { $0.dateAdded > $1.dateAdded }
             cachedAlbums = Self.buildAlbums(from: tracks)
             cachedArtists = Self.buildArtists(from: tracks)
         }
@@ -2925,10 +2957,6 @@ private struct ModalTrackRow: View {
     let onTogglePlay: () -> Void
     
     @State private var isHovered = false
-    
-    private var isHiRes: Bool {
-        track.bitsPerSample > 16 || track.sampleRate > 48000
-    }
     
     private var formattedDuration: String {
         if track.durationSeconds <= 0 { return "—" }
@@ -2959,7 +2987,7 @@ private struct ModalTrackRow: View {
                         .foregroundStyle(isSelected ? .white : (isHovered ? .white : .primary))
                         .lineLimit(1)
                     
-                    if isHiRes {
+                    if track.isHiRes {
                         Text("Hi-Res")
                             .font(WalkmanFont.badge)
                             .padding(.horizontal, 4.5)
@@ -3046,7 +3074,6 @@ private struct ModalTrackRow: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(isSelected ? WalkmanTheme.silver.opacity(0.35) : (isHovered ? Color.white.opacity(0.08) : Color.white.opacity(0.04)), lineWidth: 1)
         )
-        .scaleEffect(isHovered && !isSelected ? 1.01 : 1.0)
         .contentShape(Rectangle())
         .onHover { hovering in
             guard isHovered != hovering else { return }
@@ -3191,7 +3218,6 @@ private struct ModalAlbumRow: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(isAllSelected ? WalkmanTheme.silver.opacity(0.35) : (isHovered ? Color.white.opacity(0.08) : Color.white.opacity(0.04)), lineWidth: 1)
         )
-        .scaleEffect(isHovered && !isAllSelected ? 1.01 : 1.0)
         .contentShape(Rectangle())
         .onHover { hovering in
             guard isHovered != hovering else { return }
@@ -3308,7 +3334,6 @@ private struct ModalArtistRow: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(isAllSelected ? WalkmanTheme.silver.opacity(0.35) : (isHovered ? Color.white.opacity(0.08) : Color.white.opacity(0.04)), lineWidth: 1)
         )
-        .scaleEffect(isHovered && !isAllSelected ? 1.01 : 1.0)
         .contentShape(Rectangle())
         .onHover { hovering in
             guard isHovered != hovering else { return }

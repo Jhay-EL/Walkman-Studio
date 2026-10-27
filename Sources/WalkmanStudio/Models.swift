@@ -140,6 +140,11 @@ public struct Track: Identifiable, Hashable, Sendable {
 }
 
 extension Track {
+    /// Whether this track qualifies as Hi-Res Audio (exceeds standard 16-bit / 44.1/48kHz CD quality)
+    public var isHiRes: Bool {
+        bitsPerSample > 16 || sampleRate > 48000
+    }
+
     /// Extracts the primary artist name, stripping guest/featured artists (e.g. "6CycleMind, Ebe Dancel" -> "6CycleMind").
     public var primaryArtist: String {
         Track.parsePrimaryAndFeaturedArtist(from: artist).primary
