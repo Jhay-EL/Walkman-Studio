@@ -1972,14 +1972,6 @@ public struct TrimAndCutSheet: View {
                     .font(WalkmanFont.monoSmall)
                     .foregroundStyle(Color.red)
                     .lineLimit(1)
-            } else if let status = statusMessage {
-                ProgressView()
-                    .scaleEffect(0.65)
-                    .frame(width: 14, height: 14)
-                Text(status)
-                    .font(WalkmanFont.monoSmall)
-                    .foregroundStyle(WalkmanTheme.silverLight)
-                    .lineLimit(1)
             } else if showSuccessBanner {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(Color.green)
