@@ -8,7 +8,7 @@ public enum NavigationTab: String, CaseIterable, Identifiable, Hashable {
     case albums = "Albums"
     case artists = "Artists"
     case hiRes = "Hi-Res Audio"
-    case playlists = "Playlist"
+    case playlists = "Playlists"
     case duplicates = "Duplicates"
     case transfer = "Transfer & Convert"
     case backupRestore = "Backup & Restore"
@@ -76,6 +76,7 @@ public struct SidebarView: View {
                             isDeviceActive: isDeviceActive,
                             isOverviewSelected: isOverviewSelected,
                             onSelectDevice: {
+                                selectedTab = .overview
                                 onSelectDevice?(device)
                             }
                         )
@@ -89,9 +90,6 @@ public struct SidebarView: View {
                                 isCurrent: isCurrent,
                                 isIndented: true,
                                 onSelect: {
-                                    if !isDeviceActive {
-                                        onSelectDevice?(device)
-                                    }
                                     onSelectDrive?(drive)
                                 }
                             )
@@ -181,7 +179,7 @@ public struct SidebarView: View {
                 SidebarRow(
                     tab: .playlists,
                     selectedTab: $selectedTab,
-                    title: "Playlist",
+                    title: "Playlists",
                     icon: "list.bullet.rectangle.portrait.fill",
                     badge: nil
                 )
@@ -229,7 +227,24 @@ public struct SidebarView: View {
         .background(WalkmanTheme.background.ignoresSafeArea())
         .safeAreaInset(edge: .bottom) {
             if let onAbout = onOpenAbout {
-                AboutSidebarButton(action: onAbout)
+                VStack(spacing: 0) {
+                    Divider()
+                        .overlay(Color.white.opacity(0.06))
+                    AboutSidebarButton(action: onAbout)
+                }
+                .background(
+                    WalkmanTheme.background
+                        .overlay(
+                            LinearGradient(
+                                stops: [
+                                    .init(color: Color.white.opacity(0.04), location: 0.0),
+                                    .init(color: Color.clear, location: 0.8)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                )
             }
         }
     }
@@ -288,8 +303,7 @@ private struct AboutSidebarButton: View {
                 x: 0,
                 y: 1.5
             )
-            .scaleEffect(isHovered ? 1.015 : 1.0)
-            .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+            .animation(.easeInOut(duration: 0.15), value: isHovered)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -403,8 +417,7 @@ private struct DeviceMultiSidebarCard: View {
                 x: 0,
                 y: 1
             )
-            .scaleEffect(isHovered ? 1.01 : 1.0)
-            .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+            .animation(.easeInOut(duration: 0.15), value: isHovered)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -464,10 +477,13 @@ private struct DriveSidebarRow: View {
                 Spacer()
 
                 if isCurrent {
-                    // Active Beacon Dot (Clean tactile dot - No Glow)
+                    // Active Beacon Dot (Clean tactile gold dot - No Glow)
                     Circle()
-                        .fill(Color.green)
+                        .fill(WalkmanTheme.hiResGold)
                         .frame(width: 5.5, height: 5.5)
+                        .overlay(
+                            Circle().stroke(WalkmanTheme.hiResGoldLight.opacity(0.6), lineWidth: 0.5)
+                        )
                         .padding(.trailing, 6)
                 }
             }
@@ -511,8 +527,7 @@ private struct DriveSidebarRow: View {
                         lineWidth: 0.8
                     )
             )
-            .scaleEffect(isHovered ? 1.01 : 1.0)
-            .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+            .animation(.easeInOut(duration: 0.15), value: isHovered)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -624,8 +639,7 @@ private struct DeviceConnectedSidebarRow: View {
                 x: 0,
                 y: isSelected ? 2 : 1
             )
-            .scaleEffect(isHovered ? 1.01 : 1.0)
-            .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+            .animation(.easeInOut(duration: 0.15), value: isHovered)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -788,8 +802,7 @@ private struct SidebarRow: View {
                 x: 0,
                 y: 1.5
             )
-            .scaleEffect(isHovered ? 1.01 : 1.0)
-            .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+            .animation(.easeInOut(duration: 0.15), value: isHovered)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

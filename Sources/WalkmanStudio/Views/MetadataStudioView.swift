@@ -6,8 +6,6 @@ public struct MetadataStudioView: View {
     let onSaved: (() -> Void)?
     let onEdit: (() -> Void)?
     
-    @ObservedObject private var player = AudioPlayerService.shared
-    
     @State private var currentTrackId: String? = nil
     @State private var coverImage: NSImage? = nil
     @State private var coverData: Data? = nil
@@ -129,6 +127,11 @@ public struct MetadataStudioView: View {
         return mins * 60.0 + secs
     }
 
+    private static let lyricTimestampRegex: NSRegularExpression? = {
+        let pattern = #"\[(\d{1,2}:\d{2}(?:[.:]\d{1,3})?)\]"#
+        return try? NSRegularExpression(pattern: pattern)
+    }()
+
     public static func parseLyrics(_ raw: String?) -> [ParsedLyricLine] {
         guard let raw = raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
         let rawLines = raw.components(separatedBy: .newlines)
@@ -146,8 +149,7 @@ public struct MetadataStudioView: View {
         }
         
         var result: [ParsedLyricLine] = []
-        let pattern = #"\[(\d{1,2}:\d{2}(?:[.:]\d{1,3})?)\]"#
-        let regex = try? NSRegularExpression(pattern: pattern)
+        let regex = lyricTimestampRegex
         
         var lineIndex = 0
         for line in rawLines {
@@ -249,23 +251,31 @@ public struct MetadataStudioView: View {
         return tr.format
     }
 
+    private var coverPixelSize: (width: Int, height: Int)? {
+        guard let img = coverImage else { return nil }
+        for rep in img.representations {
+            if rep.pixelsWide > 0 && rep.pixelsHigh > 0 {
+                return (rep.pixelsWide, rep.pixelsHigh)
+            }
+        }
+        let w = Int(img.size.width)
+        let h = Int(img.size.height)
+        if w > 0 && h > 0 {
+            return (w, h)
+        }
+        return nil
+    }
+
     private func artworkStatusShortLabel(_ st: (valid: Bool, message: String)) -> String {
+        let size = coverPixelSize
         if st.valid {
-            if let img = coverImage {
-                let w = Int(img.size.width)
-                let h = Int(img.size.height)
-                if w > 0 && h > 0 {
-                    return "\(w)×\(h) • Walkman Ready"
-                }
+            if let (w, h) = size {
+                return "\(w)×\(h) • Walkman Ready"
             }
             return "Walkman Ready (Baseline)"
         } else {
-            if let img = coverImage {
-                let w = Int(img.size.width)
-                let h = Int(img.size.height)
-                if w > 800 || h > 800 {
-                    return "\(w)×\(h) • Exceeds 800px"
-                }
+            if let (w, h) = size, (w > 800 || h > 800) {
+                return "\(w)×\(h) • Exceeds 800px"
             }
             if st.message.contains("Progressive") {
                 return "Progressive JPEG (Advisory)"
@@ -295,7 +305,8 @@ public struct MetadataStudioView: View {
         
         if isDifferentTrack || force {
             if isDifferentTrack {
-                coverImage = nil
+                // Pre-fill immediately from high-speed memory/SSD cache to eliminate blank flash
+                coverImage = CoverArtCache.shared.thumbnail(for: tr)
                 coverData = nil
                 validationStatus = nil
                 lyrics = nil
@@ -323,7 +334,9 @@ public struct MetadataStudioView: View {
                 DispatchQueue.main.async {
                     guard self.track?.id == tr.id else { return }
                     self.coverData = art
-                    self.coverImage = img
+                    if let loadedImg = img {
+                        self.coverImage = loadedImg
+                    }
                     self.validationStatus = val
                     self.lyrics = rawLyrics
                     self.verifiedMetadata = meta
@@ -645,25 +658,30 @@ public struct MetadataStudioView: View {
                         }
                     }
 
-                    // 6. AUDIO PROPERTIES & SPECIFICATIONS
+                    // 6. AUDIO SPECIFICATIONS
                     VStack(alignment: .leading, spacing: 8) {
-                        sectionHeader(title: "Audio Properties", icon: "waveform")
+                        sectionHeader(title: "Audio Specifications", icon: "waveform")
                         
                         VStack(spacing: 0) {
                             AudioSpecRow(label: "Format", value: tr.format, systemImage: "doc.fill")
                             Divider().overlay(Color.white.opacity(0.06))
-                            AudioSpecRow(label: "Duration", value: formatDuration(tr.durationSeconds), systemImage: "clock")
+                            let sampleRateStr = formatSampleRate(tr.sampleRate)
+                            AudioSpecRow(label: "Sample Rate", value: sampleRateStr.isEmpty ? "Standard" : sampleRateStr, systemImage: "waveform.badge.magnifyingglass")
                             Divider().overlay(Color.white.opacity(0.06))
-                            AudioSpecRow(label: "Bitrate", value: tr.bitrateKbps > 0 ? "\(tr.bitrateKbps) kbps" : "Lossless", systemImage: "speedometer")
-                            Divider().overlay(Color.white.opacity(0.06))
-                            AudioSpecRow(label: "Audio Quality", value: formatQuality(tr), systemImage: "waveform.path")
-                            Divider().overlay(Color.white.opacity(0.06))
-                            AudioSpecRow(label: "File Size", value: formatSize(tr.sizeBytes), systemImage: "internaldrive")
+                            let bitsStr = tr.bitsPerSample > 0 ? "\(tr.bitsPerSample)-bit" : "16-bit Standard"
+                            AudioSpecRow(label: "Bit Depth", value: bitsStr, systemImage: "slider.horizontal.3")
                             Divider().overlay(Color.white.opacity(0.06))
                             AudioSpecRow(
                                 label: "Hardware Tags",
-                                value: tr.format == "MP3" ? "Strict ID3v2.3 (UTF-16)" : (tr.format == "FLAC" ? "Vorbis Comments" : "MP4 iTunes Tags"),
+                                value: tr.format == "MP3" ? "Strict ID3v2.3 (UTF-16)" : (tr.format == "FLAC" ? "Vorbis Comments (SMFM Block 2)" : "MP4 iTunes Metadata"),
                                 systemImage: "cpu"
+                            )
+                            Divider().overlay(Color.white.opacity(0.06))
+                            let isMicroSD = tr.fullPath.lowercased().contains("microsd") || tr.fullPath.lowercased().contains("sd_card") || tr.fullPath.lowercased().contains("sdcard")
+                            AudioSpecRow(
+                                label: "Storage",
+                                value: isMicroSD ? "MicroSD Card" : "Internal Memory",
+                                systemImage: isMicroSD ? "sdcard.fill" : "internaldrive.fill"
                             )
                         }
                         .padding(.horizontal, 12)
@@ -704,7 +722,25 @@ public struct MetadataStudioView: View {
                     
                     // 8. FILE LOCATION
                     VStack(alignment: .leading, spacing: 8) {
-                        sectionHeader(title: "File Location", icon: "folder.fill")
+                        HStack(spacing: 6) {
+                            sectionHeader(title: "File Location", icon: "folder.fill")
+                            Spacer()
+                            Button(action: copyPathToClipboard) {
+                                Image(systemName: "doc.on.doc")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(WalkmanTheme.silverMuted)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Copy File Path")
+
+                            Button(action: revealInFinder) {
+                                Image(systemName: "arrow.up.forward.square")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(WalkmanTheme.silverMuted)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Reveal Audio File in Finder")
+                        }
                         
                         // Exact File Location Container
                         let exactPath = tr.fullPath.isEmpty ? (tr.relativePath.isEmpty ? tr.filename : tr.relativePath) : tr.fullPath

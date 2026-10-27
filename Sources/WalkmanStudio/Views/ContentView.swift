@@ -516,7 +516,7 @@ public struct ContentView: View {
                 .background(WalkmanTheme.background)
             } else {
                 // Connected State: Native macOS NavigationSplitView
-                NavigationSplitView(columnVisibility: $columnVisibility.animation(.spring(response: 0.35, dampingFraction: 0.82))) {
+                NavigationSplitView(columnVisibility: $columnVisibility) {
                     SidebarView(
                         selectedTab: $selectedTab,
                         devices: devices,
@@ -540,7 +540,6 @@ public struct ContentView: View {
                         onOpenAbout: { self.showAboutSheet = true }
                     )
                     .frame(width: 260)
-                    .clipped()
                     .navigationSplitViewColumnWidth(min: 260, ideal: 260, max: 260)
                     .toolbarBackground(.hidden, for: .windowToolbar)
                 } detail: {
@@ -579,9 +578,7 @@ public struct ContentView: View {
                                     selectedTrackId: $selectedTrackId,
                                     onInspectTrack: { track in
                                         self.selectedTrackId = track.id
-                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                            self.showInspector = true
-                                        }
+                                        self.showInspector = true
                                     },
                                     onGoToTransfer: {
                                         self.selectedTab = .transfer
@@ -604,9 +601,7 @@ public struct ContentView: View {
                                     selectedTrackId: $selectedTrackId,
                                     onInspectTrack: { track in
                                         self.selectedTrackId = track.id
-                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                            self.showInspector = true
-                                        }
+                                        self.showInspector = true
                                     },
                                     onGoToTransfer: {
                                         self.selectedTab = .transfer
@@ -628,9 +623,7 @@ public struct ContentView: View {
                                     precomputedAlbums: cachedAlbums,
                                     onSelectTrack: { track in
                                         self.selectedTrackId = track.id
-                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                            self.showInspector = true
-                                        }
+                                        self.showInspector = true
                                     },
                                     onEditAlbum: { album in
                                         self.albumToEdit = album
@@ -655,9 +648,7 @@ public struct ContentView: View {
                                     precomputedArtists: cachedArtists,
                                     onSelectTrack: { track in
                                         self.selectedTrackId = track.id
-                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                            self.showInspector = true
-                                        }
+                                        self.showInspector = true
                                     },
                                     onEditTrack: { track in
                                         self.trackToEdit = track
@@ -674,9 +665,7 @@ public struct ContentView: View {
                                     precomputedArtists: cachedArtists,
                                     onSelectTrack: { track in
                                         self.selectedTrackId = track.id
-                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                            self.showInspector = true
-                                        }
+                                        self.showInspector = true
                                     },
                                     onEditAlbum: { album in
                                         self.albumToEdit = album
@@ -746,9 +735,7 @@ public struct ContentView: View {
                                     if let cur = player.currentTrack {
                                         self.selectedTrackId = cur.id
                                     }
-                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                        self.showInspector = true
-                                    }
+                                    self.showInspector = true
                                 },
                                 onOpenFullScreen: {
                                     withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
@@ -766,11 +753,7 @@ public struct ContentView: View {
                     .background(WalkmanTheme.background.ignoresSafeArea())
                     .adaptiveInspector(isPresented: Binding(
                         get: { showInspector && !isFullScreenPlayerPresented },
-                        set: { newValue in
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                showInspector = newValue
-                            }
-                        }
+                        set: { showInspector = $0 }
                     )) {
                         MetadataStudioView(
                             track: selectedTrack,
@@ -807,15 +790,10 @@ public struct ContentView: View {
                             }
                             
                             // Inspector Toggle
-                            Button(action: {
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                    showInspector.toggle()
-                                }
-                            }) {
+                            Button(action: { showInspector.toggle() }) {
                                 Label("Inspector", systemImage: "sidebar.trailing")
                             }
-                            .keyboardShortcut("i", modifiers: [.command])
-                            .help("Toggle Track Detail Pane / Inspector (Cmd+I)")
+                            .help("Toggle Metadata & Artwork Inspector (Cmd+I)")
                         }
                     }
                     .toolbarBackground(.hidden, for: .windowToolbar)
@@ -933,12 +911,6 @@ private extension View {
             self.inspector(isPresented: isPresented) {
                 content()
                     .inspectorColumnWidth(min: 280, ideal: 300, max: 320)
-                    .background(WalkmanTheme.background)
-                    .clipped()
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .move(edge: .trailing)),
-                        removal: .opacity.combined(with: .move(edge: .trailing))
-                    ))
             }
         } else {
             HStack(spacing: 0) {
@@ -949,11 +921,7 @@ private extension View {
                     content()
                         .frame(width: 300)
                         .background(WalkmanTheme.background)
-                        .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .move(edge: .trailing)),
-                            removal: .opacity.combined(with: .move(edge: .trailing))
-                        ))
-                        .clipped()
+                        .transition(.move(edge: .trailing))
                 }
             }
         }
