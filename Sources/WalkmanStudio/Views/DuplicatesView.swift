@@ -95,6 +95,10 @@ public struct DuplicatesView: View {
         switch reason {
         case .exactFile:
             return Color.green
+        case .bitExactAudio:
+            return Color.teal
+        case .isrcMatch:
+            return WalkmanTheme.hiResGold
         case .sameAlbum:
             return Color.blue
         case .strayCopy:
@@ -741,6 +745,10 @@ private struct DuplicateGroupCard: View {
         switch reason {
         case .exactFile:
             return Color(red: 120/255, green: 230/255, blue: 150/255)
+        case .bitExactAudio:
+            return Color(red: 100/255, green: 230/255, blue: 220/255)
+        case .isrcMatch:
+            return WalkmanTheme.hiResGold
         case .sameAlbum:
             return Color(red: 130/255, green: 200/255, blue: 255/255)
         case .strayCopy:

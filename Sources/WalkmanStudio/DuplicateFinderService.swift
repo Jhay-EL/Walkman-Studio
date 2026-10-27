@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import AppKit
+import CryptoKit
 
 public struct DuplicateTrackItem: Identifiable, Hashable, Sendable {
     public var id: String { track.fullPath }
@@ -18,6 +19,8 @@ public struct DuplicateTrackItem: Identifiable, Hashable, Sendable {
 
 public enum DuplicateMatchReason: String, CaseIterable, Identifiable, Sendable {
     case exactFile = "Exact File Match"
+    case bitExactAudio = "Bit-Exact Audio (FLAC MD5)"
+    case isrcMatch = "Official Master (ISRC Match)"
     case sameAlbum = "Same Album Copy"
     case strayCopy = "Untagged / Stray Copy"
     case crossDrive = "Cross-Drive Redundant"
@@ -28,6 +31,8 @@ public enum DuplicateMatchReason: String, CaseIterable, Identifiable, Sendable {
     public var icon: String {
         switch self {
         case .exactFile: return "doc.on.doc.fill"
+        case .bitExactAudio: return "waveform.badge.checkmark"
+        case .isrcMatch: return "seal.fill"
         case .sameAlbum: return "rectangle.stack.fill"
         case .strayCopy: return "folder.badge.questionmark"
         case .crossDrive: return "arrow.triangle.2.circlepath"
@@ -244,6 +249,206 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
         return false
     }
 
+    /// Checks if a title is generic or ambiguous (e.g., "Track 1", "Audio", "Intro")
+    public static func isGenericOrAmbiguousTitle(_ title: String) -> Bool {
+        let t = title.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.count <= 1 { return true }
+        let genericNames = [
+            "track", "audio", "untitled", "intro", "outro", "interlude",
+            "voice", "recording", "bonus track", "soundtrack"
+        ]
+        if genericNames.contains(t) { return true }
+        if t.range(of: #"^(?:track|audio|title|recording|voice)[\s\-_]*\d{1,3}$"#, options: .regularExpression) != nil {
+            return true
+        }
+        return false
+    }
+
+    /// Computes a fast content fingerprint for candidate files with identical size.
+    /// Reads up to 32KB from the start, 32KB from the middle, and 32KB from the end of the file.
+    public static func fastContentFingerprint(at path: String, fileSize: Int64) -> String? {
+        guard fileSize > 0 else { return nil }
+        guard let fileHandle = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? fileHandle.close() }
+
+        let sampleSize = 32768 // 32 KB
+        var hasher = SHA256()
+
+        do {
+            // 1. Start sample
+            let startData = try fileHandle.read(upToCount: sampleSize) ?? Data()
+            guard !startData.isEmpty else { return nil }
+            hasher.update(data: startData)
+
+            // 2. Middle sample
+            if fileSize > Int64(sampleSize * 2) {
+                let midOffset = (fileSize - Int64(sampleSize)) / 2
+                try fileHandle.seek(toOffset: UInt64(midOffset))
+                if let midData = try fileHandle.read(upToCount: sampleSize) {
+                    hasher.update(data: midData)
+                }
+            }
+
+            // 3. End sample
+            if fileSize > Int64(sampleSize * 3) {
+                let endOffset = fileSize - Int64(sampleSize)
+                try fileHandle.seek(toOffset: UInt64(endOffset))
+                if let endData = try fileHandle.read(upToCount: sampleSize) {
+                    hasher.update(data: endData)
+                }
+            }
+
+            let digest = hasher.finalize()
+            return digest.map { String(format: "%02hhx", $0) }.joined()
+        } catch {
+            return nil
+        }
+    }
+
+    /// Reads the 16-byte uncompressed audio stream MD5 from a FLAC file header (STREAMINFO block).
+    /// Returns 32-character hex string if present and non-zero.
+    public static func readFLACAudioStreamMD5(at path: String) -> String? {
+        guard let handle = try? FileHandle(forReadingFrom: URL(fileURLWithPath: path)) else { return nil }
+        defer { try? handle.close() }
+
+        // Check "fLaC" magic (4 bytes)
+        guard let magic = try? handle.read(upToCount: 4), magic == Data([0x66, 0x4C, 0x61, 0x43]) else { return nil }
+
+        // Read first metadata block header (4 bytes)
+        guard let blockHeader = try? handle.read(upToCount: 4), blockHeader.count == 4 else { return nil }
+        let blockType = Int(blockHeader[0] & 0x7F)
+        let blockLen = (Int(blockHeader[1]) << 16) | (Int(blockHeader[2]) << 8) | Int(blockHeader[3])
+
+        // Block type 0 is STREAMINFO (must be >= 34 bytes)
+        guard blockType == 0, blockLen >= 34 else { return nil }
+        guard let streamInfo = try? handle.read(upToCount: blockLen), streamInfo.count >= 34 else { return nil }
+
+        // MD5 of uncompressed audio stream is stored in bytes 18..<34
+        let md5Data = streamInfo.subdata(in: 18..<34)
+        guard md5Data.contains(where: { $0 != 0 }) else { return nil }
+
+        return md5Data.map { String(format: "%02hhx", $0) }.joined()
+    }
+
+    /// Reads the ISRC (International Standard Recording Code) tag from FLAC Vorbis Comments or MP3 ID3v2.
+    public static func readFastISRC(at path: String, format: String) -> String? {
+        let fmt = format.uppercased()
+        guard let handle = try? FileHandle(forReadingFrom: URL(fileURLWithPath: path)) else { return nil }
+        defer { try? handle.close() }
+
+        if fmt == "FLAC" {
+            guard let magic = try? handle.read(upToCount: 4), magic == Data([0x66, 0x4C, 0x61, 0x43]) else { return nil }
+            var isLast = false
+            while !isLast {
+                guard let bh = try? handle.read(upToCount: 4), bh.count == 4 else { break }
+                isLast = (bh[0] & 0x80) != 0
+                let type = Int(bh[0] & 0x7F)
+                let len = (Int(bh[1]) << 16) | (Int(bh[2]) << 8) | Int(bh[3])
+
+                if type == 4 { // VORBIS_COMMENT
+                    guard let d = try? handle.read(upToCount: min(len, 262144)), d.count >= 8 else { break }
+                    var offset = 0
+                    let vendorLen = Int(d[0]) | (Int(d[1]) << 8) | (Int(d[2]) << 16) | (Int(d[3]) << 24)
+                    offset += 4 + vendorLen
+                    guard offset + 4 <= d.count else { break }
+                    let count = Int(d[offset]) | (Int(d[offset+1]) << 8) | (Int(d[offset+2]) << 16) | (Int(d[offset+3]) << 24)
+                    offset += 4
+
+                    for _ in 0..<min(count, 150) {
+                        guard offset + 4 <= d.count else { break }
+                        let cLen = Int(d[offset]) | (Int(d[offset+1]) << 8) | (Int(d[offset+2]) << 16) | (Int(d[offset+3]) << 24)
+                        offset += 4
+                        guard offset + cLen <= d.count else { break }
+                        if let s = String(data: d.subdata(in: offset..<offset+cLen), encoding: .utf8) {
+                            let upper = s.uppercased()
+                            if upper.hasPrefix("ISRC=") {
+                                let parts = s.components(separatedBy: "=")
+                                if parts.count >= 2 {
+                                    let val = parts[1].trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+                                    if !val.isEmpty { return val }
+                                }
+                            }
+                        }
+                        offset += cLen
+                    }
+                    break
+                } else {
+                    guard len > 0 else { break }
+                    // Advance handle
+                    let cur = handle.offsetInFile
+                    try? handle.seek(toOffset: cur + UInt64(len))
+                }
+            }
+        } else if fmt == "MP3" {
+            guard let hdr = try? handle.read(upToCount: 10), hdr.count == 10,
+                  hdr[0] == 0x49, hdr[1] == 0x44, hdr[2] == 0x33 else { return nil }
+            let tagSize = (Int(hdr[6]) << 21) | (Int(hdr[7]) << 14) | (Int(hdr[8]) << 7) | Int(hdr[9])
+            guard let tagData = try? handle.read(upToCount: min(tagSize, 131072)) else { return nil }
+
+            var offset = 0
+            let flags = hdr[5]
+            let version = hdr[3]
+            if (flags & 0x40) != 0 && tagData.count >= 4 {
+                let extSize = (Int(tagData[0]) << 21) | (Int(tagData[1]) << 14) | (Int(tagData[2]) << 7) | Int(tagData[3])
+                offset = max(4, extSize)
+            }
+
+            while offset + 10 <= tagData.count {
+                let idData = tagData.subdata(in: offset..<offset+4)
+                guard let frameID = String(data: idData, encoding: .ascii) else { break }
+                let fSize: Int
+                if version == 4 {
+                    fSize = (Int(tagData[offset+4]) << 21) | (Int(tagData[offset+5]) << 14) | (Int(tagData[offset+6]) << 7) | Int(tagData[offset+7])
+                } else {
+                    fSize = (Int(tagData[offset+4]) << 24) | (Int(tagData[offset+5]) << 16) | (Int(tagData[offset+6]) << 8) | Int(tagData[offset+7])
+                }
+                offset += 10
+                guard fSize > 0 && offset + fSize <= tagData.count else { break }
+
+                if frameID == "TSRC" {
+                    let frameContent = tagData.subdata(in: offset..<offset+fSize)
+                    if frameContent.count > 1 {
+                        let payload = frameContent.subdata(in: 1..<frameContent.count)
+                        let text = String(data: payload, encoding: .isoLatin1) ?? String(data: payload, encoding: .utf8)
+                        let val = (text ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "\0 \t\n\r")).uppercased()
+                        if !val.isEmpty { return val }
+                    }
+                }
+                offset += fSize
+            }
+        }
+        return nil
+    }
+
+    /// Confirms acoustic correlation between candidate tracks using SenseMe analysis when available.
+    public static func areAcousticallyCorrelated(trackA: Track, trackB: Track) -> Bool {
+        if trackA.isSenseMeAnalyzed && trackB.isSenseMeAnalyzed {
+            if let bpmA = trackA.senseMeBpm, let bpmB = trackB.senseMeBpm {
+                if abs(bpmA - bpmB) > 1.2 {
+                    return false
+                }
+            }
+            if let valA = trackA.senseMeValence, let valB = trackB.senseMeValence {
+                if abs(valA - valB) > 0.15 {
+                    return false
+                }
+            }
+            if let aroA = trackA.senseMeArousal, let aroB = trackB.senseMeArousal {
+                if abs(aroA - aroB) > 0.15 {
+                    return false
+                }
+            }
+            if !trackA.senseMeChannels.isEmpty && !trackB.senseMeChannels.isEmpty {
+                let setA = Set(trackA.senseMeChannels)
+                let setB = Set(trackB.senseMeChannels)
+                if setA.intersection(setB).isEmpty {
+                    return false
+                }
+            }
+        }
+        return true
+    }
+
     public static func cleanFilenameForMatching(_ filename: String) -> String {
         var base = (filename as NSString).deletingPathExtension
         let patterns = [
@@ -393,31 +598,149 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
         var assignedPaths = Set<String>()
         var results: [DuplicateGroup] = []
 
-        // MARK: - Phase 1: Exact File / Content Match (Identical Size & Duration on Same Drive)
-        var sizeDurationBuckets: [String: [Track]] = [:]
+        var fingerprintCache: [String: String] = [:]
+        var flacMd5Cache: [String: String] = [:]
+        var isrcCache: [String: String] = [:]
+
+        // MARK: - Phase 1a: Verified Exact File Match (Identical Size & Verified Content Hash on Same Drive)
+        var sizeBuckets: [String: [Track]] = [:]
         for track in tracks {
             guard track.sizeBytes > 100_000, track.durationSeconds > 5.0 else { continue }
             let driveMount = resolveDrive(for: track).mountPoint
-            let roundedDur = Int((track.durationSeconds * 10).rounded())
-            let key = "\(driveMount)::\(track.sizeBytes)::\(roundedDur)::\(track.format.uppercased())"
-            sizeDurationBuckets[key, default: []].append(track)
+            let key = "\(driveMount)::\(track.sizeBytes)::\(track.format.uppercased())"
+            sizeBuckets[key, default: []].append(track)
         }
 
-        for (_, bucket) in sizeDurationBuckets where bucket.count > 1 {
-            let items = bucket.map { makeItem($0) }
-            for tr in bucket { assignedPaths.insert(tr.fullPath) }
-            let first = bucket[0]
+        for (_, bucket) in sizeBuckets where bucket.count > 1 {
+            var clusters: [[Track]] = []
+            for track in bucket {
+                let fp: String
+                if let cached = fingerprintCache[track.fullPath] {
+                    fp = cached
+                } else if let computed = fastContentFingerprint(at: track.fullPath, fileSize: track.sizeBytes) {
+                    fingerprintCache[track.fullPath] = computed
+                    fp = computed
+                } else {
+                    continue
+                }
+
+                var placed = false
+                for i in 0..<clusters.count {
+                    let leader = clusters[i][0]
+                    guard let leaderFp = fingerprintCache[leader.fullPath], leaderFp == fp else { continue }
+
+                    // Safety Check 1: Titles must not conflict if both present
+                    let tTrack = normalizeTitle(track.title)
+                    let tLeader = normalizeTitle(leader.title)
+                    if !tTrack.isEmpty && !tLeader.isEmpty && tTrack != tLeader {
+                        continue
+                    }
+
+                    // Safety Check 2: Artists must not conflict if both present
+                    let aTrack = normalizeArtist(track.artist)
+                    let aLeader = normalizeArtist(leader.artist)
+                    if !aTrack.isEmpty && !aLeader.isEmpty && aTrack != aLeader {
+                        continue
+                    }
+
+                    clusters[i].append(track)
+                    placed = true
+                    break
+                }
+                if !placed {
+                    clusters.append([track])
+                }
+            }
+
+            for cluster in clusters where cluster.count > 1 {
+                for tr in cluster { assignedPaths.insert(tr.fullPath) }
+                let items = cluster.map { makeItem($0) }
+                let first = cluster[0]
+                let cleanTitle = first.title.isEmpty ? first.filename : first.title
+                let cleanArtist = first.primaryArtist.isEmpty ? "Unknown Artist" : first.primaryArtist
+                let groupId = "exact::\(first.fullPath)::\(cluster.count)"
+                results.append(DuplicateGroup(
+                    id: groupId,
+                    title: cleanTitle,
+                    artist: cleanArtist,
+                    album: first.album,
+                    matchReason: .exactFile,
+                    items: items
+                ))
+            }
+        }
+
+        // MARK: - Phase 1b: Bit-Exact Audio via FLAC STREAMINFO MD5 (Same Drive, Different Tags/Art)
+        var flacMd5Buckets: [String: [Track]] = [:]
+        for track in tracks where !assignedPaths.contains(track.fullPath) && track.format.uppercased() == "FLAC" {
+            guard track.durationSeconds > 5.0 else { continue }
+            guard let md5 = flacMd5Cache[track.fullPath] ?? readFLACAudioStreamMD5(at: track.fullPath) else { continue }
+            flacMd5Cache[track.fullPath] = md5
+            let driveMount = resolveDrive(for: track).mountPoint
+            flacMd5Buckets["\(driveMount)::\(md5)", default: []].append(track)
+        }
+
+        for (_, bucket) in flacMd5Buckets where bucket.count > 1 {
+            let unassigned = bucket.filter { !assignedPaths.contains($0.fullPath) }
+            guard unassigned.count > 1 else { continue }
+            for tr in unassigned { assignedPaths.insert(tr.fullPath) }
+            let items = unassigned.map { makeItem($0) }
+            let first = unassigned[0]
             let cleanTitle = first.title.isEmpty ? first.filename : first.title
             let cleanArtist = first.primaryArtist.isEmpty ? "Unknown Artist" : first.primaryArtist
-            let groupId = "exact::\(first.fullPath)::\(bucket.count)"
+            let groupId = "flac_md5::\(first.fullPath)::\(unassigned.count)"
             results.append(DuplicateGroup(
                 id: groupId,
                 title: cleanTitle,
                 artist: cleanArtist,
                 album: first.album,
-                matchReason: .exactFile,
+                matchReason: .bitExactAudio,
                 items: items
             ))
+        }
+
+        // MARK: - Phase 1c: Official Master Recording via ISRC (Same Drive)
+        var isrcBuckets: [String: [Track]] = [:]
+        for track in tracks where !assignedPaths.contains(track.fullPath) {
+            guard track.durationSeconds > 5.0 else { continue }
+            guard let isrc = isrcCache[track.fullPath] ?? readFastISRC(at: track.fullPath, format: track.format) else { continue }
+            isrcCache[track.fullPath] = isrc
+            let driveMount = resolveDrive(for: track).mountPoint
+            isrcBuckets["\(driveMount)::\(isrc)", default: []].append(track)
+        }
+
+        for (_, bucket) in isrcBuckets where bucket.count > 1 {
+            let unassigned = bucket.filter { !assignedPaths.contains($0.fullPath) }
+            guard unassigned.count > 1 else { continue }
+            var clusters: [[Track]] = []
+            for track in unassigned {
+                var placed = false
+                for i in 0..<clusters.count {
+                    let leader = clusters[i][0]
+                    if abs(track.durationSeconds - leader.durationSeconds) <= 1.5 {
+                        clusters[i].append(track)
+                        placed = true
+                        break
+                    }
+                }
+                if !placed { clusters.append([track]) }
+            }
+            for cluster in clusters where cluster.count > 1 {
+                for tr in cluster { assignedPaths.insert(tr.fullPath) }
+                let items = cluster.map { makeItem($0) }
+                let first = cluster[0]
+                let cleanTitle = first.title.isEmpty ? first.filename : first.title
+                let cleanArtist = first.primaryArtist.isEmpty ? "Unknown Artist" : first.primaryArtist
+                let groupId = "isrc::\(first.fullPath)::\(cluster.count)"
+                results.append(DuplicateGroup(
+                    id: groupId,
+                    title: cleanTitle,
+                    artist: cleanArtist,
+                    album: first.album,
+                    matchReason: .isrcMatch,
+                    items: items
+                ))
+            }
         }
 
         // MARK: - Phase 2: Cross-Drive Duplicates (Internal Flash vs MicroSD)
@@ -426,6 +749,7 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
             let tKey = normalizeTitle(track.title.isEmpty ? track.filename : track.title)
             let aKey = normalizeArtist(track.artist)
             guard !tKey.isEmpty else { continue }
+            if aKey.isEmpty && isGenericOrAmbiguousTitle(tKey) { continue }
             crossDriveTitleArtistBuckets["\(tKey)::\(aKey)", default: []].append(track)
         }
 
@@ -446,10 +770,37 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
                     let sdVer = extractVersionTag(from: "\(sdTrack.title) \(sdTrack.album) \(sdTrack.fullPath)")
                     guard intVer == sdVer else { return false }
 
-                    if intTrack.durationSeconds > 0 && sdTrack.durationSeconds > 0 {
-                        return abs(intTrack.durationSeconds - sdTrack.durationSeconds) <= 1.5
+                    // Tier 1a: FLAC Stream MD5 verification
+                    if intTrack.format.uppercased() == "FLAC" && sdTrack.format.uppercased() == "FLAC" {
+                        let md5A = flacMd5Cache[intTrack.fullPath] ?? readFLACAudioStreamMD5(at: intTrack.fullPath)
+                        let md5B = flacMd5Cache[sdTrack.fullPath] ?? readFLACAudioStreamMD5(at: sdTrack.fullPath)
+                        if let a = md5A { flacMd5Cache[intTrack.fullPath] = a }
+                        if let b = md5B { flacMd5Cache[sdTrack.fullPath] = b }
+                        if let a = md5A, let b = md5B, a == b {
+                            return true
+                        }
                     }
-                    return true
+
+                    // Tier 1b: ISRC tag verification
+                    let isrcA = isrcCache[intTrack.fullPath] ?? readFastISRC(at: intTrack.fullPath, format: intTrack.format)
+                    let isrcB = isrcCache[sdTrack.fullPath] ?? readFastISRC(at: sdTrack.fullPath, format: sdTrack.format)
+                    if let a = isrcA { isrcCache[intTrack.fullPath] = a }
+                    if let b = isrcB { isrcCache[sdTrack.fullPath] = b }
+                    if let a = isrcA, let b = isrcB, !a.isEmpty, !b.isEmpty {
+                        if a == b {
+                            return true
+                        } else {
+                            return false // Different official recordings
+                        }
+                    }
+
+                    // Tier 2: Duration check
+                    if intTrack.durationSeconds > 0 && sdTrack.durationSeconds > 0 {
+                        guard abs(intTrack.durationSeconds - sdTrack.durationSeconds) <= 1.5 else { return false }
+                    }
+
+                    // Tier 2: SenseMe Acoustic Correlation
+                    return areAcousticallyCorrelated(trackA: intTrack, trackB: sdTrack)
                 }
 
                 if !matches.isEmpty {
@@ -499,9 +850,11 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
 
                     if track.durationSeconds <= 0 || leader.durationSeconds <= 0 ||
                        abs(track.durationSeconds - leader.durationSeconds) <= 2.0 {
-                        clusters[i].append(track)
-                        placed = true
-                        break
+                        if areAcousticallyCorrelated(trackA: track, trackB: leader) {
+                            clusters[i].append(track)
+                            placed = true
+                            break
+                        }
                     }
                 }
                 if !placed {
@@ -553,9 +906,9 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
                     let vT = extractVersionTag(from: "\(t.title) \(t.album) \(t.fullPath)")
                     guard vU == vT else { return false }
                     if u.durationSeconds > 0 && t.durationSeconds > 0 {
-                        return abs(u.durationSeconds - t.durationSeconds) <= 1.5
+                        guard abs(u.durationSeconds - t.durationSeconds) <= 1.5 else { return false }
                     }
-                    return true
+                    return areAcousticallyCorrelated(trackA: u, trackB: t)
                 }
 
                 if !matchingTagged.isEmpty {
@@ -598,6 +951,21 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
                     var placed = false
                     for i in 0..<clusters.count {
                         let leader = clusters[i][0]
+
+                        // Safety check: titles must not conflict if both present
+                        let tTrack = normalizeTitle(track.title)
+                        let tLeader = normalizeTitle(leader.title)
+                        if !tTrack.isEmpty && !tLeader.isEmpty && tTrack != tLeader {
+                            continue
+                        }
+
+                        // Safety check: artists must not conflict if both present
+                        let aTrack = normalizeArtist(track.artist)
+                        let aLeader = normalizeArtist(leader.artist)
+                        if !aTrack.isEmpty && !aLeader.isEmpty && aTrack != aLeader {
+                            continue
+                        }
+
                         if track.durationSeconds <= 0 || leader.durationSeconds <= 0 ||
                            abs(track.durationSeconds - leader.durationSeconds) <= 1.5 {
                             clusters[i].append(track)
@@ -635,6 +1003,7 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
                 let tKey = normalizeTitle(track.title.isEmpty ? track.filename : track.title)
                 let aKey = normalizeArtist(track.artist)
                 guard !tKey.isEmpty else { continue }
+                if aKey.isEmpty && isGenericOrAmbiguousTitle(tKey) { continue }
                 crossAlbumBuckets["\(tKey)::\(aKey)", default: []].append(track)
             }
 
@@ -651,11 +1020,35 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
                         let v2 = extractVersionTag(from: "\(leader.title) \(leader.album) \(leader.fullPath)")
                         guard v1 == v2 else { continue }
 
+                        // Tier 1a: ISRC check
+                        let isrcTrack = isrcCache[track.fullPath] ?? readFastISRC(at: track.fullPath, format: track.format)
+                        let isrcLeader = isrcCache[leader.fullPath] ?? readFastISRC(at: leader.fullPath, format: leader.format)
+                        if let a = isrcTrack { isrcCache[track.fullPath] = a }
+                        if let b = isrcLeader { isrcCache[leader.fullPath] = b }
+                        if let a = isrcTrack, let b = isrcLeader, !a.isEmpty, !b.isEmpty {
+                            guard a == b else { continue } // Distinct master recordings
+                        }
+
+                        // Tier 1b: FLAC Audio Stream MD5 check
+                        if track.format.uppercased() == "FLAC" && leader.format.uppercased() == "FLAC" {
+                            let md5A = flacMd5Cache[track.fullPath] ?? readFLACAudioStreamMD5(at: track.fullPath)
+                            let md5B = flacMd5Cache[leader.fullPath] ?? readFLACAudioStreamMD5(at: leader.fullPath)
+                            if let a = md5A { flacMd5Cache[track.fullPath] = a }
+                            if let b = md5B { flacMd5Cache[leader.fullPath] = b }
+                            if let a = md5A, let b = md5B, a == b {
+                                clusters[i].append(track)
+                                placed = true
+                                break
+                            }
+                        }
+
                         if track.durationSeconds <= 0 || leader.durationSeconds <= 0 ||
                            abs(track.durationSeconds - leader.durationSeconds) <= 2.0 {
-                            clusters[i].append(track)
-                            placed = true
-                            break
+                            if areAcousticallyCorrelated(trackA: track, trackB: leader) {
+                                clusters[i].append(track)
+                                placed = true
+                                break
+                            }
                         }
                     }
                     if !placed {
