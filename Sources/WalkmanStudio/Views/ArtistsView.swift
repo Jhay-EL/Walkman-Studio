@@ -237,7 +237,8 @@ public struct ArtistsView: View {
                                 }
                             }
                             .padding(.horizontal, 8)
-                            .padding(.vertical, 8)
+                            .padding(.top, 8)
+                            .padding(.bottom, 88)
                         }
                     }
                 }

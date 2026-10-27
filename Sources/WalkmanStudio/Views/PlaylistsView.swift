@@ -30,10 +30,20 @@ public struct PlaylistsView: View {
     @State private var draggedTrackPath: String? = nil
     @State private var dropTargetIndex: Int? = nil
     
+    // Resizable Splitter State
+    @AppStorage("playlists_sidebar_width") private var storedSidebarWidth: Double = 270.0
+    @State private var sidebarWidth: CGFloat = 270.0
+    @State private var dragStartSidebarWidth: CGFloat? = nil
+    @State private var isSplitterHovered: Bool = false
+    @State private var isSplitterDragging: Bool = false
+    @State private var hasPushedResizeCursor: Bool = false
+    
     public init(activeDrive: WalkmanDrive?, libraryTracks: [Track]) {
         self.activeDrive = activeDrive
         self.libraryTracks = libraryTracks
         _cachedTrackLookup = State(initialValue: PlaylistsView.buildLookupTable(tracks: libraryTracks))
+        let savedWidth = UserDefaults.standard.double(forKey: "playlists_sidebar_width")
+        _sidebarWidth = State(initialValue: savedWidth >= 180 ? CGFloat(savedWidth) : 270.0)
     }
     
     private func updateResolvedTracks() {
@@ -535,8 +545,13 @@ public struct PlaylistsView: View {
             let totalWidth = geo.size.width
             let isCompact = totalWidth < 840
             let isNarrow = totalWidth < 680
-            let sidebarWidth: CGFloat = isNarrow ? 170 : (isCompact ? 190 : 220)
-            let colSpacing: CGFloat = isCompact ? 10 : 14
+            
+            let minSidebarWidth: CGFloat = 190
+            let minContentWidth: CGFloat = 340
+            let splitterWidth: CGFloat = 14
+            let availableForPanels = max(0, totalWidth - splitterWidth)
+            let maxSidebarWidth = max(minSidebarWidth, availableForPanels - minContentWidth)
+            let effectiveSidebarWidth = min(maxSidebarWidth, max(minSidebarWidth, sidebarWidth))
             
             VStack(spacing: 0) {
                 // Transparent Top Navigation Header
@@ -550,8 +565,8 @@ public struct PlaylistsView: View {
                     .padding(.horizontal, 4)
                     .padding(.bottom, 12)
                 
-                // Main 2-Column Studio Console Layout
-                HStack(spacing: colSpacing) {
+                // Main 2-Column Resizable Studio Console Layout
+                HStack(spacing: 0) {
                     // Left Column: Playlist List
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
@@ -596,7 +611,7 @@ public struct PlaylistsView: View {
                             .frame(maxWidth: .infinity)
                         } else {
                             ScrollView {
-                                LazyVStack(spacing: 3) {
+                                LazyVStack(spacing: 4) {
                                     ForEach(playlists) { pl in
                                         let isSel = selectedPlaylist?.id == pl.id
                                         let isEditingRow = (editingPlaylistId == pl.id && renameLocation == .row)
@@ -639,11 +654,14 @@ public struct PlaylistsView: View {
                                         )
                                     }
                                 }
+                                .padding(.horizontal, 4)
+                                .padding(.trailing, 6)
+                                .padding(.bottom, 88)
                             }
                         }
                     }
-                    .padding(isCompact ? 10 : 12)
-                    .frame(width: sidebarWidth)
+                    .padding(12)
+                    .frame(width: effectiveSidebarWidth)
                     .background(WalkmanTheme.card)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay(
@@ -652,10 +670,19 @@ public struct PlaylistsView: View {
                     )
                     .shadow(color: Color.black.opacity(0.25), radius: 5, x: 0, y: 2)
                     
+                    // Draggable Splitter Divider between Left & Right Containers
+                    playlistSplitterView(
+                        minWidth: minSidebarWidth,
+                        maxWidth: maxSidebarWidth,
+                        effectiveWidth: effectiveSidebarWidth
+                    )
+                    
                     // Right Column: Playlist Content / Editor
                     VStack(alignment: .leading, spacing: isCompact ? 10 : 12) {
                         if let pl = selectedPlaylist {
                             playlistDetailHeader(pl: pl)
+                                .padding(.horizontal, 4)
+                                .padding(.bottom, 2)
                             
                             // Tracks List
                             if playlistTracks.isEmpty {
@@ -801,6 +828,8 @@ public struct PlaylistsView: View {
                                                 return false
                                             }
                                     }
+                                    .padding(.horizontal, 4)
+                                    .padding(.trailing, 6)
                                 }
                             }
                         } else {
@@ -817,8 +846,8 @@ public struct PlaylistsView: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
                     }
-                    .padding(14)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(16)
+                    .frame(minWidth: 320, maxWidth: .infinity, maxHeight: .infinity)
                     .background(WalkmanTheme.card)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay(
@@ -860,6 +889,94 @@ public struct PlaylistsView: View {
                 onDismiss: { showAddTrackSheet = false }
             )
         }
+        .onDisappear {
+            if hasPushedResizeCursor {
+                NSCursor.pop()
+                hasPushedResizeCursor = false
+            }
+        }
+    }
+    
+    // MARK: - Resizable Splitter Logic & View
+    
+    private func updateResizeCursor(hovering: Bool) {
+        if hovering || isSplitterDragging {
+            if !hasPushedResizeCursor {
+                NSCursor.resizeLeftRight.push()
+                hasPushedResizeCursor = true
+            }
+        } else {
+            if hasPushedResizeCursor {
+                NSCursor.pop()
+                hasPushedResizeCursor = false
+            }
+        }
+    }
+    
+    private func playlistSplitterView(
+        minWidth: CGFloat,
+        maxWidth: CGFloat,
+        effectiveWidth: CGFloat
+    ) -> some View {
+        ZStack {
+            // Invisible wider hit-testing zone (14pt wide)
+            Rectangle()
+                .fill(Color.clear)
+                .frame(width: 14)
+                .contentShape(Rectangle())
+            
+            // Visual subtle handle bar centered in the gap
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(
+                    isSplitterDragging ? WalkmanTheme.hiResGold :
+                    (isSplitterHovered ? Color.white.opacity(0.45) : Color.white.opacity(0.12))
+                )
+                .frame(
+                    width: isSplitterDragging ? 3 : (isSplitterHovered ? 2.5 : 2),
+                    height: isSplitterDragging ? 38 : (isSplitterHovered ? 30 : 22)
+                )
+                .shadow(
+                    color: isSplitterDragging ? WalkmanTheme.hiResGold.opacity(0.5) : Color.clear,
+                    radius: 3
+                )
+                .animation(.easeOut(duration: 0.15), value: isSplitterHovered)
+                .animation(.easeOut(duration: 0.15), value: isSplitterDragging)
+        }
+        .frame(width: 14)
+        .onHover { hovering in
+            isSplitterHovered = hovering
+            updateResizeCursor(hovering: hovering)
+        }
+        .gesture(
+            DragGesture(minimumDistance: 1)
+                .onChanged { value in
+                    if dragStartSidebarWidth == nil {
+                        dragStartSidebarWidth = effectiveWidth
+                        isSplitterDragging = true
+                        updateResizeCursor(hovering: true)
+                    }
+                    if let start = dragStartSidebarWidth {
+                        let proposed = start + value.translation.width
+                        let clamped = min(maxWidth, max(minWidth, proposed))
+                        sidebarWidth = clamped
+                        storedSidebarWidth = Double(clamped)
+                    }
+                }
+                .onEnded { _ in
+                    dragStartSidebarWidth = nil
+                    isSplitterDragging = false
+                    updateResizeCursor(hovering: isSplitterHovered)
+                }
+        )
+        .onTapGesture(count: 2) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                let defaultWidth: CGFloat = 270
+                let clamped = min(maxWidth, max(minWidth, defaultWidth))
+                sidebarWidth = clamped
+                storedSidebarWidth = Double(clamped)
+            }
+        }
+        .help("Drag to resize playlist and content views. Double-click to reset.")
     }
     
     // MARK: - Top Navigation Header
@@ -1227,22 +1344,22 @@ private struct PlaylistListRowView: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                     
-                    Spacer()
+                    Spacer(minLength: 8)
                     
                     if isDropTargeted {
                         Text("+ Add")
                             .font(.system(size: 10.5, weight: .bold, design: .monospaced))
                             .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2.5)
                             .background(WalkmanTheme.hiResGold)
                             .clipShape(Capsule())
                     } else {
                         Text("\(playlist.trackCount)")
                             .font(WalkmanFont.monoSmall)
                             .foregroundStyle(isSelected ? WalkmanTheme.silverLight.opacity(0.9) : WalkmanTheme.silverMuted)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2.5)
                             .background(
                                 isSelected ? Color.white.opacity(0.12) : Color.white.opacity(0.04)
                             )
@@ -1251,7 +1368,7 @@ private struct PlaylistListRowView: View {
                 }
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 7)
+            .padding(.vertical, 7.5)
             .background(
                 ZStack {
                     if isDropTargeted {
@@ -1374,11 +1491,11 @@ private struct PlaylistTrackRow: View {
     @State private var isHovered = false
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             Text(String(format: "%02d", index + 1))
                 .font(WalkmanFont.mono)
                 .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
-                .frame(width: 26, alignment: .trailing)
+                .frame(width: 28, alignment: .trailing)
             
             // Play / Note button
             Button(action: onPlay) {
@@ -1438,7 +1555,7 @@ private struct PlaylistTrackRow: View {
             Spacer()
             
             // Action buttons on row: draggable handle button + remove button
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 // Draggable Handle Button (hold & drag to reorder or transfer to another playlist)
                 TrackDragHandleButton(
                     trackPath: trackPath,
@@ -1449,17 +1566,18 @@ private struct PlaylistTrackRow: View {
                 // Remove
                 Button(action: onRemove) {
                     Image(systemName: "xmark.circle")
-                        .font(.system(size: 12))
+                        .font(.system(size: 13))
                         .foregroundStyle(Color.red.opacity(isHovered ? 0.9 : 0.6))
                         .padding(4)
                 }
                 .buttonStyle(.plain)
                 .help("Remove from Playlist")
             }
+            .padding(.trailing, 2)
             .opacity(isHovered || isPlayingThis || isDragSource ? 1.0 : 0.5)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8.5)
         .background(
             ZStack {
                 if isPlayingThis {
