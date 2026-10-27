@@ -21,6 +21,7 @@ public struct ContentView: View {
     @State private var trackToTrimCut: Track? = nil
     @State private var albumToEdit: AlbumItem? = nil
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var isFullScreenPlayerPresented: Bool = false
     
     @ObservedObject private var player = AudioPlayerService.shared
     
@@ -395,8 +396,9 @@ public struct ContentView: View {
     }
     
     public var body: some View {
-        Group {
-            if drives.isEmpty && !isRefreshingDrives {
+        ZStack {
+            Group {
+                if drives.isEmpty && !isRefreshingDrives {
                 // Disconnected State
                 VStack(spacing: 24) {
                     Spacer()
@@ -734,6 +736,11 @@ public struct ContentView: View {
                                         self.selectedTrackId = cur.id
                                     }
                                     self.showInspector = true
+                                },
+                                onOpenFullScreen: {
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                        self.isFullScreenPlayerPresented = true
+                                    }
                                 }
                             )
                             .frame(maxWidth: 1040)
@@ -744,7 +751,10 @@ public struct ContentView: View {
                     }
                     .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
                     .background(WalkmanTheme.background.ignoresSafeArea())
-                    .adaptiveInspector(isPresented: $showInspector) {
+                    .adaptiveInspector(isPresented: Binding(
+                        get: { showInspector && !isFullScreenPlayerPresented },
+                        set: { showInspector = $0 }
+                    )) {
                         MetadataStudioView(
                             track: selectedTrack,
                             onSaved: { refreshLibrary() },
@@ -756,40 +766,60 @@ public struct ContentView: View {
                         )
                     }
                     .toolbar {
-                        Spacer()
-                        
-                        // Rescan
-                        Button(action: { refreshDrives() }) {
-                            Label("Refresh", systemImage: "arrow.clockwise")
-                        }
-                        .help("Refresh connected drives and reload library")
-                        
-                        // Safe Eject (only shown if a device is connected)
-                        if !drives.isEmpty {
-                            Button(action: { performCleanAndEject() }) {
-                                if isEjecting {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                } else {
-                                    Label("Eject", systemImage: "eject.circle")
-                                }
+                        if !isFullScreenPlayerPresented {
+                            Spacer()
+                            
+                            // Rescan
+                            Button(action: { refreshDrives() }) {
+                                Label("Refresh", systemImage: "arrow.clockwise")
                             }
-                            .disabled(isEjecting)
-                            .help("Clean macOS junk files and safely unmount Walkman")
+                            .help("Refresh connected drives and reload library")
+                            
+                            // Safe Eject (only shown if a device is connected)
+                            if !drives.isEmpty {
+                                Button(action: { performCleanAndEject() }) {
+                                    if isEjecting {
+                                        ProgressView()
+                                            .controlSize(.small)
+                                    } else {
+                                        Label("Eject", systemImage: "eject.circle")
+                                    }
+                                }
+                                .disabled(isEjecting)
+                                .help("Clean macOS junk files and safely unmount Walkman")
+                            }
+                            
+                            // Inspector Toggle
+                            Button(action: { showInspector.toggle() }) {
+                                Label("Inspector", systemImage: "sidebar.trailing")
+                            }
+                            .help("Toggle Metadata & Artwork Inspector (Cmd+I)")
                         }
-                        
-                        // Inspector Toggle
-                        Button(action: { showInspector.toggle() }) {
-                            Label("Inspector", systemImage: "sidebar.trailing")
-                        }
-                        .help("Toggle Metadata & Artwork Inspector (Cmd+I)")
                     }
                     .toolbarBackground(.hidden, for: .windowToolbar)
                 }
                 .navigationSplitViewStyle(.balanced)
                 .toolbarBackground(.hidden, for: .windowToolbar)
+                .toolbar(isFullScreenPlayerPresented ? .hidden : .visible, for: .windowToolbar)
+                .removeSidebarToggle(if: isFullScreenPlayerPresented)
             }
         }
+        .opacity(isFullScreenPlayerPresented ? 0 : 1)
+
+        if isFullScreenPlayerPresented {
+            FullScreenNowPlayingView(
+                isPresented: $isFullScreenPlayerPresented,
+                libraryTracks: tracks
+            )
+            .ignoresSafeArea()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .transition(.asymmetric(
+                insertion: .opacity.combined(with: .scale(scale: 0.985)),
+                removal: .opacity.combined(with: .scale(scale: 0.985))
+            ))
+            .zIndex(100)
+        }
+    }
         .onAppear {
             refreshDrives()
         }
@@ -815,6 +845,9 @@ public struct ContentView: View {
             if let cur = player.currentTrack, player.isPlaying {
                 self.selectedTrackId = cur.id
             }
+        }
+        .onChange(of: isFullScreenPlayerPresented) {
+            FullScreenNowPlayingView.setWindowToolbarVisible(!isFullScreenPlayerPresented)
         }
         .onReceive(NotificationCenter.default.publisher(for: .showAboutWalkmanStudio)) { _ in
             self.showAboutSheet = true
@@ -891,6 +924,15 @@ private extension View {
                         .transition(.move(edge: .trailing))
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    func removeSidebarToggle(if condition: Bool) -> some View {
+        if #available(macOS 14.0, *) {
+            self.toolbar(removing: condition ? .sidebarToggle : nil)
+        } else {
+            self
         }
     }
 }
