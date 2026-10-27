@@ -159,6 +159,36 @@ extension Track {
         Track.parsePrimaryAndFeaturedArtist(from: artist).featured
     }
 
+    /// Checks if a string has balanced parentheses and brackets
+    public static func isBalanced(_ text: String) -> Bool {
+        var pDepth = 0
+        var bDepth = 0
+        for ch in text {
+            if ch == "(" {
+                pDepth += 1
+            } else if ch == ")" {
+                pDepth -= 1
+                if pDepth < 0 { return false }
+            } else if ch == "[" {
+                bDepth += 1
+            } else if ch == "]" {
+                bDepth -= 1
+                if bDepth < 0 { return false }
+            }
+        }
+        return pDepth == 0 && bDepth == 0
+    }
+
+    /// Trims leading and trailing whitespace, as well as trailing punctuation like commas, semicolons, slashes, dashes, ampersands
+    public static func cleanTrailingPunctuation(_ text: String) -> String {
+        var str = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        while let last = str.last, (last == "," || last == ";" || last == "/" || last == "-" || last == "&" || last.isWhitespace) {
+            str.removeLast()
+            str = str.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return str
+    }
+
     /// Parses an artist string into primary artist and optional featured artist string.
     public static func parsePrimaryAndFeaturedArtist(from raw: String) -> (primary: String, featured: String?) {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -170,6 +200,7 @@ extension Track {
 
         // Known artists that contain commas, ampersands, or slashes as part of their official name
         let knownExceptions: [String] = [
+            "3d (danao, dancel, dumas)",
             "tyler, the creator",
             "earth, wind & fire",
             "crosby, stills, nash & young",
@@ -184,7 +215,26 @@ extension Track {
             "brooks & dunn",
             "bell biv devoe",
             "kool & the gang",
-            "kc & the sunshine band"
+            "kc & the sunshine band",
+            "sly & the family stone",
+            "sly and the family stone",
+            "huey lewis & the news",
+            "huey lewis and the news",
+            "tom petty and the heartbreakers",
+            "tom petty & the heartbreakers",
+            "bob marley & the wailers",
+            "bob marley and the wailers",
+            "florence + the machine",
+            "florence and the machine",
+            "of monsters and men",
+            "captain & tennille",
+            "katrina and the waves",
+            "katrina & the waves",
+            "joan jett & the blackhearts",
+            "orange & lemons",
+            "she & him",
+            "ben&ben",
+            "ac/dc"
         ]
 
         for known in knownExceptions {
@@ -202,13 +252,15 @@ extension Track {
             }
         }
 
-        // 1. Explicit keyword markers: feat., ft., featuring, with (case-insensitive)
-        let keywords = [" feat. ", " feat ", " ft. ", " ft ", " featuring ", " Featuring ", " with ", " With "]
+        // 1. Explicit keyword markers: feat., ft., featuring, with, w/ (case-insensitive)
+        let keywords = [" feat. ", " feat ", " ft. ", " ft ", " featuring ", " Featuring ", " with ", " With ", " w/ ", " W/ "]
         for kw in keywords {
             if let range = trimmed.range(of: kw, options: .caseInsensitive) {
-                let primary = String(trimmed[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
-                let feat = String(trimmed[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
-                if !primary.isEmpty {
+                let rawPrimary = String(trimmed[..<range.lowerBound])
+                let primary = cleanTrailingPunctuation(rawPrimary)
+                let rawFeat = String(trimmed[range.upperBound...])
+                let feat = stripLeadingFeatTokens(rawFeat)
+                if !primary.isEmpty && isBalanced(primary) && (feat.isEmpty || isBalanced(feat)) {
                     return (primary, feat.isEmpty ? nil : feat)
                 }
             }
@@ -217,13 +269,14 @@ extension Track {
         // 2. Parenthesized feat: e.g. "Drake (feat. Rihanna)" or "Drake [ft. Rihanna]"
         for (open, close) in [("(", ")"), ("[", "]")] {
             if trimmed.hasSuffix(close), let openIdx = trimmed.range(of: open, options: .backwards)?.lowerBound {
-                let primary = String(trimmed[..<openIdx]).trimmingCharacters(in: .whitespacesAndNewlines)
+                let primaryRaw = String(trimmed[..<openIdx])
+                let primary = cleanTrailingPunctuation(primaryRaw)
                 let inside = String(trimmed[openIdx...].dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
                 let lowerInside = inside.lowercased()
-                for prefix in ["feat. ", "feat ", "ft. ", "ft ", "featuring ", "with "] {
+                for prefix in ["feat. ", "feat ", "ft. ", "ft ", "featuring ", "with ", "w/ "] {
                     if lowerInside.hasPrefix(prefix) {
-                        let feat = String(inside.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !primary.isEmpty {
+                        let feat = stripLeadingFeatTokens(String(inside.dropFirst(prefix.count)))
+                        if !primary.isEmpty && isBalanced(primary) && (feat.isEmpty || isBalanced(feat)) {
                             return (primary, feat.isEmpty ? nil : feat)
                         }
                     }
@@ -231,29 +284,61 @@ extension Track {
             }
         }
 
-        // 3. Delimiters: comma (", "), semicolon ("; "), forward slashes (" / ", " // ")
-        // Split on the first delimiter so e.g. "2 Chainz, Big Sean, Drake" -> "2 Chainz", "Big Sean, Drake"
-        let delimiters = [", ", "; ", " / ", " // "]
-        for delim in delimiters {
-            if let range = trimmed.range(of: delim) {
-                let primary = String(trimmed[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
-                let feat = String(trimmed[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
-                if !primary.isEmpty && !feat.isEmpty {
-                    return (primary, feat)
+        // 3. Delimiters at nesting depth 0: comma (", "), semicolon ("; "), forward slashes (" / ", " // ")
+        // NEVER split inside parentheses or brackets! (e.g. "3D (Danao, Dancel, Dumas)" must stay intact)
+        let delimiters = ["; ", " // ", " / ", ", "]
+        
+        var pDepth = 0
+        var bDepth = 0
+        var earliestDelimRange: Range<String.Index>? = nil
+        
+        var currIdx = trimmed.startIndex
+        while currIdx < trimmed.endIndex {
+            let ch = trimmed[currIdx]
+            if ch == "(" {
+                pDepth += 1
+            } else if ch == ")" {
+                pDepth = max(0, pDepth - 1)
+            } else if ch == "[" {
+                bDepth += 1
+            } else if ch == "]" {
+                bDepth = max(0, bDepth - 1)
+            } else if pDepth == 0 && bDepth == 0 {
+                let remaining = trimmed[currIdx...]
+                for delim in delimiters {
+                    if remaining.hasPrefix(delim) {
+                        let endIdx = trimmed.index(currIdx, offsetBy: delim.count)
+                        earliestDelimRange = currIdx..<endIdx
+                        break
+                    }
                 }
+                if earliestDelimRange != nil {
+                    break
+                }
+            }
+            currIdx = trimmed.index(after: currIdx)
+        }
+        
+        if let range = earliestDelimRange {
+            let rawPrimary = String(trimmed[..<range.lowerBound])
+            let primary = cleanTrailingPunctuation(rawPrimary)
+            let rawFeat = String(trimmed[range.upperBound...])
+            let feat = stripLeadingFeatTokens(rawFeat)
+            if !primary.isEmpty && !feat.isEmpty && isBalanced(primary) && isBalanced(feat) {
+                return (primary, feat)
             }
         }
 
         return (trimmed, nil)
     }
 
-    private static func stripLeadingFeatTokens(_ text: String) -> String {
+    public static func stripLeadingFeatTokens(_ text: String) -> String {
         var str = text.trimmingCharacters(in: .whitespacesAndNewlines)
         while str.hasPrefix(",") || str.hasPrefix(";") || str.hasPrefix("/") || str.hasPrefix("-") || str.hasPrefix("&") {
             str = String(str.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
         }
         let lower = str.lowercased()
-        for prefix in ["feat. ", "feat ", "ft. ", "ft ", "featuring ", "with "] {
+        for prefix in ["feat. ", "feat ", "ft. ", "ft ", "featuring ", "with ", "w/ "] {
             if lower.hasPrefix(prefix) {
                 return String(str.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
             }
@@ -273,7 +358,7 @@ extension Track {
         guard !raw.isEmpty else { return nil }
 
         let parsed = Track.parsePrimaryAndFeaturedArtist(from: raw)
-        if let feat = parsed.featured, !feat.isEmpty {
+        if let feat = parsed.featured, !feat.isEmpty, Track.isBalanced(feat) {
             return feat
         }
 
@@ -281,7 +366,7 @@ extension Track {
             if raw.lowercased().hasPrefix(pa.lowercased()) {
                 let rest = raw.dropFirst(pa.count)
                 let cleaned = Track.stripLeadingFeatTokens(String(rest))
-                if !cleaned.isEmpty {
+                if !cleaned.isEmpty && Track.isBalanced(cleaned) {
                     return cleaned
                 }
             }
