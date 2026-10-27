@@ -39,28 +39,6 @@ public struct ContentView: View {
     @State private var cachedRecentTracks: [Track] = []
     @ObservedObject private var duplicateFinder = DuplicateFinderService.shared
     
-    // MARK: - Fluid Sidebar & Inspector Toggle Controls
-    private func toggleSidebar() {
-        withAnimation(.spring(response: 0.36, dampingFraction: 0.84)) {
-            columnVisibility = (columnVisibility == .detailOnly) ? .all : .detailOnly
-        }
-    }
-
-    private func toggleInspector() {
-        withAnimation(.spring(response: 0.36, dampingFraction: 0.84)) {
-            showInspector.toggle()
-        }
-    }
-
-    private func openInspector(for trackId: String? = nil) {
-        withAnimation(.spring(response: 0.36, dampingFraction: 0.84)) {
-            if let id = trackId {
-                self.selectedTrackId = id
-            }
-            self.showInspector = true
-        }
-    }
-    
     private var selectedTrack: Track? {
         if let id = selectedTrackId, let tr = tracks.first(where: { $0.id == id }) {
             return tr
@@ -538,7 +516,7 @@ public struct ContentView: View {
                 .background(WalkmanTheme.background)
             } else {
                 // Connected State: Native macOS NavigationSplitView
-                NavigationSplitView(columnVisibility: $columnVisibility) {
+                NavigationSplitView(columnVisibility: $columnVisibility.animation(.spring(response: 0.35, dampingFraction: 0.82))) {
                     SidebarView(
                         selectedTab: $selectedTab,
                         devices: devices,
@@ -563,25 +541,6 @@ public struct ContentView: View {
                     )
                     .frame(width: 260)
                     .clipped()
-                    .opacity(columnVisibility == .detailOnly ? 0.0 : 1.0)
-                    .animation(.easeInOut(duration: 0.22), value: columnVisibility)
-                    .overlay(alignment: .trailing) {
-                        Rectangle()
-                            .fill(
-                                LinearGradient(
-                                    stops: [
-                                        .init(color: .white.opacity(0.10), location: 0.0),
-                                        .init(color: .white.opacity(0.03), location: 0.5),
-                                        .init(color: .white.opacity(0.06), location: 1.0)
-                                    ],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-                            .frame(width: 1)
-                            .allowsHitTesting(false)
-                            .ignoresSafeArea()
-                    }
                     .navigationSplitViewColumnWidth(min: 260, ideal: 260, max: 260)
                     .toolbarBackground(.hidden, for: .windowToolbar)
                 } detail: {
@@ -619,7 +578,10 @@ public struct ContentView: View {
                                     isLoading: isScanning,
                                     selectedTrackId: $selectedTrackId,
                                     onInspectTrack: { track in
-                                        openInspector(for: track.id)
+                                        self.selectedTrackId = track.id
+                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                            self.showInspector = true
+                                        }
                                     },
                                     onGoToTransfer: {
                                         self.selectedTab = .transfer
@@ -641,7 +603,10 @@ public struct ContentView: View {
                                     isLoading: isScanning,
                                     selectedTrackId: $selectedTrackId,
                                     onInspectTrack: { track in
-                                        openInspector(for: track.id)
+                                        self.selectedTrackId = track.id
+                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                            self.showInspector = true
+                                        }
                                     },
                                     onGoToTransfer: {
                                         self.selectedTab = .transfer
@@ -662,7 +627,10 @@ public struct ContentView: View {
                                     tracks: tracks,
                                     precomputedAlbums: cachedAlbums,
                                     onSelectTrack: { track in
-                                        openInspector(for: track.id)
+                                        self.selectedTrackId = track.id
+                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                            self.showInspector = true
+                                        }
                                     },
                                     onEditAlbum: { album in
                                         self.albumToEdit = album
@@ -686,7 +654,10 @@ public struct ContentView: View {
                                     tracks: tracks,
                                     precomputedArtists: cachedArtists,
                                     onSelectTrack: { track in
-                                        openInspector(for: track.id)
+                                        self.selectedTrackId = track.id
+                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                            self.showInspector = true
+                                        }
                                     },
                                     onEditTrack: { track in
                                         self.trackToEdit = track
@@ -702,7 +673,10 @@ public struct ContentView: View {
                                     precomputedAlbums: cachedAlbums,
                                     precomputedArtists: cachedArtists,
                                     onSelectTrack: { track in
-                                        openInspector(for: track.id)
+                                        self.selectedTrackId = track.id
+                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                            self.showInspector = true
+                                        }
                                     },
                                     onEditAlbum: { album in
                                         self.albumToEdit = album
@@ -769,7 +743,12 @@ public struct ContentView: View {
                                 libraryTracks: tracks,
                                 isInspectorPresented: showInspector,
                                 onOpenInspector: {
-                                    openInspector(for: player.currentTrack?.id)
+                                    if let cur = player.currentTrack {
+                                        self.selectedTrackId = cur.id
+                                    }
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                        self.showInspector = true
+                                    }
                                 },
                                 onOpenFullScreen: {
                                     withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
@@ -788,7 +767,7 @@ public struct ContentView: View {
                     .adaptiveInspector(isPresented: Binding(
                         get: { showInspector && !isFullScreenPlayerPresented },
                         set: { newValue in
-                            withAnimation(.spring(response: 0.36, dampingFraction: 0.84)) {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                                 showInspector = newValue
                             }
                         }
@@ -802,85 +781,49 @@ public struct ContentView: View {
                                 }
                             }
                         )
-                        .opacity(showInspector ? 1.0 : 0.0)
-                        .animation(.easeInOut(duration: 0.22), value: showInspector)
-                        .overlay(alignment: .leading) {
-                            Rectangle()
-                                .fill(
-                                    LinearGradient(
-                                        stops: [
-                                            .init(color: .white.opacity(0.12), location: 0.0),
-                                            .init(color: .white.opacity(0.04), location: 0.5),
-                                            .init(color: .white.opacity(0.08), location: 1.0)
-                                        ],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                )
-                                .frame(width: 1)
-                                .allowsHitTesting(false)
-                                .ignoresSafeArea()
-                        }
                     }
                     .toolbar {
                         if !isFullScreenPlayerPresented {
-                            // Navigation Sidebar Toggle
-                            ToolbarItem(placement: .navigation) {
-                                Button(action: { toggleSidebar() }) {
-                                    Label("Sidebar", systemImage: "sidebar.leading")
-                                        .foregroundStyle(columnVisibility != .detailOnly ? WalkmanTheme.hiResGold : Color.primary)
-                                }
-                                .help(columnVisibility == .detailOnly ? "Show Navigation Sidebar (Cmd+Option+S)" : "Hide Navigation Sidebar (Cmd+Option+S)")
-                                .keyboardShortcut("s", modifiers: [.command, .option])
-                            }
-                            
-                            ToolbarItem(placement: .automatic) {
-                                Spacer()
-                            }
+                            Spacer()
                             
                             // Rescan
-                            ToolbarItem(placement: .automatic) {
-                                Button(action: { refreshDrives() }) {
-                                    Label("Refresh", systemImage: "arrow.clockwise")
-                                }
-                                .help("Refresh connected drives and reload library")
+                            Button(action: { refreshDrives() }) {
+                                Label("Refresh", systemImage: "arrow.clockwise")
                             }
+                            .help("Refresh connected drives and reload library")
                             
                             // Safe Eject (only shown if a device is connected)
                             if !drives.isEmpty {
-                                ToolbarItem(placement: .automatic) {
-                                    Button(action: { performCleanAndEject() }) {
-                                        if isEjecting {
-                                            ProgressView()
-                                                .controlSize(.small)
-                                        } else {
-                                            Label("Eject", systemImage: "eject.circle")
-                                        }
+                                Button(action: { performCleanAndEject() }) {
+                                    if isEjecting {
+                                        ProgressView()
+                                            .controlSize(.small)
+                                    } else {
+                                        Label("Eject", systemImage: "eject.circle")
                                     }
-                                    .disabled(isEjecting)
-                                    .help("Clean macOS junk files and safely unmount Walkman")
                                 }
+                                .disabled(isEjecting)
+                                .help("Clean macOS junk files and safely unmount Walkman")
                             }
                             
                             // Inspector Toggle
-                            ToolbarItem(placement: .primaryAction) {
-                                Button(action: { toggleInspector() }) {
-                                    Label("Inspector", systemImage: "sidebar.trailing")
-                                        .foregroundStyle(showInspector ? WalkmanTheme.hiResGold : Color.primary)
+                            Button(action: {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                    showInspector.toggle()
                                 }
-                                .help(showInspector ? "Hide Track Detail Pane (Cmd+I)" : "Show Track Detail Pane (Cmd+I)")
-                                .keyboardShortcut("i", modifiers: [.command])
+                            }) {
+                                Label("Inspector", systemImage: "sidebar.trailing")
                             }
+                            .keyboardShortcut("i", modifiers: [.command])
+                            .help("Toggle Track Detail Pane / Inspector (Cmd+I)")
                         }
                     }
                     .toolbarBackground(.hidden, for: .windowToolbar)
                 }
                 .navigationSplitViewStyle(.balanced)
-                .animation(.spring(response: 0.36, dampingFraction: 0.84), value: columnVisibility)
-                .animation(.spring(response: 0.36, dampingFraction: 0.84), value: showInspector)
                 .toolbarBackground(.hidden, for: .windowToolbar)
                 .toolbar(isFullScreenPlayerPresented ? .hidden : .visible, for: .windowToolbar)
-                .removeSidebarToggle(if: true)
+                .removeSidebarToggle(if: isFullScreenPlayerPresented)
             }
         }
         .opacity(isFullScreenPlayerPresented ? 0 : 1)
@@ -990,6 +933,12 @@ private extension View {
             self.inspector(isPresented: isPresented) {
                 content()
                     .inspectorColumnWidth(min: 280, ideal: 300, max: 320)
+                    .background(WalkmanTheme.background)
+                    .clipped()
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .trailing)),
+                        removal: .opacity.combined(with: .move(edge: .trailing))
+                    ))
             }
         } else {
             HStack(spacing: 0) {
@@ -1000,7 +949,11 @@ private extension View {
                     content()
                         .frame(width: 300)
                         .background(WalkmanTheme.background)
-                        .transition(.move(edge: .trailing))
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .move(edge: .trailing)),
+                            removal: .opacity.combined(with: .move(edge: .trailing))
+                        ))
+                        .clipped()
                 }
             }
         }

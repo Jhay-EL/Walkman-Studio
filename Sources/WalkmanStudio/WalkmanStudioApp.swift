@@ -83,6 +83,15 @@ public struct WindowConfigurator: NSViewRepresentable {
     
     private func configureSplitViews(in view: NSView, isRoot: Bool = true) {
         if let splitView = view as? NSSplitView, splitView.isVertical, splitView.subviews.count >= 2 {
+            // Configure split view controller items for fluid, jitter-free collapse & expansion
+            if let svc = splitView.delegate as? NSSplitViewController {
+                for item in svc.splitViewItems {
+                    if item.behavior == .sidebar || item.behavior.rawValue == 3 /* .inspector */ {
+                        item.collapseBehavior = .preferResizingSiblingsWithFixedSplitView
+                    }
+                }
+            }
+            
             if isRoot {
                 // Outermost split view (Sidebar vs Detail):
                 // Sidebar (subview 0) is held rigid at fixed 260pt width.
