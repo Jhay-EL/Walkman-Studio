@@ -286,7 +286,7 @@ public struct AlbumsView: View {
                     } else {
                         ScrollView {
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 155, maximum: 195), spacing: 18)], spacing: 22) {
-                                ForEach(displayedAlbums) { alb in
+                                ForEach(displayedAlbums, id: \.self) { alb in
                                     AlbumGridCard(
                                         album: alb,
                                         onOpen: { selectedAlbum = alb },
@@ -323,10 +323,30 @@ public struct AlbumsView: View {
         .onChange(of: precomputedAlbums) { _, newPrecomputed in
             if let newPrecomputed = newPrecomputed {
                 cachedAlbums = newPrecomputed
-                displayedAlbums = newPrecomputed
+                recomputeDisplayedAlbums()
+                
+                // If user was viewing an album detail, refresh selectedAlbum to the new instance
+                if let currentSel = selectedAlbum {
+                    if let updated = newPrecomputed.first(where: { $0.id == currentSel.id }) {
+                        selectedAlbum = updated
+                    } else {
+                        let trackPaths = Set(currentSel.tracks.map(\.fullPath))
+                        if let updated = newPrecomputed.first(where: { alb in
+                            alb.tracks.contains(where: { trackPaths.contains($0.fullPath) })
+                        }) {
+                            selectedAlbum = updated
+                        }
+                    }
+                }
             } else {
                 recomputeDisplayedAlbums()
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .trackMetadataDidUpdate)) { _ in
+            if precomputedAlbums == nil && !tracks.isEmpty {
+                cachedAlbums = Self.buildAlbums(from: tracks)
+            }
+            recomputeDisplayedAlbums()
         }
         .onChange(of: tracks) { _, newTracks in
             if let sel = selectedAlbum, !newTracks.contains(where: { $0.album.lowercased() == sel.name.lowercased() }) {

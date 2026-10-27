@@ -310,7 +310,7 @@ public struct ArtistsView: View {
         .onChange(of: precomputedArtists) { _, newPrecomputed in
             if let newPrecomputed = newPrecomputed {
                 cachedArtists = newPrecomputed
-                displayedArtists = newPrecomputed
+                recomputeDisplayedArtists()
                 if let sel = selectedArtistName, !newPrecomputed.contains(where: { $0.name == sel }) {
                     selectedArtistName = newPrecomputed.first?.name
                 } else if selectedArtistName == nil {
@@ -319,6 +319,12 @@ public struct ArtistsView: View {
             } else {
                 recomputeDisplayedArtists()
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .trackMetadataDidUpdate)) { _ in
+            if precomputedArtists == nil && !tracks.isEmpty {
+                cachedArtists = Self.buildArtists(from: tracks)
+            }
+            recomputeDisplayedArtists()
         }
         .onChange(of: tracks) { _, newTracks in
             if precomputedArtists != nil {

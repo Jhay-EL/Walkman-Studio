@@ -300,10 +300,6 @@ public final class LibraryScanner: @unchecked Sendable {
                             sqlite3_bind_double(insStmt, 21, parsed.senseMeArousal ?? 0)
                             sqlite3_bind_text(insStmt, 22, cStr, -1, nil)
                             sqlite3_bind_double(insStmt, 23, parsed.senseMeHighlightSec ?? 0)
-                            sqlite3_bind_int(insStmt, 14, Int32(parsed.bitsPerSample))
-                            sqlite3_bind_int(insStmt, 15, parsed.hasArtwork ? 1 : 0)
-                            sqlite3_bind_text(insStmt, 16, rStr, -1, nil)
-                            sqlite3_bind_double(insStmt, 17, parsed.dateAdded.timeIntervalSince1970)
 
                             sqlite3_step(insStmt)
                             sqlite3_reset(insStmt)
@@ -542,6 +538,73 @@ public final class LibraryScanner: @unchecked Sendable {
 
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: NSNotification.Name("SenseMeCacheUpdated"), object: nil)
+        }
+    }
+
+    public func updateTrackInCache(
+        fullPath: String,
+        title: String? = nil,
+        artist: String? = nil,
+        album: String? = nil,
+        trackNum: String? = nil,
+        year: String? = nil,
+        genre: String? = nil,
+        hasArtwork: Bool? = nil,
+        mtime: Double? = nil
+    ) {
+        guard let db = getDB() else { return }
+        defer { sqlite3_close(db) }
+        
+        let curMtime: Double
+        if let m = mtime {
+            curMtime = m
+        } else {
+            let rValues = try? URL(fileURLWithPath: fullPath).resourceValues(forKeys: [.contentModificationDateKey])
+            curMtime = rValues?.contentModificationDate?.timeIntervalSince1970 ?? (CFAbsoluteTimeGetCurrent() + 978307200.0)
+        }
+        
+        let sql = """
+        UPDATE tracks_cache
+        SET title = CASE WHEN ? != '' THEN ? ELSE title END,
+            artist = CASE WHEN ? != '' THEN ? ELSE artist END,
+            album = CASE WHEN ? != '' THEN ? ELSE album END,
+            track_num = CASE WHEN ? != '' THEN ? ELSE track_num END,
+            year = CASE WHEN ? != '' THEN ? ELSE year END,
+            genre = CASE WHEN ? != '' THEN ? ELSE genre END,
+            has_artwork = CASE WHEN ? >= 0 THEN ? ELSE has_artwork END,
+            mtime = ?
+        WHERE full_path = ?;
+        """
+        var stmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+            let tStr = ((title ?? "") as NSString).utf8String
+            let aStr = ((artist ?? "") as NSString).utf8String
+            let alStr = ((album ?? "") as NSString).utf8String
+            let trkStr = ((trackNum ?? "") as NSString).utf8String
+            let yStr = ((year ?? "") as NSString).utf8String
+            let gStr = ((genre ?? "") as NSString).utf8String
+            let pStr = (fullPath as NSString).utf8String
+            let artVal: Int32 = hasArtwork == nil ? -1 : (hasArtwork! ? 1 : 0)
+            
+            sqlite3_bind_text(stmt, 1, tStr, -1, nil)
+            sqlite3_bind_text(stmt, 2, tStr, -1, nil)
+            sqlite3_bind_text(stmt, 3, aStr, -1, nil)
+            sqlite3_bind_text(stmt, 4, aStr, -1, nil)
+            sqlite3_bind_text(stmt, 5, alStr, -1, nil)
+            sqlite3_bind_text(stmt, 6, alStr, -1, nil)
+            sqlite3_bind_text(stmt, 7, trkStr, -1, nil)
+            sqlite3_bind_text(stmt, 8, trkStr, -1, nil)
+            sqlite3_bind_text(stmt, 9, yStr, -1, nil)
+            sqlite3_bind_text(stmt, 10, yStr, -1, nil)
+            sqlite3_bind_text(stmt, 11, gStr, -1, nil)
+            sqlite3_bind_text(stmt, 12, gStr, -1, nil)
+            sqlite3_bind_int(stmt, 13, artVal)
+            sqlite3_bind_int(stmt, 14, artVal)
+            sqlite3_bind_double(stmt, 15, curMtime)
+            sqlite3_bind_text(stmt, 16, pStr, -1, nil)
+            
+            sqlite3_step(stmt)
+            sqlite3_finalize(stmt)
         }
     }
 

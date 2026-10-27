@@ -290,19 +290,25 @@ public final class SenseMeEngine: @unchecked Sendable {
             channels.append("Electronic")
         }
 
-        // Time of Day
-        if channels.contains("Upbeat") || channels.contains("Relax") || valence > 0.1 {
-            channels.append("Daytime")
-        }
-        if channels.contains("Mellow") || channels.contains("Relax") || channels.contains("Lounge") {
-            channels.append("Evening")
-        }
-        if channels.contains("Relax") || channels.contains("Mellow") || arousal <= -0.10 {
-            channels.append("Midnight")
-        }
-        if channels.contains("Upbeat") || channels.contains("Acoustic") || channels.contains("Relax") {
+        // Time of Day (5 channels)
+        if channels.contains("Upbeat") || channels.contains("Acoustic") || channels.contains("Relax") || valence >= 0.15 {
             channels.append("Morning")
         }
+        if channels.contains("Energetic") || channels.contains("Upbeat") || channels.contains("Dance") || valence >= 0.10 {
+            channels.append("Daytime")
+        }
+        if channels.contains("Mellow") || channels.contains("Relax") || channels.contains("Lounge") || (arousal >= -0.30 && arousal <= 0.20 && valence >= -0.20) {
+            channels.append("Evening")
+        }
+        if channels.contains("Lounge") || channels.contains("Mellow") || channels.contains("Emotional") || (arousal <= 0.10 && valence <= 0.25) {
+            channels.append("Night")
+        }
+        if channels.contains("Relax") || channels.contains("Mellow") || arousal <= -0.10 || bpm <= 88 {
+            channels.append("Midnight")
+        }
+
+        // Global Device Channel (14th channel: includes all 12-Tone analyzed tracks)
+        channels.append("Shuffle All Songs")
 
         var uniqueChannels: [String] = []
         for c in channels {
@@ -587,22 +593,58 @@ public final class SenseMeEngine: @unchecked Sendable {
                 proc.standardOutput = outPipe
                 proc.standardError = errPipe
 
+                // Asynchronous pipe reading to prevent deadlock if buffers fill
+                let pipeGroup = DispatchGroup()
+                var outData = Data()
+                var errData = Data()
+
+                pipeGroup.enter()
+                DispatchQueue.global().async {
+                    outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+                    pipeGroup.leave()
+                }
+
+                pipeGroup.enter()
+                DispatchQueue.global().async {
+                    errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+                    pipeGroup.leave()
+                }
+
+                // 45-second watchdog timer to guarantee process never hangs
+                var timedOut = false
+                let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
+                timer.schedule(deadline: .now() + 45.0)
+                timer.setEventHandler {
+                    timedOut = true
+                    if proc.isRunning {
+                        proc.terminate()
+                    }
+                }
+                timer.resume()
+
                 do {
                     try proc.run()
                     proc.waitUntilExit()
+                    timer.cancel()
+                    pipeGroup.wait()
+
+                    if timedOut {
+                        continuation.resume(throwing: NSError(domain: "SenseMeEngine", code: -1, userInfo: [NSLocalizedDescriptionKey: "DSP Analysis timed out after 45 seconds for file: \(fileURL.lastPathComponent)"]))
+                        return
+                    }
 
                     if proc.terminationStatus != 0 {
-                        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
                         let errStr = String(data: errData, encoding: .utf8) ?? "Unknown error"
                         continuation.resume(throwing: NSError(domain: "SenseMeEngine", code: Int(proc.terminationStatus), userInfo: [NSLocalizedDescriptionKey: "DSP Analysis failed: \(errStr)"]))
                         return
                     }
 
-                    let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
                     let decoder = JSONDecoder()
                     let result = try decoder.decode(SenseMeInfo.self, from: outData)
                     continuation.resume(returning: result)
                 } catch {
+                    timer.cancel()
+                    pipeGroup.wait()
                     continuation.resume(throwing: error)
                 }
             }

@@ -189,14 +189,19 @@ def parse_smfm_payload(data: bytes) -> Optional[Dict[str, Any]]:
     if mood_scores[9] >= 60:
         channels.append("Electronic")
 
-    if "Upbeat" in channels or "Relax" in channels or valence > 0.1:
-        channels.append("Daytime")
-    if "Mellow" in channels or "Relax" in channels or "Lounge" in channels:
-        channels.append("Evening")
-    if "Relax" in channels or "Mellow" in channels or arousal <= -0.10:
-        channels.append("Midnight")
-    if "Upbeat" in channels or "Acoustic" in channels or "Relax" in channels:
+    if "Upbeat" in channels or "Acoustic" in channels or "Relax" in channels or valence >= 0.15:
         channels.append("Morning")
+    if "Energetic" in channels or "Upbeat" in channels or "Dance" in channels or valence >= 0.10:
+        channels.append("Daytime")
+    if "Mellow" in channels or "Relax" in channels or "Lounge" in channels or (-0.30 <= arousal <= 0.20 and valence >= -0.20):
+        channels.append("Evening")
+    if "Lounge" in channels or "Mellow" in channels or "Emotional" in channels or (arousal <= 0.10 and valence <= 0.25):
+        channels.append("Night")
+    if "Relax" in channels or "Mellow" in channels or arousal <= -0.10 or bpm <= 88:
+        channels.append("Midnight")
+
+    # Global Device Channel (14th channel: includes all 12-Tone analyzed tracks)
+    channels.append("Shuffle All Songs")
 
     return {
         "isAnalyzed": True,

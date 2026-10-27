@@ -202,6 +202,31 @@ public struct ContentView: View {
             }
         }
     }
+
+    private func updateTracksInMemory(_ updatedTracks: [Track]) {
+        guard !updatedTracks.isEmpty else { return }
+        var map = [String: Track]()
+        for t in updatedTracks {
+            map[t.fullPath] = t
+        }
+        
+        var newTracks = self.tracks
+        for i in 0..<newTracks.count {
+            if let updated = map[newTracks[i].fullPath] {
+                newTracks[i] = updated
+            }
+        }
+        self.tracks = newTracks
+        
+        // Recompute precomputed models immediately for instant zero-latency UI update
+        let precomputedArtists = ArtistsView.buildArtists(from: newTracks)
+        let precomputedAlbums = AlbumsView.buildAlbums(from: newTracks)
+        let precomputedRecent = newTracks.sorted { $0.dateAdded > $1.dateAdded }
+        
+        self.cachedArtists = precomputedArtists
+        self.cachedAlbums = precomputedAlbums
+        self.cachedRecentTracks = precomputedRecent
+    }
     
     private func deleteTrackFromDevice(_ track: Track) {
         // 1. If currently playing, stop playback immediately
@@ -804,12 +829,10 @@ public struct ContentView: View {
             SongMetadataEditorSheet(
                 track: track,
                 onSavedTrack: { updatedTrack in
-                    if let idx = self.tracks.firstIndex(where: { $0.id == updatedTrack.id }) {
-                        self.tracks[idx] = updatedTrack
-                    }
                     if self.player.currentTrack?.id == updatedTrack.id {
                         self.player.updateTrackInfo(track: updatedTrack)
                     }
+                    self.updateTracksInMemory([updatedTrack])
                     self.refreshLibrary()
                 },
                 onDismiss: {
@@ -833,6 +856,9 @@ public struct ContentView: View {
                 album: album,
                 onSaved: {
                     refreshLibrary()
+                },
+                onSavedTracks: { updatedTracks in
+                    self.updateTracksInMemory(updatedTracks)
                 },
                 onDismiss: {
                     albumToEdit = nil

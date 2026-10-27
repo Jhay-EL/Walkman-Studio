@@ -100,3 +100,25 @@ def test_dsp_analysis_and_injection(tmp_path):
     assert post["bpm"] == result["bpm"]
     assert post["highlightSec"] == result["highlightSec"]
     assert post["moodScores"] == result["moodScores"]
+    assert "Shuffle All Songs" in post["channels"]
+
+
+def test_walkman_14_channels():
+    walkman_channels = [
+        "Energetic", "Emotional", "Lounge", "Dance",
+        "Extreme", "Upbeat", "Relax", "Mellow",
+        "Morning", "Daytime", "Evening", "Night", "Midnight",
+        "Shuffle All Songs"
+    ]
+    # Check night condition
+    night_payload = senseme_engine.build_smfm_payload(
+        bpm=90.0,
+        mood_scores=[40, 50, 40, 60, 40, 50, 30, 20, 50, 40],
+        highlight_ms=5000,
+        raw_bpm=90.0,
+    )
+    # Parse payload
+    info = senseme_engine.parse_smfm_payload(night_payload)
+    assert info is not None
+    assert "Night" in info["channels"]
+    assert "Shuffle All Songs" in info["channels"]

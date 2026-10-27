@@ -372,10 +372,15 @@ public struct LibraryView: View {
             .disabled(visibleTracks.isEmpty)
             .help("Shuffle and play visible tracks")
 
+            let unanalyzedCount = visibleTracks.filter { !$0.isSenseMeAnalyzed }.count
+            let hasSelection = selectedTrackId != nil
+
             Button(action: {
                 let targets = tracks.filter { selectedTrackId == $0.id }
-                let toAnalyze = targets.isEmpty ? visibleTracks.filter { !$0.isSenseMeAnalyzed } : targets
-                analyzeTracksSenseMe(toAnalyze.isEmpty ? visibleTracks : toAnalyze)
+                let unanalyzed = visibleTracks.filter { !$0.isSenseMeAnalyzed }
+                let toAnalyze = !targets.isEmpty ? targets : unanalyzed
+                guard !toAnalyze.isEmpty else { return }
+                analyzeTracksSenseMe(toAnalyze)
             }) {
                 HStack(spacing: 5) {
                     if isBatchAnalyzing, let prog = batchProgress {
@@ -388,7 +393,7 @@ public struct LibraryView: View {
                         Image(systemName: "waveform.path.ecg")
                             .font(.system(size: 11, weight: .semibold))
                         ViewThatFits(in: .horizontal) {
-                            Text("Analyze SenseMe")
+                            Text(hasSelection ? "Analyze SenseMe" : (unanalyzedCount > 0 ? "Analyze SenseMe (\(unanalyzedCount))" : "SenseMe Analyzed"))
                                 .font(WalkmanFont.calloutMedium)
                             Text("SenseMe")
                                 .font(WalkmanFont.calloutMedium)
@@ -401,8 +406,8 @@ public struct LibraryView: View {
                 .foregroundStyle(Color(red: 255/255, green: 195/255, blue: 80/255))
             }
             .buttonStyle(LiquidGlassButtonStyle(variant: .capsule, cornerRadius: 17))
-            .disabled(isBatchAnalyzing || visibleTracks.isEmpty)
-            .help("Analyze tracks for Sony 12 Tone / SenseMe Channels")
+            .disabled(isBatchAnalyzing || visibleTracks.isEmpty || (!hasSelection && unanalyzedCount == 0))
+            .help(hasSelection ? "Analyze selected track for Sony 12 Tone / SenseMe" : (unanalyzedCount > 0 ? "Analyze \(unanalyzedCount) unanalyzed tracks for Sony 12 Tone / SenseMe" : "All visible tracks have 12 Tone / SenseMe metadata"))
         }
     }
     

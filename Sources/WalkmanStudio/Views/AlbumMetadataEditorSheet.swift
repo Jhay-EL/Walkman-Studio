@@ -4,6 +4,7 @@ import AppKit
 public struct AlbumMetadataEditorSheet: View {
     let album: AlbumItem
     let onSaved: () -> Void
+    var onSavedTracks: (([Track]) -> Void)? = nil
     let onDismiss: () -> Void
 
     public struct EditableTrackRow: Identifiable {
@@ -47,9 +48,15 @@ public struct AlbumMetadataEditorSheet: View {
     @State private var isCancelHovered: Bool = false
     @State private var isSaveHovered: Bool = false
 
-    public init(album: AlbumItem, onSaved: @escaping () -> Void, onDismiss: @escaping () -> Void) {
+    public init(
+        album: AlbumItem,
+        onSaved: @escaping () -> Void,
+        onSavedTracks: (([Track]) -> Void)? = nil,
+        onDismiss: @escaping () -> Void
+    ) {
         self.album = album
         self.onSaved = onSaved
+        self.onSavedTracks = onSavedTracks
         self.onDismiss = onDismiss
     }
 
@@ -328,6 +335,8 @@ public struct AlbumMetadataEditorSheet: View {
                 }
             }
 
+            var updatedTracks: [Track] = []
+
             for (index, row) in rows.enumerated() {
                 await MainActor.run {
                     self.saveProgress = Double(index) / Double(max(1, total))
@@ -338,22 +347,56 @@ public struct AlbumMetadataEditorSheet: View {
                 let trackTitle = row.title.trimmingCharacters(in: .whitespacesAndNewlines)
                 let trackArtist = shouldApplyArtist ? finalAlbumArtist : row.artist.trimmingCharacters(in: .whitespacesAndNewlines)
                 let trackNum = row.trackNum.trimmingCharacters(in: .whitespacesAndNewlines)
+                let finalTitle = trackTitle.isEmpty ? row.track.title : trackTitle
+                let finalArtist = trackArtist.isEmpty ? row.track.artist : trackArtist
+                let finalTrackNum = trackNum.isEmpty ? row.track.trackNum : trackNum
 
                 do {
                     try AudioTagger.shared.writeMetadata(
                         fileURL: trackURL,
-                        title: trackTitle.isEmpty ? row.track.title : trackTitle,
-                        artist: trackArtist.isEmpty ? row.track.artist : trackArtist,
+                        title: finalTitle,
+                        artist: finalArtist,
                         album: finalAlbumName,
-                        trackNumber: trackNum.isEmpty ? row.track.trackNum : trackNum,
+                        trackNumber: finalTrackNum,
                         year: finalYear,
                         genre: finalGenre,
                         coverArtData: artModified ? encodedArtwork : nil
                     )
 
                     AudioTagger.shared.invalidateCaches(fileURL: trackURL)
+                    
+                    // Invalidate previous and updated artwork caches
                     CoverArtCache.shared.invalidate(forFullPath: row.track.fullPath, artist: row.track.primaryArtist, album: row.track.album)
-                    LibraryScanner.shared.invalidate(fullPath: row.track.fullPath)
+                    CoverArtCache.shared.invalidate(forFullPath: row.track.fullPath, artist: finalArtist, album: finalAlbumName)
+                    
+                    // If new cover image exists, write directly to CoverArtCache for instant zero-latency preview
+                    if artModified, let enc = encodedArtwork, !enc.isEmpty, let newImg = NSImage(data: enc) {
+                        CoverArtCache.shared.storeThumbnail(newImg, forFullPath: row.track.fullPath, artist: finalArtist, album: finalAlbumName)
+                    }
+
+                    let hasArt = artModified ? (encodedArtwork != nil && !encodedArtwork!.isEmpty) : row.track.hasArtwork
+
+                    // Update SQLite database directly with fresh metadata & modification time
+                    LibraryScanner.shared.updateTrackInCache(
+                        fullPath: row.track.fullPath,
+                        title: finalTitle,
+                        artist: finalArtist,
+                        album: finalAlbumName,
+                        trackNum: finalTrackNum,
+                        year: finalYear,
+                        genre: finalGenre,
+                        hasArtwork: hasArt
+                    )
+
+                    var updated = row.track
+                    updated.title = finalTitle
+                    updated.artist = finalArtist
+                    updated.album = finalAlbumName
+                    updated.trackNum = finalTrackNum
+                    updated.year = finalYear
+                    updated.genre = finalGenre
+                    updated.hasArtwork = hasArt
+                    updatedTracks.append(updated)
                 } catch {
                     print("[AlbumMetadataEditor] Error saving track \(row.track.filename): \(error.localizedDescription)")
                 }
@@ -373,6 +416,8 @@ public struct AlbumMetadataEditorSheet: View {
                 }
             }
 
+            let finalTracks = updatedTracks
+
             await MainActor.run {
                 self.saveProgress = 1.0
                 self.saveStatus = "Saved album successfully!"
@@ -380,11 +425,12 @@ public struct AlbumMetadataEditorSheet: View {
                 NotificationCenter.default.post(
                     name: .trackMetadataDidUpdate,
                     object: nil,
-                    userInfo: [:]
+                    userInfo: ["albumName": finalAlbumName, "albumArtist": finalAlbumArtist, "tracks": finalTracks]
                 )
+                self.onSavedTracks?(finalTracks)
                 self.onSaved()
 
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                     self.onDismiss()
                 }
             }

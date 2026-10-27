@@ -370,10 +370,25 @@ public struct SongMetadataEditorSheet: View {
                     }
                 }
 
-                // 3. Invalidate caches
+                // 3. Invalidate & update caches
                 AudioTagger.shared.invalidateCaches(fileURL: url)
                 CoverArtCache.shared.invalidate(forFullPath: track.fullPath, artist: track.primaryArtist, album: track.album)
-                LibraryScanner.shared.invalidate(fullPath: track.fullPath)
+                CoverArtCache.shared.invalidate(forFullPath: track.fullPath, artist: saveArtist, album: saveAlbum)
+                if self.isCoverArtModified, let sc = saveCover, !sc.isEmpty, let newImg = NSImage(data: sc) {
+                    CoverArtCache.shared.storeThumbnail(newImg, forFullPath: track.fullPath, artist: saveArtist, album: saveAlbum)
+                }
+                
+                let hasArt = self.isCoverArtModified ? (saveCover != nil && !saveCover!.isEmpty) : track.hasArtwork
+                LibraryScanner.shared.updateTrackInCache(
+                    fullPath: track.fullPath,
+                    title: saveTitle,
+                    artist: saveArtist,
+                    album: saveAlbum,
+                    trackNum: saveTrackNum,
+                    year: saveYear,
+                    genre: saveGenre,
+                    hasArtwork: hasArt
+                )
 
                 var updatedTrack = track
                 updatedTrack.title = saveTitle
@@ -382,6 +397,7 @@ public struct SongMetadataEditorSheet: View {
                 updatedTrack.trackNum = saveTrackNum
                 updatedTrack.year = saveYear
                 updatedTrack.genre = saveGenre
+                updatedTrack.hasArtwork = hasArt
                 updatedTrack.isSenseMeAnalyzed = self.isSenseMeAnalyzed
                 if let s = self.senseMeInfo, s.isAnalyzed {
                     updatedTrack.senseMeBpm = s.bpm

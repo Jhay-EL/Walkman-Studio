@@ -47,9 +47,12 @@ public final class ArtistArtCache: @unchecked Sendable {
 
     private func diskKey(for artistName: String) -> String {
         let clean = artistName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        var hasher = Hasher()
-        hasher.combine(clean)
-        return String(format: "%016llx", UInt64(bitPattern: Int64(hasher.finalize())))
+        var hash: UInt64 = 14695981039346656037
+        for byte in clean.utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 1099511628211
+        }
+        return String(format: "%016llx", hash)
     }
 
     /// Synchronous memory/SSD check. Returns image if cached, nil otherwise without blocking.

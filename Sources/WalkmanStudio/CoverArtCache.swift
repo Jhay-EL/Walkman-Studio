@@ -25,10 +25,19 @@ public final class CoverArtCache: @unchecked Sendable {
     }
 
     private func diskKey(for track: Track) -> String {
-        let key = "\(track.primaryArtist)|\(track.album)".lowercased()
-        var hasher = Hasher()
-        hasher.combine(key)
-        return String(format: "%016llx", UInt64(bitPattern: Int64(hasher.finalize())))
+        return diskKey(artist: track.primaryArtist, album: track.album)
+    }
+
+    public func diskKey(artist: String, album: String) -> String {
+        let cleanArtist = artist.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let cleanAlbum = album.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let key = "\(cleanArtist)|\(cleanAlbum)"
+        var hash: UInt64 = 14695981039346656037
+        for byte in key.utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 1099511628211
+        }
+        return String(format: "%016llx", hash)
     }
 
     public func thumbnail(for track: Track) -> NSImage? {
@@ -64,12 +73,23 @@ public final class CoverArtCache: @unchecked Sendable {
         if !artist.isEmpty && !album.isEmpty {
             let aKey = "\(artist)|\(album)" as NSString
             albumCache.removeObject(forKey: aKey)
-            let key = "\(artist)|\(album)".lowercased()
-            var hasher = Hasher()
-            hasher.combine(key)
-            let hashStr = String(format: "%016llx", UInt64(bitPattern: Int64(hasher.finalize())))
+            let hashStr = diskKey(artist: artist, album: album)
             let fileURL = diskCacheURL.appendingPathComponent("\(hashStr).jpg")
             try? FileManager.default.removeItem(at: fileURL)
+        }
+    }
+
+    public func storeThumbnail(_ image: NSImage, forFullPath fullPath: String, artist: String, album: String) {
+        let pKey = fullPath as NSString
+        let aKey = "\(artist)|\(album)" as NSString
+        pathCache.setObject(image, forKey: pKey)
+        albumCache.setObject(image, forKey: aKey)
+        let hashStr = diskKey(artist: artist, album: album)
+        let fileURL = diskCacheURL.appendingPathComponent("\(hashStr).jpg")
+        if let tiff = image.tiffRepresentation,
+           let bitmap = NSBitmapImageRep(data: tiff),
+           let jpegData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.85]) {
+            try? jpegData.write(to: fileURL)
         }
     }
 
@@ -227,10 +247,33 @@ public struct TrackCoverThumbnail: View {
         .onChange(of: track.id) { _, _ in
             loadImage()
         }
+        .onChange(of: track) { _, _ in
+            loadImage(forceReload: true)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .trackMetadataDidUpdate)) { notif in
+            if let tracks = notif.userInfo?["tracks"] as? [Track] {
+                if tracks.contains(where: { $0.fullPath == track.fullPath }) {
+                    loadImage(forceReload: true)
+                }
+            } else if let trackId = notif.userInfo?["trackId"] as? String {
+                if trackId == track.id {
+                    loadImage(forceReload: true)
+                }
+            } else if let albumName = notif.userInfo?["albumName"] as? String {
+                if track.album.localizedCaseInsensitiveCompare(albumName) == .orderedSame {
+                    loadImage(forceReload: true)
+                }
+            } else {
+                loadImage(forceReload: true)
+            }
+        }
     }
 
-    private func loadImage() {
-        if let cached = CoverArtCache.shared.thumbnail(for: track) {
+    private func loadImage(forceReload: Bool = false) {
+        if forceReload {
+            CoverArtCache.shared.invalidate(forFullPath: track.fullPath, artist: track.primaryArtist, album: track.album)
+        }
+        if let cached = CoverArtCache.shared.thumbnail(for: track), !forceReload {
             self.image = cached
         } else {
             CoverArtCache.shared.loadThumbnail(for: track, targetSize: size) { img in

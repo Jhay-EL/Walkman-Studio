@@ -54,9 +54,12 @@ class AudioAnalysisResult:
 def decode_audio_mono(audio_path: str | Path, sr: int = SAMPLE_RATE) -> np.ndarray:
     """
     Decodes input audio file (.flac, .mp3, .m4a) to mono float32 PCM at target sample rate.
+    Includes a 360-second limit and non-blocking timeout protection against hanging on long/corrupt files.
     """
     cmd = [
         FFMPEG_PATH,
+        "-nostdin",
+        "-t", "360",
         "-i", str(audio_path),
         "-vn",
         "-ac", "1",
@@ -64,7 +67,14 @@ def decode_audio_mono(audio_path: str | Path, sr: int = SAMPLE_RATE) -> np.ndarr
         "-f", "f32le",
         "pipe:1"
     ]
-    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=True)
+    proc = subprocess.run(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL,
+        timeout=40,
+        check=True
+    )
     samples = np.frombuffer(proc.stdout, dtype=np.float32)
     if len(samples) == 0:
         raise ValueError(f"Failed to decode audio or file is empty: {audio_path}")
@@ -73,40 +83,35 @@ def decode_audio_mono(audio_path: str | Path, sr: int = SAMPLE_RATE) -> np.ndarr
 
 def perform_hpss(y: np.ndarray, sr: int = SAMPLE_RATE, n_fft: int = 2048, hop_length: int = 512) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Harmonic-Percussive Source Separation using median filtering on STFT.
-    Returns (y_harmonic, y_percussive, freqs, times, mag_spectrogram).
+    Harmonic-Percussive Source Separation using 2D median filtering on STFT.
+    Optimized: directly outputs harmonic and percussive magnitude spectrograms (mag_h, mag_p)
+    without redundant ISTFT-STFT cycles.
+    Returns (mag_h, mag_p, freqs, times, mag).
     """
     f, t, Zxx = scipy.signal.stft(y, fs=sr, nperseg=n_fft, noverlap=n_fft - hop_length)
     mag = np.abs(Zxx)
 
     # Median filter: horizontal along time (axis 1) for harmonic, vertical along frequency (axis 0) for percussive
-    H_filter = scipy.ndimage.median_filter(mag, size=(1, 31))
-    P_filter = scipy.ndimage.median_filter(mag, size=(31, 1))
+    H_filter = scipy.ndimage.median_filter(mag, size=(1, 21))
+    P_filter = scipy.ndimage.median_filter(mag, size=(21, 1))
 
     mask_h = (H_filter ** 2) / (H_filter ** 2 + P_filter ** 2 + 1e-9)
     mask_p = (P_filter ** 2) / (H_filter ** 2 + P_filter ** 2 + 1e-9)
 
-    Z_h = Zxx * mask_h
-    Z_p = Zxx * mask_p
+    mag_h = mag * mask_h
+    mag_p = mag * mask_p
 
-    _, y_h = scipy.signal.istft(Z_h, fs=sr, nperseg=n_fft, noverlap=n_fft - hop_length)
-    _, y_p = scipy.signal.istft(Z_p, fs=sr, nperseg=n_fft, noverlap=n_fft - hop_length)
-
-    min_len = min(len(y), len(y_h), len(y_p))
-    return y_h[:min_len], y_p[:min_len], f, t, mag
+    return mag_h, mag_p, f, t, mag
 
 
-def compute_chroma_and_modality(y_h: np.ndarray, sr: int = SAMPLE_RATE, n_fft: int = 2048, hop_length: int = 512) -> Tuple[float, float, np.ndarray]:
+def compute_chroma_and_modality(mag_h: np.ndarray, f: np.ndarray) -> Tuple[float, float, np.ndarray]:
     """
-    Computes 12-semitone chroma matrix, modality score, and chroma flux.
+    Computes 12-semitone chroma matrix, modality score, and chroma flux from harmonic magnitude spectrogram.
     """
-    f, _, Z_h = scipy.signal.stft(y_h, fs=sr, nperseg=n_fft, noverlap=n_fft - hop_length)
-    mag_h = np.abs(Z_h)
-
     # Map FFT bins to 12 semitones [C, C#, D, D#, E, F, F#, G, G#, A, A#, B]
     chroma_weights = np.zeros((12, len(f)), dtype=np.float32)
     for bin_idx, freq in enumerate(f):
-        if freq < 65.4: # Below C2
+        if freq < 65.4:  # Below C2
             continue
         midi = 69.0 + 12.0 * np.log2(freq / 440.0)
         chroma_idx = int(round(midi)) % 12
@@ -114,7 +119,7 @@ def compute_chroma_and_modality(y_h: np.ndarray, sr: int = SAMPLE_RATE, n_fft: i
         weight = np.exp(-0.5 * (dist / 0.25) ** 2)
         chroma_weights[chroma_idx, bin_idx] += weight
 
-    chroma_matrix = chroma_weights @ mag_h # (12, num_frames)
+    chroma_matrix = chroma_weights @ mag_h  # (12, num_frames)
     norm = np.linalg.norm(chroma_matrix, axis=0, keepdims=True) + 1e-6
     chroma_matrix_norm = chroma_matrix / norm
     chroma_mean = np.mean(chroma_matrix_norm, axis=1)
@@ -134,13 +139,10 @@ def compute_chroma_and_modality(y_h: np.ndarray, sr: int = SAMPLE_RATE, n_fft: i
     return modality_score, chroma_flux, chroma_mean
 
 
-def compute_rhythm_and_tempo(y_p: np.ndarray, sr: int = SAMPLE_RATE, n_fft: int = 2048, hop_length: int = 512) -> Tuple[float, float, float]:
+def compute_rhythm_and_tempo(mag_p: np.ndarray, sr: int = SAMPLE_RATE, hop_length: int = 512) -> Tuple[float, float, float]:
     """
-    Computes global BPM, onset density, and pulse clarity on y_percussive.
+    Computes global BPM, onset density, and pulse clarity directly from percussive magnitude spectrogram.
     """
-    _, _, Z_p = scipy.signal.stft(y_p, fs=sr, nperseg=n_fft, noverlap=n_fft - hop_length)
-    mag_p = np.abs(Z_p)
-
     spec_diff = np.diff(mag_p, axis=1)
     onset_env = np.maximum(0.0, spec_diff).sum(axis=0)
     onset_env = onset_env / (np.max(onset_env) + 1e-6)
@@ -226,10 +228,10 @@ def analyze_audio_track(audio_path: str | Path) -> AudioAnalysisResult:
     Full DSP pipeline executing all 7 Phase 2 requirements.
     """
     y = decode_audio_mono(audio_path, SAMPLE_RATE)
-    y_h, y_p, freqs, times, mag = perform_hpss(y, SAMPLE_RATE)
+    mag_h, mag_p, freqs, times, mag = perform_hpss(y, SAMPLE_RATE)
 
-    modality_score, chroma_flux, chroma_mean = compute_chroma_and_modality(y_h, SAMPLE_RATE)
-    bpm, onset_density, pulse_clarity = compute_rhythm_and_tempo(y_p, SAMPLE_RATE)
+    modality_score, chroma_flux, chroma_mean = compute_chroma_and_modality(mag_h, freqs)
+    bpm, onset_density, pulse_clarity = compute_rhythm_and_tempo(mag_p, SAMPLE_RATE)
     rms_mean, dynamic_variance, brightness, flatness, zcr, bass_ratio = compute_spectral_and_dynamic_features(y, freqs, mag, SAMPLE_RATE)
 
     # 5. Valence & Arousal Coordinates (-1.0 to +1.0)
@@ -250,36 +252,7 @@ def analyze_audio_track(audio_path: str | Path) -> AudioAnalysisResult:
     # 6. Sabi Highlight
     highlight_sec, highlight_ms = detect_sabi_highlight(y, SAMPLE_RATE)
 
-    # 7. SenseMe Channel Classification & STMO 10-Slot Vector Mapping
-    channels: List[str] = []
-    if arousal >= 0.45 and valence >= 0.15 and bpm >= 118:
-        channels.append("Energetic")
-    if arousal <= -0.25 and valence >= -0.25 and bpm <= 98:
-        channels.append("Relax")
-    if valence >= 0.35 and 0.05 <= arousal <= 0.65 and 100 <= bpm <= 135:
-        channels.append("Upbeat")
-    if -0.75 <= arousal <= -0.10 and -0.35 <= valence <= 0.40:
-        channels.append("Mellow")
-    if valence <= -0.10 and -0.55 <= arousal <= 0.40 and dynamic_variance >= 0.35:
-        channels.append("Emotional")
-    if arousal >= 0.65 and (flatness >= 0.04 or zcr >= 0.12 or bpm >= 145):
-        channels.append("Extreme")
-    if 108 <= bpm <= 138 and pulse_clarity >= 0.45 and bass_ratio >= 0.28 and arousal >= 0.25:
-        channels.append("Dance")
-    if 82 <= bpm <= 116 and -0.40 <= arousal <= 0.25 and chroma_flux >= 0.002:
-        channels.append("Lounge")
-
-    # Time-of-Day Channels
-    if "Upbeat" in channels or "Acoustic" in channels or valence > 0.15:
-        channels.append("Morning")
-    if "Energetic" in channels or "Upbeat" in channels or valence > 0.1:
-        channels.append("Daytime")
-    if "Mellow" in channels or "Relax" in channels or "Lounge" in channels:
-        channels.append("Evening")
-    if "Relax" in channels or "Mellow" in channels or arousal <= -0.10:
-        channels.append("Midnight")
-
-    # Map to 10 STMO Mood Slots [0..9]
+    # 7. Map to 10 STMO Mood Slots [0..9]
     # Slot 0: Energetic
     s0 = int(np.clip(50 + 35 * arousal + 15 * norm_bpm, 0, 100))
     # Slot 1: Relax
@@ -292,11 +265,9 @@ def analyze_audio_track(audio_path: str | Path) -> AudioAnalysisResult:
     s4 = int(np.clip(30 + 40 * dynamic_variance - 25 * modality_score, 0, 100))
     # Slot 5: Lounge
     s5 = int(np.clip(50 + 30 * min(chroma_flux * 20.0, 1.0) - 20 * abs(norm_bpm), 0, 100))
-    # Slot 6: Dance
-    if 100 <= bpm <= 145 and pulse_clarity >= 0.4:
-        s6 = int(np.clip(40 * pulse_clarity + 40 * bass_ratio + 20 * norm_rms, 0, 100))
-    else:
-        s6 = 0
+    # Slot 6: Dance (Smooth scaling with tempo and rhythmic clarity)
+    dance_tempo_factor = max(0.0, 1.0 - abs(bpm - 124.0) / 40.0)
+    s6 = int(np.clip(35 * pulse_clarity + 35 * bass_ratio + 15 * norm_rms + 15 * dance_tempo_factor, 0, 100))
     # Slot 7: Extreme
     s7 = int(np.clip(30 + 40 * arousal + 30 * min(flatness * 5.0, 1.0), 0, 100))
     # Slot 8: Acoustic
@@ -306,11 +277,47 @@ def analyze_audio_track(audio_path: str | Path) -> AudioAnalysisResult:
 
     mood_scores = [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9]
 
-    # Additional channel checks from scores
-    if s8 >= 60 and "Acoustic" not in channels:
+    # 8. SenseMe Channel Classification (Hardware Walkman 14 Channels)
+    channels: List[str] = []
+
+    # Mood Channels (8 channels)
+    if s0 >= 55 or (arousal >= 0.35 and valence >= 0.15 and bpm >= 115):
+        channels.append("Energetic")
+    if s1 >= 55 or (arousal <= -0.15 and valence >= -0.30 and bpm <= 105):
+        channels.append("Relax")
+    if s2 >= 55 or (valence >= 0.20 and -0.10 <= arousal <= 0.65):
+        channels.append("Upbeat")
+    if s3 >= 55 or (-0.75 <= arousal <= 0.05 and -0.35 <= valence <= 0.45):
+        channels.append("Mellow")
+    if s4 >= 50 or (valence <= -0.10 and -0.55 <= arousal <= 0.40):
+        channels.append("Emotional")
+    if s7 >= 60 or arousal >= 0.65 or (flatness >= 0.04 or zcr >= 0.12 or bpm >= 145):
+        channels.append("Extreme")
+    if s6 >= 45 or (105 <= bpm <= 140 and arousal >= 0.20):
+        channels.append("Dance")
+    if s5 >= 45 or (80 <= bpm <= 120 and -0.40 <= arousal <= 0.30):
+        channels.append("Lounge")
+
+    # Timbre Descriptors (Slots 8 & 9)
+    if s8 >= 55:
         channels.append("Acoustic")
-    if s9 >= 65 and "Electronic" not in channels:
+    if s9 >= 60:
         channels.append("Electronic")
+
+    # Time-of-Day Channels (5 channels)
+    if "Upbeat" in channels or "Acoustic" in channels or "Relax" in channels or valence >= 0.15:
+        channels.append("Morning")
+    if "Energetic" in channels or "Upbeat" in channels or "Dance" in channels or valence >= 0.10:
+        channels.append("Daytime")
+    if "Mellow" in channels or "Relax" in channels or "Lounge" in channels or (-0.30 <= arousal <= 0.20 and valence >= -0.20):
+        channels.append("Evening")
+    if "Lounge" in channels or "Mellow" in channels or "Emotional" in channels or (arousal <= 0.10 and valence <= 0.25):
+        channels.append("Night")
+    if "Relax" in channels or "Mellow" in channels or arousal <= -0.10 or bpm <= 88:
+        channels.append("Midnight")
+
+    # Global Device Channel (14th channel: includes all 12-Tone analyzed tracks)
+    channels.append("Shuffle All Songs")
 
     raw_bpm = float(bpm)
 
