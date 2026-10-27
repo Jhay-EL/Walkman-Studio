@@ -1209,14 +1209,9 @@ public struct ArtistsView: View {
                         albumTracks: album.tracks,
                         onSelect: {
                             onSelectTrack(track)
-                            if player.currentTrack?.id == track.id && player.isPlaying {
-                                player.pause()
-                            } else {
-                                player.play(track: track, in: album.tracks)
-                            }
                         },
-                        onPlay: {
-                            player.play(track: track, in: album.tracks)
+                        onPlayToggle: {
+                            player.playOrToggle(track: track, in: album.tracks)
                         },
                         onEdit: {
                             onEditTrack?(track)
@@ -1610,7 +1605,7 @@ private struct ArtistTrackRowView: View {
     let artistName: String
     let albumTracks: [Track]
     let onSelect: () -> Void
-    let onPlay: () -> Void
+    let onPlayToggle: () -> Void
     var onEdit: (() -> Void)? = nil
     var onTrimCut: (() -> Void)? = nil
     
@@ -1628,22 +1623,19 @@ private struct ArtistTrackRowView: View {
         let isPlayingThis = player.currentTrack?.id == track.id && player.isPlaying
         
         HStack(spacing: 12) {
-            // Track Number or Play button
-            Button(action: onPlay) {
-                ZStack {
-                    if isHovered || isPlayingThis {
-                        Image(systemName: isPlayingThis ? "pause.fill" : "play.fill")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(WalkmanTheme.silverLight)
-                    } else {
-                        Text(track.trackNum.isEmpty ? "\(index)" : track.trackNum)
-                            .font(WalkmanFont.mono)
-                            .foregroundStyle(WalkmanTheme.silverMuted)
-                    }
+            // Track Number or Play/Pause Indicator
+            ZStack {
+                if isHovered || isPlayingThis {
+                    Image(systemName: isPlayingThis ? "pause.fill" : "play.fill")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                } else {
+                    Text(track.trackNum.isEmpty ? "\(index)" : track.trackNum)
+                        .font(WalkmanFont.mono)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
                 }
-                .frame(width: 22, alignment: .trailing)
             }
-            .buttonStyle(.plain)
+            .frame(width: 22, alignment: .trailing)
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(track.title)
@@ -1711,16 +1703,28 @@ private struct ArtistTrackRowView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             onSelect()
+            onPlayToggle()
         }
         .onHover { hovering in
             if isHovered != hovering {
                 isHovered = hovering
+                if hovering {
+                    NSCursor.pointingHand.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.pop()
             }
         }
         .animation(.easeInOut(duration: 0.12), value: isHovered)
         .contextMenu {
-            Button("Play Track") {
-                onPlay()
+            Button(isPlayingThis ? "Pause" : "Play Track") {
+                onPlayToggle()
             }
             Divider()
             Button {

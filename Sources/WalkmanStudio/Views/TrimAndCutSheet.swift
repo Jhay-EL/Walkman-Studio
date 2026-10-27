@@ -210,7 +210,7 @@ public struct TrimAndCutSheet: View {
     @State private var isLoadingWaveform: Bool = true
 
     // DAW-grade Timeline Zoom & Viewport Window State
-    @State private var zoomScale: CGFloat = 1.0 // 1.0x (Fit) to 8.0x
+    @State private var zoomScale: CGFloat = 1.0 // 1.0x (Fit) to 20.0x
     @State private var windowStartTime: Double = 0.0 // Active viewport start time in seconds
 
     // Marker & Mode state
@@ -631,14 +631,14 @@ public struct TrimAndCutSheet: View {
                     .padding(.trailing, 4)
                 }
 
-                // Smooth Zoom Toolbar
+                // Smooth Zoom Toolbar (Up to 20x Magnification)
                 HStack(spacing: 5) {
-                    ForEach([1.0, 2.0, 4.0, 8.0], id: \.self) { z in
+                    ForEach([1.0, 2.0, 4.0, 8.0, 16.0, 20.0], id: \.self) { z in
                         Button(action: { setZoom(CGFloat(z)) }) {
                             Text(z == 1.0 ? "Fit" : "\(Int(z))x")
                                 .font(WalkmanFont.pillCounter)
-                                .padding(.horizontal, 9)
-                                .padding(.vertical, 4)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3.5)
                                 .background(abs(zoomScale - CGFloat(z)) < 0.1 ? WalkmanTheme.silverGradient : LinearGradient(colors: [Color.white.opacity(0.08), Color.white.opacity(0.04)], startPoint: .top, endPoint: .bottom))
                                 .foregroundStyle(abs(zoomScale - CGFloat(z)) < 0.1 ? Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255) : .secondary)
                                 .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
@@ -652,7 +652,10 @@ public struct TrimAndCutSheet: View {
                         .overlay(Color.white.opacity(0.12))
 
                     // Zoom Out
-                    Button(action: { setZoom(max(1.0, zoomScale - 1.0)) }) {
+                    Button(action: {
+                        let step: CGFloat = zoomScale > 8.0 ? 2.0 : 1.0
+                        setZoom(max(1.0, zoomScale - step))
+                    }) {
                         Image(systemName: "minus.magnifyingglass")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(zoomScale <= 1.01 ? Color.white.opacity(0.2) : WalkmanTheme.silverLight)
@@ -662,26 +665,29 @@ public struct TrimAndCutSheet: View {
                     .disabled(zoomScale <= 1.01)
                     .help("Zoom Out (-)")
 
-                    // Zoom Slider
+                    // Zoom Slider (1.0x to 20.0x)
                     Slider(
                         value: Binding(
                             get: { zoomScale },
                             set: { setZoom($0) }
                         ),
-                        in: 1.0...8.0
+                        in: 1.0...20.0
                     )
                     .frame(width: 85)
                     .help(String(format: "Zoom: %.1fx", zoomScale))
 
                     // Zoom In
-                    Button(action: { setZoom(min(8.0, zoomScale + 1.0)) }) {
+                    Button(action: {
+                        let step: CGFloat = zoomScale >= 8.0 ? 2.0 : 1.0
+                        setZoom(min(20.0, zoomScale + step))
+                    }) {
                         Image(systemName: "plus.magnifyingglass")
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(zoomScale >= 7.99 ? Color.white.opacity(0.2) : WalkmanTheme.silverLight)
+                            .foregroundStyle(zoomScale >= 19.99 ? Color.white.opacity(0.2) : WalkmanTheme.silverLight)
                             .frame(width: 22, height: 22)
                     }
                     .buttonStyle(.plain)
-                    .disabled(zoomScale >= 7.99)
+                    .disabled(zoomScale >= 19.99)
                     .help("Zoom In (+)")
                 }
                 .padding(.horizontal, 8)
@@ -1051,7 +1057,7 @@ public struct TrimAndCutSheet: View {
                 let pxPerSec = canvasW / windowDuration
                 // Target ~80-110 points between major time marks
                 let rawInterval = 85.0 / pxPerSec
-                let possibleIntervals: [Double] = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1200]
+                let possibleIntervals: [Double] = [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1200]
                 let majorInterval = possibleIntervals.first(where: { $0 >= rawInterval }) ?? 60.0
 
                 let firstTick = ceil(windowStartTime / majorInterval) * majorInterval
@@ -1072,7 +1078,9 @@ public struct TrimAndCutSheet: View {
                     let hrs = totalSec / 3600
 
                     let timeStr: String
-                    if majorInterval < 1.0 {
+                    if majorInterval < 0.1 {
+                        timeStr = String(format: "%02d:%02d.%02d", m, s, ms / 10)
+                    } else if majorInterval < 1.0 {
                         timeStr = String(format: "%02d:%02d.%01d", m, s, ms / 100)
                     } else if hrs > 0 {
                         timeStr = String(format: "%d:%02d:%02d", hrs, m, s)
@@ -1406,7 +1414,7 @@ public struct TrimAndCutSheet: View {
 
                     Spacer()
 
-                    Button(action: { adjustStartTime(by: -startTime) }) {
+                    Button(action: { setStartTime(0.0) }) {
                         HStack(spacing: 3) {
                             Image(systemName: "arrow.counterclockwise")
                                 .font(.system(size: 9))
@@ -1435,10 +1443,7 @@ public struct TrimAndCutSheet: View {
                     Spacer()
 
                     // Single clean button: Set to Playhead
-                    Button(action: {
-                        adjustStartTime(by: currentTime - startTime)
-                        seekTo(time: startTime)
-                    }) {
+                    Button(action: { setStartTime(currentTime) }) {
                         HStack(spacing: 5) {
                             Image(systemName: "mappin.and.ellipse")
                                 .font(.system(size: 11))
@@ -1487,7 +1492,7 @@ public struct TrimAndCutSheet: View {
 
                     Spacer()
 
-                    Button(action: { adjustEndTime(by: totalDuration - endTime) }) {
+                    Button(action: { setEndTime(totalDuration) }) {
                         HStack(spacing: 3) {
                             Text("Set to End")
                                 .font(WalkmanFont.monoSmall)
@@ -1516,10 +1521,7 @@ public struct TrimAndCutSheet: View {
                     Spacer()
 
                     // Single clean button: Set to Playhead
-                    Button(action: {
-                        adjustEndTime(by: currentTime - endTime)
-                        seekTo(time: endTime)
-                    }) {
+                    Button(action: { setEndTime(currentTime) }) {
                         HStack(spacing: 5) {
                             Image(systemName: "mappin.and.ellipse")
                                 .font(.system(size: 11))
@@ -1575,15 +1577,13 @@ public struct TrimAndCutSheet: View {
     }
 
 
-    private func adjustStartTime(by delta: Double) {
-        let newStart = max(0.0, min(endTime - 0.05, startTime + delta))
+    private func setStartTime(_ targetTime: Double) {
+        let newStart = max(0.0, min(endTime - 0.05, targetTime))
         startTime = newStart
         dspController.startTime = newStart
 
         // Move the playhead to the adjusted start marker so user sees and hears the adjustment!
-        if !isPlaying {
-            seekTo(time: newStart)
-        }
+        seekTo(time: newStart)
 
         // When zoomed in, keep the start marker visible inside viewport
         if zoomScale > 1.01 {
@@ -1599,15 +1599,13 @@ public struct TrimAndCutSheet: View {
         }
     }
 
-    private func adjustEndTime(by delta: Double) {
-        let newEnd = max(startTime + 0.05, min(totalDuration, endTime + delta))
+    private func setEndTime(_ targetTime: Double) {
+        let newEnd = max(startTime + 0.05, min(totalDuration, targetTime))
         endTime = newEnd
         dspController.endTime = newEnd
 
         // Move the playhead to the adjusted end marker so user sees and hears the boundary!
-        if !isPlaying {
-            seekTo(time: newEnd)
-        }
+        seekTo(time: newEnd)
 
         // When zoomed in, keep the end marker visible inside viewport
         if zoomScale > 1.01 {
@@ -1621,6 +1619,20 @@ public struct TrimAndCutSheet: View {
                 }
             }
         }
+    }
+
+    private func adjustStartTime(by delta: Double) {
+        // If start marker is at the default start (0:00) and the playhead is further in the track,
+        // anchor the initial adjustment to the playhead position so it doesn't reset to 0:00!
+        let baseTime: Double = (startTime < 0.01 && currentTime > 0.05) ? currentTime : startTime
+        setStartTime(baseTime + delta)
+    }
+
+    private func adjustEndTime(by delta: Double) {
+        // If end marker is at the default track end and the playhead is before the end,
+        // anchor the initial adjustment to the playhead position!
+        let baseTime: Double = (abs(endTime - totalDuration) < 0.01 && currentTime < totalDuration - 0.05 && currentTime > startTime) ? currentTime : endTime
+        setEndTime(baseTime + delta)
     }
 
     // MARK: - Duration Metrics Strip
@@ -2031,7 +2043,7 @@ public struct TrimAndCutSheet: View {
     // MARK: - Zoom & Navigation Logic
     private func setZoom(_ newZoom: CGFloat) {
         withAnimation(.spring(response: 0.30, dampingFraction: 0.85)) {
-            let clamped = max(1.0, min(8.0, newZoom))
+            let clamped = max(1.0, min(20.0, newZoom))
             let oldWindowDur = windowDuration
             let oldCenter = windowStartTime + oldWindowDur / 2.0
 
@@ -2187,9 +2199,9 @@ public struct TrimAndCutSheet: View {
             }
         }
 
-        // Load high-resolution waveform (600 peaks)
+        // Load high-resolution waveform (1200 peaks for crisp detail up to 20x zoom)
         Task {
-            let peaks = await TrimCutService.shared.generateWaveform(fileURL: fileURL, barCount: 600)
+            let peaks = await TrimCutService.shared.generateWaveform(fileURL: fileURL, barCount: 1200)
             await MainActor.run {
                 self.waveformPeaks = peaks
                 self.isLoadingWaveform = false

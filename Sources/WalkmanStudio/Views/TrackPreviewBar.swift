@@ -19,9 +19,15 @@ public struct TrackPreviewBar: View {
 
     private func formatTime(_ seconds: Double) -> String {
         if seconds.isNaN || seconds.isInfinite || seconds < 0 { return "0:00" }
-        let mins = Int(seconds) / 60
-        let secs = Int(seconds) % 60
-        return String(format: "%d:%02d", mins, secs)
+        let totalSecs = Int(seconds)
+        let hours = totalSecs / 3600
+        let mins = (totalSecs % 3600) / 60
+        let secs = totalSecs % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, mins, secs)
+        } else {
+            return String(format: "%d:%02d", mins, secs)
+        }
     }
 
     public var body: some View {
@@ -174,14 +180,14 @@ public struct TrackPreviewBar: View {
 
             if let track = player.currentTrack {
                 activeTrackDisplay(for: track)
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, 9)
                     .padding(.vertical, 4)
             } else {
                 idleDisplay
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 14)
             }
         }
-        .frame(minWidth: 140, maxWidth: 640)
+        .frame(minWidth: 160, maxWidth: .infinity)
         .frame(height: 42)
         .contentShape(Rectangle())
         .onTapGesture {
@@ -196,6 +202,10 @@ public struct TrackPreviewBar: View {
     @ViewBuilder
     private func activeTrackDisplay(for track: Track) -> some View {
         let isHiRes = track.bitsPerSample > 16 || track.sampleRate > 48000
+        let curTime = dragTime ?? progress.currentTime
+        let durTime = progress.duration
+        let timeWidth: CGFloat = durTime >= 3600 ? 54 : (durTime >= 600 ? 40 : 34)
+
         HStack(spacing: 8) {
             // Artwork thumbnail (clickable to open inspector)
             Button(action: onOpenInspector) {
@@ -228,33 +238,50 @@ public struct TrackPreviewBar: View {
             }
 
             // Metadata & Scrubber
-            VStack(alignment: .leading, spacing: 1.5) {
-                // Top row: Title and Artist only
+            VStack(alignment: .leading, spacing: 2) {
+                // Top row: Title, Artist, Hi-Res Badge
                 HStack(spacing: 5) {
-                    Text(track.title)
+                    Text(track.title.isEmpty ? "Unknown Title" : track.title)
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(player.isPlaying ? .white : Color(white: 0.9))
                         .lineLimit(1)
                         .truncationMode(.tail)
+                        .layoutPriority(1)
 
-                    Text("•")
-                        .font(.system(size: 8))
-                        .foregroundStyle(.secondary.opacity(0.7))
+                    if !track.artist.isEmpty {
+                        Text("•")
+                            .font(.system(size: 8))
+                            .foregroundStyle(.secondary.opacity(0.6))
+                            .fixedSize()
 
-                    Text(track.artist)
-                        .font(.system(size: 11, weight: .regular))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                        Text(track.artist)
+                            .font(.system(size: 11, weight: .regular))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .layoutPriority(0.5)
+                    }
+
+                    if isHiRes {
+                        Text("HR")
+                            .font(.system(size: 7.5, weight: .black))
+                            .foregroundStyle(WalkmanTheme.hiResGoldLight)
+                            .padding(.horizontal, 3.5)
+                            .padding(.vertical, 1)
+                            .background(WalkmanTheme.hiResGold.opacity(0.20))
+                            .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 3, style: .continuous).stroke(WalkmanTheme.hiResGold.opacity(0.40), lineWidth: 0.6))
+                            .fixedSize()
+                    }
                 }
 
-                // Bottom row: Timeline scrubber
-                HStack(spacing: 5) {
-                    let curTime = dragTime ?? progress.currentTime
+                // Bottom row: Timeline scrubber with unclipped responsive monospaced counters
+                HStack(spacing: 6) {
                     Text(formatTime(curTime))
                         .font(WalkmanFont.monoSmall)
                         .foregroundStyle(.secondary)
-                        .frame(width: 32, alignment: .trailing)
+                        .frame(width: timeWidth, alignment: .trailing)
+                        .fixedSize(horizontal: true, vertical: false)
 
                     Slider(
                         value: Binding(
@@ -276,10 +303,11 @@ public struct TrackPreviewBar: View {
                     .controlSize(.mini)
                     .tint(isHiRes ? WalkmanTheme.hiResGold : WalkmanTheme.silver)
 
-                    Text(formatTime(progress.duration))
+                    Text(formatTime(durTime))
                         .font(WalkmanFont.monoSmall)
                         .foregroundStyle(.secondary)
-                        .frame(width: 32, alignment: .leading)
+                        .frame(width: timeWidth, alignment: .leading)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
             }
         }

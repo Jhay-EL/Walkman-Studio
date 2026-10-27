@@ -22,6 +22,8 @@ public struct FullScreenNowPlayingView: View {
     @State private var isVolumeExpanded: Bool = false
     @State private var isVolumeHovered: Bool = false
     @State private var isVolumeSpeakerHovered: Bool = false
+    @State private var isLyricsTabHovered: Bool = false
+    @State private var isQueueTabHovered: Bool = false
 
     private enum RightPaneTab {
         case lyrics
@@ -122,6 +124,18 @@ public struct FullScreenNowPlayingView: View {
                 }
                 .frame(width: windowSize.width, height: windowSize.height, alignment: .top)
 
+                // Background dismiss tap area active ONLY when volume pod is expanded (prevents gesture interference with buttons)
+                if isVolumeExpanded {
+                    Color.black.opacity(0.001)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
+                                isVolumeExpanded = false
+                            }
+                        }
+                }
+
                 // Bottom Right Floating Switcher (Lyrics vs Queue)
                 VStack {
                     Spacer()
@@ -136,13 +150,6 @@ public struct FullScreenNowPlayingView: View {
             }
             .frame(width: windowSize.width, height: windowSize.height)
             .clipped()
-            .onTapGesture {
-                if isVolumeExpanded {
-                    withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
-                        isVolumeExpanded = false
-                    }
-                }
-            }
         }
         .ignoresSafeArea()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -840,59 +847,105 @@ public struct FullScreenNowPlayingView: View {
 
     // MARK: - Bottom Right Switcher (Enlarged Lyrics vs Queue)
     private var bottomRightSwitcher: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
             // Lyrics Button
             Button(action: {
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
-                    activeTab = .lyrics
+                if activeTab != .lyrics {
+                    withAnimation(.spring(response: 0.24, dampingFraction: 0.78)) {
+                        activeTab = .lyrics
+                    }
                 }
             }) {
-                Image(systemName: "quote.bubble.fill")
-                    .font(.system(size: 14.5, weight: .semibold))
-                    .foregroundStyle(activeTab == .lyrics ? .white : WalkmanTheme.silverMuted)
-                    .frame(width: 36, height: 32)
-                    .background(
-                        activeTab == .lyrics ?
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color.white.opacity(0.20))
-                            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.35), lineWidth: 0.85)) :
-                        nil
-                    )
+                ZStack {
+                    if activeTab == .lyrics {
+                        RoundedRectangle(cornerRadius: 15, style: .continuous)
+                            .fill(Color.white.opacity(0.22))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                                    .stroke(Color.white.opacity(0.35), lineWidth: 0.85)
+                            )
+                            .shadow(color: Color.black.opacity(0.25), radius: 3, x: 0, y: 1.5)
+                    } else {
+                        RoundedRectangle(cornerRadius: 15, style: .continuous)
+                            .fill(Color.white.opacity(isLyricsTabHovered ? 0.10 : 0.001))
+                    }
+
+                    Image(systemName: "quote.bubble.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(activeTab == .lyrics ? .white : (isLyricsTabHovered ? .white : WalkmanTheme.silverMuted))
+                }
+                .frame(width: 42, height: 34)
+                .contentShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                .scaleEffect(isLyricsTabHovered && activeTab != .lyrics ? 1.05 : 1.0)
+                .animation(.spring(response: 0.20, dampingFraction: 0.72), value: isLyricsTabHovered)
             }
             .buttonStyle(FullScreenTactileButtonStyle())
-            .help("Lyrics")
+            .help("Synchronized Live Lyrics")
             .onHover { h in
+                isLyricsTabHovered = h
                 if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
             }
 
-            // Queue Button
+            // Queue Button (Track List)
             Button(action: {
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
-                    activeTab = .queue
+                if activeTab != .queue {
+                    withAnimation(.spring(response: 0.24, dampingFraction: 0.78)) {
+                        activeTab = .queue
+                    }
                 }
             }) {
-                Image(systemName: "list.bullet")
-                    .font(.system(size: 14.5, weight: .semibold))
-                    .foregroundStyle(activeTab == .queue ? .white : WalkmanTheme.silverMuted)
-                    .frame(width: 36, height: 32)
-                    .background(
-                        activeTab == .queue ?
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color.white.opacity(0.20))
-                            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.35), lineWidth: 0.85)) :
-                        nil
-                    )
+                ZStack {
+                    if activeTab == .queue {
+                        RoundedRectangle(cornerRadius: 15, style: .continuous)
+                            .fill(Color.white.opacity(0.22))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                                    .stroke(Color.white.opacity(0.35), lineWidth: 0.85)
+                            )
+                            .shadow(color: Color.black.opacity(0.25), radius: 3, x: 0, y: 1.5)
+                    } else {
+                        RoundedRectangle(cornerRadius: 15, style: .continuous)
+                            .fill(Color.white.opacity(isQueueTabHovered ? 0.10 : 0.001))
+                    }
+
+                    Image(systemName: "list.bullet")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(activeTab == .queue ? .white : (isQueueTabHovered ? .white : WalkmanTheme.silverMuted))
+                }
+                .frame(width: 42, height: 34)
+                .contentShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                .scaleEffect(isQueueTabHovered && activeTab != .queue ? 1.05 : 1.0)
+                .animation(.spring(response: 0.20, dampingFraction: 0.72), value: isQueueTabHovered)
             }
             .buttonStyle(FullScreenTactileButtonStyle())
             .help("Playing Next Queue")
             .onHover { h in
+                isQueueTabHovered = h
                 if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
             }
         }
         .padding(4)
-        .background(Color.white.opacity(0.08))
+        .background(
+            ZStack {
+                Capsule()
+                    .fill(Color.white.opacity(0.09))
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(0.22), location: 0.0),
+                            .init(color: .clear, location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 6)
+                    Spacer(minLength: 0)
+                }
+                .clipShape(Capsule())
+            }
+        )
         .clipShape(Capsule())
-        .overlay(Capsule().stroke(Color.white.opacity(0.15), lineWidth: 0.85))
+        .overlay(Capsule().stroke(Color.white.opacity(0.18), lineWidth: 0.85))
         .shadow(color: Color.black.opacity(0.35), radius: 8, x: 0, y: 3)
     }
 
@@ -1051,9 +1104,15 @@ private struct FullScreenScrubberBar: View {
 
     private func formatTime(_ seconds: Double) -> String {
         if seconds.isNaN || seconds.isInfinite || seconds < 0 { return "0:00" }
-        let mins = Int(seconds) / 60
-        let secs = Int(seconds) % 60
-        return String(format: "%d:%02d", mins, secs)
+        let totalSecs = Int(seconds)
+        let hours = totalSecs / 3600
+        let mins = (totalSecs % 3600) / 60
+        let secs = totalSecs % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, mins, secs)
+        } else {
+            return String(format: "%d:%02d", mins, secs)
+        }
     }
 
     private func formatRemaining(_ current: Double, duration: Double) -> String {

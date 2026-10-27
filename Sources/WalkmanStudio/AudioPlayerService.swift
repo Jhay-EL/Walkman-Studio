@@ -108,9 +108,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
                         self?.isSeeking = false
                     }
                 }
-                if autoPlay {
+                if self.isPlaying {
                     self.player.play()
-                    self.isPlaying = true
                 }
             }
         }
@@ -137,6 +136,26 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
         if let cover = coverArt {
             self.currentCoverArt = cover
         }
+    }
+
+    public func play() {
+        guard currentTrack != nil else { return }
+        player.play()
+        self.isPlaying = true
+    }
+
+    public func playOrToggle(track: Track, coverArt: NSImage? = nil, in queue: [Track] = [], startTime: Double? = nil) {
+        if currentTrack?.id == track.id {
+            if let start = startTime {
+                seek(to: start)
+            }
+            if let cover = coverArt {
+                self.currentCoverArt = cover
+            }
+            togglePlayPause()
+            return
+        }
+        play(track: track, coverArt: coverArt, in: queue, startTime: startTime)
     }
 
     public func pause() {
@@ -252,20 +271,14 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
     }
 
     private func loadArtwork(for track: Track) {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let url = URL(fileURLWithPath: track.fullPath)
-            if let data = AudioTagger.shared.extractCoverArt(fileURL: url),
-               let img = NSImage(data: data) {
-                DispatchQueue.main.async {
-                    if self?.currentTrack?.id == track.id {
-                        self?.currentCoverArt = img
-                    }
-                }
-            } else {
-                DispatchQueue.main.async {
-                    if self?.currentTrack?.id == track.id {
-                        self?.currentCoverArt = nil
-                    }
+        if let cached = CoverArtCache.shared.thumbnail(for: track) {
+            self.currentCoverArt = cached
+            return
+        }
+        CoverArtCache.shared.loadThumbnail(for: track, targetSize: 300) { [weak self] img in
+            DispatchQueue.main.async {
+                if self?.currentTrack?.id == track.id {
+                    self?.currentCoverArt = img
                 }
             }
         }

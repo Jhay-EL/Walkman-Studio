@@ -906,6 +906,11 @@ private struct AlbumGridCard: View {
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var isHovered = false
     
+    private var isAlbumPlaying: Bool {
+        guard let current = player.currentTrack else { return false }
+        return player.isPlaying && album.tracks.contains(where: { $0.id == current.id })
+    }
+    
     var body: some View {
         Button(action: onOpen) {
             VStack(alignment: .leading, spacing: 9) {
@@ -939,7 +944,11 @@ private struct AlbumGridCard: View {
                     // Quick Play floating action button on hover
                     if isHovered {
                         Button {
-                            if let first = album.tracks.first {
+                            if isAlbumPlaying {
+                                player.pause()
+                            } else if let current = player.currentTrack, album.tracks.contains(where: { $0.id == current.id }) {
+                                player.play()
+                            } else if let first = album.tracks.first {
                                 player.play(track: first, in: album.tracks)
                             }
                         } label: {
@@ -948,10 +957,10 @@ private struct AlbumGridCard: View {
                                     .fill(Color(red: 245/255, green: 247/255, blue: 252/255))
                                     .frame(width: 36, height: 36)
                                     .shadow(color: Color.black.opacity(0.40), radius: 5, x: 0, y: 2)
-                                Image(systemName: "play.fill")
+                                Image(systemName: isAlbumPlaying ? "pause.fill" : "play.fill")
                                     .font(.system(size: 13, weight: .bold))
                                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                                    .offset(x: 1)
+                                    .offset(x: isAlbumPlaying ? 0 : 1)
                             }
                         }
                         .buttonStyle(.plain)
@@ -1031,11 +1040,15 @@ private struct AlbumGridCard: View {
             }
             
             Button {
-                if let first = album.tracks.first {
+                if isAlbumPlaying {
+                    player.pause()
+                } else if let current = player.currentTrack, album.tracks.contains(where: { $0.id == current.id }) {
+                    player.play()
+                } else if let first = album.tracks.first {
                     player.play(track: first, in: album.tracks)
                 }
             } label: {
-                Label("Play Album", systemImage: "play.fill")
+                Label(isAlbumPlaying ? "Pause Album" : "Play Album", systemImage: isAlbumPlaying ? "pause.fill" : "play.fill")
             }
             
             Divider()
@@ -1093,6 +1106,11 @@ private struct AlbumDetailView: View {
     var onDeleteTrack: ((Track) -> Void)? = nil
     
     @ObservedObject private var player = AudioPlayerService.shared
+    
+    private var isAlbumPlaying: Bool {
+        guard let current = player.currentTrack else { return false }
+        return player.isPlaying && album.tracks.contains(where: { $0.id == current.id })
+    }
     
     private func formatDuration(_ seconds: Double) -> String {
         if seconds <= 0 { return "—" }
@@ -1228,14 +1246,9 @@ private struct AlbumDetailView: View {
                                 album: album,
                                 onSelect: {
                                     onSelectTrack(track)
-                                    if player.currentTrack?.id == track.id && player.isPlaying {
-                                        player.pause()
-                                    } else {
-                                        player.play(track: track, in: album.tracks)
-                                    }
                                 },
-                                onPlay: {
-                                    player.play(track: track, in: album.tracks)
+                                onPlayToggle: {
+                                    player.playOrToggle(track: track, in: album.tracks)
                                 },
                                 onEdit: {
                                     onEditTrack?(track)
@@ -1494,14 +1507,18 @@ private struct AlbumDetailView: View {
     
     private var playButton: some View {
         Button(action: {
-            if let first = album.tracks.first {
+            if isAlbumPlaying {
+                player.pause()
+            } else if let current = player.currentTrack, album.tracks.contains(where: { $0.id == current.id }) {
+                player.play()
+            } else if let first = album.tracks.first {
                 player.play(track: first, in: album.tracks)
             }
         }) {
             HStack(spacing: 6) {
-                Image(systemName: "play.fill")
+                Image(systemName: isAlbumPlaying ? "pause.fill" : "play.fill")
                     .font(.system(size: 11, weight: .bold))
-                Text("Play")
+                Text(isAlbumPlaying ? "Pause" : "Play")
                     .font(.system(size: 13, weight: .semibold))
                     .lineLimit(1)
             }
@@ -1512,7 +1529,7 @@ private struct AlbumDetailView: View {
         }
         .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 17))
         .fixedSize(horizontal: true, vertical: false)
-        .help("Play album from the beginning")
+        .help(isAlbumPlaying ? "Pause album playback" : "Play album from the beginning")
     }
     
     private var shuffleButton: some View {
@@ -1736,7 +1753,7 @@ private struct AlbumTrackRowView: View {
     let track: Track
     let album: AlbumItem
     let onSelect: () -> Void
-    let onPlay: () -> Void
+    let onPlayToggle: () -> Void
     var onEdit: (() -> Void)? = nil
     var onTrimCut: (() -> Void)? = nil
     var onDelete: (() -> Void)? = nil
@@ -1755,26 +1772,23 @@ private struct AlbumTrackRowView: View {
         let isPlayingThis = player.currentTrack?.id == track.id && player.isPlaying
         
         HStack(spacing: 12) {
-            // Track Number or Play button
-            Button(action: onPlay) {
-                ZStack {
-                    if isHovered {
-                        Image(systemName: isPlayingThis ? "pause.fill" : "play.fill")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(isPlayingThis ? (album.isHiRes ? WalkmanTheme.hiResGoldLight : Color.white) : WalkmanTheme.silverLight)
-                    } else if isPlayingThis {
-                        Image(systemName: "speaker.wave.2.fill")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(album.isHiRes ? WalkmanTheme.hiResGoldLight : Color.white)
-                    } else {
-                        Text("\(index)")
-                            .font(WalkmanFont.mono)
-                            .foregroundStyle(WalkmanTheme.silverMuted)
-                    }
+            // Track Number or Play/Pause Indicator
+            ZStack {
+                if isHovered {
+                    Image(systemName: isPlayingThis ? "pause.fill" : "play.fill")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(isPlayingThis ? (album.isHiRes ? WalkmanTheme.hiResGoldLight : Color.white) : WalkmanTheme.silverLight)
+                } else if isPlayingThis {
+                    Image(systemName: "speaker.wave.2.fill")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(album.isHiRes ? WalkmanTheme.hiResGoldLight : Color.white)
+                } else {
+                    Text("\(index)")
+                        .font(WalkmanFont.mono)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
                 }
-                .frame(width: 26, alignment: .trailing)
             }
-            .buttonStyle(.plain)
+            .frame(width: 26, alignment: .trailing)
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(track.title)
@@ -1855,16 +1869,28 @@ private struct AlbumTrackRowView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             onSelect()
+            onPlayToggle()
         }
         .onHover { hovering in
             if isHovered != hovering {
                 isHovered = hovering
+                if hovering {
+                    NSCursor.pointingHand.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.pop()
             }
         }
         .animation(.easeInOut(duration: 0.15), value: isHovered)
         .contextMenu {
-            Button("Play Track") {
-                onPlay()
+            Button(isPlayingThis ? "Pause" : "Play Track") {
+                onPlayToggle()
             }
             Divider()
             Button {
