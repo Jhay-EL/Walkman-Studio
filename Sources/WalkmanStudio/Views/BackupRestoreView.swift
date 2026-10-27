@@ -1,6 +1,29 @@
 import SwiftUI
 import AppKit
 
+// MARK: - File-Level Shared Helpers
+private func formatBytes(_ bytes: Int64) -> String {
+    if bytes <= 0 { return "0 MB" }
+    let mb = Double(bytes) / 1_048_576.0
+    if mb >= 1024.0 {
+        return String(format: "%.2f GB", mb / 1024.0)
+    }
+    return String(format: "%.1f MB", mb)
+}
+
+private func cleanDriveName(_ drive: WalkmanDrive) -> String {
+    var name = drive.name
+    name = name.replacingOccurrences(of: " (MicroSD)", with: "")
+    name = name.replacingOccurrences(of: " (Internal)", with: "")
+    name = name.replacingOccurrences(of: "(MicroSD)", with: "")
+    name = name.replacingOccurrences(of: "(Internal)", with: "")
+    name = name.trimmingCharacters(in: .whitespaces)
+    if name.isEmpty {
+        return drive.type == .internal ? "Internal Flash" : "MicroSD Card"
+    }
+    return name
+}
+
 public struct BackupRestoreView: View {
     let drives: [WalkmanDrive]
     let activeDrive: WalkmanDrive?
@@ -65,12 +88,17 @@ public struct BackupRestoreView: View {
     @State private var selectedBackup: DiscoveredBackup? = nil
     @State private var targetDriveMount: String = ""
     @State private var restorePassphrase: String = ""
+    @State private var showRestorePassphrase: Bool = false
     @State private var isRestoring: Bool = false
     @State private var restoreProgress: BackupProgress? = nil
     @State private var restoreSuccessResult: RestoreResult? = nil
     @State private var restoreErrorMessage: String? = nil
     @State private var isRestoreSuccessHovered: Bool = false
     @State private var restoreSuccessDismissTask: Task<Void, Never>? = nil
+
+    // Background Scan Tasks
+    @State private var sourceScanTask: Task<Void, Never>? = nil
+    @State private var destinationScanTask: Task<Void, Never>? = nil
 
     public init(
         drives: [WalkmanDrive],
@@ -102,28 +130,6 @@ public struct BackupRestoreView: View {
         destinations.first(where: { $0.id == selectedDestinationId }) ?? destinations.first
     }
 
-    private func formatBytes(_ bytes: Int64) -> String {
-        if bytes <= 0 { return "0 MB" }
-        let mb = Double(bytes) / 1_048_576.0
-        if mb >= 1024.0 {
-            return String(format: "%.2f GB", mb / 1024.0)
-        }
-        return String(format: "%.1f MB", mb)
-    }
-
-    private func cleanDriveName(_ drive: WalkmanDrive) -> String {
-        var name = drive.name
-        name = name.replacingOccurrences(of: " (MicroSD)", with: "")
-        name = name.replacingOccurrences(of: " (Internal)", with: "")
-        name = name.replacingOccurrences(of: "(MicroSD)", with: "")
-        name = name.replacingOccurrences(of: "(Internal)", with: "")
-        name = name.trimmingCharacters(in: .whitespaces)
-        if name.isEmpty {
-            return drive.type == .internal ? "Internal Flash" : "MicroSD Card"
-        }
-        return name
-    }
-
     private func recalculateEstimatedScope() {
         guard let drive = currentSourceDrive else {
             self.estimatedCount = 0
@@ -144,14 +150,13 @@ public struct BackupRestoreView: View {
             self.estimatedBytes = max(trackBytes, drive.usedBytes)
 
         case .playlists:
-            var count = 0
-            var trackBytes: Int64 = 0
-            for tr in sourceTracks where tr.fullPath.hasPrefix(mount) {
-                count += 1
-                trackBytes += tr.sizeBytes
-            }
-            self.estimatedCount = count
-            self.estimatedBytes = trackBytes
+            let items = BackupRestoreService.shared.resolveFilesToBackup(
+                drive: drive,
+                scope: BackupScopeConfig(type: .playlists),
+                allTracks: sourceTracks
+            )
+            self.estimatedCount = items.count
+            self.estimatedBytes = items.reduce(0) { $0 + $1.sizeBytes }
 
         case .learning:
             var count = 0
@@ -166,10 +171,9 @@ public struct BackupRestoreView: View {
         case .albums:
             var count = 0
             var bytes: Int64 = 0
-            for tr in sourceTracks where tr.fullPath.hasPrefix(mount) {
-                let key = "\(tr.album.lowercased())|\(tr.artist.lowercased())"
-                if selectedAlbumKeys.contains(key) || selectedAlbumKeys.contains(tr.album.lowercased()) {
-                    count += 1
+            for alb in sourceAlbums where selectedAlbumKeys.contains(alb.id) || selectedAlbumKeys.contains(alb.name.lowercased()) {
+                count += alb.trackCount
+                for tr in alb.tracks {
                     bytes += tr.sizeBytes
                 }
             }
@@ -219,7 +223,9 @@ public struct BackupRestoreView: View {
 
     private func refreshSourceDriveAsync(drive: WalkmanDrive) {
         let mount = drive.mountPoint
-        Task.detached(priority: .userInitiated) {
+        sourceScanTask?.cancel()
+        sourceScanTask = Task.detached(priority: .userInitiated) {
+            if Task.isCancelled { return }
             var scanDirs: [URL] = [URL(fileURLWithPath: drive.musicDir)]
             let learningURL = URL(fileURLWithPath: drive.learningDir)
             if FileManager.default.fileExists(atPath: learningURL.path) {
@@ -228,14 +234,17 @@ public struct BackupRestoreView: View {
 
             // 1. Fast background scan with LibraryScanner to discover any uncached or modified tracks
             let result = await LibraryScanner.shared.scan(directories: scanDirs)
+            if Task.isCancelled { return }
             let albums = AlbumsView.buildAlbums(from: result.tracks)
 
             // 2. Count total regular files in /MUSIC and /LEARNING for full library scope accuracy (.m3u8, .lrc, .jpg, etc.)
             var totalFiles = 0
             let fm = FileManager.default
             for dir in scanDirs {
+                if Task.isCancelled { return }
                 if let enumerator = fm.enumerator(at: dir, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles]) {
                     while let fileURL = enumerator.nextObject() as? URL {
+                        if Task.isCancelled { return }
                         let name = fileURL.lastPathComponent.lowercased()
                         if name == ".ds_store" || name.hasPrefix("._") || name.hasPrefix(".spotlight") || name.hasPrefix(".trashes") {
                             continue
@@ -251,7 +260,7 @@ public struct BackupRestoreView: View {
             let finalFileCount = totalFiles
 
             await MainActor.run {
-                guard self.sourceDriveMount == mount else { return }
+                guard !Task.isCancelled, self.sourceDriveMount == mount else { return }
                 self.sourceTracks = result.tracks
                 self.sourceAlbums = albums
 
@@ -270,14 +279,19 @@ public struct BackupRestoreView: View {
         let walkmanMounts = Set(drives.map(\.mountPoint))
         let customPath = UserDefaults.standard.string(forKey: "walkman_custom_backup_dest")
 
-        Task.detached(priority: .userInitiated) {
+        destinationScanTask?.cancel()
+        destinationScanTask = Task.detached(priority: .userInitiated) {
+            if Task.isCancelled { return }
             let detected = BackupRestoreService.shared.detectAvailableDestinations(
                 walkmanMountPoints: walkmanMounts,
                 customPath: customPath
             )
+            if Task.isCancelled { return }
             let found = BackupRestoreService.shared.discoverBackups(in: detected)
+            if Task.isCancelled { return }
 
             await MainActor.run {
+                guard !Task.isCancelled else { return }
                 self.destinations = detected
                 if !detected.contains(where: { $0.id == self.selectedDestinationId }) {
                     if let firstAvail = detected.first(where: { $0.isAvailable }) {
@@ -355,6 +369,8 @@ public struct BackupRestoreView: View {
             refreshDestinationsAsync()
         }
         .onDisappear {
+            sourceScanTask?.cancel()
+            destinationScanTask?.cancel()
             backupSuccessDismissTask?.cancel()
             restoreSuccessDismissTask?.cancel()
         }
@@ -493,6 +509,8 @@ public struct BackupRestoreView: View {
                 .stroke(WalkmanTheme.border, lineWidth: 1)
         )
         .fixedSize(horizontal: true, vertical: false)
+        .disabled(isBackingUp || isRestoring)
+        .opacity((isBackingUp || isRestoring) ? 0.6 : 1.0)
     }
 
     // MARK: - BACKUP VIEW
@@ -1346,7 +1364,10 @@ public struct BackupRestoreView: View {
             } catch {
                 await MainActor.run {
                     self.isBackingUp = false
-                    self.backupErrorMessage = error.localizedDescription
+                    let nsErr = error as NSError
+                    if nsErr.code != -999 && !nsErr.localizedDescription.contains("cancelled") {
+                        self.backupErrorMessage = error.localizedDescription
+                    }
                 }
             }
         }
@@ -1736,9 +1757,24 @@ public struct BackupRestoreView: View {
                     .foregroundStyle(WalkmanTheme.hiResGold)
                     .frame(width: 18)
 
-                SecureField("Enter Decryption Passphrase", text: $restorePassphrase)
-                    .textFieldStyle(.plain)
-                    .font(WalkmanFont.body)
+                if showRestorePassphrase {
+                    TextField("Enter Decryption Passphrase", text: $restorePassphrase)
+                        .textFieldStyle(.plain)
+                        .font(WalkmanFont.body)
+                } else {
+                    SecureField("Enter Decryption Passphrase", text: $restorePassphrase)
+                        .textFieldStyle(.plain)
+                        .font(WalkmanFont.body)
+                }
+
+                Button(action: { showRestorePassphrase.toggle() }) {
+                    Image(systemName: showRestorePassphrase ? "eye.slash" : "eye")
+                        .font(.system(size: 12))
+                        .foregroundStyle(WalkmanTheme.silverMuted)
+                        .frame(width: 20, height: 20)
+                }
+                .buttonStyle(.plain)
+                .help(showRestorePassphrase ? "Hide Passphrase" : "Show Passphrase")
             }
             .padding(10)
             .background(Color.black.opacity(0.3))
@@ -2026,7 +2062,10 @@ public struct BackupRestoreView: View {
             } catch {
                 await MainActor.run {
                     self.isRestoring = false
-                    self.restoreErrorMessage = error.localizedDescription
+                    let nsErr = error as NSError
+                    if nsErr.code != -999 && !nsErr.localizedDescription.contains("cancelled") {
+                        self.restoreErrorMessage = error.localizedDescription
+                    }
                 }
             }
         }
@@ -2085,6 +2124,7 @@ private struct BackupAlbumPickerSheet: View {
     let sourceDriveName: String
     let onDone: () -> Void
 
+    @State private var localSelectedKeys: Set<String> = []
     @State private var searchText: String = ""
     @State private var selectedFilter: AlbumFilter = .all
     @Namespace private var filterNamespace
@@ -2098,15 +2138,6 @@ private struct BackupAlbumPickerSheet: View {
         var id: String { rawValue }
     }
 
-    private func formatBytes(_ bytes: Int64) -> String {
-        if bytes <= 0 { return "0 MB" }
-        let mb = Double(bytes) / 1_048_576.0
-        if mb >= 1024.0 {
-            return String(format: "%.2f GB", mb / 1024.0)
-        }
-        return String(format: "%.1f MB", mb)
-    }
-
     private var filteredAlbums: [AlbumItem] {
         albums.filter { alb in
             if !searchText.isEmpty {
@@ -2118,7 +2149,7 @@ private struct BackupAlbumPickerSheet: View {
             case .all:
                 return true
             case .selected:
-                return selectedAlbumKeys.contains(alb.id)
+                return localSelectedKeys.contains(alb.id)
             case .hiRes:
                 return alb.isHiRes
             }
@@ -2127,7 +2158,7 @@ private struct BackupAlbumPickerSheet: View {
 
     private var totalSelectedTracks: Int {
         var count = 0
-        for alb in albums where selectedAlbumKeys.contains(alb.id) {
+        for alb in albums where localSelectedKeys.contains(alb.id) {
             count += alb.trackCount
         }
         return count
@@ -2135,7 +2166,7 @@ private struct BackupAlbumPickerSheet: View {
 
     private var totalSelectedBytes: Int64 {
         var bytes: Int64 = 0
-        for alb in albums where selectedAlbumKeys.contains(alb.id) {
+        for alb in albums where localSelectedKeys.contains(alb.id) {
             for tr in alb.tracks {
                 bytes += tr.sizeBytes
             }
@@ -2148,7 +2179,7 @@ private struct BackupAlbumPickerSheet: View {
         case .all:
             return "\(albums.count)"
         case .selected:
-            return "\(selectedAlbumKeys.count)"
+            return "\(localSelectedKeys.count)"
         case .hiRes:
             let count = albums.filter(\.isHiRes).count
             return "\(count)"
@@ -2185,7 +2216,7 @@ private struct BackupAlbumPickerSheet: View {
                         .font(WalkmanFont.title2)
                         .foregroundStyle(.white)
 
-                    Text("\(sourceDriveName) • \(selectedAlbumKeys.count) of \(albums.count) albums selected • \(totalSelectedTracks) tracks (\(formatBytes(totalSelectedBytes)))")
+                    Text("\(sourceDriveName) • \(localSelectedKeys.count) of \(albums.count) albums selected • \(totalSelectedTracks) tracks (\(formatBytes(totalSelectedBytes)))")
                         .font(WalkmanFont.callout)
                         .foregroundStyle(WalkmanTheme.silverMuted)
                 }
@@ -2280,7 +2311,7 @@ private struct BackupAlbumPickerSheet: View {
                 // Quick Select / Clear Actions
                 Button(action: {
                     for alb in filteredAlbums {
-                        selectedAlbumKeys.insert(alb.id)
+                        localSelectedKeys.insert(alb.id)
                     }
                 }) {
                     HStack(spacing: 4) {
@@ -2302,7 +2333,7 @@ private struct BackupAlbumPickerSheet: View {
                 .buttonStyle(.plain)
 
                 Button(action: {
-                    selectedAlbumKeys.removeAll()
+                    localSelectedKeys.removeAll()
                 }) {
                     HStack(spacing: 4) {
                         Image(systemName: "xmark.square")
@@ -2350,12 +2381,12 @@ private struct BackupAlbumPickerSheet: View {
                         ForEach(filteredAlbums) { alb in
                             AlbumPickerRow(
                                 album: alb,
-                                isChecked: selectedAlbumKeys.contains(alb.id),
+                                isChecked: localSelectedKeys.contains(alb.id),
                                 onToggle: {
-                                    if selectedAlbumKeys.contains(alb.id) {
-                                        selectedAlbumKeys.remove(alb.id)
+                                    if localSelectedKeys.contains(alb.id) {
+                                        localSelectedKeys.remove(alb.id)
                                     } else {
-                                        selectedAlbumKeys.insert(alb.id)
+                                        localSelectedKeys.insert(alb.id)
                                     }
                                 }
                             )
@@ -2372,7 +2403,7 @@ private struct BackupAlbumPickerSheet: View {
             // Footer Action Bar
             HStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(selectedAlbumKeys.count) Albums Selected")
+                    Text("\(localSelectedKeys.count) Albums Selected")
                         .font(WalkmanFont.bodyBold)
                         .foregroundStyle(.white)
 
@@ -2400,11 +2431,14 @@ private struct BackupAlbumPickerSheet: View {
                 .buttonStyle(.plain)
                 .onHover { isCancelHovered = $0 }
 
-                Button(action: onDone) {
+                Button(action: {
+                    selectedAlbumKeys = localSelectedKeys
+                    onDone()
+                }) {
                     HStack(spacing: 6) {
                         Image(systemName: "checkmark")
                             .font(.system(size: 11, weight: .bold))
-                        Text(selectedAlbumKeys.isEmpty ? "Done" : "Apply (\(selectedAlbumKeys.count) Albums)")
+                        Text(localSelectedKeys.isEmpty ? "Done" : "Apply (\(localSelectedKeys.count) Albums)")
                             .font(WalkmanFont.calloutBold)
                     }
                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
@@ -2424,6 +2458,9 @@ private struct BackupAlbumPickerSheet: View {
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 14)
+        }
+        .onAppear {
+            localSelectedKeys = selectedAlbumKeys
         }
         .frame(width: 820, height: 720)
         .background(
@@ -2473,15 +2510,6 @@ private struct AlbumPickerRow: View {
     let isChecked: Bool
     let onToggle: () -> Void
     @State private var isHovered = false
-
-    private func formatBytes(_ bytes: Int64) -> String {
-        if bytes <= 0 { return "0 MB" }
-        let mb = Double(bytes) / 1_048_576.0
-        if mb >= 1024.0 {
-            return String(format: "%.2f GB", mb / 1024.0)
-        }
-        return String(format: "%.1f MB", mb)
-    }
 
     private var albumBytes: Int64 {
         album.tracks.reduce(0) { $0 + $1.sizeBytes }
@@ -2602,6 +2630,7 @@ private struct BackupTrackPickerSheet: View {
     let sourceDriveName: String
     let onDone: () -> Void
 
+    @State private var localSelectedPaths: Set<String> = []
     @State private var searchText: String = ""
     @State private var selectedFilter: TrackFilter = .all
     @Namespace private var filterNamespace
@@ -2613,15 +2642,6 @@ private struct BackupTrackPickerSheet: View {
         case selected = "Selected"
         case hiRes = "Hi-Res Only"
         var id: String { rawValue }
-    }
-
-    private func formatBytes(_ bytes: Int64) -> String {
-        if bytes <= 0 { return "0 MB" }
-        let mb = Double(bytes) / 1_048_576.0
-        if mb >= 1024.0 {
-            return String(format: "%.2f GB", mb / 1024.0)
-        }
-        return String(format: "%.1f MB", mb)
     }
 
     private var filteredTracks: [Track] {
@@ -2640,7 +2660,7 @@ private struct BackupTrackPickerSheet: View {
             case .all:
                 return true
             case .selected:
-                return selectedTrackPaths.contains(tr.fullPath)
+                return localSelectedPaths.contains(tr.fullPath)
             case .hiRes:
                 return isHiRes
             }
@@ -2649,7 +2669,7 @@ private struct BackupTrackPickerSheet: View {
 
     private var totalSelectedBytes: Int64 {
         var bytes: Int64 = 0
-        for tr in tracks where selectedTrackPaths.contains(tr.fullPath) {
+        for tr in tracks where localSelectedPaths.contains(tr.fullPath) {
             bytes += tr.sizeBytes
         }
         return bytes
@@ -2660,7 +2680,7 @@ private struct BackupTrackPickerSheet: View {
         case .all:
             return "\(tracks.count)"
         case .selected:
-            return "\(selectedTrackPaths.count)"
+            return "\(localSelectedPaths.count)"
         case .hiRes:
             let count = tracks.filter { $0.bitsPerSample > 16 || $0.sampleRate > 48000 }.count
             return "\(count)"
@@ -2697,7 +2717,7 @@ private struct BackupTrackPickerSheet: View {
                         .font(WalkmanFont.title2)
                         .foregroundStyle(.white)
 
-                    Text("\(sourceDriveName) • \(selectedTrackPaths.count) of \(tracks.count) tracks selected • \(formatBytes(totalSelectedBytes))")
+                    Text("\(sourceDriveName) • \(localSelectedPaths.count) of \(tracks.count) tracks selected • \(formatBytes(totalSelectedBytes))")
                         .font(WalkmanFont.callout)
                         .foregroundStyle(WalkmanTheme.silverMuted)
                 }
@@ -2792,7 +2812,7 @@ private struct BackupTrackPickerSheet: View {
                 // Quick Actions
                 Button(action: {
                     for tr in filteredTracks {
-                        selectedTrackPaths.insert(tr.fullPath)
+                        localSelectedPaths.insert(tr.fullPath)
                     }
                 }) {
                     HStack(spacing: 4) {
@@ -2814,7 +2834,7 @@ private struct BackupTrackPickerSheet: View {
                 .buttonStyle(.plain)
 
                 Button(action: {
-                    selectedTrackPaths.removeAll()
+                    localSelectedPaths.removeAll()
                 }) {
                     HStack(spacing: 4) {
                         Image(systemName: "xmark.square")
@@ -2862,12 +2882,12 @@ private struct BackupTrackPickerSheet: View {
                         ForEach(filteredTracks) { tr in
                             TrackPickerRow(
                                 track: tr,
-                                isChecked: selectedTrackPaths.contains(tr.fullPath),
+                                isChecked: localSelectedPaths.contains(tr.fullPath),
                                 onToggle: {
-                                    if selectedTrackPaths.contains(tr.fullPath) {
-                                        selectedTrackPaths.remove(tr.fullPath)
+                                    if localSelectedPaths.contains(tr.fullPath) {
+                                        localSelectedPaths.remove(tr.fullPath)
                                     } else {
-                                        selectedTrackPaths.insert(tr.fullPath)
+                                        localSelectedPaths.insert(tr.fullPath)
                                     }
                                 }
                             )
@@ -2884,7 +2904,7 @@ private struct BackupTrackPickerSheet: View {
             // Footer Action Bar
             HStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(selectedTrackPaths.count) Tracks Selected")
+                    Text("\(localSelectedPaths.count) Tracks Selected")
                         .font(WalkmanFont.bodyBold)
                         .foregroundStyle(.white)
 
@@ -2912,11 +2932,14 @@ private struct BackupTrackPickerSheet: View {
                 .buttonStyle(.plain)
                 .onHover { isCancelHovered = $0 }
 
-                Button(action: onDone) {
+                Button(action: {
+                    selectedTrackPaths = localSelectedPaths
+                    onDone()
+                }) {
                     HStack(spacing: 6) {
                         Image(systemName: "checkmark")
                             .font(.system(size: 11, weight: .bold))
-                        Text(selectedTrackPaths.isEmpty ? "Done" : "Apply (\(selectedTrackPaths.count) Tracks)")
+                        Text(localSelectedPaths.isEmpty ? "Done" : "Apply (\(localSelectedPaths.count) Tracks)")
                             .font(WalkmanFont.calloutBold)
                     }
                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
@@ -2936,6 +2959,9 @@ private struct BackupTrackPickerSheet: View {
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 14)
+        }
+        .onAppear {
+            localSelectedPaths = selectedTrackPaths
         }
         .frame(width: 860, height: 720)
         .background(
@@ -2985,15 +3011,6 @@ private struct TrackPickerRow: View {
     let isChecked: Bool
     let onToggle: () -> Void
     @State private var isHovered = false
-
-    private func formatBytes(_ bytes: Int64) -> String {
-        if bytes <= 0 { return "0 MB" }
-        let mb = Double(bytes) / 1_048_576.0
-        if mb >= 1024.0 {
-            return String(format: "%.2f GB", mb / 1024.0)
-        }
-        return String(format: "%.1f MB", mb)
-    }
 
     private func formatDuration(_ sec: Double) -> String {
         let s = Int(sec)
@@ -3106,28 +3123,6 @@ private struct BackupConfirmationSheet: View {
 
     @State private var isConfirmHovered = false
     @State private var isCancelHovered = false
-
-    private func formatBytes(_ bytes: Int64) -> String {
-        if bytes <= 0 { return "0 MB" }
-        let mb = Double(bytes) / 1_048_576.0
-        if mb >= 1024.0 {
-            return String(format: "%.2f GB", mb / 1024.0)
-        }
-        return String(format: "%.1f MB", mb)
-    }
-
-    private func cleanDriveName(_ drive: WalkmanDrive) -> String {
-        var name = drive.name
-        name = name.replacingOccurrences(of: " (MicroSD)", with: "")
-        name = name.replacingOccurrences(of: " (Internal)", with: "")
-        name = name.replacingOccurrences(of: "(MicroSD)", with: "")
-        name = name.replacingOccurrences(of: "(Internal)", with: "")
-        name = name.trimmingCharacters(in: .whitespaces)
-        if name.isEmpty {
-            return drive.type == .internal ? "Internal Flash" : "MicroSD Card"
-        }
-        return name
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -3460,28 +3455,6 @@ private struct RestoreConfirmationSheet: View {
 
     @State private var isConfirmHovered = false
     @State private var isCancelHovered = false
-
-    private func formatBytes(_ bytes: Int64) -> String {
-        if bytes <= 0 { return "0 MB" }
-        let mb = Double(bytes) / 1_048_576.0
-        if mb >= 1024.0 {
-            return String(format: "%.2f GB", mb / 1024.0)
-        }
-        return String(format: "%.1f MB", mb)
-    }
-
-    private func cleanDriveName(_ drive: WalkmanDrive) -> String {
-        var name = drive.name
-        name = name.replacingOccurrences(of: " (MicroSD)", with: "")
-        name = name.replacingOccurrences(of: " (Internal)", with: "")
-        name = name.replacingOccurrences(of: "(MicroSD)", with: "")
-        name = name.replacingOccurrences(of: "(Internal)", with: "")
-        name = name.trimmingCharacters(in: .whitespaces)
-        if name.isEmpty {
-            return drive.type == .internal ? "Internal Flash" : "MicroSD Card"
-        }
-        return name
-    }
 
     var body: some View {
         VStack(spacing: 0) {

@@ -50,14 +50,17 @@ public struct SidebarView: View {
     var onOpenAbout: (() -> Void)? = nil
 
     @ViewBuilder
-    private func sidebarSectionHeader(_ title: String, isFirst: Bool = false) -> some View {
-        Text(title)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(Color.secondary.opacity(0.82))
-            .textCase(nil)
-            .padding(.top, isFirst ? 4 : 22)
-            .padding(.bottom, 6)
-            .padding(.leading, 4)
+    private func sidebarSectionHeader(_ title: String) -> some View {
+        HStack(alignment: .center, spacing: 6) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color.secondary.opacity(0.82))
+                .textCase(nil)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 5)
+        .padding(.leading, 4)
+        .padding(.trailing, 4)
     }
 
     public var body: some View {
@@ -66,7 +69,7 @@ public struct SidebarView: View {
             // DEVICE Section
             // -----------------------------------------------------------------
             if devices.count > 1 {
-                Section(header: sidebarSectionHeader("Connected Devices (\(devices.count))", isFirst: true)) {
+                Section(header: sidebarSectionHeader("Connected Devices (\(devices.count))")) {
                     ForEach(devices) { device in
                         let isDeviceActive = (activeDevice?.id == device.id)
                         let isOverviewSelected = (selectedTab == .overview && isDeviceActive)
@@ -99,7 +102,7 @@ public struct SidebarView: View {
                     }
                 }
             } else {
-                Section(header: sidebarSectionHeader("Device", isFirst: true)) {
+                Section(header: sidebarSectionHeader("Device")) {
                     DeviceConnectedSidebarRow(
                         selectedTab: $selectedTab,
                         deviceInfo: deviceInfo,

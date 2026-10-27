@@ -490,11 +490,22 @@ public final class BackupRestoreService: @unchecked Sendable {
         case .playlists:
             // Find all .m3u8 playlists, their referenced songs, lyrics, and folder artwork
             var playlistURLs: [URL] = []
-            let searchDirs = [musicURL, learningURL]
+            var searchDirs = [musicURL, learningURL]
+            let playlistsDir = musicURL.appendingPathComponent("PLAYLISTS")
+            if fm.fileExists(atPath: playlistsDir.path) {
+                searchDirs.append(playlistsDir)
+            }
+            let rootPlaylistsDir = mountURL.appendingPathComponent("PLAYLISTS")
+            if fm.fileExists(atPath: rootPlaylistsDir.path) {
+                searchDirs.append(rootPlaylistsDir)
+            }
+
             for dir in searchDirs {
                 if let contents = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) {
                     for f in contents where f.pathExtension.lowercased() == "m3u8" || f.pathExtension.lowercased() == "m3u" {
-                        playlistURLs.append(f)
+                        if !playlistURLs.contains(f) {
+                            playlistURLs.append(f)
+                        }
                     }
                 }
             }
@@ -507,7 +518,15 @@ public final class BackupRestoreService: @unchecked Sendable {
                 let parentDir = pURL.deletingLastPathComponent()
 
                 for relTrack in referenced {
-                    let trackURL = parentDir.appendingPathComponent(relTrack)
+                    // Try musicURL first, then parentDir, then mountURL
+                    var trackURL = musicURL.appendingPathComponent(relTrack)
+                    if !fm.fileExists(atPath: trackURL.path) {
+                        trackURL = parentDir.appendingPathComponent(relTrack)
+                    }
+                    if !fm.fileExists(atPath: trackURL.path) {
+                        trackURL = mountURL.appendingPathComponent(relTrack)
+                    }
+
                     if fm.fileExists(atPath: trackURL.path) {
                         let fullRel = trackURL.path.replacingOccurrences(of: mountURL.path, with: "")
                         addFileIfValid(url: trackURL, relativePath: fullRel)
@@ -718,19 +737,21 @@ public final class BackupRestoreService: @unchecked Sendable {
                     ))
                 }
 
-                // Sequential direct stream read (avoids 4KB page fault penalties over USB 2.0 FAT32)
-                let fileData: Data
-                if let readHandle = try? FileHandle(forReadingFrom: item.sourceURL) {
-                    fileData = readHandle.readDataToEndOfFile()
-                    try? readHandle.close()
-                } else {
-                    fileData = try Data(contentsOf: item.sourceURL)
-                }
+                try autoreleasepool {
+                    // Sequential direct stream read (avoids 4KB page fault penalties over USB 2.0 FAT32)
+                    let fileData: Data
+                    if let readHandle = try? FileHandle(forReadingFrom: item.sourceURL) {
+                        fileData = readHandle.readDataToEndOfFile()
+                        try? readHandle.close()
+                    } else {
+                        fileData = try Data(contentsOf: item.sourceURL)
+                    }
 
-                let sealedFile = try AES.GCM.seal(fileData, using: key).combined!
-                var dLen = UInt64(sealedFile.count).bigEndian
-                handle.write(Data(bytes: &dLen, count: 8))
-                handle.write(sealedFile)
+                    let sealedFile = try AES.GCM.seal(fileData, using: key).combined!
+                    var dLen = UInt64(sealedFile.count).bigEndian
+                    handle.write(Data(bytes: &dLen, count: 8))
+                    handle.write(sealedFile)
+                }
 
                 bytesDone += item.sizeBytes
             }
@@ -756,7 +777,7 @@ public final class BackupRestoreService: @unchecked Sendable {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let manifestData = try encoder.encode(manifest)
-            try manifestData.write(to: manifestURL, options: .atomic)
+            try manifestData.write(to: manifestURL)
 
             // Copy each file into mirrored relative structure with kernel-level copyfile and directory caching
             var bytesDone: Int64 = 0
@@ -866,6 +887,7 @@ public final class BackupRestoreService: @unchecked Sendable {
                     // Attempt to parse public summary header
                     var manifestPreview: BackupManifest? = nil
                     if let handle = try? FileHandle(forReadingFrom: fileURL) {
+                        defer { try? handle.close() }
                         let magicData = handle.readData(ofLength: 8)
                         if let magic = String(data: magicData, encoding: .utf8), magic == magicEncryptedHeader {
                             _ = handle.readData(ofLength: 16) // salt
@@ -899,7 +921,6 @@ public final class BackupRestoreService: @unchecked Sendable {
                                 }
                             }
                         }
-                        try? handle.close()
                     }
 
                     results.append(DiscoveredBackup(
@@ -977,11 +998,24 @@ public final class BackupRestoreService: @unchecked Sendable {
 
             let manifest = try JSONDecoder().decode(BackupManifest.self, from: decryptedManifestData)
 
-            // 5. Check Target Capacity
-            if targetDrive.freeBytes < manifest.totalBytes {
-                let reqMB = Double(manifest.totalBytes) / 1_048_576.0
+            // 5. Check Target Capacity (accounting for existing files that will be overwritten)
+            var netBytesRequired: Int64 = 0
+            for entry in manifest.files {
+                let targetURL = targetMountURL.appendingPathComponent(entry.relativePath)
+                if fm.fileExists(atPath: targetURL.path) {
+                    let existingSize = (try? fm.attributesOfItem(atPath: targetURL.path)[.size] as? Int64) ?? 0
+                    if entry.sizeBytes > existingSize {
+                        netBytesRequired += (entry.sizeBytes - existingSize)
+                    }
+                } else {
+                    netBytesRequired += entry.sizeBytes
+                }
+            }
+
+            if targetDrive.freeBytes < netBytesRequired {
+                let reqMB = Double(netBytesRequired) / 1_048_576.0
                 let freeMB = Double(targetDrive.freeBytes) / 1_048_576.0
-                throw NSError(domain: "BackupRestore", code: 507, userInfo: [NSLocalizedDescriptionKey: "Insufficient free space on \(targetDrive.name). Requires \(String(format: "%.1f MB", reqMB)), available \(String(format: "%.1f MB", freeMB))."])
+                throw NSError(domain: "BackupRestore", code: 507, userInfo: [NSLocalizedDescriptionKey: "Insufficient free space on \(targetDrive.name). Requires \(String(format: "%.1f MB", reqMB)) additional space, available \(String(format: "%.1f MB", freeMB))."])
             }
 
             // 6. Read File Count
@@ -1010,35 +1044,37 @@ public final class BackupRestoreService: @unchecked Sendable {
                     ))
                 }
 
-                let lenData = handle.readData(ofLength: 8)
-                guard lenData.count == 8 else { break }
-                let dLen = Int(lenData.withUnsafeBytes { $0.load(as: UInt64.self).bigEndian })
-                let sealedData = handle.readData(ofLength: dLen)
+                try autoreleasepool {
+                    let lenData = handle.readData(ofLength: 8)
+                    guard lenData.count == 8 else { return }
+                    let dLen = Int(lenData.withUnsafeBytes { $0.load(as: UInt64.self).bigEndian })
+                    let sealedData = handle.readData(ofLength: dLen)
 
-                let fileBytes: Data
-                do {
-                    let fileBox = try AES.GCM.SealedBox(combined: sealedData)
-                    fileBytes = try AES.GCM.open(fileBox, using: key)
-                } catch {
-                    throw NSError(domain: "BackupRestore", code: 500, userInfo: [NSLocalizedDescriptionKey: "Failed to decrypt \(entry.relativePath). File may be corrupted."])
-                }
-
-                // Write file to Walkman target (direct write avoids slow .atomic rename on FAT32/exFAT)
-                let targetURL = targetMountURL.appendingPathComponent(entry.relativePath)
-                let parentDir = targetURL.deletingLastPathComponent()
-                let parentDirPath = parentDir.path
-
-                if !createdDirs.contains(parentDirPath) {
-                    if !fm.fileExists(atPath: parentDirPath) {
-                        try fm.createDirectory(at: parentDir, withIntermediateDirectories: true)
+                    let fileBytes: Data
+                    do {
+                        let fileBox = try AES.GCM.SealedBox(combined: sealedData)
+                        fileBytes = try AES.GCM.open(fileBox, using: key)
+                    } catch {
+                        throw NSError(domain: "BackupRestore", code: 500, userInfo: [NSLocalizedDescriptionKey: "Failed to decrypt \(entry.relativePath). File may be corrupted."])
                     }
-                    createdDirs.insert(parentDirPath)
-                }
 
-                if fm.fileExists(atPath: targetURL.path) {
-                    try? fm.removeItem(at: targetURL)
+                    // Write file to Walkman target (direct write avoids slow .atomic rename on FAT32/exFAT)
+                    let targetURL = targetMountURL.appendingPathComponent(entry.relativePath)
+                    let parentDir = targetURL.deletingLastPathComponent()
+                    let parentDirPath = parentDir.path
+
+                    if !createdDirs.contains(parentDirPath) {
+                        if !fm.fileExists(atPath: parentDirPath) {
+                            try fm.createDirectory(at: parentDir, withIntermediateDirectories: true)
+                        }
+                        createdDirs.insert(parentDirPath)
+                    }
+
+                    if fm.fileExists(atPath: targetURL.path) {
+                        try? fm.removeItem(at: targetURL)
+                    }
+                    try fileBytes.write(to: targetURL)
                 }
-                try fileBytes.write(to: targetURL)
 
                 bytesRestored += entry.sizeBytes
             }
@@ -1061,10 +1097,24 @@ public final class BackupRestoreService: @unchecked Sendable {
                 throw NSError(domain: "BackupRestore", code: 400, userInfo: [NSLocalizedDescriptionKey: "manifest.json missing or invalid in backup bundle."])
             }
 
-            if targetDrive.freeBytes < manifest.totalBytes {
-                let reqMB = Double(manifest.totalBytes) / 1_048_576.0
+            // Check Target Capacity (accounting for existing files that will be overwritten)
+            var netBytesRequired: Int64 = 0
+            for entry in manifest.files {
+                let targetURL = targetMountURL.appendingPathComponent(entry.relativePath)
+                if fm.fileExists(atPath: targetURL.path) {
+                    let existingSize = (try? fm.attributesOfItem(atPath: targetURL.path)[.size] as? Int64) ?? 0
+                    if entry.sizeBytes > existingSize {
+                        netBytesRequired += (entry.sizeBytes - existingSize)
+                    }
+                } else {
+                    netBytesRequired += entry.sizeBytes
+                }
+            }
+
+            if targetDrive.freeBytes < netBytesRequired {
+                let reqMB = Double(netBytesRequired) / 1_048_576.0
                 let freeMB = Double(targetDrive.freeBytes) / 1_048_576.0
-                throw NSError(domain: "BackupRestore", code: 507, userInfo: [NSLocalizedDescriptionKey: "Insufficient free space on \(targetDrive.name). Requires \(String(format: "%.1f MB", reqMB)), available \(String(format: "%.1f MB", freeMB))."])
+                throw NSError(domain: "BackupRestore", code: 507, userInfo: [NSLocalizedDescriptionKey: "Insufficient free space on \(targetDrive.name). Requires \(String(format: "%.1f MB", reqMB)) additional space, available \(String(format: "%.1f MB", freeMB))."])
             }
 
             var bytesRestored: Int64 = 0
