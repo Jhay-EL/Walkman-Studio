@@ -615,37 +615,19 @@ public struct MetadataStudioView: View {
                                 Text(isAnalyzed ? "SenseMe Analyzed" : "Not Analyzed")
                                     .font(WalkmanFont.bodyBold)
                                     .foregroundStyle(isAnalyzed ? Color.white : Color.secondary)
+                                    .lineLimit(1)
                                 Text(isAnalyzed ? "12 Tone acoustic metadata is embedded in file" : "No 12 Tone metadata embedded in file")
                                     .font(WalkmanFont.subheadline)
                                     .foregroundStyle(isAnalyzed ? WalkmanTheme.silverMuted : Color.white.opacity(0.35))
-                                    .lineLimit(1)
+                                    .lineLimit(2)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
 
-                            Spacer()
-
-                            if isAnalyzed {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 9, weight: .bold))
-                                    Text("12 TONE")
-                                        .font(WalkmanFont.badge)
-                                }
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3.5)
-                                .background(Capsule().fill(Color(red: 255/255, green: 145/255, blue: 0/255).opacity(0.18)))
-                                .overlay(Capsule().stroke(Color(red: 255/255, green: 165/255, blue: 30/255).opacity(0.55), lineWidth: 0.8))
-                                .foregroundStyle(Color(red: 255/255, green: 195/255, blue: 80/255))
-                            } else {
-                                Text("NOT ANALYZED")
-                                    .font(WalkmanFont.badge)
-                                    .padding(.horizontal, 7)
-                                    .padding(.vertical, 3.5)
-                                    .background(Capsule().fill(Color.white.opacity(0.05)))
-                                    .foregroundStyle(Color.secondary)
-                            }
+                            Spacer(minLength: 0)
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .liquidGlass(cornerRadius: 12)
                     }
 
