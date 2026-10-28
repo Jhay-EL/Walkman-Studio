@@ -93,6 +93,9 @@ Walkman Studio v2.1.1 resolves reported playback, metadata, and synchronization 
 | **`Walkman-Studio-2.1.1-intel.dmg`** | Intel (`x86_64`) | Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac Pro |
 | **`Walkman-Studio-2.1.1-universal.dmg`** | Universal 2 (`arm64` + `x86_64`) | Universal package running natively on all Macs (macOS 13.0+) |
 
+### Alternative Mirror
+* **Google Drive:** [Download v2.1.1 Release Files on Google Drive](https://drive.google.com/drive/folders/1sPALywphDMWHfE7RzliWKuW4y1fcMdSt?usp=share_link)
+
 ---
 
 ## Installation
@@ -163,6 +166,9 @@ cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
     </tr>
   </tbody>
 </table>
+
+<h3>Alternative Mirror</h3>
+<p><strong>Google Drive:</strong> <a href="https://drive.google.com/drive/folders/1sPALywphDMWHfE7RzliWKuW4y1fcMdSt?usp=share_link" target="_blank" rel="noopener noreferrer">Download v2.1.1 Release Files on Google Drive</a></p>
 
 <hr>
 
