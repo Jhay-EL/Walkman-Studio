@@ -106,7 +106,7 @@ public struct AboutWalkmanStudioView: View {
                     .font(WalkmanFont.title1)
                     .foregroundStyle(.primary)
                 
-                Text("Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.1.0") • Universal (Apple Silicon & Intel)")
+                Text("Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.1.1") • Universal (Apple Silicon & Intel)")
                     .font(WalkmanFont.calloutMedium)
                     .foregroundStyle(.secondary)
                 
