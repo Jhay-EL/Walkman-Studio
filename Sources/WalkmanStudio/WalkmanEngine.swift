@@ -656,7 +656,7 @@ public final class WalkmanEngine: @unchecked Sendable {
         case "aac_256":
             args.append(contentsOf: ["-c:a", "aac", "-b:a", "256k"])
         case "alac_16":
-            args.append(contentsOf: ["-c:a", "alac"])
+            args.append(contentsOf: ["-c:a", "alac", "-sample_fmt", "s16p"])
         case "wav_16":
             args.append(contentsOf: ["-c:a", "pcm_s16le", "-ar", "44100"])
         default:
@@ -683,15 +683,76 @@ public final class WalkmanEngine: @unchecked Sendable {
         }
     }
 
-    /// Saves companion .LRC lyrics file in the destination track folder alongside the audio file
-    public func writeCompanionLyrics(destinationAudioURL: URL, lyrics: String) throws {
+    // -----------------------------------------------------------------------
+    // Format Helpers (Bytes & Duration)
+    // -----------------------------------------------------------------------
+    public static func formatBytes(_ bytes: Int64) -> String {
+        if bytes <= 0 { return "0 MB" }
+        let mb = Double(bytes) / 1_048_576.0
+        if mb >= 1024.0 {
+            return String(format: "%.1f GB", mb / 1024.0)
+        }
+        return String(format: "%.1f MB", mb)
+    }
+
+    public static func formatDuration(_ seconds: Double) -> String {
+        if seconds <= 0 { return "0:00" }
+        let s = Int(seconds)
+        let m = s / 60
+        let rem = s % 60
+        return String(format: "%d:%02d", m, rem)
+    }
+
+    /// Saves companion .LRC lyrics file in the destination track folder alongside the audio file.
+    /// Ensures compatibility with Sony Walkman firmware:
+    /// 1. Walkman NW-A45/A55/A50/A30 requires chronological [mm:ss.xx] timestamps to unlock the "Display Lyrics" option.
+    ///    If plain text lyrics are provided, timestamps are synthesized sequentially across the song's duration.
+    /// 2. Enforces standard CRLF (\r\n) line endings and clean UTF-8 encoding.
+    public func writeCompanionLyrics(destinationAudioURL: URL, lyrics: String, durationSeconds: Double = 0) throws {
         let lrcURL = destinationAudioURL.deletingPathExtension().appendingPathExtension("lrc")
-        try lyrics.write(to: lrcURL, atomically: true, encoding: .utf8)
+        let formattedLyrics = prepareWalkmanLRC(lyrics: lyrics, durationSeconds: durationSeconds)
+        try formattedLyrics.write(to: lrcURL, atomically: true, encoding: .utf8)
         let cPath = (lrcURL.path as NSString).fileSystemRepresentation
         removexattr(cPath, "com.apple.TextEncoding", 0)
         let dotfileURL = lrcURL.deletingLastPathComponent().appendingPathComponent("._" + lrcURL.lastPathComponent)
         try? FileManager.default.removeItem(at: dotfileURL)
         sync()
+    }
+
+    /// Prepares lyrics text for Sony Walkman: ensures every line has [mm:ss.xx] timestamps and CRLF endings.
+    public func prepareWalkmanLRC(lyrics: String, durationSeconds: Double = 0) -> String {
+        let rawLines = lyrics.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
+        let hasAnyTimestamps = rawLines.contains { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            return (trimmed.hasPrefix("[0") || trimmed.hasPrefix("[1") || trimmed.hasPrefix("[2") || trimmed.hasPrefix("[3")) && trimmed.contains(":")
+        }
+
+        if hasAnyTimestamps {
+            // Already timestamped: normalize line endings to CRLF and filter out empty lines
+            let cleanLines = rawLines.filter { !$0.isEmpty }
+            return cleanLines.joined(separator: "\r\n") + "\r\n"
+        }
+
+        // Plain text lyrics: synthesize sequential timestamps so the Sony Walkman RTOS firmware
+        // accepts the .lrc file and enables the "Display Lyrics" button instead of greying it out.
+        let nonEmptyLines = rawLines.filter { !$0.isEmpty }
+        guard !nonEmptyLines.isEmpty else { return "" }
+
+        let effectiveDuration = durationSeconds > 10.0 ? durationSeconds : Double(max(60, nonEmptyLines.count * 4))
+        let startSec: Double = 3.0
+        let endSec: Double = max(startSec + 2.0, effectiveDuration - 3.0)
+        let step: Double = (endSec - startSec) / Double(max(1, nonEmptyLines.count))
+
+        var timedLines: [String] = []
+        for (i, line) in nonEmptyLines.enumerated() {
+            let t = startSec + Double(i) * step
+            let m = Int(t) / 60
+            let s = Int(t) % 60
+            let cs = Int((t - Double(Int(t))) * 100)
+            timedLines.append(String(format: "[%02d:%02d.%02d]%@", m, s, cs, line))
+        }
+
+        return timedLines.joined(separator: "\r\n") + "\r\n"
     }
 
     /// Saves folder.jpg and cover.jpg Baseline RGB JPEGs in the destination album directory

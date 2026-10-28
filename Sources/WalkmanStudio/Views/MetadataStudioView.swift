@@ -117,7 +117,7 @@ public struct MetadataStudioView: View {
         public let text: String
     }
 
-    public static func parseTimeStr(_ timeStr: String) -> Double? {
+    public nonisolated static func parseTimeStr(_ timeStr: String) -> Double? {
         let cleaned = timeStr.trimmingCharacters(in: CharacterSet(charactersIn: "[] \t"))
         let parts = cleaned.components(separatedBy: ":")
         guard parts.count >= 2 else { return nil }
@@ -127,12 +127,12 @@ public struct MetadataStudioView: View {
         return mins * 60.0 + secs
     }
 
-    private static let lyricTimestampRegex: NSRegularExpression? = {
+    private nonisolated static let lyricTimestampRegex: NSRegularExpression? = {
         let pattern = #"\[(\d{1,2}:\d{2}(?:[.:]\d{1,3})?)\]"#
         return try? NSRegularExpression(pattern: pattern)
     }()
 
-    public static func parseLyrics(_ raw: String?) -> [ParsedLyricLine] {
+    public nonisolated static func parseLyrics(_ raw: String?) -> [ParsedLyricLine] {
         guard let raw = raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
         let rawLines = raw.components(separatedBy: .newlines)
         
@@ -287,7 +287,16 @@ public struct MetadataStudioView: View {
         }
     }
 
-    private func loadTrack(force: Bool = false) {
+    private struct LoadedTrackDetails: Sendable {
+        let art: Data?
+        let validation: (valid: Bool, message: String)?
+        let rawLyrics: String?
+        let parsedLines: [ParsedLyricLine]
+        let meta: AudioFileMetadata?
+        let senseMe: SenseMeInfo?
+    }
+
+    private func loadTrackData(force: Bool = false) async {
         guard let tr = track else {
             currentTrackId = nil
             coverImage = nil
@@ -317,33 +326,44 @@ public struct MetadataStudioView: View {
             
             let url = URL(fileURLWithPath: tr.fullPath)
             
-            // Asynchronous extraction of artwork, lyrics, and metadata off main UI thread
-            DispatchQueue.global(qos: .userInitiated).async {
+            let details = await Task.detached(priority: .userInitiated) { () -> LoadedTrackDetails? in
+                if Task.isCancelled { return nil }
                 let art = AudioTagger.shared.extractCoverArt(fileURL: url)
+                if Task.isCancelled { return nil }
                 let lyr = AudioTagger.shared.extractLyrics(fileURL: url)
+                if Task.isCancelled { return nil }
                 let val = art != nil ? WalkmanEngine.shared.isBaselineRGBJPEG(data: art!) : nil
-                let img = art != nil ? NSImage(data: art!) : nil
                 let meta = AudioTagger.shared.readMetadata(fileURL: url)
+                if Task.isCancelled { return nil }
                 let rawLyrics = lyr ?? meta?.lyrics
                 let parsedLines = Self.parseLyrics(rawLyrics)
                 let senseMe = SenseMeEngine.shared.inspect(fileURL: url)
+                if Task.isCancelled { return nil }
                 if senseMe.isAnalyzed && !tr.isSenseMeAnalyzed {
                     LibraryScanner.shared.updateCachedSenseMe(fullPath: tr.fullPath, info: senseMe)
                 }
-                
-                DispatchQueue.main.async {
-                    guard self.track?.id == tr.id else { return }
-                    self.coverData = art
-                    if let loadedImg = img {
-                        self.coverImage = loadedImg
-                    }
-                    self.validationStatus = val
-                    self.lyrics = rawLyrics
-                    self.verifiedMetadata = meta
-                    self.cachedLyricLines = parsedLines
-                    self.senseMeInfo = senseMe
-                }
+                return LoadedTrackDetails(
+                    art: art,
+                    validation: val,
+                    rawLyrics: rawLyrics,
+                    parsedLines: parsedLines,
+                    meta: meta,
+                    senseMe: senseMe
+                )
+            }.value
+            
+            guard !Task.isCancelled, self.currentTrackId == tr.id, let details = details else { return }
+            self.coverData = details.art
+            if let art = details.art, let loadedImg = NSImage(data: art) {
+                self.coverImage = loadedImg
+            } else if self.coverImage == nil {
+                self.coverImage = CoverArtCache.shared.thumbnail(for: tr)
             }
+            self.validationStatus = details.validation
+            self.lyrics = details.rawLyrics
+            self.verifiedMetadata = details.meta
+            self.cachedLyricLines = details.parsedLines
+            self.senseMeInfo = details.senseMe
         }
     }
     
@@ -817,15 +837,20 @@ public struct MetadataStudioView: View {
             .allowsHitTesting(false)
             .ignoresSafeArea(edges: .top)
         }
-        .onAppear { loadTrack(force: true) }
-        .onChange(of: track) { loadTrack(force: true) }
+        .task(id: track?.id) {
+            await loadTrackData()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .trackMetadataDidUpdate)) { notif in
             if let updatedId = notif.userInfo?["trackId"] as? String {
                 if updatedId == track?.id {
-                    loadTrack(force: true)
+                    Task { @MainActor in
+                        await loadTrackData(force: true)
+                    }
                 }
             } else {
-                loadTrack(force: true)
+                Task { @MainActor in
+                    await loadTrackData(force: true)
+                }
             }
         }
     }

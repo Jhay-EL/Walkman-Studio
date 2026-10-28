@@ -19,7 +19,8 @@ public final class AudioTagger: @unchecked Sendable {
         trackNumber: String?,
         year: String?,
         genre: String?,
-        coverArtData: Data?
+        coverArtData: Data?,
+        lyrics: String? = nil
     ) throws {
         let ext = fileURL.pathExtension.lowercased()
         if ext == "flac" {
@@ -31,7 +32,8 @@ public final class AudioTagger: @unchecked Sendable {
                 trackNumber: trackNumber,
                 year: year,
                 genre: genre,
-                coverArtData: coverArtData
+                coverArtData: coverArtData,
+                lyrics: lyrics
             )
         } else if ext == "mp3" {
             try writeMP3Metadata(
@@ -42,7 +44,8 @@ public final class AudioTagger: @unchecked Sendable {
                 trackNumber: trackNumber,
                 year: year,
                 genre: genre,
-                coverArtData: coverArtData
+                coverArtData: coverArtData,
+                lyrics: lyrics
             )
         } else if ext == "m4a" || ext == "m4b" || ext == "alac" || ext == "aac" || ext == "mp4" {
             try writeM4AMetadata(
@@ -53,7 +56,8 @@ public final class AudioTagger: @unchecked Sendable {
                 trackNumber: trackNumber,
                 year: year,
                 genre: genre,
-                coverArtData: coverArtData
+                coverArtData: coverArtData,
+                lyrics: lyrics
             )
         } else {
             throw NSError(domain: "WalkmanStudio", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unsupported audio format for metadata tagging: .\(ext)"])
@@ -78,7 +82,8 @@ public final class AudioTagger: @unchecked Sendable {
         trackNumber: String?,
         year: String?,
         genre: String?,
-        coverArtData: Data?
+        coverArtData: Data?,
+        lyrics: String? = nil
     ) throws {
         // Snapshot existing file timestamps to preserve original "Date Added"
         let origAttr = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
@@ -136,7 +141,7 @@ public final class AudioTagger: @unchecked Sendable {
                                 if parts.count >= 2 {
                                     let k = parts[0].uppercased()
                                     let v = parts[1...].joined(separator: "=")
-                                    let standardKeys: Set<String> = ["TITLE", "ARTIST", "ALBUM", "TRACKNUMBER", "TRACK", "DATE", "YEAR", "GENRE"]
+                                    let standardKeys: Set<String> = ["TITLE", "ARTIST", "ALBUM", "TRACKNUMBER", "TRACK", "DATE", "YEAR", "GENRE", "LYRICS", "UNSYNCEDLYRICS"]
                                     if standardKeys.contains(k) {
                                         existingComments[k] = v
                                     } else {
@@ -199,6 +204,12 @@ public final class AudioTagger: @unchecked Sendable {
         let finGenre: String? = (cleanGenre != nil && !cleanGenre!.isEmpty) ? cleanGenre : existingComments["GENRE"]
         if let g = finGenre, !g.isEmpty {
             newComments.append(("GENRE", g))
+        }
+
+        let cleanLyrics = lyrics?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finLyrics = (cleanLyrics != nil && !cleanLyrics!.isEmpty) ? cleanLyrics : (existingComments["LYRICS"] ?? existingComments["UNSYNCEDLYRICS"])
+        if let lyr = finLyrics, !lyr.isEmpty {
+            newComments.append(("LYRICS", lyr))
         }
 
         for (k, v) in existingOtherComments {
@@ -320,7 +331,8 @@ public final class AudioTagger: @unchecked Sendable {
         trackNumber: String?,
         year: String?,
         genre: String?,
-        coverArtData: Data?
+        coverArtData: Data?,
+        lyrics: String? = nil
     ) throws {
         // Snapshot existing file timestamps to preserve original "Date Added"
         let origAttr = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
@@ -341,6 +353,68 @@ public final class AudioTagger: @unchecked Sendable {
         }
 
         let audioStream = fileData.subdata(in: audioOffset..<fileData.count)
+
+        // Extract existing GEOB, PRIV, and USLT frames to preserve
+        var preservedFrames: [Data] = []
+        if audioOffset > 10 && fileData.count >= 10 && fileData.starts(with: [0x49, 0x44, 0x33]) {
+            let version = fileData[3]
+            let flags = fileData[5]
+            var offset = 10
+            let tagLimit = min(audioOffset, fileData.count)
+
+            // Skip extended header if present
+            if (flags & 0x40) != 0 && offset + 4 <= tagLimit {
+                if version == 4 {
+                    let extSize = (Int(fileData[offset]) << 21) | (Int(fileData[offset+1]) << 14) | (Int(fileData[offset+2]) << 7) | Int(fileData[offset+3])
+                    offset += max(4, extSize)
+                } else if version == 3 {
+                    let extSize = (Int(fileData[offset]) << 24) | (Int(fileData[offset+1]) << 16) | (Int(fileData[offset+2]) << 8) | Int(fileData[offset+3])
+                    offset += max(4, extSize + 4)
+                }
+            }
+
+            if version == 3 || version == 4 {
+                while offset + 10 <= tagLimit {
+                    let idData = fileData.subdata(in: offset..<offset+4)
+                    guard idData[0] != 0, let frameID = String(data: idData, encoding: .ascii),
+                          frameID.allSatisfy({ $0.isLetter || $0.isNumber }) else {
+                        break
+                    }
+                    let fSize: Int
+                    if version == 4 {
+                        fSize = (Int(fileData[offset+4]) << 21) | (Int(fileData[offset+5]) << 14) | (Int(fileData[offset+6]) << 7) | Int(fileData[offset+7])
+                    } else {
+                        fSize = (Int(fileData[offset+4]) << 24) | (Int(fileData[offset+5]) << 16) | (Int(fileData[offset+6]) << 8) | Int(fileData[offset+7])
+                    }
+                    offset += 10
+                    guard offset + fSize <= tagLimit else { break }
+                    let frameContent = fileData.subdata(in: offset..<offset+fSize)
+                    offset += fSize
+
+                    if frameID == "GEOB" || frameID == "PRIV" {
+                        var rawFrame = Data()
+                        rawFrame.append(idData)
+                        let uSize = UInt32(fSize)
+                        rawFrame.append(contentsOf: [
+                            UInt8((uSize >> 24) & 0xFF), UInt8((uSize >> 16) & 0xFF), UInt8((uSize >> 8) & 0xFF), UInt8(uSize & 0xFF)
+                        ])
+                        rawFrame.append(contentsOf: [0x00, 0x00])
+                        rawFrame.append(frameContent)
+                        preservedFrames.append(rawFrame)
+                    } else if (frameID == "USLT" || frameID == "SYLT") && (lyrics == nil || lyrics!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
+                        var rawFrame = Data()
+                        rawFrame.append("USLT".data(using: .ascii)!)
+                        let uSize = UInt32(fSize)
+                        rawFrame.append(contentsOf: [
+                            UInt8((uSize >> 24) & 0xFF), UInt8((uSize >> 16) & 0xFF), UInt8((uSize >> 8) & 0xFF), UInt8(uSize & 0xFF)
+                        ])
+                        rawFrame.append(contentsOf: [0x00, 0x00])
+                        rawFrame.append(frameContent)
+                        preservedFrames.append(rawFrame)
+                    }
+                }
+            }
+        }
 
         // 2. Read existing tags to prevent wiping out data if nil/empty passed
         let existingMeta = readMP3Metadata(fileURL: fileURL)
@@ -388,6 +462,16 @@ public final class AudioTagger: @unchecked Sendable {
             framesData.append(makeID3v23TextFrame(id: "TCON", text: g))
         }
 
+        // Add USLT (Lyrics) frame if provided
+        if let l = lyrics, !l.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            framesData.append(makeID3v23UsltFrame(lyrics: l))
+        }
+
+        // Add preserved frames (GEOB, PRIV, prior USLT)
+        for pFrame in preservedFrames {
+            framesData.append(pFrame)
+        }
+
         // 4. Embed Baseline RGB JPEG APIC frame
         var effectiveArtData = coverArtData
         if effectiveArtData == nil {
@@ -399,7 +483,7 @@ public final class AudioTagger: @unchecked Sendable {
 
         // 4. Construct ID3v2.3 10-byte header
         var header = Data([0x49, 0x44, 0x33, 0x03, 0x00, 0x00]) // ID3v2.3, no flags
-        let synchsafe = synchsafeBytes(framesData.count)
+        let synchsafe = AudioTagger.synchsafeBytes(framesData.count)
         header.append(contentsOf: synchsafe)
 
         // 5. Assemble complete file
@@ -439,6 +523,33 @@ public final class AudioTagger: @unchecked Sendable {
         return frame
     }
 
+    private func makeID3v23UsltFrame(lyrics: String) -> Data {
+        let cleanLyrics = WalkmanEngine.sanitizeWalkmanText(lyrics, stripExplicitMarkers: false)
+        var frame = Data()
+        frame.append("USLT".data(using: .ascii)!)
+
+        var content = Data()
+        content.append(0x01) // 1 = UTF-16 with BOM
+        content.append(contentsOf: [UInt8]("eng".utf8))
+        // Content descriptor: empty UTF-16 with BOM + terminator
+        content.append(contentsOf: [0xFF, 0xFE, 0x00, 0x00])
+        // Lyrics text in UTF-16LE (BOM already established above)
+        if let lData = cleanLyrics.data(using: .utf16LittleEndian) {
+            content.append(lData)
+        }
+
+        let size = UInt32(content.count)
+        frame.append(contentsOf: [
+            UInt8((size >> 24) & 0xFF),
+            UInt8((size >> 16) & 0xFF),
+            UInt8((size >> 8) & 0xFF),
+            UInt8(size & 0xFF)
+        ])
+        frame.append(contentsOf: [0x00, 0x00]) // Flags
+        frame.append(content)
+        return frame
+    }
+
     private func makeID3v23ApicFrame(imageData: Data) -> Data {
         var frame = Data()
         frame.append("APIC".data(using: .ascii)!)
@@ -462,7 +573,7 @@ public final class AudioTagger: @unchecked Sendable {
         return frame
     }
 
-    private func synchsafeBytes(_ size: Int) -> [UInt8] {
+    public static func synchsafeBytes(_ size: Int) -> [UInt8] {
         return [
             UInt8((size >> 21) & 0x7F),
             UInt8((size >> 14) & 0x7F),
@@ -622,7 +733,8 @@ public final class AudioTagger: @unchecked Sendable {
         trackNumber: String?,
         year: String?,
         genre: String?,
-        coverArtData: Data?
+        coverArtData: Data?,
+        lyrics: String? = nil
     ) throws {
         let ffmpegPath = FileManager.default.fileExists(atPath: "/opt/homebrew/bin/ffmpeg") ? "/opt/homebrew/bin/ffmpeg" : "/usr/local/bin/ffmpeg"
         guard FileManager.default.fileExists(atPath: ffmpegPath) else {
@@ -661,6 +773,9 @@ public final class AudioTagger: @unchecked Sendable {
         }
         if let g = genre, !g.isEmpty {
             args.append(contentsOf: ["-metadata", "genre=\(g)"])
+        }
+        if let l = lyrics, !l.isEmpty {
+            args.append(contentsOf: ["-metadata", "lyrics=\(l)"])
         }
 
         args.append(tempOutputFile.path)
@@ -1085,7 +1200,7 @@ public final class AudioTagger: @unchecked Sendable {
                             else { text = String(data: payload, encoding: .utf8) }
                             if let full = text {
                                 let parts = full.components(separatedBy: "\0")
-                                let lyric = parts.last?.trimmingCharacters(in: .whitespacesAndNewlines) ?? full
+                                let lyric = (parts.last ?? full).trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "\u{FEFF}\0")))
                                 if !lyric.isEmpty { res.lyrics = lyric }
                             }
                         }
@@ -1420,7 +1535,7 @@ public final class AudioTagger: @unchecked Sendable {
                     }
                     if let full = text {
                         let parts = full.components(separatedBy: "\0")
-                        let lyric = parts.last?.trimmingCharacters(in: .whitespacesAndNewlines) ?? full
+                        let lyric = (parts.last ?? full).trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "\u{FEFF}\0")))
                         if !lyric.isEmpty {
                             return lyric
                         }

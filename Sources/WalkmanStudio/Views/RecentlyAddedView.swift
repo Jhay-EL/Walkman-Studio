@@ -180,6 +180,7 @@ public struct RecentlyAddedView: View {
         if isPlayingFromVisibleQueue {
             player.pause()
         } else if let first = currentPlaybackQueue.first {
+            self.selectedTrackId = first.id
             player.play(track: first, in: currentPlaybackQueue)
         }
     }
@@ -188,6 +189,7 @@ public struct RecentlyAddedView: View {
         guard !currentPlaybackQueue.isEmpty else { return }
         let shuffled = currentPlaybackQueue.shuffled()
         if let random = shuffled.first {
+            self.selectedTrackId = random.id
             player.play(track: random, in: shuffled)
         }
     }
@@ -552,6 +554,7 @@ public struct RecentlyAddedView: View {
                 
                 HStack(spacing: 8) {
                     Button(action: {
+                        self.selectedTrackId = track.id
                         if isPlayingThis {
                             player.pause()
                         } else {
@@ -699,6 +702,7 @@ public struct RecentlyAddedView: View {
         .contextMenu(forSelectionType: RankedTrack.ID.self) { items in
             if let id = items.first, let item = displayedTracks.first(where: { $0.id == id }) {
                 Button("Play") {
+                    self.selectedTrackId = item.track.id
                     player.play(track: item.track, in: currentPlaybackQueue)
                 }
                 
@@ -752,6 +756,7 @@ public struct RecentlyAddedView: View {
             }
         } primaryAction: { items in
             if let id = items.first, let item = displayedTracks.first(where: { $0.id == id }) {
+                self.selectedTrackId = item.track.id
                 if player.currentTrack?.id == item.track.id && player.isPlaying {
                     player.pause()
                 } else {

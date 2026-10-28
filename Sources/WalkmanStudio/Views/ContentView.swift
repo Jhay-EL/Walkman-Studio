@@ -40,11 +40,22 @@ public struct ContentView: View {
     @ObservedObject private var duplicateFinder = DuplicateFinderService.shared
     
     private var selectedTrack: Track? {
-        if let id = selectedTrackId, let tr = tracks.first(where: { $0.id == id }) {
-            return tr
+        if let id = selectedTrackId {
+            if let tr = tracks.first(where: { $0.id == id }) {
+                return tr
+            }
+            if let tr = cachedRecentTracks.first(where: { $0.id == id }) {
+                return tr
+            }
+            if let playing = player.currentTrack, playing.id == id {
+                return playing
+            }
         }
         if let playing = player.currentTrack {
             if let tr = tracks.first(where: { $0.id == playing.id }) {
+                return tr
+            }
+            if let tr = cachedRecentTracks.first(where: { $0.id == playing.id }) {
                 return tr
             }
             return playing
@@ -764,6 +775,7 @@ public struct ContentView: View {
                                 }
                             }
                         )
+                        .id(selectedTrack?.id ?? "empty_inspector")
                     }
                     .toolbar {
                         if !isFullScreenPlayerPresented {
@@ -790,7 +802,12 @@ public struct ContentView: View {
                             }
                             
                             // Inspector Toggle
-                            Button(action: { showInspector.toggle() }) {
+                            Button(action: {
+                                if !showInspector && selectedTrackId == nil, let cur = player.currentTrack {
+                                    self.selectedTrackId = cur.id
+                                }
+                                showInspector.toggle()
+                            }) {
                                 Label("Inspector", systemImage: "sidebar.trailing")
                             }
                             .help("Toggle Metadata & Artwork Inspector (Cmd+I)")
@@ -841,8 +858,13 @@ public struct ContentView: View {
         .onReceive(heartbeatTimer) { _ in
             checkDrivesHeartbeat()
         }
-        .onChange(of: player.currentTrack?.id) {
-            if let cur = player.currentTrack, player.isPlaying {
+        .onChange(of: player.currentTrack?.id) { _, newTrackId in
+            if let newId = newTrackId {
+                self.selectedTrackId = newId
+            }
+        }
+        .onChange(of: player.isPlaying) { _, isPlaying in
+            if isPlaying, let cur = player.currentTrack {
                 self.selectedTrackId = cur.id
             }
         }

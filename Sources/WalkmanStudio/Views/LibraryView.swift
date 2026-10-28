@@ -136,6 +136,7 @@ public struct LibraryView: View {
         if isPlayingFromVisibleList {
             player.pause()
         } else if let first = visibleTracks.first {
+            self.selectedTrackId = first.id
             player.play(track: first, in: visibleTracks)
         }
     }
@@ -144,6 +145,7 @@ public struct LibraryView: View {
         guard !visibleTracks.isEmpty else { return }
         let shuffled = visibleTracks.shuffled()
         if let randomTrack = shuffled.first {
+            self.selectedTrackId = randomTrack.id
             player.play(track: randomTrack, in: shuffled)
         }
     }
@@ -547,6 +549,7 @@ public struct LibraryView: View {
                 
                 HStack(spacing: 8) {
                     Button(action: {
+                        self.selectedTrackId = track.id
                         if isPlayingThis {
                             player.pause()
                         } else {
@@ -697,6 +700,7 @@ public struct LibraryView: View {
                 let isThisPlaying = player.currentTrack?.id == track.id && player.isPlaying
                 
                 Button(isThisPlaying ? "Pause Playback" : "Play Preview") {
+                    self.selectedTrackId = track.id
                     if isThisPlaying {
                         player.pause()
                     } else {
@@ -762,6 +766,7 @@ public struct LibraryView: View {
             }
         } primaryAction: { selection in
             if let firstId = selection.first, let track = tracks.first(where: { $0.id == firstId }) {
+                self.selectedTrackId = track.id
                 if player.currentTrack?.id == track.id && player.isPlaying {
                     player.pause()
                 } else {
