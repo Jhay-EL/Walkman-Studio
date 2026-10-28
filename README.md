@@ -292,13 +292,13 @@ Pre-built `.dmg` disk images and `.zip` standalone archives are available for al
 
 | Package | Architecture | Supported Mac Models | Primary Download (GitHub) | Mirror Download (Google Drive) |
 | :--- | :--- | :--- | :--- | :--- |
-| **Apple Silicon DMG** | `arm64` | MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4) | [Walkman-Studio-2.1.1-arm64.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v2.1.1/Walkman-Studio-2.1.1-arm64.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1Xz5k1HS0C3Hq6Jqwfqvj2EJr7KjTtll_?usp=share_link) |
-| **Intel Mac DMG** | `x86_64` | Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac mini, Mac Pro | [Walkman-Studio-2.1.1-intel.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v2.1.1/Walkman-Studio-2.1.1-intel.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1Xz5k1HS0C3Hq6Jqwfqvj2EJr7KjTtll_?usp=share_link) |
-| **Universal 2 DMG** | `arm64` + `x86_64` | Universal package running natively on all Macs (macOS 13.0+) | [Walkman-Studio-2.1.1-universal.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v2.1.1/Walkman-Studio-2.1.1-universal.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1Xz5k1HS0C3Hq6Jqwfqvj2EJr7KjTtll_?usp=share_link) |
+| **Apple Silicon DMG** | `arm64` | MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4) | [Walkman-Studio-2.1.1-arm64.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v2.1.1/Walkman-Studio-2.1.1-arm64.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1sPALywphDMWHfE7RzliWKuW4y1fcMdSt?usp=share_link) |
+| **Intel Mac DMG** | `x86_64` | Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac mini, Mac Pro | [Walkman-Studio-2.1.1-intel.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v2.1.1/Walkman-Studio-2.1.1-intel.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1sPALywphDMWHfE7RzliWKuW4y1fcMdSt?usp=share_link) |
+| **Universal 2 DMG** | `arm64` + `x86_64` | Universal package running natively on all Macs (macOS 13.0+) | [Walkman-Studio-2.1.1-universal.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v2.1.1/Walkman-Studio-2.1.1-universal.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1sPALywphDMWHfE7RzliWKuW4y1fcMdSt?usp=share_link) |
 
 > [!NOTE]
 > **Alternative Download Mirror:**
-> If the GitHub Releases page is inaccessible or returns an error, all release packages, `.dmg` installers, standalone `.zip` archives, and cryptographic checksums are directly available on our **[Google Drive Release Mirror](https://drive.google.com/drive/folders/1Xz5k1HS0C3Hq6Jqwfqvj2EJr7KjTtll_?usp=share_link)**.
+> If the GitHub Releases page is inaccessible or returns an error, all release packages, `.dmg` installers, standalone `.zip` archives, and cryptographic checksums are directly available on our **[Google Drive Release Mirror](https://drive.google.com/drive/folders/1sPALywphDMWHfE7RzliWKuW4y1fcMdSt?usp=share_link)**.
 
 > [!TIP]
 > **Which package should I choose?**
