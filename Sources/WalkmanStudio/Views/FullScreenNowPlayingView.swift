@@ -720,7 +720,7 @@ public struct FullScreenNowPlayingView: View {
                                         .scaleEffect(isActive ? 1.03 : 1.0, anchor: .center)
                                         .multilineTextAlignment(.center)
                                         .frame(maxWidth: .infinity, alignment: .center)
-                                        .animation(.spring(response: 0.28, dampingFraction: 0.78), value: isActive)
+                                        .animation(.easeInOut(duration: 0.18), value: isActive)
                                         .animation(.easeInOut(duration: 0.15), value: isHovered)
                                 }
                                 .buttonStyle(.plain)
@@ -766,15 +766,25 @@ public struct FullScreenNowPlayingView: View {
                     .onChange(of: player.isPlaying) {
                         updateActiveLyric(proxy: proxy)
                     }
+                    .onChange(of: parsedLines.count) {
+                        updateActiveLyric(proxy: proxy)
+                    }
+                    .onChange(of: player.currentTrack?.id) {
+                        activeLyricId = nil
+                        updateActiveLyric(proxy: proxy)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
     }
 
+    /// Lead time (0.3s / 300ms) to ensure lyric highlighting anticipates vocal onset with zero lag, matching Track Details pane.
+    private let lyricLeadTimeSeconds: Double = 0.3
+
     private func updateActiveLyric(proxy: ScrollViewProxy) {
-        guard player.isPlaying, !parsedLines.isEmpty else { return }
-        let now = progress.currentTime + 0.3 // 300ms vocal lead time
+        guard !parsedLines.isEmpty else { return }
+        let now = progress.currentTime + lyricLeadTimeSeconds
         var targetId: Int? = nil
 
         for line in parsedLines {
@@ -789,7 +799,7 @@ public struct FullScreenNowPlayingView: View {
         if targetId != activeLyricId {
             activeLyricId = targetId
             if let id = targetId {
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.80)) {
+                withAnimation(.easeInOut(duration: 0.28)) {
                     proxy.scrollTo(id, anchor: UnitPoint(x: 0.5, y: 0.35))
                 }
             }
