@@ -4,7 +4,7 @@ import AppKit
 // =============================================================================
 // SONY SENSME™ CHANNELS ARCHITECTURE
 // Authentic recreation of Sony Walkman 12 Tone Acoustic Mood & Time Channels
-// Horizontal Stack Carousel with 3D Depth Transitions & Bottom Channel Tracks
+// With 3D Stacked Card Carousel Slider & Integrated Bottom Tracks List
 // =============================================================================
 
 public enum SenseMeChannelCategory: String, CaseIterable, Identifiable, Sendable {
@@ -16,7 +16,7 @@ public enum SenseMeChannelCategory: String, CaseIterable, Identifiable, Sendable
 }
 
 public enum SenseMeViewMode: String, CaseIterable, Identifiable, Sendable {
-    case carousel = "Channels Carousel"
+    case carousel = "Channels Stack"
     case moodGalaxy = "12-Tone Mood Galaxy"
 
     public var id: String { rawValue }
@@ -331,7 +331,8 @@ public struct EqualizerLiveBars: View {
 }
 
 // =============================================================================
-// MAIN SENSEME CHANNELS VIEW (REDESIGNED: CAROUSEL TOP + TRACKS BOTTOM)
+// MAIN SENSEME CHANNELS VIEW
+// Stacked Card Carousel Slider on Top + Full Tracklist Table on Bottom
 // =============================================================================
 
 public struct SenseMeChannelsView: View {
@@ -344,10 +345,11 @@ public struct SenseMeChannelsView: View {
     var onGoToTransfer: (() -> Void)? = nil
     var onNavigateToLocalLibrary: (() -> Void)? = nil
 
-    @State private var selectedChannel: SenseMeChannel = SenseMeChannel.allChannels[0]
+    @State private var activeIndex: Int = 0
     @State private var viewMode: SenseMeViewMode = .carousel
     @State private var selectedCategoryFilter: String = "ALL"
     @State private var trackFilterQuery: String = ""
+    @State private var dragOffset: CGFloat = 0.0
     @State private var isAnalyzing: Bool = false
     @State private var analysisCurrent: Int = 0
     @State private var analysisTotal: Int = 0
@@ -380,6 +382,13 @@ public struct SenseMeChannelsView: View {
         }
     }
 
+    private var selectedChannel: SenseMeChannel {
+        let channels = displayedChannels
+        guard !channels.isEmpty else { return SenseMeChannel.allChannels[0] }
+        let safeIndex = max(0, min(channels.count - 1, activeIndex))
+        return channels[safeIndex]
+    }
+
     public init(
         onInspectTrack: ((Track) -> Void)? = nil,
         onEditTrack: ((Track) -> Void)? = nil,
@@ -399,15 +408,15 @@ public struct SenseMeChannelsView: View {
             WalkmanTheme.background
                 .ignoresSafeArea()
 
-            // Dynamic Ambient Backing Glow derived from the active selected channel
+            // Dynamic Ambient Backing Glow derived from front-facing active card
             RadialGradient(
-                colors: [selectedChannel.gradientColors[0].opacity(0.15), Color.clear],
+                colors: [selectedChannel.gradientColors[0].opacity(0.18), Color.clear],
                 center: .top,
-                startRadius: 50,
+                startRadius: 40,
                 endRadius: 650
             )
             .ignoresSafeArea()
-            .animation(.easeInOut(duration: 0.45), value: selectedChannel.id)
+            .animation(.easeInOut(duration: 0.42), value: selectedChannel.id)
 
             VStack(spacing: 0) {
                 // Top Header (Title, 12-Tone badge, Mode Toggle, Analysis status)
@@ -438,10 +447,10 @@ public struct SenseMeChannelsView: View {
                 } else {
                     switch viewMode {
                     case .carousel:
-                        // REDESIGNED DUAL PANE:
-                        // Top = Horizontal Stack Carousel
-                        // Bottom = Tracks List for Selected Channel
-                        carouselAndTracksSplitView
+                        // DUAL PANE:
+                        // Upper Pane = Stacked Card Carousel Slider (Bigger cards & 3D stack physics)
+                        // Lower Pane = Selected Channel Tracklist & Controls
+                        stackedDeckAndTracksSplitView
                     case .moodGalaxy:
                         SenseMeMoodGalaxyView(
                             tracks: analyzedTracks,
@@ -457,8 +466,8 @@ public struct SenseMeChannelsView: View {
         .onAppear {
             // Default select the channel matching the current time of day
             let hour = Calendar.current.component(.hour, from: Date())
-            if let activeTimeCh = SenseMeChannel.allChannels.first(where: { $0.isCurrentlyActive(at: hour) }) {
-                self.selectedChannel = activeTimeCh
+            if let idx = displayedChannels.firstIndex(where: { $0.isCurrentlyActive(at: hour) }) {
+                self.activeIndex = idx
             }
         }
     }
@@ -493,7 +502,7 @@ public struct SenseMeChannelsView: View {
 
             Spacer(minLength: 12)
 
-            // Mode Selector Toggle (Channels Carousel vs 12-Tone Mood Galaxy)
+            // Mode Selector Toggle (Stacked Carousel vs 12-Tone Mood Galaxy)
             HStack(spacing: 2) {
                 ForEach(SenseMeViewMode.allCases) { mode in
                     Button(action: {
@@ -609,11 +618,11 @@ public struct SenseMeChannelsView: View {
     // -------------------------------------------------------------------------
     // DUAL PANE: TOP STACK CAROUSEL + BOTTOM CHANNEL TRACKLIST
     // -------------------------------------------------------------------------
-    private var carouselAndTracksSplitView: some View {
+    private var stackedDeckAndTracksSplitView: some View {
         VStack(spacing: 0) {
-            // TOP SECTION: Horizontal Stack Carousel
-            topCarouselStage
-                .frame(height: 228)
+            // TOP SECTION: 3D Stacked Card Carousel Slider (Bigger Cards)
+            stackedCarouselStage
+                .frame(height: 275)
                 .background(
                     WalkmanTheme.background
                         .overlay(
@@ -631,98 +640,196 @@ public struct SenseMeChannelsView: View {
     }
 
     // -------------------------------------------------------------------------
-    // TOP CAROUSEL STAGE
+    // 3D STACKED CARD CAROUSEL SLIDER STAGE
     // -------------------------------------------------------------------------
-    private var topCarouselStage: some View {
-        ScrollViewReader { proxy in
-            VStack(spacing: 10) {
-                // Category Filter Pills & Left/Right Step Controls
-                HStack(spacing: 8) {
-                    HStack(spacing: 6) {
-                        categoryFilterButton(id: "ALL", title: "All Channels (\(SenseMeChannel.allChannels.count))")
-                        categoryFilterButton(id: "TIME", title: "🌅 Time of Day (5)")
-                        categoryFilterButton(id: "MOOD", title: "⚡ Mood & Style (10)")
-                        categoryFilterButton(id: "SPECIAL", title: "🔀 Global (1)")
+    private var stackedCarouselStage: some View {
+        VStack(spacing: 8) {
+            // Filter Pills along top of Carousel
+            HStack(spacing: 8) {
+                categoryFilterButton(id: "ALL", title: "All Channels (\(SenseMeChannel.allChannels.count))")
+                categoryFilterButton(id: "TIME", title: "🌅 Time of Day (5)")
+                categoryFilterButton(id: "MOOD", title: "⚡ Mood & Style (10)")
+                categoryFilterButton(id: "SPECIAL", title: "🔀 Global (1)")
+
+                Spacer()
+
+                // Step count indicator e.g. "3 of 16"
+                Text("\(activeIndex + 1) of \(displayedChannels.count)")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(WalkmanTheme.silverMuted)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color.white.opacity(0.04))
+                    .clipShape(Capsule())
+            }
+            .padding(.horizontal, 22)
+            .padding(.top, 6)
+
+            // The 3D Overlapping Card Stack Deck with Drag & Stepper Arrows
+            ZStack {
+                // Interactive Stack Container
+                GeometryReader { geo in
+                    let centerX = geo.size.width / 2
+                    let centerY = geo.size.height / 2
+
+                    ZStack {
+                        // Render all visible cards layered in 3D Stack order
+                        ForEach(Array(displayedChannels.enumerated()), id: \.element.id) { index, ch in
+                            let relativeIndex = CGFloat(index - activeIndex) - (dragOffset / 200.0)
+
+                            if abs(relativeIndex) <= 3.2 {
+                                let isFront = abs(relativeIndex) < 0.45
+                                let chTracks = tracks(for: ch)
+                                let isActiveTime = ch.isCurrentlyActive(at: currentHour)
+
+                                SenseMeStackedCard(
+                                    channel: ch,
+                                    tracks: chTracks,
+                                    isFront: isFront,
+                                    isActiveTime: isActiveTime,
+                                    onSelect: {
+                                        withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
+                                            self.activeIndex = index
+                                        }
+                                    },
+                                    onQuickPlay: {
+                                        quickPlay(channel: ch)
+                                    }
+                                )
+                                .offset(x: cardXOffset(for: relativeIndex))
+                                .scaleEffect(cardScale(for: relativeIndex))
+                                .opacity(cardOpacity(for: relativeIndex))
+                                .rotation3DEffect(
+                                    .degrees(cardRotationY(for: relativeIndex)),
+                                    axis: (x: 0, y: 1, z: 0)
+                                )
+                                .zIndex(cardZIndex(for: relativeIndex))
+                                .position(x: centerX, y: centerY - 2)
+                            }
+                        }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture()
+                            .onChanged { value in
+                                self.dragOffset = value.translation.width
+                            }
+                            .onEnded { value in
+                                let threshold: CGFloat = 55.0
+                                if value.translation.width < -threshold && activeIndex < displayedChannels.count - 1 {
+                                    withAnimation(.spring(response: 0.36, dampingFraction: 0.78)) {
+                                        activeIndex += 1
+                                    }
+                                } else if value.translation.width > threshold && activeIndex > 0 {
+                                    withAnimation(.spring(response: 0.36, dampingFraction: 0.78)) {
+                                        activeIndex -= 1
+                                    }
+                                }
+                                withAnimation(.spring(response: 0.34, dampingFraction: 0.8)) {
+                                    dragOffset = 0
+                                }
+                            }
+                    )
+                }
+
+                // Left Slider Floating Arrow Button
+                HStack {
+                    Button(action: { stepChannel(offset: -1) }) {
+                        ZStack {
+                            Circle()
+                                .fill(Color(red: 0.08, green: 0.08, blue: 0.10).opacity(0.85))
+                                .frame(width: 36, height: 36)
+                            Circle()
+                                .stroke(Color.white.opacity(activeIndex > 0 ? 0.20 : 0.06), lineWidth: 1)
+                                .frame(width: 36, height: 36)
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(activeIndex > 0 ? Color.white : WalkmanTheme.silverMuted.opacity(0.3))
+                        }
+                        .shadow(color: Color.black.opacity(0.4), radius: 4, x: 0, y: 2)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(activeIndex == 0)
+                    .padding(.leading, 18)
 
                     Spacer()
 
-                    // Previous / Next Step Buttons
-                    HStack(spacing: 6) {
-                        Button(action: { stepChannel(offset: -1, proxy: proxy) }) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(WalkmanTheme.silverLight)
-                                .frame(width: 26, height: 26)
-                                .background(Color.white.opacity(0.05))
-                                .clipShape(Circle())
-                                .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 0.8))
-                        }
-                        .buttonStyle(.plain)
-                        .help("Previous Channel")
-
-                        Button(action: { stepChannel(offset: 1, proxy: proxy) }) {
+                    // Right Slider Floating Arrow Button
+                    Button(action: { stepChannel(offset: 1) }) {
+                        ZStack {
+                            Circle()
+                                .fill(Color(red: 0.08, green: 0.08, blue: 0.10).opacity(0.85))
+                                .frame(width: 36, height: 36)
+                            Circle()
+                                .stroke(Color.white.opacity(activeIndex < displayedChannels.count - 1 ? 0.20 : 0.06), lineWidth: 1)
+                                .frame(width: 36, height: 36)
                             Image(systemName: "chevron.right")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(WalkmanTheme.silverLight)
-                                .frame(width: 26, height: 26)
-                                .background(Color.white.opacity(0.05))
-                                .clipShape(Circle())
-                                .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 0.8))
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(activeIndex < displayedChannels.count - 1 ? Color.white : WalkmanTheme.silverMuted.opacity(0.3))
                         }
-                        .buttonStyle(.plain)
-                        .help("Next Channel")
+                        .shadow(color: Color.black.opacity(0.4), radius: 4, x: 0, y: 2)
                     }
-                }
-                .padding(.horizontal, 22)
-                .padding(.top, 8)
-
-                // Horizontal Carousel ScrollView with 3D Depth Transitions
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 16) {
-                        // Left breathing margin
-                        Spacer().frame(width: 14)
-
-                        ForEach(displayedChannels) { ch in
-                            let isSelected = selectedChannel.id == ch.id
-                            let chTracks = tracks(for: ch)
-                            let isActiveTime = ch.isCurrentlyActive(at: currentHour)
-
-                            SenseMeCarouselCard(
-                                channel: ch,
-                                tracks: chTracks,
-                                isSelected: isSelected,
-                                isActiveTime: isActiveTime,
-                                onSelect: {
-                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.76)) {
-                                        self.selectedChannel = ch
-                                        proxy.scrollTo(ch.id, anchor: .center)
-                                    }
-                                },
-                                onQuickPlay: {
-                                    quickPlay(channel: ch)
-                                }
-                            )
-                            .id(ch.id)
-                            .carouselScrollTransition()
-                        }
-
-                        // Right breathing margin
-                        Spacer().frame(width: 14)
-                    }
-                    .padding(.vertical, 8)
+                    .buttonStyle(.plain)
+                    .disabled(activeIndex >= displayedChannels.count - 1)
+                    .padding(.trailing, 18)
                 }
             }
+
+            // Pagination Dots Indicator along bottom of Stack
+            HStack(spacing: 5) {
+                ForEach(0..<displayedChannels.count, id: \.self) { idx in
+                    Circle()
+                        .fill(idx == activeIndex ? WalkmanTheme.hiResGold : Color.white.opacity(0.18))
+                        .frame(width: idx == activeIndex ? 6.5 : 4.5, height: idx == activeIndex ? 6.5 : 4.5)
+                        .scaleEffect(idx == activeIndex ? 1.2 : 1.0)
+                        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: activeIndex)
+                        .onTapGesture {
+                            withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
+                                activeIndex = idx
+                            }
+                        }
+                }
+            }
+            .padding(.bottom, 6)
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // 3D STACK CALCULATIONS
+    // -------------------------------------------------------------------------
+    private func cardXOffset(for relativeIndex: CGFloat) -> CGFloat {
+        // Overlapping offset: each side card peeks out by ~145pt
+        let clamped = max(-3.0, min(3.0, relativeIndex))
+        return clamped * 145.0
+    }
+
+    private func cardScale(for relativeIndex: CGFloat) -> CGFloat {
+        let absDist = abs(relativeIndex)
+        return max(0.70, 1.0 - (absDist * 0.11))
+    }
+
+    private func cardOpacity(for relativeIndex: CGFloat) -> Double {
+        let absDist = abs(relativeIndex)
+        if absDist > 2.8 { return 0.0 }
+        return max(0.0, 1.0 - Double(absDist) * 0.26)
+    }
+
+    private func cardRotationY(for relativeIndex: CGFloat) -> Double {
+        let clamped = max(-2.5, min(2.5, relativeIndex))
+        return Double(clamped) * -13.0
+    }
+
+    private func cardZIndex(for relativeIndex: CGFloat) -> Double {
+        let absDist = abs(relativeIndex)
+        return 100.0 - Double(absDist) * 10.0
     }
 
     private func categoryFilterButton(id: String, title: String) -> some View {
         Button(action: {
             withAnimation(.spring(response: 0.28, dampingFraction: 0.76)) {
                 selectedCategoryFilter = id
-                if let first = displayedChannels.first {
-                    selectedChannel = first
-                }
+                activeIndex = 0
             }
         }) {
             Text(title)
@@ -743,20 +850,12 @@ public struct SenseMeChannelsView: View {
         .buttonStyle(.plain)
     }
 
-    private func stepChannel(offset: Int, proxy: ScrollViewProxy) {
+    private func stepChannel(offset: Int) {
         let channels = displayedChannels
         guard !channels.isEmpty else { return }
-        guard let currentIndex = channels.firstIndex(where: { $0.id == selectedChannel.id }) else {
-            selectedChannel = channels[0]
-            proxy.scrollTo(channels[0].id, anchor: .center)
-            return
-        }
-
-        let newIndex = max(0, min(channels.count - 1, currentIndex + offset))
-        let target = channels[newIndex]
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.76)) {
-            self.selectedChannel = target
-            proxy.scrollTo(target.id, anchor: .center)
+        let newIndex = max(0, min(channels.count - 1, activeIndex + offset))
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.78)) {
+            self.activeIndex = newIndex
         }
     }
 
@@ -1062,7 +1161,6 @@ public struct SenseMeChannelsView: View {
                 return true
             }
 
-            // Fallback heuristics using 12-Tone acoustic metrics if channels array not populated
             if let bpm = tr.senseMeBpm, let val = tr.senseMeValence, let aro = tr.senseMeArousal {
                 switch channel.id {
                 case "energetic":
@@ -1156,13 +1254,14 @@ public struct SenseMeChannelsView: View {
 }
 
 // =============================================================================
-// SENSEME CAROUSEL CARD COMPONENT (HORIZONTAL STACK WITH PEAKING VINYL)
+// BIGGER SENSEME STACKED CARD COMPONENT
+// 310pt x 185pt Card with Peeking Vinyl Disc & Tactile Depth
 // =============================================================================
 
-private struct SenseMeCarouselCard: View {
+private struct SenseMeStackedCard: View {
     let channel: SenseMeChannel
     let tracks: [Track]
-    let isSelected: Bool
+    let isFront: Bool
     let isActiveTime: Bool
     let onSelect: () -> Void
     let onQuickPlay: () -> Void
@@ -1191,43 +1290,66 @@ private struct SenseMeCarouselCard: View {
     }
 
     var body: some View {
-        Button(action: onSelect) {
+        Button(action: {
+            if isFront {
+                onQuickPlay()
+            } else {
+                onSelect()
+            }
+        }) {
             ZStack(alignment: .topTrailing) {
-                // Tactile Peeking Vinyl Record (Slides out when active or hovered)
+                // Tactile Peeking Vinyl Record (Slides out from behind the sleeve on front card)
                 peekingVinylRecord
-                    .offset(x: (isSelected || isHovered) ? 24 : 0, y: (isSelected || isHovered) ? -14 : 0)
-                    .opacity((isSelected || isHovered) ? 0.95 : 0.0)
-                    .scaleEffect((isSelected || isHovered) ? 1.0 : 0.8)
-                    .animation(.spring(response: 0.36, dampingFraction: 0.72), value: isSelected || isHovered)
+                    .offset(x: (isFront || isHovered) ? 32 : 0, y: (isFront || isHovered) ? -16 : 0)
+                    .opacity((isFront || isHovered) ? 0.95 : 0.0)
+                    .scaleEffect((isFront || isHovered) ? 1.0 : 0.8)
+                    .animation(.spring(response: 0.36, dampingFraction: 0.72), value: isFront || isHovered)
 
-                // Foreground Card Body
+                // Foreground Card Body (310pt width x 185pt height)
                 VStack(alignment: .leading, spacing: 0) {
-                    // Artwork / Mood Tile
+                    // Artwork / Mood Tile (122pt)
                     ZStack(alignment: .topTrailing) {
                         artworkOrPlaceholderTile
-                            .frame(height: 108)
+                            .frame(height: 122)
                             .clipped()
 
-                        // "CURRENT TIME" Badge
-                        if isActiveTime {
-                            HStack(spacing: 4) {
-                                Circle()
-                                    .fill(WalkmanTheme.hiResGold)
-                                    .frame(width: 5, height: 5)
-                                Text("CURRENT TIME")
-                                    .font(.system(size: 8, weight: .heavy))
-                                    .foregroundStyle(Color.black)
+                        // Top Badges (Category Pill on Left, Current Time on Right)
+                        VStack {
+                            HStack {
+                                Text(channel.category.rawValue.uppercased())
+                                    .font(.system(size: 8.5, weight: .heavy))
+                                    .foregroundStyle(Color.white.opacity(0.85))
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3)
+                                    .background(Color.black.opacity(0.60))
+                                    .clipShape(Capsule())
+                                    .overlay(Capsule().stroke(Color.white.opacity(0.14), lineWidth: 0.6))
+                                    .padding(8)
+
+                                Spacer()
+
+                                if isActiveTime {
+                                    HStack(spacing: 4) {
+                                        Circle()
+                                            .fill(WalkmanTheme.hiResGold)
+                                            .frame(width: 5, height: 5)
+                                        Text("CURRENT TIME")
+                                            .font(.system(size: 8, weight: .heavy))
+                                            .foregroundStyle(Color.black)
+                                    }
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3.5)
+                                    .background(WalkmanTheme.hiResGoldGradient)
+                                    .clipShape(Capsule())
+                                    .shadow(color: Color.black.opacity(0.35), radius: 2, x: 0, y: 1)
+                                    .padding(8)
+                                }
                             }
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 3)
-                            .background(WalkmanTheme.hiResGoldGradient)
-                            .clipShape(Capsule())
-                            .shadow(color: Color.black.opacity(0.35), radius: 2, x: 0, y: 1)
-                            .padding(6)
+                            Spacer()
                         }
 
-                        // Hover / Playing Quick Play Button
-                        if (isHovered || isPlayingThisChannel || isSelected) && !tracks.isEmpty {
+                        // Front Card Play/Pause Button in Lower Right of Tile
+                        if isFront && !tracks.isEmpty {
                             VStack {
                                 Spacer()
                                 HStack {
@@ -1236,28 +1358,28 @@ private struct SenseMeCarouselCard: View {
                                         ZStack {
                                             Circle()
                                                 .fill(WalkmanTheme.hiResGoldGradient)
-                                                .frame(width: 28, height: 28)
+                                                .frame(width: 32, height: 32)
                                                 .shadow(color: Color.black.opacity(0.35), radius: 3, x: 0, y: 2)
 
                                             Image(systemName: isPlayingThisChannel ? "pause.fill" : "play.fill")
-                                                .font(.system(size: 11, weight: .bold))
+                                                .font(.system(size: 13, weight: .bold))
                                                 .foregroundStyle(Color.black)
-                                                .offset(x: isPlayingThisChannel ? 0 : 0.8)
+                                                .offset(x: isPlayingThisChannel ? 0 : 1)
                                         }
                                     }
                                     .buttonStyle(.plain)
-                                    .padding(6)
+                                    .padding(8)
                                 }
                             }
                         }
                     }
 
-                    // Card Footer Info
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack(spacing: 5) {
+                    // Card Footer Info (63pt)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
                             Text(channel.name)
-                                .font(.system(size: 13, weight: isSelected ? .heavy : .bold))
-                                .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : (isHovered ? Color.white : WalkmanTheme.silverLight))
+                                .font(.system(size: 15, weight: isFront ? .heavy : .bold))
+                                .foregroundStyle(isFront ? WalkmanTheme.hiResGold : (isHovered ? Color.white : WalkmanTheme.silverLight))
                                 .lineLimit(1)
 
                             if isPlayingThisChannel {
@@ -1266,56 +1388,59 @@ private struct SenseMeCarouselCard: View {
 
                             Spacer()
 
-                            Text("\(tracks.count)")
-                                .font(.system(size: 10.5, weight: .semibold))
-                                .foregroundStyle(WalkmanTheme.silverMuted)
+                            HStack(spacing: 3) {
+                                Image(systemName: "music.note")
+                                    .font(.system(size: 9.5))
+                                Text("\(tracks.count) Songs")
+                                    .font(.system(size: 11, weight: .semibold))
+                            }
+                            .foregroundStyle(WalkmanTheme.silverMuted)
                         }
 
                         HStack(spacing: 4) {
-                            Text(durationLabel)
-                                .font(.system(size: 9.5))
-                                .foregroundStyle(WalkmanTheme.silverDark)
+                            Text(channel.subtitle)
+                                .font(.system(size: 11))
+                                .foregroundStyle(WalkmanTheme.silverMuted)
+                                .lineLimit(1)
 
                             Spacer()
 
-                            if tracks.isEmpty {
-                                Text("No tracks")
-                                    .font(.system(size: 9))
-                                    .foregroundStyle(WalkmanTheme.silverMuted.opacity(0.6))
-                            }
+                            Text(durationLabel)
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(WalkmanTheme.silverDark)
                         }
                     }
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(Color.white.opacity(isSelected ? 0.04 : 0.02))
+                    .background(Color.white.opacity(isFront ? 0.04 : 0.02))
                 }
-                .frame(width: 195)
+                .frame(width: 310, height: 185)
                 .background(
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .fill(Color.white.opacity(isSelected ? 0.06 : (isHovered ? 0.04 : 0.02)))
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .fill(Color(red: 0.08, green: 0.08, blue: 0.10).opacity(isFront ? 0.96 : 0.88))
                 )
-                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
                         .stroke(
-                            isSelected ?
+                            isFront ?
                                 WalkmanTheme.hiResGold.opacity(0.85) :
                                 (isActiveTime ?
                                     WalkmanTheme.hiResGold.opacity(0.40) :
-                                    Color.white.opacity(isHovered ? 0.22 : 0.08)),
-                            lineWidth: isSelected ? 1.5 : (isActiveTime ? 1.0 : 0.8)
+                                    Color.white.opacity(isHovered ? 0.24 : 0.09)),
+                            lineWidth: isFront ? 1.6 : (isActiveTime ? 1.0 : 0.8)
                         )
                 )
             }
+            .frame(width: 310, height: 185)
             .shadow(
-                color: Color.black.opacity(isSelected ? 0.35 : (isHovered ? 0.22 : 0.12)),
-                radius: isSelected ? 7 : (isHovered ? 5 : 2),
+                color: isFront ?
+                    channel.gradientColors[0].opacity(0.40) :
+                    Color.black.opacity(0.35),
+                radius: isFront ? 12 : 6,
                 x: 0,
-                y: isSelected ? 3 : 1
+                y: isFront ? 4 : 2
             )
-            .scaleEffect(isSelected ? 1.04 : (isHovered ? 1.01 : 0.93))
-            .opacity(isSelected ? 1.0 : (isHovered ? 0.92 : 0.72))
-            .animation(.spring(response: 0.32, dampingFraction: 0.76), value: isSelected || isHovered)
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -1339,29 +1464,32 @@ private struct SenseMeCarouselCard: View {
                             Color(red: 0.04, green: 0.04, blue: 0.05)
                         ],
                         center: .center,
-                        startRadius: 4,
-                        endRadius: 45
+                        startRadius: 5,
+                        endRadius: 58
                     )
                 )
-                .frame(width: 80, height: 80)
-                .shadow(color: Color.black.opacity(0.45), radius: 4, x: 2, y: 1)
+                .frame(width: 105, height: 105)
+                .shadow(color: Color.black.opacity(0.50), radius: 5, x: 2, y: 2)
 
             Circle()
                 .stroke(Color.white.opacity(0.07), lineWidth: 0.8)
-                .frame(width: 68, height: 68)
+                .frame(width: 90, height: 90)
             Circle()
                 .stroke(Color.white.opacity(0.05), lineWidth: 0.8)
-                .frame(width: 56, height: 56)
+                .frame(width: 74, height: 74)
+            Circle()
+                .stroke(Color.white.opacity(0.06), lineWidth: 0.8)
+                .frame(width: 58, height: 58)
 
             Circle()
                 .fill(channel.gradientColors[0].opacity(0.85))
-                .frame(width: 26, height: 26)
+                .frame(width: 34, height: 34)
 
             Circle()
                 .fill(Color(red: 0.08, green: 0.08, blue: 0.10))
-                .frame(width: 6, height: 6)
+                .frame(width: 8, height: 8)
         }
-        .rotationEffect(.degrees((isSelected || isHovered) ? 30 : 0))
+        .rotationEffect(.degrees((isFront || isHovered) ? 28 : 0))
     }
 
     @ViewBuilder
@@ -1389,19 +1517,19 @@ private struct SenseMeCarouselCard: View {
                         startPoint: .top,
                         endPoint: .bottom
                     )
-                    .frame(height: 22)
+                    .frame(height: 25)
                     Spacer()
                 }
 
-                VStack(spacing: 4) {
+                VStack(spacing: 5) {
                     Image(systemName: channel.icon)
-                        .font(.system(size: 24, weight: .medium))
+                        .font(.system(size: 32, weight: .medium))
                         .foregroundStyle(Color.white.opacity(0.92))
                         .shadow(color: Color.black.opacity(0.4), radius: 3, x: 0, y: 1)
 
                     Text(channel.name.uppercased())
-                        .font(.system(size: 10, weight: .heavy))
-                        .tracking(1.2)
+                        .font(.system(size: 11, weight: .heavy))
+                        .tracking(1.4)
                         .foregroundStyle(Color.white.opacity(0.95))
                         .shadow(color: Color.black.opacity(0.5), radius: 2, x: 0, y: 1)
                 }
@@ -1956,25 +2084,5 @@ extension Track {
     var senseMeMoodString: String {
         guard let val = senseMeValence else { return "0.00" }
         return String(format: "%.2f", val)
-    }
-}
-
-extension View {
-    @ViewBuilder
-    func carouselScrollTransition() -> some View {
-        if #available(macOS 14.0, *) {
-            self.scrollTransition(.interactive, axis: .horizontal) { content, phase in
-                content
-                    .scaleEffect(phase.isIdentity ? 1.03 : 0.88)
-                    .opacity(phase.isIdentity ? 1.0 : 0.65)
-                    .rotation3DEffect(
-                        .degrees(Double(phase.value) * -12),
-                        axis: (x: 0, y: 1, z: 0)
-                    )
-                    .offset(y: phase.isIdentity ? 0 : 5)
-            }
-        } else {
-            self
-        }
     }
 }
