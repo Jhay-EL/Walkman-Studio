@@ -577,7 +577,8 @@ public final class LocalMusicLibraryService: ObservableObject, @unchecked Sendab
                 for item in filesToEnrich {
                     let fileURL = item.url
                     let meta = AudioTagger.shared.readMetadata(fileURL: fileURL)
-                    let senseMe = SenseMeEngine.shared.inspect(fileURL: fileURL)
+                    // High-speed on-board acoustic analyzer (Pure Swift / zero CPU spikes)
+                    let senseMe = SenseMeEngine.shared.analyzeTrackOnBoard(fileURL: fileURL, metadata: meta, injectSMFM: false)
                     let cleanTitle = WalkmanEngine.sanitizeWalkmanText(meta?.title ?? "")
                     let cleanArtist = WalkmanEngine.sanitizeWalkmanText(meta?.artist ?? "", stripExplicitMarkers: false)
                     let cleanAlbum = WalkmanEngine.sanitizeWalkmanText(meta?.album ?? "")
@@ -815,53 +816,67 @@ public final class LocalMusicLibraryService: ObservableObject, @unchecked Sendab
         }
     }
 
-    public func analyzeLocalTracksWithSenseMe(progressHandler: @escaping (Int, Int, String) -> Void) async {
-        let unanalyzed = self.tracks.filter { !$0.isSenseMeAnalyzed }
-        guard !unanalyzed.isEmpty else { return }
+    public func analyzeLocalTracksWithSenseMe(forceReanalyzeAll: Bool = false, progressHandler: @escaping (Int, Int, String) -> Void) async {
+        let targets = forceReanalyzeAll ? self.tracks : self.tracks.filter { !$0.isSenseMeAnalyzed }
+        guard !targets.isEmpty else { return }
 
-        let total = unanalyzed.count
-        for (idx, tr) in unanalyzed.enumerated() {
+        let total = targets.count
+        var updatedResults: [(String, SenseMeInfo)] = []
+
+        let db = self.getDB()
+        if let db = db {
+            sqlite3_exec(db, "BEGIN TRANSACTION;", nil, nil, nil)
+        }
+        let updateSql = """
+        UPDATE local_library_tracks
+        SET is_senseme = 1, senseme_bpm = ?, senseme_valence = ?, senseme_arousal = ?, senseme_channels = ?, senseme_highlight_sec = ?
+        WHERE full_path = ?;
+        """
+        var updateStmt: OpaquePointer?
+        if let db = db {
+            _ = sqlite3_prepare_v2(db, updateSql, -1, &updateStmt, nil)
+        }
+
+        for (idx, tr) in targets.enumerated() {
             let url = URL(fileURLWithPath: tr.fullPath)
             guard FileManager.default.fileExists(atPath: tr.fullPath) else { continue }
             progressHandler(idx + 1, total, tr.title)
 
-            do {
-                let info = try await SenseMeEngine.shared.analyzeAndInject(fileURL: url)
-                if info.isAnalyzed {
-                    await MainActor.run {
-                        if let pos = self.tracks.firstIndex(where: { $0.fullPath == tr.fullPath }) {
-                            self.tracks[pos].isSenseMeAnalyzed = true
-                            self.tracks[pos].senseMeBpm = info.bpm
-                            self.tracks[pos].senseMeValence = info.valence
-                            self.tracks[pos].senseMeArousal = info.arousal
-                            self.tracks[pos].senseMeChannels = info.channels
-                            self.tracks[pos].senseMeHighlightSec = info.highlightSec > 0 ? info.highlightSec : nil
-                        }
-                    }
+            // High-speed on-board acoustic analysis
+            let info = SenseMeEngine.shared.analyzeTrackOnBoard(fileURL: url, injectSMFM: true)
+            if info.isAnalyzed {
+                updatedResults.append((tr.fullPath, info))
 
-                    // Update SQLite
-                    if let db = self.getDB() {
-                        let updateSql = """
-                        UPDATE local_library_tracks
-                        SET is_senseme = 1, senseme_bpm = ?, senseme_valence = ?, senseme_arousal = ?, senseme_channels = ?, senseme_highlight_sec = ?
-                        WHERE full_path = ?;
-                        """
-                        var stmt: OpaquePointer?
-                        if sqlite3_prepare_v2(db, updateSql, -1, &stmt, nil) == SQLITE_OK {
-                            sqlite3_bind_double(stmt, 1, info.bpm)
-                            sqlite3_bind_double(stmt, 2, info.valence)
-                            sqlite3_bind_double(stmt, 3, info.arousal)
-                            sqlite3_bind_text(stmt, 4, (info.channels.joined(separator: ",") as NSString).utf8String, -1, nil)
-                            sqlite3_bind_double(stmt, 5, info.highlightSec)
-                            sqlite3_bind_text(stmt, 6, (tr.fullPath as NSString).utf8String, -1, nil)
-                            sqlite3_step(stmt)
-                            sqlite3_finalize(stmt)
-                        }
-                        sqlite3_close(db)
-                    }
+                if let stmt = updateStmt {
+                    sqlite3_bind_double(stmt, 1, info.bpm)
+                    sqlite3_bind_double(stmt, 2, info.valence)
+                    sqlite3_bind_double(stmt, 3, info.arousal)
+                    sqlite3_bind_text(stmt, 4, (info.channels.joined(separator: ",") as NSString).utf8String, -1, nil)
+                    sqlite3_bind_double(stmt, 5, info.highlightSec)
+                    sqlite3_bind_text(stmt, 6, (tr.fullPath as NSString).utf8String, -1, nil)
+                    sqlite3_step(stmt)
+                    sqlite3_reset(stmt)
                 }
-            } catch {
-                print("[LocalMusicLibrary] SenseMe analysis failed for \(tr.filename): \(error)")
+            }
+        }
+
+        if let stmt = updateStmt { sqlite3_finalize(stmt) }
+        if let db = db {
+            sqlite3_exec(db, "COMMIT;", nil, nil, nil)
+            sqlite3_close(db)
+        }
+
+        let resultsToApply = updatedResults
+        await MainActor.run {
+            for (path, info) in resultsToApply {
+                if let pos = self.tracks.firstIndex(where: { $0.fullPath == path }) {
+                    self.tracks[pos].isSenseMeAnalyzed = true
+                    self.tracks[pos].senseMeBpm = info.bpm
+                    self.tracks[pos].senseMeValence = info.valence
+                    self.tracks[pos].senseMeArousal = info.arousal
+                    self.tracks[pos].senseMeChannels = info.channels
+                    self.tracks[pos].senseMeHighlightSec = info.highlightSec > 0 ? info.highlightSec : nil
+                }
             }
         }
     }

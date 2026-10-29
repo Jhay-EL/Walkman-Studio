@@ -407,6 +407,9 @@ public struct SenseMeChannelsView: View {
     @State private var trackFilterQuery: String = ""
     @State private var dragOffset: CGFloat = 0.0
     @State private var lastStepTimestamp: TimeInterval = 0
+    @State private var isStepping: Bool = false
+    @State private var channelAutoPlayTask: Task<Void, Never>? = nil
+    @State private var randomizedPlaylists: [String: [Track]] = [:]
     @State private var isAnalyzing: Bool = false
     @State private var analysisCurrent: Int = 0
     @State private var analysisTotal: Int = 0
@@ -510,11 +513,29 @@ public struct SenseMeChannelsView: View {
         .sheet(isPresented: $showAnalysisSheet) {
             batchAnalysisProgressSheet
         }
+        .onChange(of: activeIndex) { newIndex in
+            handleChannelSwitched(to: newIndex)
+        }
         .onAppear {
             // Default select the channel matching the current time of day
             let hour = Calendar.current.component(.hour, from: Date())
             if let idx = displayedChannels.firstIndex(where: { $0.isCurrentlyActive(at: hour) }) {
                 self.activeIndex = idx
+            }
+            _ = generateRandomizedPlaylist(for: selectedChannel)
+
+            // Auto on-board check: if any unanalyzed tracks or legacy multi-channel tracks exist, re-analyze on-board in background
+            let needsReanalysis = localLibrary.tracks.contains { tr in
+                !tr.isSenseMeAnalyzed || (tr.senseMeChannels.contains("Morning") && tr.senseMeChannels.contains("Midnight") && tr.senseMeChannels.contains("Daytime"))
+            }
+            if needsReanalysis {
+                Task {
+                    await localLibrary.analyzeLocalTracksWithSenseMe(forceReanalyzeAll: true) { _, _, _ in }
+                    await MainActor.run {
+                        randomizedPlaylists.removeAll()
+                        _ = generateRandomizedPlaylist(for: selectedChannel)
+                    }
+                }
             }
         }
     }
@@ -734,9 +755,17 @@ public struct SenseMeChannelsView: View {
                                 relativeIndex: relativeIndex,
                                 isActiveTime: isActiveTime,
                                 onSelect: {
-                                    withAnimation(.spring(response: 0.32, dampingFraction: 0.92)) {
+                                    guard !isStepping else { return }
+                                    let now = ProcessInfo.processInfo.systemUptime
+                                    guard now - lastStepTimestamp > 0.42 else { return }
+                                    lastStepTimestamp = now
+                                    isStepping = true
+                                    withAnimation(.spring(response: 0.38, dampingFraction: 0.88)) {
                                         self.activeIndex = index
                                         self.dragOffset = 0
+                                    }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) {
+                                        self.isStepping = false
                                     }
                                 },
                                 onQuickPlay: {
@@ -763,9 +792,11 @@ public struct SenseMeChannelsView: View {
                     .gesture(
                         DragGesture()
                             .onChanged { value in
+                                guard !isStepping else { return }
                                 self.dragOffset = value.translation.width
                             }
                             .onEnded { value in
+                                guard !isStepping else { return }
                                 let threshold: CGFloat = 60.0
                                 var targetIndex = activeIndex
                                 if value.translation.width < -threshold && activeIndex < displayedChannels.count - 1 {
@@ -773,9 +804,27 @@ public struct SenseMeChannelsView: View {
                                 } else if value.translation.width > threshold && activeIndex > 0 {
                                     targetIndex -= 1
                                 }
-                                withAnimation(.spring(response: 0.32, dampingFraction: 0.92)) {
+                                guard targetIndex != activeIndex else {
+                                    withAnimation(.spring(response: 0.32, dampingFraction: 0.92)) {
+                                        dragOffset = 0
+                                    }
+                                    return
+                                }
+                                let now = ProcessInfo.processInfo.systemUptime
+                                guard now - lastStepTimestamp > 0.35 else {
+                                    withAnimation(.spring(response: 0.32, dampingFraction: 0.92)) {
+                                        dragOffset = 0
+                                    }
+                                    return
+                                }
+                                lastStepTimestamp = now
+                                isStepping = true
+                                withAnimation(.spring(response: 0.38, dampingFraction: 0.88)) {
                                     activeIndex = targetIndex
                                     dragOffset = 0
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) {
+                                    self.isStepping = false
                                 }
                             }
                     )
@@ -789,16 +838,16 @@ public struct SenseMeChannelsView: View {
                                 .fill(Color(red: 0.08, green: 0.08, blue: 0.10).opacity(0.85))
                                 .frame(width: 36, height: 36)
                             Circle()
-                                .stroke(Color.white.opacity(activeIndex > 0 ? 0.20 : 0.06), lineWidth: 1)
+                                .stroke(Color.white.opacity(activeIndex > 0 && !isStepping ? 0.20 : 0.06), lineWidth: 1)
                                 .frame(width: 36, height: 36)
                             Image(systemName: "chevron.left")
                                 .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(activeIndex > 0 ? Color.white : WalkmanTheme.silverMuted.opacity(0.3))
+                                .foregroundStyle(activeIndex > 0 && !isStepping ? Color.white : WalkmanTheme.silverMuted.opacity(0.3))
                         }
                         .shadow(color: Color.black.opacity(0.4), radius: 4, x: 0, y: 2)
                     }
                     .buttonStyle(.plain)
-                    .disabled(activeIndex == 0)
+                    .disabled(isStepping || activeIndex == 0)
                     .padding(.leading, 18)
 
                     Spacer()
@@ -810,16 +859,16 @@ public struct SenseMeChannelsView: View {
                                 .fill(Color(red: 0.08, green: 0.08, blue: 0.10).opacity(0.85))
                                 .frame(width: 36, height: 36)
                             Circle()
-                                .stroke(Color.white.opacity(activeIndex < displayedChannels.count - 1 ? 0.20 : 0.06), lineWidth: 1)
+                                .stroke(Color.white.opacity(activeIndex < displayedChannels.count - 1 && !isStepping ? 0.20 : 0.06), lineWidth: 1)
                                 .frame(width: 36, height: 36)
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(activeIndex < displayedChannels.count - 1 ? Color.white : WalkmanTheme.silverMuted.opacity(0.3))
+                                .foregroundStyle(activeIndex < displayedChannels.count - 1 && !isStepping ? Color.white : WalkmanTheme.silverMuted.opacity(0.3))
                         }
                         .shadow(color: Color.black.opacity(0.4), radius: 4, x: 0, y: 2)
                     }
                     .buttonStyle(.plain)
-                    .disabled(activeIndex >= displayedChannels.count - 1)
+                    .disabled(isStepping || activeIndex >= displayedChannels.count - 1)
                     .padding(.trailing, 18)
                 }
             }
@@ -833,9 +882,17 @@ public struct SenseMeChannelsView: View {
                         .scaleEffect(idx == activeIndex ? 1.2 : 1.0)
                         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: activeIndex)
                         .onTapGesture {
-                            withAnimation(.spring(response: 0.32, dampingFraction: 0.92)) {
+                            guard !isStepping else { return }
+                            let now = ProcessInfo.processInfo.systemUptime
+                            guard now - lastStepTimestamp > 0.42 else { return }
+                            lastStepTimestamp = now
+                            isStepping = true
+                            withAnimation(.spring(response: 0.38, dampingFraction: 0.88)) {
                                 activeIndex = idx
                                 dragOffset = 0
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) {
+                                self.isStepping = false
                             }
                         }
                 }
@@ -928,14 +985,20 @@ public struct SenseMeChannelsView: View {
         guard !channels.isEmpty else { return }
 
         // Spam prevention throttle: ensure animations settle cleanly without compounding
+        guard !isStepping else { return }
         let now = ProcessInfo.processInfo.systemUptime
-        guard now - lastStepTimestamp > 0.16 else { return }
+        guard now - lastStepTimestamp > 0.42 else { return }
         lastStepTimestamp = now
+        isStepping = true
 
         let newIndex = max(0, min(channels.count - 1, activeIndex + offset))
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.92)) {
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.88)) {
             self.activeIndex = newIndex
             self.dragOffset = 0
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) {
+            self.isStepping = false
         }
     }
 
@@ -1230,7 +1293,104 @@ public struct SenseMeChannelsView: View {
     // -------------------------------------------------------------------------
     // LOGIC & ACTIONS
     // -------------------------------------------------------------------------
+    private func handleChannelSwitched(to newIndex: Int) {
+        channelAutoPlayTask?.cancel()
+        channelAutoPlayTask = Task {
+            // Debounce pause: wait 380ms for card animation to land and settle gracefully
+            try? await Task.sleep(nanoseconds: 380_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                autoPlayCurrentChannel()
+            }
+        }
+    }
+
+    private func autoPlayCurrentChannel() {
+        let channel = selectedChannel
+        // Generate fresh randomized playlist weighted by mood/vibe and time of day
+        let currentTracks = generateRandomizedPlaylist(for: channel)
+        guard !currentTracks.isEmpty else { return }
+
+        let firstTrack = currentTracks[0]
+        player.isShuffle = true
+        let startTime = firstTrack.senseMeHighlightSec ?? 0.0
+        player.play(
+            track: firstTrack,
+            coverArt: nil,
+            in: currentTracks,
+            startTime: startTime > 5.0 ? startTime : nil
+        )
+    }
+
     private func tracks(for channel: SenseMeChannel) -> [Track] {
+        if let cached = randomizedPlaylists[channel.id], !cached.isEmpty {
+            return cached
+        }
+        return generateRandomizedPlaylist(for: channel)
+    }
+
+    private func generateRandomizedPlaylist(for channel: SenseMeChannel) -> [Track] {
+        let candidates = candidateTracks(for: channel)
+        guard !candidates.isEmpty else {
+            randomizedPlaylists[channel.id] = []
+            return []
+        }
+
+        let hour = Calendar.current.component(.hour, from: Date())
+        let scored = candidates.map { tr -> (track: Track, score: Double) in
+            var score = 50.0
+            if let aro = tr.senseMeArousal, let val = tr.senseMeValence, let bpm = tr.senseMeBpm {
+                switch channel.id {
+                case "energetic":
+                    score += aro * 30.0 + ((bpm - 110.0) / 40.0) * 15.0
+                case "relax":
+                    score -= aro * 30.0 + ((110.0 - bpm) / 40.0) * 15.0 + val * 10.0
+                case "upbeat":
+                    score += val * 35.0 + aro * 15.0
+                case "mellow":
+                    score += (1.0 - abs(aro + 0.25)) * 30.0 + (1.0 - abs(val)) * 15.0
+                case "emotional":
+                    score -= val * 35.0 + (aro > 0 ? 10.0 : -10.0)
+                case "lounge":
+                    score += (1.0 - abs(bpm - 100.0) / 35.0) * 25.0 + (0.5 - abs(aro)) * 20.0
+                case "dance":
+                    score += (1.0 - abs(bpm - 124.0) / 30.0) * 35.0 + aro * 20.0
+                case "extreme":
+                    score += aro * 45.0 + ((bpm - 120.0) / 30.0) * 15.0
+                case "acoustic":
+                    score += val * 20.0 + (tr.format == "FLAC" ? 10.0 : 0.0)
+                case "electronic":
+                    score += aro * 25.0
+                case "morning":
+                    let hourFit = (hour >= 5 && hour < 10) ? 30.0 : 0.0
+                    score += val * 30.0 + ((120.0 - abs(bpm - 105.0)) / 40.0) * 10.0 + hourFit
+                case "daytime":
+                    let hourFit = (hour >= 10 && hour < 17) ? 30.0 : 0.0
+                    score += aro * 25.0 + ((bpm - 100.0) / 30.0) * 15.0 + hourFit
+                case "evening":
+                    let hourFit = (hour >= 17 && hour < 21) ? 30.0 : 0.0
+                    score += (1.0 - abs(aro)) * 25.0 + val * 15.0 + hourFit
+                case "night":
+                    let hourFit = (hour >= 21 || hour < 0) ? 30.0 : 0.0
+                    score -= aro * 30.0 + (1.0 - val) * 15.0 + hourFit
+                case "midnight":
+                    let hourFit = (hour >= 0 && hour < 5) ? 35.0 : 0.0
+                    score -= aro * 40.0 + ((95.0 - bpm) / 30.0) * 15.0 + hourFit
+                default:
+                    break
+                }
+            }
+            // Controlled entropy jitter to create fresh variations each selection
+            let jitter = Double.random(in: -28.0...28.0)
+            return (tr, score + jitter)
+        }
+
+        let shuffled = scored.sorted { $0.score > $1.score }.map { $0.track }
+        randomizedPlaylists[channel.id] = shuffled
+        return shuffled
+    }
+
+    private func candidateTracks(for channel: SenseMeChannel) -> [Track] {
         let analyzed = analyzedTracks
         if channel.id == "shuffle_all" {
             return analyzed
@@ -1244,33 +1404,33 @@ public struct SenseMeChannelsView: View {
             if let bpm = tr.senseMeBpm, let val = tr.senseMeValence, let aro = tr.senseMeArousal {
                 switch channel.id {
                 case "energetic":
-                    return aro >= 0.35 && val >= 0.15 && bpm >= 115
+                    return aro >= 0.30 && val >= 0.10 && bpm >= 112
                 case "relax":
-                    return aro <= -0.15 && val >= -0.30 && bpm <= 105
+                    return aro <= -0.10 && val >= -0.30 && bpm <= 108
                 case "upbeat":
-                    return val >= 0.20 && aro >= -0.10 && aro <= 0.65
+                    return val >= 0.15 && aro >= -0.15 && aro <= 0.70
                 case "mellow":
-                    return aro >= -0.75 && aro <= 0.0 && val >= -0.35 && val <= 0.45
+                    return aro >= -0.75 && aro <= 0.05 && val >= -0.35 && val <= 0.45
                 case "emotional":
-                    return val <= -0.10 && aro >= -0.55 && aro <= 0.40
+                    return val <= -0.05 && aro >= -0.55 && aro <= 0.40
                 case "extreme":
-                    return aro >= 0.65
+                    return aro >= 0.60 || bpm >= 145
                 case "dance":
-                    return bpm >= 108 && bpm <= 138 && aro >= 0.25
+                    return bpm >= 105 && bpm <= 140 && aro >= 0.20
                 case "lounge":
-                    return bpm >= 80 && bpm <= 118 && aro >= -0.40 && aro <= 0.30
+                    return bpm >= 75 && bpm <= 120 && aro >= -0.40 && aro <= 0.25
                 case "acoustic":
                     return tr.genre.localizedCaseInsensitiveContains("acoustic") || val >= 0.10
                 case "electronic":
-                    return tr.genre.localizedCaseInsensitiveContains("electronic") || aro >= 0.40
+                    return tr.genre.localizedCaseInsensitiveContains("electronic") || aro >= 0.35
                 case "morning":
-                    return val >= 0.15 || (aro >= -0.20 && bpm >= 90 && bpm <= 125)
+                    return (val >= 0.10 || (aro >= -0.20 && aro <= 0.35)) && bpm >= 85 && bpm <= 130
                 case "daytime":
-                    return val >= 0.10 || (aro >= 0.15 && bpm >= 105)
+                    return (aro >= 0.05 || bpm >= 100) && aro >= -0.15
                 case "evening":
-                    return (aro >= -0.30 && aro <= 0.20 && val >= -0.20) || bpm <= 115
+                    return bpm <= 118 && aro >= -0.45 && aro <= 0.20
                 case "night":
-                    return (aro <= 0.10 && val <= 0.25) || bpm <= 110
+                    return aro <= 0.15 && val <= 0.30 && bpm <= 115
                 case "midnight":
                     return aro <= -0.10 || bpm <= 88
                 default:
@@ -1285,15 +1445,10 @@ public struct SenseMeChannelsView: View {
         let channelTracks = tracks(for: channel)
         guard !channelTracks.isEmpty else { return }
 
-        if channel.id == "shuffle_all" {
-            let shuffled = channelTracks.shuffled()
-            if let first = shuffled.first {
-                player.isShuffle = true
-                player.play(track: first, in: shuffled)
-            }
-        } else {
-            player.play(track: channelTracks[0], in: channelTracks)
-        }
+        let first = channelTracks[0]
+        player.isShuffle = true
+        let startTime = first.senseMeHighlightSec ?? 0.0
+        player.play(track: first, coverArt: nil, in: channelTracks, startTime: startTime > 5.0 ? startTime : nil)
     }
 
     private func playAll(in channelTracks: [Track]) {
@@ -1302,12 +1457,11 @@ public struct SenseMeChannelsView: View {
     }
 
     private func shuffleAll(in channelTracks: [Track]) {
-        guard !channelTracks.isEmpty else { return }
-        let shuffled = channelTracks.shuffled()
-        if let first = shuffled.first {
-            player.isShuffle = true
-            player.play(track: first, in: shuffled)
-        }
+        let fresh = generateRandomizedPlaylist(for: selectedChannel)
+        guard let first = fresh.first else { return }
+        player.isShuffle = true
+        let startTime = first.senseMeHighlightSec ?? 0.0
+        player.play(track: first, in: fresh, startTime: startTime > 5.0 ? startTime : nil)
     }
 
     private func startBatchAnalysis() {
@@ -1327,6 +1481,8 @@ public struct SenseMeChannelsView: View {
                 }
             }
             await MainActor.run {
+                self.randomizedPlaylists.removeAll()
+                _ = self.generateRandomizedPlaylist(for: self.selectedChannel)
                 self.isAnalyzing = false
             }
         }
