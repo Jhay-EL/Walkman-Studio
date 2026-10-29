@@ -62,6 +62,16 @@ if [ -f "$DIR/assets/walkman_logo_emblem.png" ]; then
     cp "$DIR/assets/walkman_logo_emblem.png" "$RESOURCES_DIR/walkman_logo_emblem.png"
 fi
 
+# Copy SensMe Channel Cover Artworks
+if [ -d "$DIR/assets/SensMe Channel cover" ]; then
+    echo "Bundling SensMe Channel covers into $RESOURCES_DIR/senseme..."
+    mkdir -p "$RESOURCES_DIR/senseme"
+    mkdir -p "$RESOURCES_DIR/SensMe Channel cover"
+    cp -R "$DIR/assets/SensMe Channel cover/"* "$RESOURCES_DIR/senseme/" 2>/dev/null || true
+    cp -R "$DIR/assets/SensMe Channel cover/"* "$RESOURCES_DIR/SensMe Channel cover/" 2>/dev/null || true
+    cp "$DIR/assets/SensMe Channel cover/"*.jpg "$RESOURCES_DIR/" 2>/dev/null || true
+fi
+
 # Copy Backend Python Engine & Resources for local 12 Tone SenseMe DSP
 if [ -d "$DIR/backend" ]; then
     echo "Bundling backend engine into $RESOURCES_DIR/backend..."

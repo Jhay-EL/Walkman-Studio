@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import ImageIO
 
 // =============================================================================
 // SONY SENSME™ CHANNELS ARCHITECTURE
@@ -243,6 +244,7 @@ public struct SenseMeChannel: Identifiable, Hashable, Sendable {
 
 // =============================================================================
 // SENSEME ARTWORK RESOLVER
+// High-Performance Artwork Resolver with Downsampling Cache & Multi-Path Fallback
 // =============================================================================
 
 public final class SenseMeArtworkResolver: @unchecked Sendable {
@@ -252,7 +254,11 @@ public final class SenseMeArtworkResolver: @unchecked Sendable {
 
     private init() {}
 
-    public func image(for channelId: String) -> NSImage? {
+    public func image(for channel: SenseMeChannel) -> NSImage? {
+        image(for: channel.id, channelName: channel.name)
+    }
+
+    public func image(for channelId: String, channelName: String? = nil) -> NSImage? {
         lock.lock()
         defer { lock.unlock() }
 
@@ -260,35 +266,70 @@ public final class SenseMeArtworkResolver: @unchecked Sendable {
             return cached
         }
 
-        let filenames = [
-            "senseme_\(channelId).png",
-            "senseme_\(channelId).jpg",
-            "\(channelId).png",
-            "\(channelId).jpg"
-        ]
+        // Build exhaustive candidate filename variations
+        var candidates: [String] = []
+        if let name = channelName {
+            candidates.append("\(name).jpg")
+            candidates.append("\(name).jpeg")
+            candidates.append("\(name).png")
+            candidates.append("\(name.lowercased()).jpg")
+            candidates.append("\(name.lowercased()).jpeg")
+            candidates.append("\(name.lowercased()).png")
+        }
+        if channelId == "shuffle_all" {
+            candidates.append("Shuffle all songs.jpg")
+            candidates.append("Shuffle all songs.jpeg")
+            candidates.append("Shuffle all songs.png")
+            candidates.append("Shuffle All Songs.jpg")
+            candidates.append("Shuffle All Songs.jpeg")
+            candidates.append("Shuffle All Songs.png")
+            candidates.append("shuffle_all.jpg")
+            candidates.append("shuffle_all.png")
+        }
+        candidates.append("\(channelId).jpg")
+        candidates.append("\(channelId).jpeg")
+        candidates.append("\(channelId).png")
+        candidates.append("\(channelId.capitalized).jpg")
+        candidates.append("\(channelId.capitalized).png")
+        candidates.append("senseme_\(channelId).jpg")
+        candidates.append("senseme_\(channelId).png")
 
-        for fn in filenames {
+        // 1. Check App Bundle Resources
+        for fn in candidates {
             if let img = NSImage(named: fn) {
                 cache[channelId] = img
                 return img
             }
             if let path = Bundle.main.path(forResource: fn, ofType: nil),
-               let img = NSImage(contentsOfFile: path) {
+               let img = loadThumbnail(from: URL(fileURLWithPath: path)) {
                 cache[channelId] = img
                 return img
             }
         }
 
-        let candidateDirs = [
-            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".walkman_studio/senseme"),
-            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Pictures/WalkmanStudio/SenseMe")
-        ]
+        // 2. Candidate Directories
+        var candidateDirs: [URL] = []
+
+        // In-App Resources directory and subfolders
+        if let resURL = Bundle.main.resourceURL {
+            candidateDirs.append(resURL.appendingPathComponent("senseme"))
+            candidateDirs.append(resURL.appendingPathComponent("SensMe Channel cover"))
+            candidateDirs.append(resURL)
+        }
+
+        // Project / Development Directory
+        candidateDirs.append(URL(fileURLWithPath: "/Users/workstation/Documents/Projects/walkman-studio/assets/SensMe Channel cover"))
+        candidateDirs.append(URL(fileURLWithPath: "assets/SensMe Channel cover"))
+
+        // User Custom Directories
+        candidateDirs.append(FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".walkman_studio/senseme"))
+        candidateDirs.append(FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Pictures/WalkmanStudio/SenseMe"))
 
         for dir in candidateDirs {
-            for fn in filenames {
+            for fn in candidates {
                 let fileUrl = dir.appendingPathComponent(fn)
                 if FileManager.default.fileExists(atPath: fileUrl.path),
-                   let img = NSImage(contentsOf: fileUrl) {
+                   let img = loadThumbnail(from: fileUrl) {
                     cache[channelId] = img
                     return img
                 }
@@ -296,6 +337,21 @@ public final class SenseMeArtworkResolver: @unchecked Sendable {
         }
 
         return nil
+    }
+
+    private func loadThumbnail(from url: URL) -> NSImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
+            return NSImage(contentsOf: url)
+        }
+        let options: [CFString: Any] = [
+            kCGImageSourceThumbnailMaxPixelSize: 800,
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true
+        ]
+        if let cgThumb = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) {
+            return NSImage(cgImage: cgThumb, size: NSSize(width: cgThumb.width / 2, height: cgThumb.height / 2))
+        }
+        return NSImage(contentsOf: url)
     }
 }
 
@@ -1481,10 +1537,40 @@ private struct SenseMeStackedCard: View {
 
     @ViewBuilder
     private var artworkOrPlaceholderTile: some View {
-        if let customImage = SenseMeArtworkResolver.shared.image(for: channel.id) {
-            Image(nsImage: customImage)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
+        if let customImage = SenseMeArtworkResolver.shared.image(for: channel) {
+            ZStack {
+                Image(nsImage: customImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+
+                // Top specular gradient sheen
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(0.18), location: 0.0),
+                            .init(color: .clear, location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 25)
+                    Spacer()
+                }
+
+                // Bottom vignette gradient to blend into footer
+                VStack(spacing: 0) {
+                    Spacer()
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0.0),
+                            .init(color: Color.black.opacity(0.40), location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 35)
+                }
+            }
         } else {
             ZStack {
                 LinearGradient(
