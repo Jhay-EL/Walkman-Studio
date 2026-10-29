@@ -377,6 +377,8 @@ public struct SenseMeChannelsView: View {
     @State private var analysisTrackName: String = ""
     @State private var showAnalysisSheet: Bool = false
     @State private var analysisTask: Task<Void, Never>? = nil
+    @State private var emptyChannelNotice: String? = nil
+    @State private var emptyNoticeDismissTask: Task<Void, Never>? = nil
 
     private var currentHour: Int {
         Calendar.current.component(.hour, from: Date())
@@ -416,7 +418,7 @@ public struct SenseMeChannelsView: View {
     }
 
     public var body: some View {
-        ZStack {
+        ZStack(alignment: .top) {
             WalkmanTheme.background
                 .ignoresSafeArea()
 
@@ -437,6 +439,43 @@ public struct SenseMeChannelsView: View {
                     // Lower Pane = Selected Channel Tracklist & Controls
                     stackedDeckAndTracksSplitView
                 }
+            }
+
+            // Floating Toast Notice Pill (when channel has no tracks or playback stopped)
+            if let notice = emptyChannelNotice {
+                HStack(spacing: 8) {
+                    Image(systemName: "speaker.slash.fill")
+                        .font(.system(size: 11.5, weight: .bold))
+                        .foregroundStyle(WalkmanTheme.hiResGold)
+
+                    Text(notice)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(Color.white)
+
+                    Button(action: {
+                        withAnimation { emptyChannelNotice = nil }
+                    }) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 9.5, weight: .bold))
+                            .foregroundStyle(WalkmanTheme.silverMuted)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.leading, 4)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule()
+                        .fill(Color(red: 0.10, green: 0.10, blue: 0.12).opacity(0.96))
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(WalkmanTheme.hiResGold.opacity(0.45), lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.50), radius: 8, x: 0, y: 3)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .padding(.top, 14)
+                .zIndex(999)
             }
         }
         .sheet(isPresented: $showAnalysisSheet) {
@@ -758,85 +797,104 @@ public struct SenseMeChannelsView: View {
         let currentTracks = tracks(for: selectedChannel)
 
         return VStack(spacing: 0) {
-            // Action Toolbar (Filter, Play All, Shuffle)
-            HStack(spacing: 12) {
-                Spacer()
+            // Action Toolbar (Filter, Play All, Shuffle) OR Empty Channel Banner
+            if currentTracks.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: "speaker.slash.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(WalkmanTheme.hiResGold)
 
-                // Filter search inside channel
-                HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 11))
+                    Text("No tracks available in \"\(selectedChannel.name)\" channel")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(WalkmanTheme.silverLight)
+
+                    Text("• Playback stopped")
+                        .font(.system(size: 12, weight: .regular))
                         .foregroundStyle(WalkmanTheme.silverMuted)
 
-                    TextField("Filter channel...", text: $trackFilterQuery)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 12))
+                    Spacer()
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .frame(width: 170)
-                .background(Color.white.opacity(0.04))
-                .clipShape(Capsule())
-                .overlay(Capsule().stroke(Color.white.opacity(0.10), lineWidth: 0.8))
+                .padding(.horizontal, 22)
+                .padding(.vertical, 8)
+                .background(Color.white.opacity(0.025))
+            } else {
+                HStack(spacing: 12) {
+                    Spacer()
 
-                // Play All Button
-                Button(action: { playAll(in: currentTracks) }) {
-                    HStack(spacing: 5) {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 11, weight: .bold))
-                        Text("Play All")
-                            .font(.system(size: 12, weight: .bold))
-                    }
-                    .foregroundStyle(Color.black)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(WalkmanTheme.hiResGoldGradient)
-                    .clipShape(Capsule())
-                    .shadow(color: Color.black.opacity(0.25), radius: 3, x: 0, y: 1)
-                }
-                .buttonStyle(.plain)
-                .disabled(currentTracks.isEmpty)
+                    // Filter search inside channel
+                    HStack(spacing: 6) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 11))
+                            .foregroundStyle(WalkmanTheme.silverMuted)
 
-                // Shuffle Button
-                Button(action: { shuffleAll(in: currentTracks) }) {
-                    HStack(spacing: 5) {
-                        Image(systemName: "shuffle")
-                            .font(.system(size: 11, weight: .semibold))
-                        Text("Shuffle")
-                            .font(.system(size: 12, weight: .semibold))
+                        TextField("Filter channel...", text: $trackFilterQuery)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 12))
                     }
-                    .foregroundStyle(WalkmanTheme.silverLight)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.white.opacity(0.06))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .frame(width: 170)
+                    .background(Color.white.opacity(0.04))
                     .clipShape(Capsule())
-                    .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 0.8))
+                    .overlay(Capsule().stroke(Color.white.opacity(0.10), lineWidth: 0.8))
+
+                    // Play All Button
+                    Button(action: { playAll(in: currentTracks) }) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 11, weight: .bold))
+                            Text("Play All")
+                                .font(.system(size: 12, weight: .bold))
+                        }
+                        .foregroundStyle(Color.black)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(WalkmanTheme.hiResGoldGradient)
+                        .clipShape(Capsule())
+                        .shadow(color: Color.black.opacity(0.25), radius: 3, x: 0, y: 1)
+                    }
+                    .buttonStyle(.plain)
+
+                    // Shuffle Button
+                    Button(action: { shuffleAll(in: currentTracks) }) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "shuffle")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text("Shuffle")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 0.8))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-                .disabled(currentTracks.isEmpty)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 8)
+                .background(WalkmanTheme.background.opacity(0.75))
             }
-            .padding(.horizontal, 22)
-            .padding(.vertical, 8)
-            .background(WalkmanTheme.background.opacity(0.75))
 
             Divider().overlay(Color.white.opacity(0.06))
 
             // Channel Tracks Table
             if currentTracks.isEmpty {
                 VStack(spacing: 12) {
-                    Image(systemName: "music.note")
-                        .font(.system(size: 34))
+                    Image(systemName: "speaker.slash.circle")
+                        .font(.system(size: 40))
                         .foregroundStyle(WalkmanTheme.silverMuted)
 
                     Text("No Tracks in \"\(selectedChannel.name)\"")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(Color.white)
 
-                    Text("Tracks are automatically assigned to this channel when their 12-Tone speed, mood, and valence parameters match.")
-                        .font(.system(size: 12))
+                    Text("Music playback was stopped. There are no tracks in your library matching this channel's 12-Tone acoustic mood, speed, or energy parameters.")
+                        .font(.system(size: 12.5))
                         .foregroundStyle(WalkmanTheme.silverMuted)
                         .multilineTextAlignment(.center)
-                        .frame(maxWidth: 420)
+                        .frame(maxWidth: 440)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.vertical, 40)
@@ -1018,6 +1076,30 @@ public struct SenseMeChannelsView: View {
     // -------------------------------------------------------------------------
     private func handleChannelSwitched(to newIndex: Int) {
         channelAutoPlayTask?.cancel()
+
+        // 1. Immediately pause playing audio so audio from the previous channel does not leak
+        player.pause()
+
+        let channels = displayedChannels
+        guard !channels.isEmpty else { return }
+        let safeIndex = max(0, min(channels.count - 1, newIndex))
+        let targetChannel = channels[safeIndex]
+        let channelTracks = tracks(for: targetChannel)
+
+        // 2. If the destination channel has NO tracks:
+        // Immediately stop playback, clear the audio queue, and tell the user that there are no tracks
+        if channelTracks.isEmpty {
+            player.stopAndClear()
+            showEmptyChannelNotice(for: targetChannel)
+            return
+        }
+
+        // 3. Clear empty channel notice since destination channel has tracks
+        withAnimation {
+            emptyChannelNotice = nil
+        }
+
+        // 4. Channel has tracks -> Auto-play tracks from the selected channel after 380ms debounce
         channelAutoPlayTask = Task {
             // Debounce pause: wait 380ms for card animation to land and settle gracefully
             try? await Task.sleep(nanoseconds: 380_000_000)
@@ -1032,7 +1114,11 @@ public struct SenseMeChannelsView: View {
         let channel = selectedChannel
         // Generate fresh randomized playlist weighted by mood/vibe and time of day
         let currentTracks = generateRandomizedPlaylist(for: channel)
-        guard !currentTracks.isEmpty else { return }
+        if currentTracks.isEmpty {
+            player.stopAndClear()
+            showEmptyChannelNotice(for: channel)
+            return
+        }
 
         let firstTrack = currentTracks[0]
         player.isShuffle = true
@@ -1158,7 +1244,11 @@ public struct SenseMeChannelsView: View {
 
     private func quickPlay(channel: SenseMeChannel) {
         let channelTracks = tracks(for: channel)
-        guard !channelTracks.isEmpty else { return }
+        if channelTracks.isEmpty {
+            player.stopAndClear()
+            showEmptyChannelNotice(for: channel)
+            return
+        }
 
         // If this channel is already playing, toggle pause / resume
         if let current = player.currentTrack, channelTracks.contains(where: { $0.id == current.id }) {
@@ -1173,16 +1263,40 @@ public struct SenseMeChannelsView: View {
     }
 
     private func playAll(in channelTracks: [Track]) {
-        guard let first = channelTracks.first else { return }
+        guard let first = channelTracks.first else {
+            player.stopAndClear()
+            showEmptyChannelNotice(for: selectedChannel)
+            return
+        }
         player.play(track: first, in: channelTracks)
     }
 
     private func shuffleAll(in channelTracks: [Track]) {
         let fresh = generateRandomizedPlaylist(for: selectedChannel)
-        guard let first = fresh.first else { return }
+        guard let first = fresh.first else {
+            player.stopAndClear()
+            showEmptyChannelNotice(for: selectedChannel)
+            return
+        }
         player.isShuffle = true
         let startTime = first.senseMeHighlightSec ?? 0.0
         player.play(track: first, in: fresh, startTime: startTime > 5.0 ? startTime : nil)
+    }
+
+    private func showEmptyChannelNotice(for channel: SenseMeChannel) {
+        emptyNoticeDismissTask?.cancel()
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
+            self.emptyChannelNotice = "No tracks in \"\(channel.name)\" channel • Playback stopped"
+        }
+        emptyNoticeDismissTask = Task {
+            try? await Task.sleep(nanoseconds: 3_500_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    self.emptyChannelNotice = nil
+                }
+            }
+        }
     }
 
     private func startBatchAnalysis() {
