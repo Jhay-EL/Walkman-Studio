@@ -377,8 +377,6 @@ public struct SenseMeChannelsView: View {
     @State private var analysisTrackName: String = ""
     @State private var showAnalysisSheet: Bool = false
     @State private var analysisTask: Task<Void, Never>? = nil
-    @State private var emptyChannelNotice: String? = nil
-    @State private var emptyNoticeDismissTask: Task<Void, Never>? = nil
 
     private var currentHour: Int {
         Calendar.current.component(.hour, from: Date())
@@ -439,43 +437,6 @@ public struct SenseMeChannelsView: View {
                     // Lower Pane = Selected Channel Tracklist & Controls
                     stackedDeckAndTracksSplitView
                 }
-            }
-
-            // Floating Toast Notice Pill (when channel has no tracks or playback stopped)
-            if let notice = emptyChannelNotice {
-                HStack(spacing: 8) {
-                    Image(systemName: "speaker.slash.fill")
-                        .font(.system(size: 11.5, weight: .bold))
-                        .foregroundStyle(WalkmanTheme.hiResGold)
-
-                    Text(notice)
-                        .font(.system(size: 12.5, weight: .semibold))
-                        .foregroundStyle(Color.white)
-
-                    Button(action: {
-                        withAnimation { emptyChannelNotice = nil }
-                    }) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 9.5, weight: .bold))
-                            .foregroundStyle(WalkmanTheme.silverMuted)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.leading, 4)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(
-                    Capsule()
-                        .fill(Color(red: 0.10, green: 0.10, blue: 0.12).opacity(0.96))
-                )
-                .overlay(
-                    Capsule()
-                        .stroke(WalkmanTheme.hiResGold.opacity(0.45), lineWidth: 1)
-                )
-                .shadow(color: Color.black.opacity(0.50), radius: 8, x: 0, y: 3)
-                .transition(.move(edge: .top).combined(with: .opacity))
-                .padding(.top, 14)
-                .zIndex(999)
             }
         }
         .sheet(isPresented: $showAnalysisSheet) {
@@ -1227,19 +1188,13 @@ public struct SenseMeChannelsView: View {
         let channelTracks = tracks(for: targetChannel)
 
         // 2. If the destination channel has NO tracks:
-        // Immediately stop playback, clear the audio queue, and tell the user that there are no tracks
+        // Immediately stop playback and clear the audio queue
         if channelTracks.isEmpty {
             player.stopAndClear()
-            showEmptyChannelNotice(for: targetChannel)
             return
         }
 
-        // 3. Clear empty channel notice since destination channel has tracks
-        withAnimation {
-            emptyChannelNotice = nil
-        }
-
-        // 4. Channel has tracks -> Auto-play tracks from the selected channel after 380ms debounce
+        // 3. Channel has tracks -> Auto-play tracks from the selected channel after 380ms debounce
         channelAutoPlayTask = Task {
             // Debounce pause: wait 380ms for card animation to land and settle gracefully
             try? await Task.sleep(nanoseconds: 380_000_000)
@@ -1256,7 +1211,6 @@ public struct SenseMeChannelsView: View {
         let currentTracks = generateRandomizedPlaylist(for: channel)
         if currentTracks.isEmpty {
             player.stopAndClear()
-            showEmptyChannelNotice(for: channel)
             return
         }
 
@@ -1386,7 +1340,6 @@ public struct SenseMeChannelsView: View {
         let channelTracks = tracks(for: channel)
         if channelTracks.isEmpty {
             player.stopAndClear()
-            showEmptyChannelNotice(for: channel)
             return
         }
 
@@ -1405,7 +1358,6 @@ public struct SenseMeChannelsView: View {
     private func playAll(in channelTracks: [Track]) {
         guard let first = channelTracks.first else {
             player.stopAndClear()
-            showEmptyChannelNotice(for: selectedChannel)
             return
         }
         player.play(track: first, in: channelTracks)
@@ -1415,28 +1367,11 @@ public struct SenseMeChannelsView: View {
         let fresh = generateRandomizedPlaylist(for: selectedChannel)
         guard let first = fresh.first else {
             player.stopAndClear()
-            showEmptyChannelNotice(for: selectedChannel)
             return
         }
         player.isShuffle = true
         let startTime = first.senseMeHighlightSec ?? 0.0
         player.play(track: first, in: fresh, startTime: startTime > 5.0 ? startTime : nil)
-    }
-
-    private func showEmptyChannelNotice(for channel: SenseMeChannel) {
-        emptyNoticeDismissTask?.cancel()
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
-            self.emptyChannelNotice = "No tracks in \"\(channel.name)\" channel • Playback stopped"
-        }
-        emptyNoticeDismissTask = Task {
-            try? await Task.sleep(nanoseconds: 3_500_000_000)
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    self.emptyChannelNotice = nil
-                }
-            }
-        }
     }
 
     private func startBatchAnalysis() {
