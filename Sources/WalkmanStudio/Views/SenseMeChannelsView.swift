@@ -421,21 +421,6 @@ public struct SenseMeChannelsView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Top Header (Title, 12-Tone badge, Mode Toggle, Analysis status)
-                topHeaderBar
-                    .padding(.horizontal, 22)
-                    .padding(.top, 14)
-                    .padding(.bottom, 12)
-                    .background(
-                        WalkmanTheme.background
-                            .overlay(
-                                Rectangle()
-                                    .fill(Color.white.opacity(0.06))
-                                    .frame(height: 0.8),
-                                alignment: .bottom
-                            )
-                    )
-
                 // Optional Analysis Alert Banner
                 if !unanalyzedTracks.isEmpty && !localLibrary.tracks.isEmpty {
                     analysisNotificationBanner
@@ -479,75 +464,6 @@ public struct SenseMeChannelsView: View {
                         randomizedPlaylists.removeAll()
                         _ = generateRandomizedPlaylist(for: selectedChannel)
                     }
-                }
-            }
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // TOP HEADER BAR
-    // -------------------------------------------------------------------------
-    private var topHeaderBar: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 8) {
-                    Text("SenseMe™ Channels")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(Color.white)
-
-                    Text("12 TONE")
-                        .font(.system(size: 9.5, weight: .heavy))
-                        .foregroundStyle(WalkmanTheme.hiResGold)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2.5)
-                        .background(WalkmanTheme.hiResGold.opacity(0.12))
-                        .clipShape(Capsule())
-                        .overlay(
-                            Capsule().stroke(WalkmanTheme.hiResGold.opacity(0.35), lineWidth: 0.8)
-                        )
-                }
-
-                Text("Acoustic mood and time-of-day channels based on Sony 12 Tone Analysis")
-                    .font(.system(size: 12))
-                    .foregroundStyle(WalkmanTheme.silverMuted)
-            }
-
-            Spacer(minLength: 12)
-
-            // Stats Badges
-            HStack(spacing: 10) {
-                HStack(spacing: 5) {
-                    Image(systemName: "waveform.path.ecg")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(WalkmanTheme.hiResGold)
-                    Text("\(analyzedTracks.count) / \(localLibrary.tracks.count)")
-                        .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(WalkmanTheme.silverLight)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Color.white.opacity(0.04))
-                .clipShape(Capsule())
-                .overlay(Capsule().stroke(Color.white.opacity(0.08), lineWidth: 0.8))
-
-                // Analyze 12-Tone Acoustics Button
-                if !unanalyzedTracks.isEmpty {
-                    Button(action: startBatchAnalysis) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "waveform.badge.magnifyingglass")
-                                .font(.system(size: 12, weight: .semibold))
-                            Text("Analyze (\(unanalyzedTracks.count))")
-                                .font(.system(size: 12, weight: .semibold))
-                        }
-                        .foregroundStyle(Color.black)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(WalkmanTheme.hiResGoldGradient)
-                        .clipShape(Capsule())
-                        .shadow(color: Color.black.opacity(0.25), radius: 3, x: 0, y: 1)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Batch analyze remaining local tracks for Sony 12 Tone Acoustics")
                 }
             }
         }
@@ -602,7 +518,7 @@ public struct SenseMeChannelsView: View {
         VStack(spacing: 0) {
             // TOP SECTION: 3D Stacked Card Carousel Slider (Taller 4:3 Aspect Ratio Cards)
             stackedCarouselStage
-                .frame(height: 380)
+                .frame(height: 440)
                 .background(
                     WalkmanTheme.background
                         .overlay(
@@ -632,15 +548,13 @@ public struct SenseMeChannelsView: View {
                     ZStack {
                         // Render all cards layered in 3D Stack order (no mid-transition popup or clipping)
                         ForEach(Array(displayedChannels.enumerated()), id: \.element.id) { index, ch in
-                            let relativeIndex = CGFloat(index - activeIndex) + (dragOffset / 195.0)
+                            let relativeIndex = CGFloat(index - activeIndex) + (dragOffset / 235.0)
                             let chTracks = tracks(for: ch)
-                            let isActiveTime = ch.isCurrentlyActive(at: currentHour)
 
                             SenseMeStackedCard(
                                 channel: ch,
                                 tracks: chTracks,
                                 relativeIndex: relativeIndex,
-                                isActiveTime: isActiveTime,
                                 onSelect: {
                                     guard !isStepping else { return }
                                     let now = ProcessInfo.processInfo.systemUptime
@@ -769,31 +683,31 @@ public struct SenseMeChannelsView: View {
         let sign: CGFloat = relativeIndex >= 0 ? 1.0 : -1.0
         let absDist = abs(relativeIndex)
         if absDist <= 1.0 {
-            return relativeIndex * 195.0
+            return relativeIndex * 235.0
         } else if absDist <= 2.0 {
-            return sign * (195.0 + (absDist - 1.0) * 125.0)
+            return sign * (235.0 + (absDist - 1.0) * 150.0)
         } else {
-            return sign * (320.0 + (absDist - 2.0) * 105.0)
+            return sign * (385.0 + (absDist - 2.0) * 125.0)
         }
     }
 
     private func cardYOffset(for relativeIndex: CGFloat) -> CGFloat {
         let absDist = abs(relativeIndex)
         // Center card is slightly lifted; receding behind cards sit gently lower in perspective
-        return min(14.0, absDist * 6.0)
+        return min(16.0, absDist * 7.0)
     }
 
     private func cardScale(for relativeIndex: CGFloat) -> CGFloat {
         let absDist = abs(relativeIndex)
         if absDist <= 1.0 {
-            // Center is 1.08, smoothly dropping to 0.76 at distance 1
-            return 1.08 - (absDist * 0.32)
+            // Center is 1.10, smoothly dropping to 0.78 at distance 1
+            return 1.10 - (absDist * 0.32)
         } else if absDist <= 2.0 {
-            // Distance 1 to 2: 0.76 down to 0.58
-            return 0.76 - ((absDist - 1.0) * 0.18)
+            // Distance 1 to 2: 0.78 down to 0.60
+            return 0.78 - ((absDist - 1.0) * 0.18)
         } else {
-            // Distance 2+: 0.58 down to minimum 0.44
-            return max(0.44, 0.58 - ((absDist - 2.0) * 0.14))
+            // Distance 2+: 0.60 down to minimum 0.46
+            return max(0.46, 0.60 - ((absDist - 2.0) * 0.14))
         }
     }
 
@@ -844,35 +758,8 @@ public struct SenseMeChannelsView: View {
         let currentTracks = tracks(for: selectedChannel)
 
         return VStack(spacing: 0) {
-            // Channel Action Toolbar (Title, Count, Play All, Shuffle, Search)
-            HStack(spacing: 14) {
-                // Channel Identity Pill
-                HStack(spacing: 8) {
-                    Image(systemName: selectedChannel.icon)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(selectedChannel.gradientColors[0])
-
-                    Text(selectedChannel.name)
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(Color.white)
-
-                    Text(selectedChannel.category.rawValue.uppercased())
-                        .font(.system(size: 8.5, weight: .heavy))
-                        .foregroundStyle(WalkmanTheme.silverMuted)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.white.opacity(0.06))
-                        .clipShape(Capsule())
-                }
-
-                Text("•")
-                    .foregroundStyle(WalkmanTheme.silverDark)
-
-                Text(selectedChannel.subtitle)
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(WalkmanTheme.silverMuted)
-                    .lineLimit(1)
-
+            // Action Toolbar (Filter, Play All, Shuffle)
+            HStack(spacing: 12) {
                 Spacer()
 
                 // Filter search inside channel
@@ -929,7 +816,7 @@ public struct SenseMeChannelsView: View {
                 .disabled(currentTracks.isEmpty)
             }
             .padding(.horizontal, 22)
-            .padding(.vertical, 10)
+            .padding(.vertical, 8)
             .background(WalkmanTheme.background.opacity(0.75))
 
             Divider().overlay(Color.white.opacity(0.06))
@@ -1272,6 +1159,12 @@ public struct SenseMeChannelsView: View {
         let channelTracks = tracks(for: channel)
         guard !channelTracks.isEmpty else { return }
 
+        // If this channel is already playing, toggle pause / resume
+        if let current = player.currentTrack, channelTracks.contains(where: { $0.id == current.id }) {
+            player.togglePlayPause()
+            return
+        }
+
         let first = channelTracks[0]
         player.isShuffle = true
         let startTime = first.senseMeHighlightSec ?? 0.0
@@ -1325,7 +1218,6 @@ private struct SenseMeStackedCard: View {
     let channel: SenseMeChannel
     let tracks: [Track]
     let relativeIndex: CGFloat
-    let isActiveTime: Bool
     let onSelect: () -> Void
     let onQuickPlay: () -> Void
 
@@ -1356,6 +1248,13 @@ private struct SenseMeStackedCard: View {
         return "\(mins) min"
     }
 
+    private var cleanSubtitle: String {
+        if let range = channel.subtitle.range(of: "• ") {
+            return String(channel.subtitle[range.upperBound...])
+        }
+        return channel.subtitle
+    }
+
     var body: some View {
         Button(action: {
             if isFront {
@@ -1364,73 +1263,13 @@ private struct SenseMeStackedCard: View {
                 onSelect()
             }
         }) {
-            // Card Body (280pt width x 262pt height - 4:3 Aspect Ratio Artwork)
+            // Card Body (336pt width x 304pt height - 4:3 Aspect Ratio Artwork)
             VStack(alignment: .leading, spacing: 0) {
-                // Artwork / Mood Tile (exact 4:3 ratio: 280pt x 209pt)
+                // Artwork / Mood Tile (exact 4:3 ratio: 336pt x 252pt)
                 ZStack(alignment: .topTrailing) {
                     artworkOrPlaceholderTile
-                        .frame(width: 280, height: 209)
+                        .frame(width: 336, height: 252)
                         .clipped()
-
-                    // Top Badges (Category Pill on Left, Current Time on Right)
-                    VStack {
-                        HStack {
-                            Text(channel.category.rawValue.uppercased())
-                                .font(.system(size: 8.5, weight: .heavy))
-                                .foregroundStyle(Color.white.opacity(0.85))
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3)
-                                .background(Color.black.opacity(0.60))
-                                .clipShape(Capsule())
-                                .overlay(Capsule().stroke(Color.white.opacity(0.14), lineWidth: 0.6))
-                                .padding(8)
-
-                            Spacer()
-
-                            if isActiveTime {
-                                HStack(spacing: 4) {
-                                    Circle()
-                                        .fill(WalkmanTheme.hiResGold)
-                                        .frame(width: 5, height: 5)
-                                    Text("CURRENT TIME")
-                                        .font(.system(size: 8, weight: .heavy))
-                                        .foregroundStyle(Color.black)
-                                }
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3.5)
-                                .background(WalkmanTheme.hiResGoldGradient)
-                                .clipShape(Capsule())
-                                .shadow(color: Color.black.opacity(0.35), radius: 2, x: 0, y: 1)
-                                .padding(8)
-                            }
-                        }
-                        Spacer()
-                    }
-
-                    // Front Card Play/Pause Button in Lower Right of Tile
-                    if isFront && !tracks.isEmpty {
-                        VStack {
-                            Spacer()
-                            HStack {
-                                Spacer()
-                                Button(action: onQuickPlay) {
-                                    ZStack {
-                                        Circle()
-                                            .fill(WalkmanTheme.hiResGoldGradient)
-                                            .frame(width: 32, height: 32)
-                                            .shadow(color: Color.black.opacity(0.35), radius: 3, x: 0, y: 2)
-
-                                        Image(systemName: isPlayingThisChannel ? "pause.fill" : "play.fill")
-                                            .font(.system(size: 13, weight: .bold))
-                                            .foregroundStyle(Color.black)
-                                            .offset(x: isPlayingThisChannel ? 0 : 1)
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                                .padding(8)
-                            }
-                        }
-                    }
 
                     // Dimming Scrim for receding behind cards
                     if abs(relativeIndex) > 0.3 {
@@ -1440,11 +1279,11 @@ private struct SenseMeStackedCard: View {
                     }
                 }
 
-                // Card Footer Info (53pt)
+                // Card Footer Info (52pt)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         Text(channel.name)
-                            .font(.system(size: 14.5, weight: isFront ? .heavy : .bold))
+                            .font(.system(size: 15, weight: isFront ? .heavy : .bold))
                             .foregroundStyle(isFront ? WalkmanTheme.hiResGold : (isHovered ? Color.white : WalkmanTheme.silverLight))
                             .lineLimit(1)
 
@@ -1464,38 +1303,36 @@ private struct SenseMeStackedCard: View {
                     }
 
                     HStack(spacing: 4) {
-                        Text(channel.subtitle)
-                            .font(.system(size: 10.5))
+                        Text(cleanSubtitle)
+                            .font(.system(size: 11))
                             .foregroundStyle(WalkmanTheme.silverMuted)
                             .lineLimit(1)
 
                         Spacer()
 
                         Text(durationLabel)
-                            .font(.system(size: 10))
+                            .font(.system(size: 10.5))
                             .foregroundStyle(WalkmanTheme.silverDark)
                     }
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 14)
                 .padding(.vertical, 7)
-                .frame(width: 280, height: 53)
+                .frame(width: 336, height: 52)
                 .background(Color.white.opacity(isFront ? 0.04 : 0.02))
             }
-            .frame(width: 280, height: 262)
+            .frame(width: 336, height: 304)
             .background(
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(Color(red: 0.08, green: 0.08, blue: 0.10).opacity(isFront ? 0.96 : 0.88))
             )
-            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .stroke(
                         isFront ?
                             WalkmanTheme.hiResGold.opacity(0.88) :
-                            (isActiveTime ?
-                                WalkmanTheme.hiResGold.opacity(0.40) :
-                                Color.white.opacity(isHovered ? 0.24 : 0.09)),
-                        lineWidth: isFront ? 1.8 : (isActiveTime ? 1.0 : 0.8)
+                            Color.white.opacity(isHovered ? 0.24 : 0.09),
+                        lineWidth: isFront ? 1.8 : 0.8
                     )
             )
             .shadow(
@@ -1709,29 +1546,6 @@ private struct SenseMeChannelTableView: View {
                 }
             }
             .width(min: 60, ideal: 75, max: 90)
-
-            TableColumn("Mood", value: \.senseMeMoodString) { track in
-                if let val = track.senseMeValence, let aro = track.senseMeArousal {
-                    HStack(spacing: 4) {
-                        Text("V: \(val >= 0 ? "+" : "")\(String(format: "%.2f", val))")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(val >= 0 ? Color(red: 0.95, green: 0.70, blue: 0.25) : WalkmanTheme.silverMuted)
-
-                        Text("•")
-                            .font(.system(size: 9))
-                            .foregroundStyle(WalkmanTheme.silverDark)
-
-                        Text("A: \(aro >= 0 ? "+" : "")\(String(format: "%.2f", aro))")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(aro >= 0 ? Color(red: 0.95, green: 0.40, blue: 0.40) : WalkmanTheme.silverMuted)
-                    }
-                } else {
-                    Text("—")
-                        .font(WalkmanFont.monoSmall)
-                        .foregroundStyle(WalkmanTheme.silverDark)
-                }
-            }
-            .width(min: 110, ideal: 130, max: 150)
 
             TableColumn("Time", value: \.durationSeconds) { track in
                 Text(track.durationFormatted)

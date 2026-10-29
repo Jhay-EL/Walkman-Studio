@@ -159,7 +159,7 @@ public struct SidebarView: View {
                     selectedTab: $selectedTab,
                     title: "SenseMe™ Channels",
                     icon: "waveform.path.ecg.rectangle.fill",
-                    badge: localSenseMeCount > 0 ? "\(localSenseMeCount.formatted())" : nil
+                    badge: nil
                 )
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets(top: 3.5, leading: 10, bottom: 3.5, trailing: 10))
