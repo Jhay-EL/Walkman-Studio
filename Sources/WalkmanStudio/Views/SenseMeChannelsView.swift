@@ -1255,7 +1255,7 @@ public struct SenseMeChannelsView: View {
 
 // =============================================================================
 // BIGGER SENSEME STACKED CARD COMPONENT
-// 310pt x 185pt Card with Peeking Vinyl Disc & Tactile Depth
+// 310pt x 185pt Card with Tactile Depth & Ambient Mood Glow
 // =============================================================================
 
 private struct SenseMeStackedCard: View {
@@ -1297,17 +1297,9 @@ private struct SenseMeStackedCard: View {
                 onSelect()
             }
         }) {
-            ZStack(alignment: .topTrailing) {
-                // Tactile Peeking Vinyl Record (Slides out from behind the sleeve on front card)
-                peekingVinylRecord
-                    .offset(x: (isFront || isHovered) ? 32 : 0, y: (isFront || isHovered) ? -16 : 0)
-                    .opacity((isFront || isHovered) ? 0.95 : 0.0)
-                    .scaleEffect((isFront || isHovered) ? 1.0 : 0.8)
-                    .animation(.spring(response: 0.36, dampingFraction: 0.72), value: isFront || isHovered)
-
-                // Foreground Card Body (310pt width x 185pt height)
-                VStack(alignment: .leading, spacing: 0) {
-                    // Artwork / Mood Tile (122pt)
+            // Card Body (310pt width x 185pt height)
+            VStack(alignment: .leading, spacing: 0) {
+                // Artwork / Mood Tile (122pt)
                     ZStack(alignment: .topTrailing) {
                         artworkOrPlaceholderTile
                             .frame(height: 122)
@@ -1431,16 +1423,14 @@ private struct SenseMeStackedCard: View {
                             lineWidth: isFront ? 1.6 : (isActiveTime ? 1.0 : 0.8)
                         )
                 )
-            }
-            .frame(width: 310, height: 185)
-            .shadow(
-                color: isFront ?
-                    channel.gradientColors[0].opacity(0.40) :
-                    Color.black.opacity(0.35),
-                radius: isFront ? 12 : 6,
-                x: 0,
-                y: isFront ? 4 : 2
-            )
+                .shadow(
+                    color: isFront ?
+                        channel.gradientColors[0].opacity(0.40) :
+                        Color.black.opacity(0.35),
+                    radius: isFront ? 12 : 6,
+                    x: 0,
+                    y: isFront ? 4 : 2
+                )
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -1452,44 +1442,6 @@ private struct SenseMeStackedCard: View {
                 NSCursor.pop()
             }
         }
-    }
-
-    private var peekingVinylRecord: some View {
-        ZStack {
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            Color(red: 0.14, green: 0.14, blue: 0.16),
-                            Color(red: 0.04, green: 0.04, blue: 0.05)
-                        ],
-                        center: .center,
-                        startRadius: 5,
-                        endRadius: 58
-                    )
-                )
-                .frame(width: 105, height: 105)
-                .shadow(color: Color.black.opacity(0.50), radius: 5, x: 2, y: 2)
-
-            Circle()
-                .stroke(Color.white.opacity(0.07), lineWidth: 0.8)
-                .frame(width: 90, height: 90)
-            Circle()
-                .stroke(Color.white.opacity(0.05), lineWidth: 0.8)
-                .frame(width: 74, height: 74)
-            Circle()
-                .stroke(Color.white.opacity(0.06), lineWidth: 0.8)
-                .frame(width: 58, height: 58)
-
-            Circle()
-                .fill(channel.gradientColors[0].opacity(0.85))
-                .frame(width: 34, height: 34)
-
-            Circle()
-                .fill(Color(red: 0.08, green: 0.08, blue: 0.10))
-                .frame(width: 8, height: 8)
-        }
-        .rotationEffect(.degrees((isFront || isHovered) ? 28 : 0))
     }
 
     @ViewBuilder
