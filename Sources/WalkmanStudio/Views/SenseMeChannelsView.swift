@@ -350,6 +350,7 @@ public struct SenseMeChannelsView: View {
     @State private var selectedCategoryFilter: String = "ALL"
     @State private var trackFilterQuery: String = ""
     @State private var dragOffset: CGFloat = 0.0
+    @State private var lastStepTimestamp: TimeInterval = 0
     @State private var isAnalyzing: Bool = false
     @State private var analysisCurrent: Int = 0
     @State private var analysisTotal: Int = 0
@@ -407,16 +408,6 @@ public struct SenseMeChannelsView: View {
         ZStack {
             WalkmanTheme.background
                 .ignoresSafeArea()
-
-            // Dynamic Ambient Backing Glow derived from front-facing active card
-            RadialGradient(
-                colors: [selectedChannel.gradientColors[0].opacity(0.18), Color.clear],
-                center: .top,
-                startRadius: 40,
-                endRadius: 650
-            )
-            .ignoresSafeArea()
-            .animation(.easeInOut(duration: 0.42), value: selectedChannel.id)
 
             VStack(spacing: 0) {
                 // Top Header (Title, 12-Tone badge, Mode Toggle, Analysis status)
@@ -687,7 +678,7 @@ public struct SenseMeChannelsView: View {
                                 relativeIndex: relativeIndex,
                                 isActiveTime: isActiveTime,
                                 onSelect: {
-                                    withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+                                    withAnimation(.spring(response: 0.32, dampingFraction: 0.92)) {
                                         self.activeIndex = index
                                         self.dragOffset = 0
                                     }
@@ -696,12 +687,11 @@ public struct SenseMeChannelsView: View {
                                     quickPlay(channel: ch)
                                 }
                             )
+                            .scaleEffect(cardScale(for: relativeIndex))
                             .rotation3DEffect(
                                 .degrees(cardRotationY(for: relativeIndex)),
-                                axis: (x: 0, y: 1, z: 0),
-                                perspective: 0.45
+                                axis: (x: 0, y: 1, z: 0)
                             )
-                            .scaleEffect(cardScale(for: relativeIndex))
                             .offset(
                                 x: cardXOffset(for: relativeIndex),
                                 y: cardYOffset(for: relativeIndex)
@@ -727,7 +717,7 @@ public struct SenseMeChannelsView: View {
                                 } else if value.translation.width > threshold && activeIndex > 0 {
                                     targetIndex -= 1
                                 }
-                                withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+                                withAnimation(.spring(response: 0.32, dampingFraction: 0.92)) {
                                     activeIndex = targetIndex
                                     dragOffset = 0
                                 }
@@ -787,7 +777,7 @@ public struct SenseMeChannelsView: View {
                         .scaleEffect(idx == activeIndex ? 1.2 : 1.0)
                         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: activeIndex)
                         .onTapGesture {
-                            withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+                            withAnimation(.spring(response: 0.32, dampingFraction: 0.92)) {
                                 activeIndex = idx
                                 dragOffset = 0
                             }
@@ -841,8 +831,8 @@ public struct SenseMeChannelsView: View {
     }
 
     private func cardRotationY(for relativeIndex: CGFloat) -> Double {
-        let clamped = max(-2.0, min(2.0, relativeIndex))
-        return Double(clamped) * -20.0
+        let clamped = max(-1.8, min(1.8, relativeIndex))
+        return Double(clamped) * -16.0
     }
 
     private func cardZIndex(for relativeIndex: CGFloat) -> Double {
@@ -880,8 +870,14 @@ public struct SenseMeChannelsView: View {
     private func stepChannel(offset: Int) {
         let channels = displayedChannels
         guard !channels.isEmpty else { return }
+
+        // Spam prevention throttle: ensure animations settle cleanly without compounding
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now - lastStepTimestamp > 0.16 else { return }
+        lastStepTimestamp = now
+
         let newIndex = max(0, min(channels.count - 1, activeIndex + offset))
-        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.92)) {
             self.activeIndex = newIndex
             self.dragOffset = 0
         }
