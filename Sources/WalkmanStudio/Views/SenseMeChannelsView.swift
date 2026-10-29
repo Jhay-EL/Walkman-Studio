@@ -669,9 +669,9 @@ public struct SenseMeChannelsView: View {
     // -------------------------------------------------------------------------
     private var stackedDeckAndTracksSplitView: some View {
         VStack(spacing: 0) {
-            // TOP SECTION: 3D Stacked Card Carousel Slider (Center Bigger, Behind Smaller)
+            // TOP SECTION: 3D Stacked Card Carousel Slider (Taller 4:3 Aspect Ratio Cards)
             stackedCarouselStage
-                .frame(height: 300)
+                .frame(height: 380)
                 .background(
                     WalkmanTheme.background
                         .overlay(
@@ -724,7 +724,7 @@ public struct SenseMeChannelsView: View {
                     ZStack {
                         // Render all cards layered in 3D Stack order (no mid-transition popup or clipping)
                         ForEach(Array(displayedChannels.enumerated()), id: \.element.id) { index, ch in
-                            let relativeIndex = CGFloat(index - activeIndex) + (dragOffset / 205.0)
+                            let relativeIndex = CGFloat(index - activeIndex) + (dragOffset / 195.0)
                             let chTracks = tracks(for: ch)
                             let isActiveTime = ch.isCurrentlyActive(at: currentHour)
 
@@ -851,11 +851,11 @@ public struct SenseMeChannelsView: View {
         let sign: CGFloat = relativeIndex >= 0 ? 1.0 : -1.0
         let absDist = abs(relativeIndex)
         if absDist <= 1.0 {
-            return relativeIndex * 205.0
+            return relativeIndex * 195.0
         } else if absDist <= 2.0 {
-            return sign * (205.0 + (absDist - 1.0) * 135.0)
+            return sign * (195.0 + (absDist - 1.0) * 125.0)
         } else {
-            return sign * (340.0 + (absDist - 2.0) * 110.0)
+            return sign * (320.0 + (absDist - 2.0) * 105.0)
         }
     }
 
@@ -1381,12 +1381,12 @@ private struct SenseMeStackedCard: View {
                 onSelect()
             }
         }) {
-            // Card Body (295pt width x 175pt height)
+            // Card Body (280pt width x 262pt height - 4:3 Aspect Ratio Artwork)
             VStack(alignment: .leading, spacing: 0) {
-                // Artwork / Mood Tile (115pt)
+                // Artwork / Mood Tile (exact 4:3 ratio: 280pt x 209pt)
                 ZStack(alignment: .topTrailing) {
                     artworkOrPlaceholderTile
-                        .frame(height: 115)
+                        .frame(width: 280, height: 209)
                         .clipped()
 
                     // Top Badges (Category Pill on Left, Current Time on Right)
@@ -1457,7 +1457,7 @@ private struct SenseMeStackedCard: View {
                     }
                 }
 
-                // Card Footer Info (60pt)
+                // Card Footer Info (53pt)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         Text(channel.name)
@@ -1495,9 +1495,10 @@ private struct SenseMeStackedCard: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
+                .frame(width: 280, height: 53)
                 .background(Color.white.opacity(isFront ? 0.04 : 0.02))
             }
-            .frame(width: 295, height: 175)
+            .frame(width: 280, height: 262)
             .background(
                 RoundedRectangle(cornerRadius: 13, style: .continuous)
                     .fill(Color(red: 0.08, green: 0.08, blue: 0.10).opacity(isFront ? 0.96 : 0.88))
