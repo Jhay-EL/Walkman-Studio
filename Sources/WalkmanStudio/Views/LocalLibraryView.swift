@@ -71,6 +71,8 @@ public struct LocalLibraryView: View {
     let tracks: [Track]
     let folders: [LocalMusicFolder]
     let isLoading: Bool
+    var drives: [WalkmanDrive] = []
+    var activeDrive: WalkmanDrive? = nil
     @Binding var selectedTrackId: String?
     let onInspectTrack: (Track) -> Void
     var onDeleteTrack: ((Track) -> Void)? = nil
@@ -78,6 +80,7 @@ public struct LocalLibraryView: View {
     var onTrimCutTrack: ((Track) -> Void)? = nil
     var onGoToTransfer: (() -> Void)? = nil
     var onEditAlbum: ((AlbumItem) -> Void)? = nil
+    var onTransferComplete: (() -> Void)? = nil
 
     private static let defaultSortOrder = [
         KeyPathComparator(\Track.artist),
@@ -99,21 +102,44 @@ public struct LocalLibraryView: View {
     @State private var showRemoveConfirmation: Bool = false
     @Namespace private var modeAnimationNamespace
 
+    // Direct Transfer to Walkman State
+    @State private var isDirectTransferring: Bool = false
+    @State private var directTransferProgress: Double = 0.0
+    @State private var directTransferCurrentIndex: Int = 0
+    @State private var directTransferTotalCount: Int = 0
+    @State private var directTransferCurrentTitle: String = ""
+    @State private var showDirectTransferSheet: Bool = false
+    @State private var directTransferComplete: Bool = false
+    @State private var directTransferTargetName: String = "Sony Walkman"
+
+    // Unsupported Format & Device Warning Alert State
+    @State private var showTransferWarningAlert: Bool = false
+    @State private var transferWarningTitle: String = ""
+    @State private var transferWarningMessage: String = ""
+    @State private var pendingWarningTracks: [Track] = []
+    @State private var supportedTracksForMixedChoice: [Track] = []
+    @State private var hasMixedFormats: Bool = false
+
     public init(
         tracks: [Track],
         folders: [LocalMusicFolder],
         isLoading: Bool,
+        drives: [WalkmanDrive] = [],
+        activeDrive: WalkmanDrive? = nil,
         selectedTrackId: Binding<String?>,
         onInspectTrack: @escaping (Track) -> Void,
         onDeleteTrack: ((Track) -> Void)? = nil,
         onEditTrack: ((Track) -> Void)? = nil,
         onTrimCutTrack: ((Track) -> Void)? = nil,
         onGoToTransfer: (() -> Void)? = nil,
-        onEditAlbum: ((AlbumItem) -> Void)? = nil
+        onEditAlbum: ((AlbumItem) -> Void)? = nil,
+        onTransferComplete: (() -> Void)? = nil
     ) {
         self.tracks = tracks
         self.folders = folders
         self.isLoading = isLoading
+        self.drives = drives
+        self.activeDrive = activeDrive
         self._selectedTrackId = selectedTrackId
         self.onInspectTrack = onInspectTrack
         self.onDeleteTrack = onDeleteTrack
@@ -121,6 +147,7 @@ public struct LocalLibraryView: View {
         self.onTrimCutTrack = onTrimCutTrack
         self.onGoToTransfer = onGoToTransfer
         self.onEditAlbum = onEditAlbum
+        self.onTransferComplete = onTransferComplete
     }
 
     private var mappedAlbumSortOption: AlbumSortOption {
@@ -350,6 +377,41 @@ public struct LocalLibraryView: View {
             Button("Cancel", role: .cancel) {}
         } message: { folder in
             Text("This will remove \"\(folder.displayName)\" and its indexed tracks from your Walkman Studio database. Files on disk will NOT be deleted.")
+        }
+        .sheet(isPresented: $showDirectTransferSheet) {
+            DirectTransferSheet(
+                targetName: directTransferTargetName,
+                current: directTransferCurrentIndex,
+                total: directTransferTotalCount,
+                currentTitle: directTransferCurrentTitle,
+                progress: directTransferProgress,
+                isComplete: directTransferComplete,
+                onDone: {
+                    showDirectTransferSheet = false
+                }
+            )
+        }
+        .alert(transferWarningTitle, isPresented: $showTransferWarningAlert) {
+            if hasMixedFormats {
+                Button("Transfer & Convert (All)") {
+                    TransferQueueService.shared.enqueue(tracks: pendingWarningTracks)
+                    onGoToTransfer?()
+                }
+                if let targetDrive = ((activeDrive != nil && activeDrive?.type != .local) ? activeDrive : drives.first(where: { $0.type == .internal || $0.type == .microsd })) {
+                    Button("Transfer \(supportedTracksForMixedChoice.count) Supported Tracks") {
+                        startDirectTransfer(tracks: supportedTracksForMixedChoice, targetDrive: targetDrive)
+                    }
+                }
+                Button("Cancel", role: .cancel) { }
+            } else {
+                Button("Open Transfer & Convert") {
+                    TransferQueueService.shared.enqueue(tracks: pendingWarningTracks)
+                    onGoToTransfer?()
+                }
+                Button("Cancel", role: .cancel) { }
+            }
+        } message: {
+            Text(transferWarningMessage)
         }
     }
 
@@ -780,8 +842,21 @@ public struct LocalLibraryView: View {
 
                 Divider()
 
+                Button {
+                    let targets = filteredTracks.filter { selection.contains($0.id) }
+                    let toTransfer = targets.isEmpty ? [track] : targets
+                    handleTransferToWalkman(tracks: toTransfer)
+                } label: {
+                    Label(selection.count > 1 ? "Transfer \(selection.count) Tracks to Walkman" : "Transfer to Walkman", systemImage: "arrow.right.circle.fill")
+                }
+
                 if let onTransfer = onGoToTransfer {
-                    Button(action: onTransfer) {
+                    Button {
+                        let targets = filteredTracks.filter { selection.contains($0.id) }
+                        let toQueue = targets.isEmpty ? [track] : targets
+                        TransferQueueService.shared.enqueue(tracks: toQueue)
+                        onTransfer()
+                    } label: {
                         Label("Send to Transfer & Convert...", systemImage: "arrow.up.arrow.down.circle")
                     }
                 }
@@ -857,6 +932,12 @@ public struct LocalLibraryView: View {
             },
             onDeleteTrack: { track in
                 onDeleteTrack?(track)
+            },
+            onTransferAlbum: { album in
+                handleTransferToWalkman(tracks: album.tracks)
+            },
+            onTransferTrack: { track in
+                handleTransferToWalkman(tracks: [track])
             }
         )
         .id("local-albums-\(formatFilter)-\(searchQuery)-\(filteredTracks.count)")
@@ -881,6 +962,15 @@ public struct LocalLibraryView: View {
             },
             onTrimCutTrack: { track in
                 onTrimCutTrack?(track)
+            },
+            onTransferArtist: { artist in
+                handleTransferToWalkman(tracks: artist.tracks)
+            },
+            onTransferTracks: { tracks in
+                handleTransferToWalkman(tracks: tracks)
+            },
+            onTransferTrack: { track in
+                handleTransferToWalkman(tracks: [track])
             }
         )
         .id("local-artists-\(formatFilter)-\(searchQuery)-\(filteredTracks.count)")
@@ -948,6 +1038,10 @@ public struct LocalLibraryView: View {
                         onRemove: {
                             self.folderToRemove = folder
                             self.showRemoveConfirmation = true
+                        },
+                        onTransfer: {
+                            let folderTracks = effectiveTracks.filter { $0.fullPath.hasPrefix(folder.path) }
+                            handleTransferToWalkman(tracks: folderTracks)
                         }
                     )
                 }
@@ -1117,6 +1211,99 @@ public struct LocalLibraryView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+
+    // -------------------------------------------------------------------------
+    // TRANSFER TO WALKMAN ORCHESTRATION
+    // -------------------------------------------------------------------------
+    private func handleTransferToWalkman(tracks: [Track]) {
+        guard !tracks.isEmpty else { return }
+
+        // 1. Check if a physical Sony Walkman DAP is mounted
+        let walkmanDrive = (activeDrive != nil && activeDrive?.type != .local) ? activeDrive : drives.first(where: { $0.type == .internal || $0.type == .microsd })
+        guard let targetDrive = walkmanDrive else {
+            // No Walkman device connected -> Show Warning Alert offering redirect to Transfer & Convert tab
+            transferWarningTitle = "No Walkman Connected"
+            transferWarningMessage = "Please connect your Sony Walkman DAP via USB Mass Storage to transfer songs directly.\n\nWould you like to redirect to the Transfer & Convert tab to prepare your queue?"
+            pendingWarningTracks = tracks
+            hasMixedFormats = false
+            showTransferWarningAlert = true
+            return
+        }
+
+        // 2. Format Support Check
+        let unsupported = tracks.filter { track in
+            let ext = URL(fileURLWithPath: track.fullPath).pathExtension.lowercased()
+            return !TransferQueueService.isFormatSupported(ext: ext)
+        }
+
+        if !unsupported.isEmpty {
+            let uniqueExts = Array(Set(unsupported.map { ".\(URL(fileURLWithPath: $0.fullPath).pathExtension.lowercased())" })).sorted().joined(separator: ", ")
+            pendingWarningTracks = tracks
+
+            if unsupported.count == tracks.count {
+                // ALL selected tracks are unsupported
+                hasMixedFormats = false
+                transferWarningTitle = "Unsupported Audio Format"
+                transferWarningMessage = "The selected track\(tracks.count == 1 ? " is" : "s are") in an audio format (\(uniqueExts)) not natively supported by Sony Walkman non-Android firmware.\n\nRedirect to the Transfer & Convert tab to optimize and convert \(tracks.count == 1 ? "this track" : "these tracks") before transferring to your Walkman?"
+                showTransferWarningAlert = true
+            } else {
+                // MIXED: some supported, some unsupported
+                hasMixedFormats = true
+                let supported = tracks.filter { track in
+                    let ext = URL(fileURLWithPath: track.fullPath).pathExtension.lowercased()
+                    return TransferQueueService.isFormatSupported(ext: ext)
+                }
+                supportedTracksForMixedChoice = supported
+                transferWarningTitle = "Unsupported Formats Detected"
+                transferWarningMessage = "\(unsupported.count) of \(tracks.count) selected tracks are in formats (\(uniqueExts)) not natively playable on Sony Walkman.\n\nWould you like to redirect to the Transfer & Convert tab to optimize all tracks, or transfer only the \(supported.count) supported track\(supported.count == 1 ? "" : "s") directly?"
+                showTransferWarningAlert = true
+            }
+            return
+        }
+
+        // 3. ALL tracks are supported -> Execute Direct Transfer to Walkman
+        startDirectTransfer(tracks: tracks, targetDrive: targetDrive)
+    }
+
+    private func startDirectTransfer(tracks: [Track], targetDrive: WalkmanDrive) {
+        directTransferTotalCount = tracks.count
+        directTransferCurrentIndex = 0
+        directTransferProgress = 0.0
+        directTransferCurrentTitle = tracks.first?.title ?? ""
+        directTransferTargetName = targetDrive.name
+        directTransferComplete = false
+        showDirectTransferSheet = true
+        isDirectTransferring = true
+
+        Task {
+            do {
+                _ = try await TransferQueueService.shared.transferDirectly(
+                    tracks: tracks,
+                    to: targetDrive
+                ) { current, total, trackTitle in
+                    Task { @MainActor in
+                        self.directTransferCurrentIndex = current
+                        self.directTransferCurrentTitle = trackTitle
+                        self.directTransferProgress = total > 0 ? Double(current) / Double(total) : 1.0
+                    }
+                }
+                await MainActor.run {
+                    self.directTransferProgress = 1.0
+                    self.directTransferComplete = true
+                    self.isDirectTransferring = false
+                    self.onTransferComplete?()
+                }
+            } catch {
+                await MainActor.run {
+                    self.isDirectTransferring = false
+                    self.showDirectTransferSheet = false
+                    self.transferWarningTitle = "Transfer Failed"
+                    self.transferWarningMessage = error.localizedDescription
+                    self.showTransferWarningAlert = true
+                }
+            }
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -1128,6 +1315,7 @@ private struct LocalFolderRowCard: View {
     var onRescan: (() -> Void)? = nil
     let onReveal: () -> Void
     let onRemove: () -> Void
+    var onTransfer: (() -> Void)? = nil
 
     @State private var isHovered = false
 
@@ -1230,6 +1418,22 @@ private struct LocalFolderRowCard: View {
                 .stroke(Color.white.opacity(isHovered ? 0.16 : 0.06), lineWidth: 0.8)
         )
         .onHover { isHovered = $0 }
+        .contextMenu {
+            if let onTransfer = onTransfer {
+                Button {
+                    onTransfer()
+                } label: {
+                    Label("Transfer Folder to Walkman", systemImage: "arrow.right.circle.fill")
+                }
+                Divider()
+            }
+            Button("Open Folder in Songs View") {
+                onSelect?()
+            }
+            Button("Reveal in Finder", action: onReveal)
+            Divider()
+            Button("Remove from Local Library", role: .destructive, action: onRemove)
+        }
     }
 }
 
@@ -1495,6 +1699,119 @@ private struct LocalDisplayModePillView: View {
             }
         }
         .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+    }
+}
+
+// -----------------------------------------------------------------------------
+// DIRECT TRANSFER PROGRESS SHEET
+// -----------------------------------------------------------------------------
+private struct DirectTransferSheet: View {
+    let targetName: String
+    let current: Int
+    let total: Int
+    let currentTitle: String
+    let progress: Double
+    let isComplete: Bool
+    let onDone: () -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            // Header with Icon
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(WalkmanTheme.hiResGoldGradient)
+                        .frame(width: 44, height: 44)
+                        .shadow(color: WalkmanTheme.hiResGold.opacity(0.3), radius: 6, x: 0, y: 2)
+
+                    Image(systemName: isComplete ? "checkmark.circle.fill" : "arrow.right.circle.fill")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(Color.black)
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(isComplete ? "Transfer Complete" : "Transferring to Walkman...")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(Color.white)
+
+                    Text(targetName)
+                        .font(.system(size: 12))
+                        .foregroundStyle(WalkmanTheme.silverMuted)
+                }
+
+                Spacer()
+            }
+
+            // Progress Details
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(isComplete ? "\(total) track\(total == 1 ? "" : "s") transferred" : "Track \(current) of \(total)")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(WalkmanTheme.silverLight)
+
+                    Spacer()
+
+                    Text("\(Int((progress * 100).rounded()))%")
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(WalkmanTheme.hiResGold)
+                }
+
+                // Progress Bar
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(Color.white.opacity(0.08))
+                            .frame(height: 7)
+
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(WalkmanTheme.hiResGoldGradient)
+                            .frame(width: max(0, min(geo.size.width, geo.size.width * CGFloat(progress))), height: 7)
+                            .animation(.linear(duration: 0.15), value: progress)
+                    }
+                }
+                .frame(height: 7)
+
+                if !isComplete && !currentTitle.isEmpty {
+                    Text(currentTitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(WalkmanTheme.silverMuted)
+                        .lineLimit(1)
+                }
+            }
+            .padding(14)
+            .background(Color.white.opacity(0.03))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color.white.opacity(0.07), lineWidth: 0.8)
+            )
+
+            // Hardware compliance caption
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.shield.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(WalkmanTheme.hiResGold)
+                Text("Baseline RGB 800x800 JPEG • Strict ID3v2.3 UTF-16 • AppleDouble Cleaned")
+                    .font(.system(size: 10))
+                    .foregroundStyle(WalkmanTheme.silverDark)
+            }
+
+            if isComplete {
+                Button(action: onDone) {
+                    Text("Done")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Color.black)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(WalkmanTheme.hiResGoldGradient)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(24)
+        .frame(width: 440)
+        .background(WalkmanTheme.background)
     }
 }
 

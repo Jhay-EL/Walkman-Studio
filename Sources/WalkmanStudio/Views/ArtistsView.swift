@@ -15,6 +15,9 @@ public struct ArtistsView: View {
     let onSelectTrack: (Track) -> Void
     var onEditTrack: ((Track) -> Void)? = nil
     var onTrimCutTrack: ((Track) -> Void)? = nil
+    var onTransferArtist: ((ArtistItem) -> Void)? = nil
+    var onTransferTracks: (([Track]) -> Void)? = nil
+    var onTransferTrack: ((Track) -> Void)? = nil
     
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var selectedArtistName: String? = nil
@@ -38,7 +41,10 @@ public struct ArtistsView: View {
         showToolbar: Bool = true,
         onSelectTrack: @escaping (Track) -> Void,
         onEditTrack: ((Track) -> Void)? = nil,
-        onTrimCutTrack: ((Track) -> Void)? = nil
+        onTrimCutTrack: ((Track) -> Void)? = nil,
+        onTransferArtist: ((ArtistItem) -> Void)? = nil,
+        onTransferTracks: (([Track]) -> Void)? = nil,
+        onTransferTrack: ((Track) -> Void)? = nil
     ) {
         self.tracks = tracks
         self.precomputedArtists = precomputedArtists
@@ -46,6 +52,9 @@ public struct ArtistsView: View {
         self.onSelectTrack = onSelectTrack
         self.onEditTrack = onEditTrack
         self.onTrimCutTrack = onTrimCutTrack
+        self.onTransferArtist = onTransferArtist
+        self.onTransferTracks = onTransferTracks
+        self.onTransferTrack = onTransferTrack
         
         let initial = precomputedArtists ?? []
         self._cachedArtists = State(initialValue: initial)
@@ -232,7 +241,8 @@ public struct ArtistsView: View {
                                         },
                                         onCustomPhoto: {
                                             promptCustomPhoto(for: art.name)
-                                        }
+                                        },
+                                        onTransferArtist: onTransferArtist != nil ? { onTransferArtist?(art) } : nil
                                     )
                                 }
                             }
@@ -1178,6 +1188,14 @@ public struct ArtistsView: View {
             }
             .contentShape(Rectangle())
             .contextMenu {
+                if let onTransfer = onTransferTracks {
+                    Button {
+                        onTransfer(album.tracks)
+                    } label: {
+                        Label("Transfer Album to Walkman", systemImage: "arrow.right.circle.fill")
+                    }
+                    Divider()
+                }
                 Button("Play Album") {
                     if let first = album.tracks.first {
                         player.play(track: first, in: album.tracks)
@@ -1219,7 +1237,8 @@ public struct ArtistsView: View {
                         },
                         onTrimCut: {
                             onTrimCutTrack?(track)
-                        }
+                        },
+                        onTransferTrack: onTransferTrack != nil ? { onTransferTrack?(track) } : nil
                     )
                 }
             }
@@ -1320,6 +1339,7 @@ private struct ArtistListRowView: View {
     let onPlayAll: () -> Void
     let onRefreshPhoto: () -> Void
     let onCustomPhoto: () -> Void
+    var onTransferArtist: (() -> Void)? = nil
     
     @State private var isHovered = false
     
@@ -1395,6 +1415,14 @@ private struct ArtistListRowView: View {
         }
         .animation(.easeInOut(duration: 0.12), value: isHovered)
         .contextMenu {
+            if let onTransfer = onTransferArtist {
+                Button {
+                    onTransfer()
+                } label: {
+                    Label("Transfer Artist to Walkman", systemImage: "arrow.right.circle.fill")
+                }
+                Divider()
+            }
             Button("Play All (\(artist.trackCount) tracks)") {
                 onPlayAll()
             }
@@ -1609,6 +1637,7 @@ private struct ArtistTrackRowView: View {
     let onPlayToggle: () -> Void
     var onEdit: (() -> Void)? = nil
     var onTrimCut: (() -> Void)? = nil
+    var onTransferTrack: (() -> Void)? = nil
     
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var isHovered = false
@@ -1728,6 +1757,14 @@ private struct ArtistTrackRowView: View {
                 onPlayToggle()
             }
             Divider()
+            if let onTransfer = onTransferTrack {
+                Button {
+                    onTransfer()
+                } label: {
+                    Label("Transfer to Walkman", systemImage: "arrow.right.circle.fill")
+                }
+                Divider()
+            }
             Button {
                 onEdit?()
             } label: {

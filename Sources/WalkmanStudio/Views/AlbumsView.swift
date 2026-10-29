@@ -42,6 +42,8 @@ public struct AlbumsView: View {
     var onTrimCutTrack: ((Track) -> Void)? = nil
     var onDeleteAlbum: ((AlbumItem) -> Void)? = nil
     var onDeleteTrack: ((Track) -> Void)? = nil
+    var onTransferAlbum: ((AlbumItem) -> Void)? = nil
+    var onTransferTrack: ((Track) -> Void)? = nil
     
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var selectedAlbum: AlbumItem? = nil
@@ -70,7 +72,9 @@ public struct AlbumsView: View {
         onEditTrack: ((Track) -> Void)? = nil,
         onTrimCutTrack: ((Track) -> Void)? = nil,
         onDeleteAlbum: ((AlbumItem) -> Void)? = nil,
-        onDeleteTrack: ((Track) -> Void)? = nil
+        onDeleteTrack: ((Track) -> Void)? = nil,
+        onTransferAlbum: ((AlbumItem) -> Void)? = nil,
+        onTransferTrack: ((Track) -> Void)? = nil
     ) {
         self.tracks = tracks
         self.precomputedAlbums = precomputedAlbums
@@ -82,6 +86,8 @@ public struct AlbumsView: View {
         self.onTrimCutTrack = onTrimCutTrack
         self.onDeleteAlbum = onDeleteAlbum
         self.onDeleteTrack = onDeleteTrack
+        self.onTransferAlbum = onTransferAlbum
+        self.onTransferTrack = onTransferTrack
         
         let initial = precomputedAlbums ?? []
         self._cachedAlbums = State(initialValue: initial)
@@ -272,7 +278,9 @@ public struct AlbumsView: View {
                     },
                     onDeleteTrack: { tr in
                         onDeleteTrack?(tr)
-                    }
+                    },
+                    onTransferAlbum: onTransferAlbum != nil ? { onTransferAlbum?(album) } : nil,
+                    onTransferTrack: onTransferTrack
                 )
             } else {
                 // Albums Grid View
@@ -300,7 +308,8 @@ public struct AlbumsView: View {
                                         },
                                         onDeleteAlbum: {
                                             onDeleteAlbum?(alb)
-                                        }
+                                        },
+                                        onTransferAlbum: onTransferAlbum != nil ? { onTransferAlbum?(alb) } : nil
                                     )
                                 }
                             }
@@ -902,6 +911,7 @@ private struct AlbumGridCard: View {
     var onInspectAlbum: (() -> Void)? = nil
     var onEditAlbum: (() -> Void)? = nil
     var onDeleteAlbum: (() -> Void)? = nil
+    var onTransferAlbum: (() -> Void)? = nil
     
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var isHovered = false
@@ -1035,6 +1045,15 @@ private struct AlbumGridCard: View {
         }
         .animation(.easeInOut(duration: 0.15), value: isHovered)
         .contextMenu {
+            if let onTransfer = onTransferAlbum {
+                Button {
+                    onTransfer()
+                } label: {
+                    Label("Transfer Album to Walkman", systemImage: "arrow.right.circle.fill")
+                }
+                Divider()
+            }
+
             Button(action: onOpen) {
                 Label("View Album Details", systemImage: "music.note.list")
             }
@@ -1104,6 +1123,8 @@ private struct AlbumDetailView: View {
     var onTrimCutTrack: ((Track) -> Void)? = nil
     var onDeleteAlbum: (() -> Void)? = nil
     var onDeleteTrack: ((Track) -> Void)? = nil
+    var onTransferAlbum: (() -> Void)? = nil
+    var onTransferTrack: ((Track) -> Void)? = nil
     
     @ObservedObject private var player = AudioPlayerService.shared
     
@@ -1258,7 +1279,8 @@ private struct AlbumDetailView: View {
                                 },
                                 onDelete: {
                                     onDeleteTrack?(track)
-                                }
+                                },
+                                onTransfer: onTransferTrack != nil ? { onTransferTrack?(track) } : nil
                             )
                         }
                     }
@@ -1446,6 +1468,14 @@ private struct AlbumDetailView: View {
             }
         }
         .contextMenu {
+            if let onTransfer = onTransferAlbum {
+                Button {
+                    onTransfer()
+                } label: {
+                    Label("Transfer Album to Walkman", systemImage: "arrow.right.circle.fill")
+                }
+                Divider()
+            }
             Button {
                 onEditAlbum?()
             } label: {
@@ -1757,6 +1787,7 @@ private struct AlbumTrackRowView: View {
     var onEdit: (() -> Void)? = nil
     var onTrimCut: (() -> Void)? = nil
     var onDelete: (() -> Void)? = nil
+    var onTransfer: (() -> Void)? = nil
     
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var isHovered = false
@@ -1893,6 +1924,14 @@ private struct AlbumTrackRowView: View {
                 onPlayToggle()
             }
             Divider()
+            if let onTransfer = onTransfer {
+                Button {
+                    onTransfer()
+                } label: {
+                    Label("Transfer to Walkman", systemImage: "arrow.right.circle.fill")
+                }
+                Divider()
+            }
             Button {
                 onEdit?()
             } label: {

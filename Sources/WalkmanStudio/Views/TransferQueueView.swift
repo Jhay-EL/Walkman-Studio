@@ -7,10 +7,16 @@ public struct TransferQueueView: View {
     let activeDrive: WalkmanDrive?
     let onTransferComplete: () -> Void
 
+    @ObservedObject private var queueService = TransferQueueService.shared
+
     @State private var targetDriveId: String = ""
     @State private var targetMode: TransferTargetMode = .music
     @State private var selectedPreset: String = "copy_optimize"
-    @State private var queue: [TransferItem] = []
+
+    private var queue: [TransferItem] {
+        get { queueService.queue }
+        nonmutating set { queueService.queue = newValue }
+    }
     @State private var isProcessing: Bool = false
     @State private var isTargeted: Bool = false
     @State private var queueSearchText: String = ""
@@ -645,7 +651,7 @@ public struct TransferQueueView: View {
                             LazyVStack(spacing: 6) {
                                 ForEach(filteredQueueIndices.filter { $0 < queue.count }, id: \.self) { idx in
                                     QueueItemRow(
-                                        item: $queue[idx],
+                                        item: $queueService.queue[idx],
                                         isThisPlaying: player.isPlaying && player.currentTrack?.id == queue[idx].sourceURL.path,
                                         destinationExtension: destinationExtension(for: queue[idx].sourceURL),
                                         rootFolderName: targetMode.rootFolderName,

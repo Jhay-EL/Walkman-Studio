@@ -597,6 +597,8 @@ public struct ContentView: View {
                                 tracks: localLibrary.tracks,
                                 folders: localLibrary.folders,
                                 isLoading: localLibrary.isScanning,
+                                drives: drives,
+                                activeDrive: activeDrive,
                                 selectedTrackId: $selectedTrackId,
                                 onInspectTrack: { track in
                                     self.selectedTrackId = track.id
@@ -616,6 +618,9 @@ public struct ContentView: View {
                                 },
                                 onEditAlbum: { album in
                                     self.albumToEdit = album
+                                },
+                                onTransferComplete: {
+                                    self.refreshLibrary()
                                 }
                             )
 
