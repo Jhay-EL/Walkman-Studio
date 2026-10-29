@@ -4,6 +4,7 @@ import AppKit
 extension Notification.Name {
     public static let showAboutWalkmanStudio = Notification.Name("showAboutWalkmanStudio")
     public static let trackMetadataDidUpdate = Notification.Name("WalkmanStudio.trackMetadataDidUpdate")
+    public static let manageLocalFolders = Notification.Name("WalkmanStudio.manageLocalFolders")
 }
 
 public struct WindowConfigurator: NSViewRepresentable {
@@ -83,24 +84,44 @@ public struct WindowConfigurator: NSViewRepresentable {
     
     private func configureSplitViews(in view: NSView, isRoot: Bool = true) {
         if let splitView = view as? NSSplitView, splitView.isVertical, splitView.subviews.count >= 2 {
-            if isRoot {
-                // Outermost split view (Sidebar vs Detail):
-                // Sidebar (subview 0) is held rigid at fixed 260pt width.
-                // Detail container (subview 1) absorbs all window resizing.
-                splitView.setHoldingPriority(.defaultHigh, forSubviewAt: 0)
-                splitView.setHoldingPriority(.defaultLow, forSubviewAt: 1)
-                
-                // Recurse into subviews marking isRoot as false
-                for sub in splitView.subviews {
-                    configureSplitViews(in: sub, isRoot: false)
+            if let controller = splitView.delegate as? NSSplitViewController {
+                // When NSSplitView is managed by an NSSplitViewController, setting holding priorities
+                // directly on the NSSplitView throws an NSInternalInconsistencyException.
+                // We must configure holdingPriority on NSSplitViewItem instead.
+                if controller.splitViewItems.count >= 2 {
+                    if isRoot {
+                        controller.splitViewItems[0].holdingPriority = .defaultHigh
+                        controller.splitViewItems[1].holdingPriority = .defaultLow
+                        
+                        for sub in splitView.subviews {
+                            configureSplitViews(in: sub, isRoot: false)
+                        }
+                        return
+                    } else {
+                        controller.splitViewItems[0].holdingPriority = .defaultLow
+                        controller.splitViewItems[1].holdingPriority = .defaultHigh
+                    }
                 }
-                return
             } else {
-                // Inner split view (Main Content vs Trailing Inspector):
-                // Main Content (subview 0) absorbs size changes fluidly with zero resistance or clipping.
-                // Trailing Inspector (subview 1) is held rigid at its configured column width.
-                splitView.setHoldingPriority(.defaultLow, forSubviewAt: 0)
-                splitView.setHoldingPriority(.defaultHigh, forSubviewAt: 1)
+                if isRoot {
+                    // Outermost split view (Sidebar vs Detail):
+                    // Sidebar (subview 0) is held rigid at fixed 260pt width.
+                    // Detail container (subview 1) absorbs all window resizing.
+                    splitView.setHoldingPriority(.defaultHigh, forSubviewAt: 0)
+                    splitView.setHoldingPriority(.defaultLow, forSubviewAt: 1)
+                    
+                    // Recurse into subviews marking isRoot as false
+                    for sub in splitView.subviews {
+                        configureSplitViews(in: sub, isRoot: false)
+                    }
+                    return
+                } else {
+                    // Inner split view (Main Content vs Trailing Inspector):
+                    // Main Content (subview 0) absorbs size changes fluidly with zero resistance or clipping.
+                    // Trailing Inspector (subview 1) is held rigid at its configured column width.
+                    splitView.setHoldingPriority(.defaultLow, forSubviewAt: 0)
+                    splitView.setHoldingPriority(.defaultHigh, forSubviewAt: 1)
+                }
             }
         }
         for sub in view.subviews {
@@ -137,6 +158,17 @@ struct WalkmanStudioApp: App {
                 Button("About Walkman Studio") {
                     NotificationCenter.default.post(name: .showAboutWalkmanStudio, object: nil)
                 }
+                Divider()
+                Button("Manage Local Folders...") {
+                    NotificationCenter.default.post(name: .manageLocalFolders, object: nil)
+                }
+                .keyboardShortcut("l", modifiers: [.command, .shift])
+            }
+            CommandGroup(replacing: .newItem) {
+                Button("Manage Local Folders...") {
+                    NotificationCenter.default.post(name: .manageLocalFolders, object: nil)
+                }
+                .keyboardShortcut("o", modifiers: [.command, .shift])
             }
         }
     }

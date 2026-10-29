@@ -431,7 +431,6 @@ public extension View {
         self.background(TableScrollInsetModifier(bottomInset: inset))
     }
 
-    // MARK: - Backward Compatibility for macOS 13 (Ventura)
     @_disfavoredOverload
     @ViewBuilder
     func onChange<V: Equatable>(of value: V, _ action: @escaping () -> Void) -> some View {
@@ -446,5 +445,86 @@ public extension View {
         self.onChange(of: value) { newValue in
             action(newValue, newValue)
         }
+    }
+}
+
+// MARK: - Liquid Glass Segmented Pill Backgrounds
+public struct LiquidGlassActivePill: View {
+    public let isHiRes: Bool
+    public let isHovered: Bool
+    
+    public init(isHiRes: Bool = false, isHovered: Bool = false) {
+        self.isHiRes = isHiRes
+        self.isHovered = isHovered
+    }
+    
+    public var body: some View {
+        ZStack {
+            // Liquid Glass Translucent Body Fill
+            Color.white.opacity(isHiRes ? 0.13 : 0.16)
+            
+            // Top specular refraction sheen
+            VStack(spacing: 0) {
+                LinearGradient(
+                    stops: [
+                        .init(color: .white.opacity(isHovered ? 0.42 : 0.35), location: 0.0),
+                        .init(color: .clear, location: 1.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 6)
+                Spacer(minLength: 0)
+            }
+        }
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(
+                    isHiRes ? WalkmanTheme.hiResGold.opacity(0.55) : Color.white.opacity(isHovered ? 0.45 : 0.34),
+                    lineWidth: 0.85
+                )
+        )
+        .shadow(
+            color: Color.black.opacity(0.25),
+            radius: 3,
+            x: 0,
+            y: 1
+        )
+    }
+}
+
+public struct LiquidGlassHoverPill: View {
+    public init() {}
+    
+    public var body: some View {
+        ZStack {
+            Color.white.opacity(0.09)
+            
+            // Subtle specular refraction on top edge
+            VStack(spacing: 0) {
+                LinearGradient(
+                    stops: [
+                        .init(color: .white.opacity(0.20), location: 0.0),
+                        .init(color: .clear, location: 1.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 5.5)
+                Spacer(minLength: 0)
+            }
+        }
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(Color.white.opacity(0.22), lineWidth: 0.85)
+        )
+        .shadow(
+            color: Color.black.opacity(0.15),
+            radius: 2,
+            x: 0,
+            y: 1
+        )
     }
 }
