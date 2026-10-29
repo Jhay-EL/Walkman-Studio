@@ -1539,7 +1539,7 @@ private struct SenseMeStackedCard: View {
                     HStack(spacing: 6) {
                         Text(channel.name)
                             .font(.system(size: 15, weight: isFront ? .heavy : .bold))
-                            .foregroundStyle(isFront ? WalkmanTheme.hiResGold : (isHovered ? Color.white : WalkmanTheme.silverLight))
+                            .foregroundStyle(isFront ? Color.white : (isHovered ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted))
                             .lineLimit(1)
 
                         if isPlayingThisChannel {
@@ -1573,30 +1573,80 @@ private struct SenseMeStackedCard: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 7)
                 .frame(width: 336, height: 52)
-                .background(Color.white.opacity(isFront ? 0.04 : 0.02))
+                .background(
+                    ZStack {
+                        Color(red: 16 / 255, green: 17 / 255, blue: 21 / 255).opacity(isFront ? 0.90 : 0.82)
+                        Color.white.opacity(isFront ? 0.04 : 0.02)
+                    }
+                )
+                .overlay(
+                    Rectangle()
+                        .fill(Color.white.opacity(isFront ? 0.12 : 0.05))
+                        .frame(height: 0.8),
+                    alignment: .top
+                )
             }
             .frame(width: 336, height: 304)
             .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color(red: 0.08, green: 0.08, blue: 0.10).opacity(isFront ? 0.96 : 0.88))
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(.ultraThinMaterial)
+
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color(red: 14 / 255, green: 15 / 255, blue: 19 / 255).opacity(isFront ? 0.88 : 0.80))
+
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.white.opacity(isFront ? 0.04 : 0.015))
+
+                    // Optical top specular sheen reflection
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color.white.opacity(isFront ? 0.32 : 0.14), location: 0.0),
+                                .init(color: Color.white.opacity(0.04), location: 0.45),
+                                .init(color: Color.clear, location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 16)
+                        Spacer(minLength: 0)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
             )
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(
-                        isFront ?
-                            WalkmanTheme.hiResGold.opacity(0.88) :
-                            Color.white.opacity(isHovered ? 0.24 : 0.09),
-                        lineWidth: isFront ? 1.8 : 0.8
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            stops: isFront ? [
+                                .init(color: Color.white.opacity(0.70), location: 0.0),
+                                .init(color: Color.white.opacity(0.35), location: 0.35),
+                                .init(color: Color.white.opacity(0.12), location: 0.70),
+                                .init(color: Color.white.opacity(0.06), location: 1.0)
+                            ] : [
+                                .init(color: Color.white.opacity(isHovered ? 0.38 : 0.18), location: 0.0),
+                                .init(color: Color.white.opacity(isHovered ? 0.18 : 0.08), location: 0.5),
+                                .init(color: Color.white.opacity(0.03), location: 1.0)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: isFront ? 1.2 : 0.8
                     )
             )
             .shadow(
-                color: isFront ?
-                    channel.gradientColors[0].opacity(0.48) :
-                    Color.black.opacity(0.35),
-                radius: isFront ? 14 : 5,
+                color: Color.black.opacity(isFront ? 0.56 : 0.32),
+                radius: isFront ? 20 : 7,
                 x: 0,
-                y: isFront ? 5 : 2
+                y: isFront ? 10 : 3
+            )
+            .shadow(
+                color: Color.black.opacity(isFront ? 0.24 : 0.12),
+                radius: isFront ? 5 : 2,
+                x: 0,
+                y: isFront ? 2 : 1
             )
         }
         .buttonStyle(.plain)
