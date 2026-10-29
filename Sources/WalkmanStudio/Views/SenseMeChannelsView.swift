@@ -1561,21 +1561,13 @@ private struct SenseMeChannelTableView: View {
 
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var selectedTrackId: String? = nil
-    @State private var sortOrder = [
-        KeyPathComparator(\Track.artist),
-        KeyPathComparator(\Track.album),
-        KeyPathComparator(\Track.trackNum)
-    ]
-
-    private var sortedTracks: [Track] {
-        tracks.sorted(using: sortOrder)
-    }
 
     var body: some View {
-        Table(sortedTracks, selection: $selectedTrackId, sortOrder: $sortOrder) {
-            TableColumn("#", value: \.trackNum) { track in
+        Table(tracks, selection: $selectedTrackId) {
+            TableColumn("#") { track in
                 let isCurrent = player.currentTrack?.id == track.id
                 let isPlayingThis = isCurrent && player.isPlaying
+                let pos = (tracks.firstIndex(where: { $0.id == track.id }) ?? 0) + 1
 
                 Button(action: {
                     self.selectedTrackId = track.id
@@ -1589,7 +1581,7 @@ private struct SenseMeChannelTableView: View {
                         if isPlayingThis {
                             EqualizerLiveBars(color: WalkmanTheme.hiResGold, barCount: 3)
                         } else {
-                            Text(track.trackNum.isEmpty ? "—" : track.trackNum)
+                            Text("\(pos)")
                                 .font(WalkmanFont.monoSmall)
                                 .foregroundStyle(WalkmanTheme.silverMuted)
                         }
@@ -1600,40 +1592,22 @@ private struct SenseMeChannelTableView: View {
             }
             .width(min: 24, ideal: 30, max: 36)
 
-            TableColumn("Title", value: \.title) { track in
+            TableColumn("Title") { track in
                 let isCurrent = player.currentTrack?.id == track.id
                 let isPlayingThis = isCurrent && player.isPlaying
 
                 HStack(spacing: 8) {
                     TrackCoverThumbnail(track: track, size: 28, isPlaying: isPlayingThis)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(track.title)
-                            .font(isPlayingThis ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
-                            .foregroundStyle(isPlayingThis ? WalkmanTheme.hiResGold : Color.white)
-                            .lineLimit(1)
-
-                        if let highlight = track.senseMeHighlightSec, highlight > 0 {
-                            Button(action: {
-                                player.play(track: track, in: allChannelTracks, startTime: highlight)
-                            }) {
-                                HStack(spacing: 3) {
-                                    Image(systemName: "sparkles")
-                                        .font(.system(size: 8))
-                                    Text("Preview Chorus @ \(formatTime(highlight))")
-                                        .font(.system(size: 9, weight: .semibold))
-                                }
-                                .foregroundStyle(WalkmanTheme.hiResGold)
-                            }
-                            .buttonStyle(.plain)
-                            .help("Jump to Sony Sabi Chorus Highlight")
-                        }
-                    }
+                    Text(track.title)
+                        .font(isPlayingThis ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
+                        .foregroundStyle(isPlayingThis ? WalkmanTheme.hiResGold : Color.white)
+                        .lineLimit(1)
                 }
             }
             .width(min: 160, ideal: 240)
 
-            TableColumn("Artist", value: \.artist) { track in
+            TableColumn("Artist") { track in
                 Text(track.artist.isEmpty ? "Unknown Artist" : track.artist)
                     .font(WalkmanFont.bodyMedium)
                     .foregroundStyle(WalkmanTheme.silverLight)
@@ -1641,7 +1615,7 @@ private struct SenseMeChannelTableView: View {
             }
             .width(min: 120, ideal: 180)
 
-            TableColumn("Album", value: \.album) { track in
+            TableColumn("Album") { track in
                 Text(track.album.isEmpty ? "Unknown Album" : track.album)
                     .font(WalkmanFont.callout)
                     .foregroundStyle(WalkmanTheme.silverMuted)
@@ -1649,7 +1623,7 @@ private struct SenseMeChannelTableView: View {
             }
             .width(min: 110, ideal: 160)
 
-            TableColumn("Speed", value: \.senseMeBpmString) { track in
+            TableColumn("Speed") { track in
                 if let bpm = track.senseMeBpm, bpm > 0 {
                     Text("\(Int(bpm.rounded())) BPM")
                         .font(WalkmanFont.monoSmall)
@@ -1662,7 +1636,7 @@ private struct SenseMeChannelTableView: View {
             }
             .width(min: 60, ideal: 75, max: 90)
 
-            TableColumn("Time", value: \.durationSeconds) { track in
+            TableColumn("Time") { track in
                 Text(track.durationFormatted)
                     .font(WalkmanFont.monoSmall)
                     .foregroundStyle(WalkmanTheme.silverMuted)
@@ -1706,7 +1680,7 @@ private struct SenseMeChannelTableView: View {
                 }
             }
         } primaryAction: { selection in
-            if let firstId = selection.first, let track = sortedTracks.first(where: { $0.id == firstId }) {
+            if let firstId = selection.first, let track = tracks.first(where: { $0.id == firstId }) {
                 self.selectedTrackId = track.id
                 if player.currentTrack?.id == track.id && player.isPlaying {
                     player.pause()
