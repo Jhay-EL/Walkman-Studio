@@ -840,6 +840,7 @@ public struct SenseMeChannelsView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.vertical, 40)
+                .padding(.bottom, 88)
             } else {
                 SenseMeChannelTableView(
                     tracks: filteredTracks(from: currentTracks),
@@ -1574,12 +1575,33 @@ private struct SenseMeChannelTableView: View {
                 Button("Trim & Cut...") {
                     onTrimCutTrack?(tr)
                 }
+                if let onTransfer = onGoToTransfer {
+                    Divider()
+                    Button {
+                        let targets = tracks.filter { selection.contains($0.id) }
+                        let toQueue = targets.isEmpty ? [tr] : targets
+                        TransferQueueService.shared.enqueue(tracks: toQueue)
+                        onTransfer()
+                    } label: {
+                        Label("Send to Transfer & Convert...", systemImage: "arrow.up.arrow.down.circle")
+                    }
+                }
                 Divider()
                 Button("Reveal in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: tr.fullPath)])
                 }
             }
+        } primaryAction: { selection in
+            if let firstId = selection.first, let track = sortedTracks.first(where: { $0.id == firstId }) {
+                self.selectedTrackId = track.id
+                if player.currentTrack?.id == track.id && player.isPlaying {
+                    player.pause()
+                } else {
+                    player.play(track: track, in: allChannelTracks)
+                }
+            }
         }
+        .tableScrollBottomInset(88)
     }
 
     private func formatTime(_ sec: Double) -> String {
