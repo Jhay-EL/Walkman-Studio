@@ -202,29 +202,6 @@ public struct SenseMeChannel: Identifiable, Hashable, Sendable {
             artworkFilename: "senseme_extreme.png",
             hourRange: nil
         ),
-        SenseMeChannel(
-            id: "acoustic",
-            name: "Acoustic",
-            category: .moodAndStyle,
-            subtitle: "Natural Instruments & Vocals",
-            description: "Unplugged guitars, pianos, folk instrumentation, and intimate, organic performances.",
-            icon: "guitars.fill",
-            gradientColors: [Color(red: 0.76, green: 0.54, blue: 0.34), Color(red: 0.48, green: 0.32, blue: 0.18)],
-            artworkFilename: "senseme_acoustic.png",
-            hourRange: nil
-        ),
-        SenseMeChannel(
-            id: "electronic",
-            name: "Electronic",
-            category: .moodAndStyle,
-            subtitle: "Synthesizers & Digital Beats",
-            description: "Analog synths, modular soundscapes, ambient electronica, and futuristic grooves.",
-            icon: "pianokeys.inverse",
-            gradientColors: [Color(red: 0.18, green: 0.60, blue: 0.92), Color(red: 0.08, green: 0.28, blue: 0.72)],
-            artworkFilename: "senseme_electronic.png",
-            hourRange: nil
-        ),
-
         // ---------------------------------------------------------------------
         // 3. Special / Global Channel (1 Channel)
         // ---------------------------------------------------------------------
@@ -403,7 +380,6 @@ public struct SenseMeChannelsView: View {
 
     @State private var activeIndex: Int = 0
     @State private var viewMode: SenseMeViewMode = .carousel
-    @State private var selectedCategoryFilter: String = "ALL"
     @State private var trackFilterQuery: String = ""
     @State private var dragOffset: CGFloat = 0.0
     @State private var lastStepTimestamp: TimeInterval = 0
@@ -430,16 +406,7 @@ public struct SenseMeChannelsView: View {
     }
 
     private var displayedChannels: [SenseMeChannel] {
-        switch selectedCategoryFilter {
-        case "TIME":
-            return SenseMeChannel.allChannels.filter { $0.category == .timeOfDay }
-        case "MOOD":
-            return SenseMeChannel.allChannels.filter { $0.category == .moodAndStyle }
-        case "SPECIAL":
-            return SenseMeChannel.allChannels.filter { $0.category == .special }
-        default:
-            return SenseMeChannel.allChannels
-        }
+        SenseMeChannel.allChannels
     }
 
     private var selectedChannel: SenseMeChannel {
@@ -714,21 +681,16 @@ public struct SenseMeChannelsView: View {
     // -------------------------------------------------------------------------
     private var stackedCarouselStage: some View {
         VStack(spacing: 6) {
-            // Filter Pills along top of Carousel
-            HStack(spacing: 8) {
-                categoryFilterButton(id: "ALL", title: "All Channels (\(SenseMeChannel.allChannels.count))")
-                categoryFilterButton(id: "TIME", title: "🌅 Time of Day (5)")
-                categoryFilterButton(id: "MOOD", title: "⚡ Mood & Style (10)")
-                categoryFilterButton(id: "SPECIAL", title: "🔀 Global (1)")
-
+            // Top of Carousel Stage: Clean Step Indicator
+            HStack {
                 Spacer()
 
-                // Step count indicator e.g. "3 of 16"
+                // Step count indicator e.g. "3 of 14"
                 Text("\(activeIndex + 1) of \(displayedChannels.count)")
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
                     .foregroundStyle(WalkmanTheme.silverMuted)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 3.5)
                     .background(Color.white.opacity(0.04))
                     .clipShape(Capsule())
             }
@@ -952,32 +914,6 @@ public struct SenseMeChannelsView: View {
         let absDist = abs(relativeIndex)
         let tieBreaker = relativeIndex > 0 ? 0.01 : 0.0
         return 100.0 - (Double(absDist) * 15.0) + tieBreaker
-    }
-
-    private func categoryFilterButton(id: String, title: String) -> some View {
-        Button(action: {
-            withAnimation(.spring(response: 0.28, dampingFraction: 0.76)) {
-                selectedCategoryFilter = id
-                activeIndex = 0
-                dragOffset = 0
-            }
-        }) {
-            Text(title)
-                .font(.system(size: 11, weight: selectedCategoryFilter == id ? .bold : .medium))
-                .foregroundStyle(selectedCategoryFilter == id ? Color.black : WalkmanTheme.silverLight)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(
-                    selectedCategoryFilter == id ?
-                        WalkmanTheme.hiResGoldGradient :
-                        LinearGradient(colors: [Color.white.opacity(0.05), Color.white.opacity(0.02)], startPoint: .top, endPoint: .bottom)
-                )
-                .clipShape(Capsule())
-                .overlay(
-                    Capsule().stroke(selectedCategoryFilter == id ? WalkmanTheme.hiResGold.opacity(0.4) : Color.white.opacity(0.08), lineWidth: 0.8)
-                )
-        }
-        .buttonStyle(.plain)
     }
 
     private func stepChannel(offset: Int) {
@@ -1357,10 +1293,6 @@ public struct SenseMeChannelsView: View {
                     score += (1.0 - abs(bpm - 124.0) / 30.0) * 35.0 + aro * 20.0
                 case "extreme":
                     score += aro * 45.0 + ((bpm - 120.0) / 30.0) * 15.0
-                case "acoustic":
-                    score += val * 20.0 + (tr.format == "FLAC" ? 10.0 : 0.0)
-                case "electronic":
-                    score += aro * 25.0
                 case "morning":
                     let hourFit = (hour >= 5 && hour < 10) ? 30.0 : 0.0
                     score += val * 30.0 + ((120.0 - abs(bpm - 105.0)) / 40.0) * 10.0 + hourFit
@@ -1419,10 +1351,6 @@ public struct SenseMeChannelsView: View {
                     return bpm >= 105 && bpm <= 140 && aro >= 0.20
                 case "lounge":
                     return bpm >= 75 && bpm <= 120 && aro >= -0.40 && aro <= 0.25
-                case "acoustic":
-                    return tr.genre.localizedCaseInsensitiveContains("acoustic") || val >= 0.10
-                case "electronic":
-                    return tr.genre.localizedCaseInsensitiveContains("electronic") || aro >= 0.35
                 case "morning":
                     return (val >= 0.10 || (aro >= -0.20 && aro <= 0.35)) && bpm >= 85 && bpm <= 130
                 case "daytime":

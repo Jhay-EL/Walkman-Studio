@@ -330,15 +330,9 @@ public final class SenseMeEngine: @unchecked Sendable {
         if moodScores[5] >= 50 || (bpm >= 80 && bpm <= 118 && arousal >= -0.40 && arousal <= 0.30) {
             channels.append("Lounge")
         }
-        if moodScores[8] >= 55 {
-            channels.append("Acoustic")
-        }
-        if moodScores[9] >= 60 {
-            channels.append("Electronic")
-        }
 
         // Time of Day (5 channels)
-        if channels.contains("Upbeat") || channels.contains("Acoustic") || channels.contains("Relax") || valence >= 0.15 {
+        if channels.contains("Upbeat") || channels.contains("Relax") || valence >= 0.15 {
             channels.append("Morning")
         }
         if channels.contains("Energetic") || channels.contains("Upbeat") || channels.contains("Dance") || valence >= 0.10 {
@@ -929,9 +923,6 @@ public final class SenseMeEngine: @unchecked Sendable {
                 assignedChannels.append(moodPairs[1].name)
             }
         }
-
-        if s8 >= 65 { assignedChannels.append("Acoustic") }
-        if s9 >= 65 { assignedChannels.append("Electronic") }
 
         // B) Time-of-Day Channels (Exclusive circadian matching - no dumping into all 5!)
         if (s2 >= 55 || s8 >= 60 || valence >= 0.10) && bpm >= 85 && bpm <= 130 && arousal >= -0.20 && arousal <= 0.40 {
