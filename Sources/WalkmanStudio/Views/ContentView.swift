@@ -10,13 +10,14 @@ public struct ContentView: View {
     @State private var tracks: [Track] = []
     @State private var isScanning: Bool = false
     @State private var isRefreshingDrives: Bool = false
-    @State private var selectedTab: NavigationTab = .overview
+    @State private var selectedTab: NavigationTab = .localLibrary
     @State private var selectedTrackId: String?
     @State private var showInspector: Bool = false
     @State private var isEjecting: Bool = false
     @State private var queueCount: Int = 0
     @State private var deviceInfo: WalkmanDeviceInfo? = nil
     @State private var showAboutSheet: Bool = false
+    @State private var showManageFoldersSheet: Bool = false
     @State private var trackToEdit: Track? = nil
     @State private var trackToTrimCut: Track? = nil
     @State private var albumToEdit: AlbumItem? = nil
@@ -24,6 +25,7 @@ public struct ContentView: View {
     @State private var isFullScreenPlayerPresented: Bool = false
     
     @ObservedObject private var player = AudioPlayerService.shared
+    @ObservedObject private var localLibrary = LocalMusicLibraryService.shared
     
     // Real-time macOS workspace volume publishers
     private let didMountPublisher = NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didMountNotification)
@@ -47,6 +49,9 @@ public struct ContentView: View {
             if let tr = cachedRecentTracks.first(where: { $0.id == id }) {
                 return tr
             }
+            if let tr = localLibrary.tracks.first(where: { $0.id == id }) {
+                return tr
+            }
             if let playing = player.currentTrack, playing.id == id {
                 return playing
             }
@@ -56,6 +61,9 @@ public struct ContentView: View {
                 return tr
             }
             if let tr = cachedRecentTracks.first(where: { $0.id == playing.id }) {
+                return tr
+            }
+            if let tr = localLibrary.tracks.first(where: { $0.id == playing.id }) {
                 return tr
             }
             return playing
@@ -101,9 +109,13 @@ public struct ContentView: View {
             self.cachedAlbums = []
             self.cachedRecentTracks = []
             self.libraryStats = (0, 0, 0, 0)
-            self.selectedTrackId = nil
             self.isEjecting = false
-            AudioPlayerService.shared.stopAndClear()
+            if let current = AudioPlayerService.shared.currentTrack, !localLibrary.tracks.contains(where: { $0.id == current.id }) {
+                AudioPlayerService.shared.stopAndClear()
+            }
+            if selectedTab == .overview || selectedTab == .library || selectedTab == .recentlyAdded || selectedTab == .albums || selectedTab == .artists || selectedTab == .hiRes || selectedTab == .playlists || selectedTab == .backupRestore {
+                self.selectedTab = .localLibrary
+            }
         } else {
             // 1. Maintain active device if still connected, otherwise pick first
             if let current = activeDevice, let stillPresent = detectedDevices.first(where: { $0.id == current.id }) {
@@ -406,161 +418,158 @@ public struct ContentView: View {
         }
     }
     
+    @ViewBuilder
+    private var disconnectedDeviceView: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(0.08))
+                    .frame(width: 88, height: 88)
+                
+                Image(systemName: "cable.connector.horizontal")
+                    .font(.system(size: 36))
+                    .foregroundStyle(WalkmanTheme.silver)
+            }
+            
+            VStack(spacing: 8) {
+                Text("Connect Sony Walkman")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(.white)
+                
+                Text("Plug in your Sony Walkman via USB cable and ensure USB Mass Storage mode is enabled on the player.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 440)
+            }
+            
+            if let unsupported = WalkmanEngine.shared.lastUnsupportedModel {
+                VStack(spacing: 5) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(WalkmanTheme.hiResGold)
+                        Text("Unsupported Model: \(unsupported)")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
+                    Text("Walkman Studio is designed exclusively for non-Android Sony OS Walkmans. Android-based Walkmans use MTP and are not supported.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .frame(maxWidth: 440)
+            }
+            
+            Button(action: refreshDrives) {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.clockwise")
+                    Text("Detect Drives")
+                }
+                .font(.system(size: 12.5, weight: .semibold))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 7)
+                .background(WalkmanTheme.silverGradient)
+                .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(WalkmanTheme.background)
+    }
+
+    @ViewBuilder
+    private var walkmanLoadingView: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            
+            WalkmanDeviceIconView(
+                size: 84,
+                mountPoint: activeDrive?.mountPoint,
+                deviceInfo: deviceInfo,
+                hasBackground: false
+            )
+            
+            VStack(spacing: 8) {
+                Text("Reading Walkman Library")
+                    .font(WalkmanFont.title1)
+                    .foregroundStyle(.white)
+                
+                Text("Caching music index & album metadata from \(activeDrive?.name ?? "Walkman")...")
+                    .font(WalkmanFont.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 460)
+            }
+            
+            VStack(spacing: 12) {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .tint(WalkmanTheme.silver)
+                    .scaleEffect(1.2)
+                
+                Text("Optimizing library view...")
+                    .font(WalkmanFont.callout)
+                    .foregroundStyle(WalkmanTheme.silverMuted)
+            }
+            .padding(.top, 6)
+            
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(WalkmanTheme.background)
+    }
+
     public var body: some View {
         ZStack {
-            Group {
-                if drives.isEmpty && !isRefreshingDrives {
-                // Disconnected State
-                VStack(spacing: 24) {
-                    Spacer()
-                    
-                    ZStack {
-                        Circle()
-                            .fill(Color.white.opacity(0.08))
-                            .frame(width: 88, height: 88)
-                        
-                        Image(systemName: "cable.connector.horizontal")
-                            .font(.system(size: 36))
-                            .foregroundStyle(WalkmanTheme.silver)
-                    }
-                    
-                    VStack(spacing: 8) {
-                        Text("Connect Sony Walkman")
-                            .font(.system(size: 22, weight: .bold))
-                            .foregroundStyle(.white)
-                        
-                        Text("Plug in your Sony Walkman via USB cable and ensure USB Mass Storage mode is enabled on the player.")
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: 440)
-                    }
-                    
-                    if let unsupported = WalkmanEngine.shared.lastUnsupportedModel {
-                        VStack(spacing: 5) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundStyle(WalkmanTheme.hiResGold)
-                                Text("Unsupported Model: \(unsupported)")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(.white)
-                            }
-                            Text("Walkman Studio is designed exclusively for non-Android Sony OS Walkmans. Android-based Walkmans use MTP and are not supported.")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Color.white.opacity(0.06))
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .frame(maxWidth: 440)
-                    }
-                    
-                    Button(action: refreshDrives) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "arrow.clockwise")
-                            Text("Detect Drives")
-                        }
-                        .font(.system(size: 12.5, weight: .semibold))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 7)
-                        .background(WalkmanTheme.silverGradient)
-                        .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    
-                    Spacer()
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(WalkmanTheme.background)
-                .toolbar {
-                    Spacer()
-                    
-                    // Rescan
-                    Button(action: { refreshDrives() }) {
-                        Label("Refresh", systemImage: "arrow.clockwise")
-                    }
-                    .help("Refresh connected drives and reload library")
-                }
+            NavigationSplitView(columnVisibility: $columnVisibility) {
+                SidebarView(
+                    selectedTab: $selectedTab,
+                    devices: devices,
+                    drives: drives,
+                    activeDevice: activeDevice,
+                    trackCount: tracks.count,
+                    localTrackCount: localLibrary.tracks.count,
+                    localSenseMeCount: localLibrary.tracks.filter { $0.isSenseMeAnalyzed }.count,
+                    isWalkmanConnected: !drives.isEmpty,
+                    recentlyAddedCount: libraryStats.recentlyAdded,
+                    albumCount: libraryStats.albums,
+                    artistCount: libraryStats.artists,
+                    hiResCount: libraryStats.hiRes,
+                    duplicateCount: duplicateFinder.duplicateGroups.count,
+                    queueCount: queueCount,
+                    deviceInfo: deviceInfo,
+                    activeDrive: activeDrive,
+                    onSelectDevice: { dev in
+                        selectDevice(dev)
+                    },
+                    onSelectDrive: { drive in
+                        selectDrive(drive)
+                    },
+                    onOpenAbout: { self.showAboutSheet = true }
+                )
+                .frame(width: 260)
+                .navigationSplitViewColumnWidth(min: 260, ideal: 260, max: 260)
                 .toolbarBackground(.hidden, for: .windowToolbar)
-            } else if isScanning && tracks.isEmpty {
-                // Caching & Indexing Loading Screen
-                VStack(spacing: 24) {
-                    Spacer()
-                    
-                    WalkmanDeviceIconView(
-                        size: 84,
-                        mountPoint: activeDrive?.mountPoint,
-                        deviceInfo: deviceInfo,
-                        hasBackground: false
-                    )
-                    
-                    VStack(spacing: 8) {
-                        Text("Reading Walkman Library")
-                            .font(WalkmanFont.title1)
-                            .foregroundStyle(.white)
+            } detail: {
+                ZStack(alignment: .bottom) {
+                    ZStack {
+                        WalkmanTheme.background
+                            .ignoresSafeArea()
                         
-                        Text("Caching music index & album metadata from \(activeDrive?.name ?? "Walkman")...")
-                            .font(WalkmanFont.callout)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: 460)
-                    }
-                    
-                    VStack(spacing: 12) {
-                        ProgressView()
-                            .progressViewStyle(.circular)
-                            .tint(WalkmanTheme.silver)
-                            .scaleEffect(1.2)
-                        
-                        Text("Optimizing library view...")
-                            .font(WalkmanFont.callout)
-                            .foregroundStyle(WalkmanTheme.silverMuted)
-                    }
-                    .padding(.top, 6)
-                    
-                    Spacer()
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(WalkmanTheme.background)
-            } else {
-                // Connected State: Native macOS NavigationSplitView
-                NavigationSplitView(columnVisibility: $columnVisibility) {
-                    SidebarView(
-                        selectedTab: $selectedTab,
-                        devices: devices,
-                        drives: drives,
-                        activeDevice: activeDevice,
-                        trackCount: tracks.count,
-                        recentlyAddedCount: libraryStats.recentlyAdded,
-                        albumCount: libraryStats.albums,
-                        artistCount: libraryStats.artists,
-                        hiResCount: libraryStats.hiRes,
-                        duplicateCount: duplicateFinder.duplicateGroups.count,
-                        queueCount: queueCount,
-                        deviceInfo: deviceInfo,
-                        activeDrive: activeDrive,
-                        onSelectDevice: { dev in
-                            selectDevice(dev)
-                        },
-                        onSelectDrive: { drive in
-                            selectDrive(drive)
-                        },
-                        onOpenAbout: { self.showAboutSheet = true }
-                    )
-                    .frame(width: 260)
-                    .navigationSplitViewColumnWidth(min: 260, ideal: 260, max: 260)
-                    .toolbarBackground(.hidden, for: .windowToolbar)
-                } detail: {
-                    ZStack(alignment: .bottom) {
-                        ZStack {
-                            WalkmanTheme.background
-                                .ignoresSafeArea()
-                            
-                            switch selectedTab {
-                            case .overview:
+                        switch selectedTab {
+                        case .overview:
+                            if drives.isEmpty {
+                                disconnectedDeviceView
+                            } else {
                                 DeviceOverviewView(
                                     devices: devices,
                                     drives: activeDevice?.drives ?? drives,
@@ -581,8 +590,59 @@ public struct ContentView: View {
                                     onOpenAbout: { self.showAboutSheet = true },
                                     isEjecting: isEjecting
                                 )
-                                
-                            case .library:
+                            }
+
+                        case .localLibrary:
+                            LocalLibraryView(
+                                tracks: localLibrary.tracks,
+                                folders: localLibrary.folders,
+                                isLoading: localLibrary.isScanning,
+                                selectedTrackId: $selectedTrackId,
+                                onInspectTrack: { track in
+                                    self.selectedTrackId = track.id
+                                    self.showInspector = true
+                                },
+                                onDeleteTrack: { track in
+                                    localLibrary.deleteTrack(track: track, moveToTrash: false)
+                                },
+                                onEditTrack: { track in
+                                    self.trackToEdit = track
+                                },
+                                onTrimCutTrack: { track in
+                                    self.trackToTrimCut = track
+                                },
+                                onGoToTransfer: {
+                                    self.selectedTab = .transfer
+                                },
+                                onEditAlbum: { album in
+                                    self.albumToEdit = album
+                                }
+                            )
+
+                        case .senseMe:
+                            SenseMeChannelsView(
+                                onInspectTrack: { track in
+                                    self.selectedTrackId = track.id
+                                    self.showInspector = true
+                                },
+                                onEditTrack: { track in
+                                    self.trackToEdit = track
+                                },
+                                onTrimCutTrack: { track in
+                                    self.trackToTrimCut = track
+                                },
+                                onGoToTransfer: {
+                                    self.selectedTab = .transfer
+                                },
+                                onNavigateToLocalLibrary: {
+                                    self.selectedTab = .localLibrary
+                                }
+                            )
+                            
+                        case .library:
+                            if isScanning && tracks.isEmpty {
+                                walkmanLoadingView
+                            } else {
                                 LibraryView(
                                     tracks: tracks,
                                     isLoading: isScanning,
@@ -604,6 +664,7 @@ public struct ContentView: View {
                                         self.trackToTrimCut = track
                                     }
                                 )
+                            }
                                 
                             case .recentlyAdded:
                                 RecentlyAddedView(
@@ -740,7 +801,7 @@ public struct ContentView: View {
                         HStack {
                             Spacer(minLength: 0)
                             TrackPreviewBar(
-                                libraryTracks: tracks,
+                                libraryTracks: !tracks.isEmpty ? tracks : localLibrary.tracks,
                                 isInspectorPresented: showInspector,
                                 onOpenInspector: {
                                     if let cur = player.currentTrack {
@@ -819,24 +880,22 @@ public struct ContentView: View {
                 .toolbarBackground(.hidden, for: .windowToolbar)
                 .toolbar(isFullScreenPlayerPresented ? .hidden : .visible, for: .windowToolbar)
                 .removeSidebarToggle(if: isFullScreenPlayerPresented)
+                .opacity(isFullScreenPlayerPresented ? 0 : 1)
+
+            if isFullScreenPlayerPresented {
+                FullScreenNowPlayingView(
+                    isPresented: $isFullScreenPlayerPresented,
+                    libraryTracks: !tracks.isEmpty ? tracks : localLibrary.tracks
+                )
+                .ignoresSafeArea()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .scale(scale: 0.985)),
+                    removal: .opacity.combined(with: .scale(scale: 0.985))
+                ))
+                .zIndex(100)
             }
         }
-        .opacity(isFullScreenPlayerPresented ? 0 : 1)
-
-        if isFullScreenPlayerPresented {
-            FullScreenNowPlayingView(
-                isPresented: $isFullScreenPlayerPresented,
-                libraryTracks: tracks
-            )
-            .ignoresSafeArea()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .transition(.asymmetric(
-                insertion: .opacity.combined(with: .scale(scale: 0.985)),
-                removal: .opacity.combined(with: .scale(scale: 0.985))
-            ))
-            .zIndex(100)
-        }
-    }
         .onAppear {
             refreshDrives()
         }
@@ -874,10 +933,18 @@ public struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showAboutWalkmanStudio)) { _ in
             self.showAboutSheet = true
         }
+        .onReceive(NotificationCenter.default.publisher(for: .manageLocalFolders)) { _ in
+            self.showManageFoldersSheet = true
+        }
         .sheet(isPresented: $showAboutSheet) {
             AboutWalkmanStudioView(
                 currentDeviceInfo: deviceInfo,
                 onDismiss: { showAboutSheet = false }
+            )
+        }
+        .sheet(isPresented: $showManageFoldersSheet) {
+            ManageLocalFoldersSheet(
+                onDismiss: { showManageFoldersSheet = false }
             )
         }
         .sheet(item: $trackToEdit) { track in
@@ -887,8 +954,12 @@ public struct ContentView: View {
                     if self.player.currentTrack?.id == updatedTrack.id {
                         self.player.updateTrackInfo(track: updatedTrack)
                     }
-                    self.updateTracksInMemory([updatedTrack])
-                    self.refreshLibrary()
+                    if self.localLibrary.tracks.contains(where: { $0.id == updatedTrack.id }) {
+                        self.localLibrary.updateTrack(track: updatedTrack)
+                    } else {
+                        self.updateTracksInMemory([updatedTrack])
+                        self.refreshLibrary()
+                    }
                 },
                 onDismiss: {
                     trackToEdit = nil
@@ -899,7 +970,11 @@ public struct ContentView: View {
             TrimAndCutSheet(
                 track: track,
                 onSaved: {
-                    refreshLibrary()
+                    if self.localLibrary.tracks.contains(where: { $0.id == track.id }) {
+                        self.localLibrary.rescanAllFolders()
+                    } else {
+                        self.refreshLibrary()
+                    }
                 },
                 onDismiss: {
                     trackToTrimCut = nil
@@ -913,6 +988,11 @@ public struct ContentView: View {
                     refreshLibrary()
                 },
                 onSavedTracks: { updatedTracks in
+                    for t in updatedTracks {
+                        if self.localLibrary.tracks.contains(where: { $0.id == t.id }) {
+                            self.localLibrary.updateTrack(track: t)
+                        }
+                    }
                     self.updateTracksInMemory(updatedTracks)
                 },
                 onDismiss: {

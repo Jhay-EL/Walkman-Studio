@@ -3,6 +3,8 @@ import AppKit
 
 public enum NavigationTab: String, CaseIterable, Identifiable, Hashable {
     case overview = "Device Overview"
+    case localLibrary = "Local Music Library"
+    case senseMe = "SenseMe™ Channels"
     case library = "All Songs"
     case recentlyAdded = "Recently Added"
     case albums = "Albums"
@@ -18,6 +20,8 @@ public enum NavigationTab: String, CaseIterable, Identifiable, Hashable {
     public var icon: String {
         switch self {
         case .overview: return "hifispeaker.fill"
+        case .localLibrary: return "folder.badge.gearshape"
+        case .senseMe: return "waveform.path.ecg.rectangle.fill"
         case .library: return "music.note.list"
         case .recentlyAdded: return "clock.arrow.circlepath"
         case .albums: return "square.stack.fill"
@@ -37,6 +41,9 @@ public struct SidebarView: View {
     let drives: [WalkmanDrive]
     var activeDevice: WalkmanDevice? = nil
     let trackCount: Int
+    var localTrackCount: Int = 0
+    var localSenseMeCount: Int = 0
+    var isWalkmanConnected: Bool = true
     var recentlyAddedCount: Int = 0
     var albumCount: Int = 0
     var artistCount: Int = 0
@@ -68,7 +75,15 @@ public struct SidebarView: View {
             // -----------------------------------------------------------------
             // DEVICE Section
             // -----------------------------------------------------------------
-            if devices.count > 1 {
+            if !isWalkmanConnected {
+                Section(header: sidebarSectionHeader("Device")) {
+                    DeviceDisconnectedSidebarRow(
+                        selectedTab: $selectedTab
+                    )
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 3.5, leading: 10, bottom: 3.5, trailing: 10))
+                }
+            } else if devices.count > 1 {
                 Section(header: sidebarSectionHeader("Connected Devices (\(devices.count))")) {
                     ForEach(devices) { device in
                         let isDeviceActive = (activeDevice?.id == device.id)
@@ -126,68 +141,95 @@ public struct SidebarView: View {
             }
 
             // -----------------------------------------------------------------
-            // LIBRARY Section
+            // LOCAL MUSIC LIBRARY Section
             // -----------------------------------------------------------------
-            Section(header: sidebarSectionHeader("Library")) {
+            Section(header: sidebarSectionHeader("Local Music Library")) {
                 SidebarRow(
-                    tab: .library,
+                    tab: .localLibrary,
                     selectedTab: $selectedTab,
-                    title: "All Songs",
-                    icon: "music.note.list",
-                    badge: trackCount > 0 ? "\(trackCount.formatted())" : nil
+                    title: "Local Library",
+                    icon: "folder.badge.gearshape",
+                    badge: localTrackCount > 0 ? "\(localTrackCount.formatted())" : nil
                 )
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets(top: 3.5, leading: 10, bottom: 3.5, trailing: 10))
 
                 SidebarRow(
-                    tab: .recentlyAdded,
+                    tab: .senseMe,
                     selectedTab: $selectedTab,
-                    title: "Recently Added",
-                    icon: "clock.arrow.circlepath",
-                    badge: recentlyAddedCount > 0 ? "\(recentlyAddedCount.formatted())" : nil
+                    title: "SenseMe™ Channels",
+                    icon: "waveform.path.ecg.rectangle.fill",
+                    badge: localSenseMeCount > 0 ? "\(localSenseMeCount.formatted())" : nil
                 )
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets(top: 3.5, leading: 10, bottom: 3.5, trailing: 10))
+            }
 
-                SidebarRow(
-                    tab: .albums,
-                    selectedTab: $selectedTab,
-                    title: "Albums",
-                    icon: "square.stack.fill",
-                    badge: albumCount > 0 ? "\(albumCount.formatted())" : nil
-                )
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 3.5, leading: 10, bottom: 3.5, trailing: 10))
+            // -----------------------------------------------------------------
+            // WALKMAN LIBRARY Section (Only when Walkman is connected)
+            // -----------------------------------------------------------------
+            if isWalkmanConnected {
+                Section(header: sidebarSectionHeader("Walkman Library")) {
+                    SidebarRow(
+                        tab: .library,
+                        selectedTab: $selectedTab,
+                        title: "All Songs",
+                        icon: "music.note.list",
+                        badge: trackCount > 0 ? "\(trackCount.formatted())" : nil
+                    )
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 3.5, leading: 10, bottom: 3.5, trailing: 10))
 
-                SidebarRow(
-                    tab: .artists,
-                    selectedTab: $selectedTab,
-                    title: "Artists",
-                    icon: "music.mic",
-                    badge: artistCount > 0 ? "\(artistCount.formatted())" : nil
-                )
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 3.5, leading: 10, bottom: 3.5, trailing: 10))
+                    SidebarRow(
+                        tab: .recentlyAdded,
+                        selectedTab: $selectedTab,
+                        title: "Recently Added",
+                        icon: "clock.arrow.circlepath",
+                        badge: recentlyAddedCount > 0 ? "\(recentlyAddedCount.formatted())" : nil
+                    )
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 3.5, leading: 10, bottom: 3.5, trailing: 10))
 
-                SidebarRow(
-                    tab: .hiRes,
-                    selectedTab: $selectedTab,
-                    title: "Hi-Res Audio",
-                    icon: "waveform.badge.magnifyingglass",
-                    badge: hiResCount > 0 ? "\(hiResCount.formatted())" : nil
-                )
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 3.5, leading: 10, bottom: 3.5, trailing: 10))
+                    SidebarRow(
+                        tab: .albums,
+                        selectedTab: $selectedTab,
+                        title: "Albums",
+                        icon: "square.stack.fill",
+                        badge: albumCount > 0 ? "\(albumCount.formatted())" : nil
+                    )
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 3.5, leading: 10, bottom: 3.5, trailing: 10))
 
-                SidebarRow(
-                    tab: .playlists,
-                    selectedTab: $selectedTab,
-                    title: "Playlists",
-                    icon: "list.bullet.rectangle.portrait.fill",
-                    badge: nil
-                )
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 3.5, leading: 10, bottom: 3.5, trailing: 10))
+                    SidebarRow(
+                        tab: .artists,
+                        selectedTab: $selectedTab,
+                        title: "Artists",
+                        icon: "music.mic",
+                        badge: artistCount > 0 ? "\(artistCount.formatted())" : nil
+                    )
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 3.5, leading: 10, bottom: 3.5, trailing: 10))
+
+                    SidebarRow(
+                        tab: .hiRes,
+                        selectedTab: $selectedTab,
+                        title: "Hi-Res Audio",
+                        icon: "waveform.badge.magnifyingglass",
+                        badge: hiResCount > 0 ? "\(hiResCount.formatted())" : nil
+                    )
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 3.5, leading: 10, bottom: 3.5, trailing: 10))
+
+                    SidebarRow(
+                        tab: .playlists,
+                        selectedTab: $selectedTab,
+                        title: "Playlists",
+                        icon: "list.bullet.rectangle.portrait.fill",
+                        badge: nil
+                    )
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 3.5, leading: 10, bottom: 3.5, trailing: 10))
+                }
             }
 
             // -----------------------------------------------------------------
@@ -219,8 +261,11 @@ public struct SidebarView: View {
                     selectedTab: $selectedTab,
                     title: "Backup & Restore",
                     icon: "arrow.triangle.2.circlepath.circle.fill",
-                    badge: nil
+                    badge: nil,
+                    isDisabled: !isWalkmanConnected
                 )
+                .opacity(isWalkmanConnected ? 1.0 : 0.35)
+                .help(isWalkmanConnected ? "Backup and restore Walkman flash storage" : "Backup & Restore requires a connected Sony Walkman DAP")
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets(top: 3.5, leading: 10, bottom: 3.5, trailing: 10))
             }
@@ -667,6 +712,7 @@ private struct SidebarRow: View {
     let title: String
     let icon: String
     let badge: String?
+    var isDisabled: Bool = false
     @State private var isHovered = false
 
     private var isSelected: Bool {
@@ -674,21 +720,30 @@ private struct SidebarRow: View {
     }
 
     var body: some View {
-        Button(action: { selectedTab = tab }) {
+        Button(action: {
+            guard !isDisabled else { return }
+            selectedTab = tab
+        }) {
             HStack(spacing: 9) {
                 // SF Symbol
                 Image(systemName: icon)
                     .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
                     .foregroundStyle(
-                        tab == .hiRes
-                            ? (isSelected ? WalkmanTheme.hiResGoldLight : WalkmanTheme.hiResGold)
-                            : (isSelected ? WalkmanTheme.silverLight : (isHovered ? .white : WalkmanTheme.silverMuted))
+                        isDisabled
+                            ? WalkmanTheme.silverMuted.opacity(0.4)
+                            : (tab == .hiRes
+                                ? (isSelected ? WalkmanTheme.hiResGoldLight : WalkmanTheme.hiResGold)
+                                : (isSelected ? WalkmanTheme.silverLight : (isHovered ? .white : WalkmanTheme.silverMuted)))
                     )
                     .frame(width: 20, alignment: .center)
 
                 Text(title)
                     .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? .white : (isHovered ? .white : WalkmanTheme.silverLight))
+                    .foregroundStyle(
+                        isDisabled
+                            ? WalkmanTheme.silverMuted.opacity(0.4)
+                            : (isSelected ? .white : (isHovered ? .white : WalkmanTheme.silverLight))
+                    )
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
                     .layoutPriority(1)
@@ -770,7 +825,7 @@ private struct SidebarRow: View {
                             startPoint: .top,
                             endPoint: .bottom
                         )
-                    } else if isHovered {
+                    } else if isHovered && !isDisabled {
                         Color.white.opacity(0.045)
                     } else {
                         Color.clear
@@ -792,7 +847,7 @@ private struct SidebarRow: View {
                                 endPoint: .bottomTrailing
                             )
                             : LinearGradient(
-                                colors: [Color.white.opacity(isHovered ? 0.12 : 0.0), Color.clear],
+                                colors: [Color.white.opacity(isHovered && !isDisabled ? 0.12 : 0.0), Color.clear],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
@@ -810,6 +865,7 @@ private struct SidebarRow: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering in
+            guard !isDisabled else { return }
             guard isHovered != hovering else { return }
             isHovered = hovering
             if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
@@ -817,5 +873,71 @@ private struct SidebarRow: View {
         .onDisappear {
             if isHovered { isHovered = false; NSCursor.pop() }
         }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// DEVICE DISCONNECTED SIDEBAR ROW (LIQUID GLASS DISCONNECTED TILE)
+// -----------------------------------------------------------------------------
+private struct DeviceDisconnectedSidebarRow: View {
+    @Binding var selectedTab: NavigationTab
+    @State private var isHovered = false
+
+    private var isSelected: Bool {
+        selectedTab == .overview
+    }
+
+    var body: some View {
+        Button(action: { selectedTab = .overview }) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.06))
+                        .frame(width: 28, height: 28)
+                    Image(systemName: "cable.connector.horizontal")
+                        .font(.system(size: 13))
+                        .foregroundStyle(WalkmanTheme.silverMuted)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Sony Walkman")
+                        .font(.system(size: 13, weight: isSelected ? .bold : .semibold))
+                        .foregroundStyle(isSelected ? .white : WalkmanTheme.silverLight)
+                        .lineLimit(1)
+
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color.secondary.opacity(0.6))
+                            .frame(width: 5, height: 5)
+                        Text("Not Connected")
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer(minLength: 4)
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 10)
+            .background(
+                ZStack {
+                    if isSelected {
+                        Color.white.opacity(0.10)
+                    } else if isHovered {
+                        Color.white.opacity(0.04)
+                    } else {
+                        Color.white.opacity(0.02)
+                    }
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(isSelected ? Color.white.opacity(0.35) : Color.white.opacity(0.06), lineWidth: 0.8)
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .help("View Sony Walkman connection setup and supported models")
     }
 }

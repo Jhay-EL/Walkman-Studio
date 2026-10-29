@@ -3,6 +3,37 @@ import Foundation
 public enum DriveType: String, Codable, Sendable {
     case `internal`
     case microsd
+    case local
+}
+
+public struct LocalMusicFolder: Identifiable, Hashable, Codable, Sendable {
+    public let id: String
+    public let path: String
+    public let displayName: String
+    public let dateAdded: Date
+    public var lastScanned: Date
+    public var trackCount: Int
+    public var totalBytes: Int64
+
+    public var url: URL { URL(fileURLWithPath: path) }
+
+    public init(
+        id: String = UUID().uuidString,
+        path: String,
+        displayName: String,
+        dateAdded: Date = Date(),
+        lastScanned: Date = Date(),
+        trackCount: Int = 0,
+        totalBytes: Int64 = 0
+    ) {
+        self.id = id
+        self.path = path
+        self.displayName = displayName
+        self.dateAdded = dateAdded
+        self.lastScanned = lastScanned
+        self.trackCount = trackCount
+        self.totalBytes = totalBytes
+    }
 }
 
 public struct WalkmanDrive: Identifiable, Hashable, Sendable {
@@ -31,6 +62,25 @@ public struct WalkmanDrive: Identifiable, Hashable, Sendable {
         self.percentUsed = percentUsed
         self.hasCfw = hasCfw
         self.musicDir = musicDir
+    }
+
+    public static func localLibrary(at folderURL: URL, name: String = "Local Music Library") -> WalkmanDrive {
+        let values = try? folderURL.resourceValues(forKeys: [.volumeTotalCapacityKey, .volumeAvailableCapacityKey])
+        let total = Int64(values?.volumeTotalCapacity ?? 500_000_000_000)
+        let free = Int64(values?.volumeAvailableCapacity ?? 200_000_000_000)
+        let used = max(0, total - free)
+        let percent = total > 0 ? (Double(used) / Double(total)) * 100.0 : 0.0
+        return WalkmanDrive(
+            name: name,
+            mountPoint: folderURL.path,
+            type: .local,
+            totalBytes: total,
+            usedBytes: used,
+            freeBytes: free,
+            percentUsed: percent,
+            hasCfw: false,
+            musicDir: folderURL.path
+        )
     }
 }
 
