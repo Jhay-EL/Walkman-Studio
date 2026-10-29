@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import ImageIO
+import UniformTypeIdentifiers
 
 // =============================================================================
 // SONY SENSME™ CHANNELS ARCHITECTURE
@@ -377,6 +378,7 @@ public struct SenseMeChannelsView: View {
     @State private var analysisTrackName: String = ""
     @State private var showAnalysisSheet: Bool = false
     @State private var analysisTask: Task<Void, Never>? = nil
+    @State private var isDropTargeted: Bool = false
 
     private var currentHour: Int {
         Calendar.current.component(.hour, from: Date())
@@ -441,6 +443,10 @@ public struct SenseMeChannelsView: View {
         }
         .sheet(isPresented: $showAnalysisSheet) {
             batchAnalysisProgressSheet
+        }
+        .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
+            handleDrop(providers: providers)
+            return true
         }
         .onChange(of: activeIndex) { newIndex in
             handleChannelSwitched(to: newIndex)
@@ -1028,52 +1034,84 @@ public struct SenseMeChannelsView: View {
     // EMPTY STATES
     // -------------------------------------------------------------------------
     private var emptyLibraryView: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "folder.badge.gearshape")
-                .font(.system(size: 42))
-                .foregroundStyle(WalkmanTheme.silverMuted)
+        VStack(spacing: 20) {
+            Spacer()
 
-            Text("No Local Music Indexed")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(Color.white)
-
-            Text("Import folders into your Local Music Library to organize your tracks into Sony SensMe™ Channels.")
-                .font(.system(size: 13))
-                .foregroundStyle(WalkmanTheme.silverMuted)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 420)
-
-            Button(action: { onNavigateToLocalLibrary?() }) {
-                Text("Go to Local Library")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.black)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(WalkmanTheme.hiResGoldGradient)
-                    .clipShape(Capsule())
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(0.06))
+                    .frame(width: 88, height: 88)
+                    .overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
+                Image(systemName: "folder.badge.plus")
+                    .font(.system(size: 38))
+                    .foregroundStyle(WalkmanTheme.silverLight)
             }
-            .buttonStyle(.plain)
-            .padding(.top, 6)
+
+            VStack(spacing: 8) {
+                Text("Your Local Music Library")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(.white)
+
+                Text("Import music folders to organize, play, and transfer tracks to your Sony Walkman.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(WalkmanTheme.silverMuted)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 440)
+            }
+
+            VStack(spacing: 12) {
+                Button(action: openFolderPicker) {
+                    HStack(spacing: 7) {
+                        Image(systemName: "plus.circle.fill")
+                        Text("Import Music Folders...")
+                    }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 8)
+                    .background(WalkmanTheme.silverGradient)
+                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .shadow(color: Color.black.opacity(0.25), radius: 4, x: 0, y: 1.5)
+                }
+                .buttonStyle(.plain)
+
+                Text("or drag & drop folders here from Finder")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 4)
+
+            Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.vertical, 60)
+        .padding(24)
     }
 
     private var noAnalyzedTracksView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "waveform.path.ecg.rectangle")
-                .font(.system(size: 44))
-                .foregroundStyle(WalkmanTheme.hiResGold)
+        VStack(spacing: 20) {
+            Spacer()
 
-            Text("12 Tone Acoustic Analysis Required")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(Color.white)
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(0.06))
+                    .frame(width: 88, height: 88)
+                    .overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
+                Image(systemName: "waveform.path.ecg.rectangle")
+                    .font(.system(size: 38))
+                    .foregroundStyle(WalkmanTheme.hiResGold)
+            }
 
-            Text("Sony SensMe™ Channels analyzes speed (BPM), mood (valence), and energy (arousal) to automatically group your tracks into tailored listening channels.")
-                .font(.system(size: 13))
-                .foregroundStyle(WalkmanTheme.silverMuted)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 460)
+            VStack(spacing: 8) {
+                Text("12 Tone Acoustic Analysis Required")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(Color.white)
+
+                Text("Sony SensMe™ Channels analyzes speed (BPM), mood (valence), and energy (arousal) to automatically group your tracks into tailored listening channels.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(WalkmanTheme.silverMuted)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 460)
+            }
 
             Button(action: startBatchAnalysis) {
                 HStack(spacing: 8) {
@@ -1084,16 +1122,18 @@ public struct SenseMeChannelsView: View {
                 }
                 .foregroundStyle(Color.black)
                 .padding(.horizontal, 18)
-                .padding(.vertical, 9)
+                .padding(.vertical, 8)
                 .background(WalkmanTheme.hiResGoldGradient)
-                .clipShape(Capsule())
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 .shadow(color: Color.black.opacity(0.3), radius: 4, x: 0, y: 2)
             }
             .buttonStyle(.plain)
             .padding(.top, 4)
+
+            Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.vertical, 60)
+        .padding(24)
     }
 
     // -------------------------------------------------------------------------
@@ -1394,6 +1434,50 @@ public struct SenseMeChannelsView: View {
                 self.randomizedPlaylists.removeAll()
                 _ = self.generateRandomizedPlaylist(for: self.selectedChannel)
                 self.isAnalyzing = false
+            }
+        }
+    }
+
+    private func openFolderPicker() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = true
+        panel.prompt = "Import Folders"
+        panel.message = "Choose one or more music folders to add to your Local Music Library"
+        panel.canCreateDirectories = false
+
+        if panel.runModal() == .OK {
+            let urls = panel.urls
+            localLibrary.addFolders(urls: urls)
+        }
+    }
+
+    private func handleDrop(providers: [NSItemProvider]) {
+        var folderURLs: [URL] = []
+        let group = DispatchGroup()
+
+        for provider in providers {
+            group.enter()
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                defer { group.leave() }
+                if let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
+                    var isDir: ObjCBool = false
+                    if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
+                        folderURLs.append(url)
+                    }
+                } else if let url = item as? URL {
+                    var isDir: ObjCBool = false
+                    if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
+                        folderURLs.append(url)
+                    }
+                }
+            }
+        }
+
+        group.notify(queue: .main) {
+            if !folderURLs.isEmpty {
+                self.localLibrary.addFolders(urls: folderURLs)
             }
         }
     }
