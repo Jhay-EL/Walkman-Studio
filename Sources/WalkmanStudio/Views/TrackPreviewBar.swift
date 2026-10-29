@@ -118,20 +118,20 @@ public struct TrackPreviewBar: View {
                 systemName: "backward.fill",
                 size: 14.5,
                 isActive: false,
-                isDisabled: player.currentTrack == nil && libraryTracks.isEmpty,
-                helpText: "Previous track",
+                isDisabled: player.currentTrack == nil && libraryTracks.isEmpty && player.effectiveQueue.isEmpty,
+                helpText: "Previous track (F7 or Cmd+Left)",
                 action: { player.playPrevious() }
             )
 
             // Play / Pause prominent circular button
             PlayPauseCircleButton(
                 isPlaying: player.isPlaying,
-                isEnabled: player.currentTrack != nil || !libraryTracks.isEmpty,
+                isEnabled: player.currentTrack != nil || !libraryTracks.isEmpty || !player.effectiveQueue.isEmpty,
                 action: {
                     if player.currentTrack != nil {
                         player.togglePlayPause()
-                    } else if let first = libraryTracks.first {
-                        player.play(track: first, in: libraryTracks)
+                    } else if let first = libraryTracks.first ?? player.effectiveQueue.first {
+                        player.play(track: first, in: !libraryTracks.isEmpty ? libraryTracks : player.effectiveQueue)
                     }
                 }
             )
@@ -141,8 +141,8 @@ public struct TrackPreviewBar: View {
                 systemName: "forward.fill",
                 size: 14.5,
                 isActive: false,
-                isDisabled: player.currentTrack == nil && libraryTracks.isEmpty,
-                helpText: "Next track",
+                isDisabled: player.currentTrack == nil && libraryTracks.isEmpty && player.effectiveQueue.isEmpty,
+                helpText: "Next track (F9 or Cmd+Right)",
                 action: { player.playNext() }
             )
 

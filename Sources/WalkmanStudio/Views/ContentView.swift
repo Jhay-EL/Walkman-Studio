@@ -898,6 +898,9 @@ public struct ContentView: View {
         }
         .onAppear {
             refreshDrives()
+            AudioPlayerService.shared.fallbackTracksProvider = {
+                !tracks.isEmpty ? tracks : localLibrary.tracks
+            }
         }
         .onReceive(didMountPublisher) { _ in
             refreshDrives()
