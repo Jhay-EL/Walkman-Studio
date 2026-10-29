@@ -16,20 +16,6 @@ public enum SenseMeChannelCategory: String, CaseIterable, Identifiable, Sendable
     public var id: String { rawValue }
 }
 
-public enum SenseMeViewMode: String, CaseIterable, Identifiable, Sendable {
-    case carousel = "Channels Stack"
-    case moodGalaxy = "12-Tone Mood Galaxy"
-
-    public var id: String { rawValue }
-
-    public var icon: String {
-        switch self {
-        case .carousel: return "rectangle.stack.fill"
-        case .moodGalaxy: return "sparkles"
-        }
-    }
-}
-
 public struct SenseMeChannel: Identifiable, Hashable, Sendable {
     public let id: String
     public let name: String
@@ -379,7 +365,6 @@ public struct SenseMeChannelsView: View {
     var onNavigateToLocalLibrary: (() -> Void)? = nil
 
     @State private var activeIndex: Int = 0
-    @State private var viewMode: SenseMeViewMode = .carousel
     @State private var trackFilterQuery: String = ""
     @State private var dragOffset: CGFloat = 0.0
     @State private var lastStepTimestamp: TimeInterval = 0
@@ -462,18 +447,10 @@ public struct SenseMeChannelsView: View {
                 } else if analyzedTracks.isEmpty && !isAnalyzing {
                     noAnalyzedTracksView
                 } else {
-                    switch viewMode {
-                    case .carousel:
-                        // DUAL PANE:
-                        // Upper Pane = Stacked Card Carousel Slider (Bigger cards & 3D stack physics)
-                        // Lower Pane = Selected Channel Tracklist & Controls
-                        stackedDeckAndTracksSplitView
-                    case .moodGalaxy:
-                        SenseMeMoodGalaxyView(
-                            tracks: analyzedTracks,
-                            onInspectTrack: onInspectTrack
-                        )
-                    }
+                    // DUAL PANE:
+                    // Upper Pane = Stacked Card Carousel Slider (Bigger cards & 3D stack physics)
+                    // Lower Pane = Selected Channel Tracklist & Controls
+                    stackedDeckAndTracksSplitView
                 }
             }
         }
@@ -536,40 +513,6 @@ public struct SenseMeChannelsView: View {
             }
 
             Spacer(minLength: 12)
-
-            // Mode Selector Toggle (Stacked Carousel vs 12-Tone Mood Galaxy)
-            HStack(spacing: 2) {
-                ForEach(SenseMeViewMode.allCases) { mode in
-                    Button(action: {
-                        withAnimation(.spring(response: 0.32, dampingFraction: 0.76)) {
-                            viewMode = mode
-                        }
-                    }) {
-                        HStack(spacing: 5) {
-                            Image(systemName: mode.icon)
-                                .font(.system(size: 11, weight: .semibold))
-                            Text(mode.rawValue)
-                                .font(.system(size: 11.5, weight: viewMode == mode ? .bold : .medium))
-                        }
-                        .foregroundStyle(viewMode == mode ? Color.black : WalkmanTheme.silverLight)
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 5)
-                        .background(
-                            ZStack {
-                                if viewMode == mode {
-                                    Capsule().fill(WalkmanTheme.hiResGoldGradient)
-                                }
-                            }
-                        )
-                        .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(2.5)
-            .background(Color.white.opacity(0.04))
-            .clipShape(Capsule())
-            .overlay(Capsule().stroke(Color.white.opacity(0.08), lineWidth: 0.8))
 
             // Stats Badges
             HStack(spacing: 10) {
@@ -680,27 +623,9 @@ public struct SenseMeChannelsView: View {
     // 3D STACKED CARD CAROUSEL SLIDER STAGE
     // -------------------------------------------------------------------------
     private var stackedCarouselStage: some View {
-        VStack(spacing: 6) {
-            // Top of Carousel Stage: Clean Step Indicator
-            HStack {
-                Spacer()
-
-                // Step count indicator e.g. "3 of 14"
-                Text("\(activeIndex + 1) of \(displayedChannels.count)")
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
-                    .foregroundStyle(WalkmanTheme.silverMuted)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 3.5)
-                    .background(Color.white.opacity(0.04))
-                    .clipShape(Capsule())
-            }
-            .padding(.horizontal, 22)
-            .padding(.top, 6)
-
-            // The 3D Overlapping Card Stack Deck with Drag & Stepper Arrows
-            ZStack {
-                // Interactive Stack Container
-                GeometryReader { geo in
+        ZStack {
+            // Interactive Stack Container
+            GeometryReader { geo in
                     let centerX = geo.size.width / 2
                     let centerY = geo.size.height / 2
 
@@ -834,34 +759,8 @@ public struct SenseMeChannelsView: View {
                     .padding(.trailing, 18)
                 }
             }
-
-            // Pagination Dots Indicator along bottom of Stack
-            HStack(spacing: 5) {
-                ForEach(0..<displayedChannels.count, id: \.self) { idx in
-                    Circle()
-                        .fill(idx == activeIndex ? WalkmanTheme.hiResGold : Color.white.opacity(0.18))
-                        .frame(width: idx == activeIndex ? 6.5 : 4.5, height: idx == activeIndex ? 6.5 : 4.5)
-                        .scaleEffect(idx == activeIndex ? 1.2 : 1.0)
-                        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: activeIndex)
-                        .onTapGesture {
-                            guard !isStepping else { return }
-                            let now = ProcessInfo.processInfo.systemUptime
-                            guard now - lastStepTimestamp > 0.42 else { return }
-                            lastStepTimestamp = now
-                            isStepping = true
-                            withAnimation(.spring(response: 0.38, dampingFraction: 0.88)) {
-                                activeIndex = idx
-                                dragOffset = 0
-                            }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) {
-                                self.isStepping = false
-                            }
-                        }
-                }
-            }
-            .padding(.bottom, 6)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-    }
 
     // -------------------------------------------------------------------------
     // 3D STACK CALCULATIONS: CENTER BIGGER, BEHIND CARDS SMALLER
@@ -1873,352 +1772,6 @@ private struct SenseMeChannelTableView: View {
         let mins = Int(sec) / 60
         let secs = Int(sec) % 60
         return String(format: "%d:%02d", mins, secs)
-    }
-}
-
-// =============================================================================
-// SENSEME 12-TONE MOOD GALAXY (ACOUSTIC UNIVERSE MAP)
-// =============================================================================
-
-public struct SenseMeMoodGalaxyView: View {
-    let tracks: [Track]
-    var onInspectTrack: ((Track) -> Void)? = nil
-
-    @ObservedObject private var player = AudioPlayerService.shared
-    @State private var hoveredTrack: Track? = nil
-    @State private var selectedFilterChannel: String = "ALL"
-
-    private let filterOptions = [
-        ("ALL", "All Moods"),
-        ("Energetic", "⚡ Energetic"),
-        ("Relax", "🍃 Relax"),
-        ("Upbeat", "✨ Upbeat"),
-        ("Mellow", "☕ Mellow"),
-        ("Emotional", "💖 Emotional"),
-        ("Dance", "🪩 Dance"),
-        ("Lounge", "🍸 Lounge"),
-        ("Morning", "🌅 Morning"),
-        ("Night", "🌙 Night")
-    ]
-
-    private var filteredTracks: [Track] {
-        if selectedFilterChannel == "ALL" {
-            return tracks
-        }
-        return tracks.filter { $0.senseMeChannels.contains(selectedFilterChannel) }
-    }
-
-    public var body: some View {
-        VStack(spacing: 0) {
-            // Filter Bar & Shuffle Button
-            galaxyToolbar
-                .padding(.horizontal, 22)
-                .padding(.vertical, 10)
-                .background(Color.white.opacity(0.02))
-
-            // 2D Acoustic Mood Canvas
-            GeometryReader { geo in
-                ZStack {
-                    quadrantBackgrounds(size: geo.size)
-                    coordinateCrosshairs(size: geo.size)
-
-                    ForEach(tracks) { tr in
-                        let isHighlighted = selectedFilterChannel == "ALL" || tr.senseMeChannels.contains(selectedFilterChannel)
-                        let isPlaying = player.currentTrack?.id == tr.id && player.isPlaying
-
-                        trackGalaxyNode(track: tr, in: geo.size, isHighlighted: isHighlighted, isPlaying: isPlaying)
-                    }
-
-                    if let target = hoveredTrack {
-                        hoverPopover(for: target, in: geo.size)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(red: 0.05, green: 0.055, blue: 0.07))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Color.white.opacity(0.08), lineWidth: 0.8)
-                )
-                .padding(20)
-            }
-        }
-    }
-
-    private var galaxyToolbar: some View {
-        HStack(spacing: 12) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(filterOptions, id: \.0) { opt in
-                        Button(action: {
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.76)) {
-                                selectedFilterChannel = opt.0
-                            }
-                        }) {
-                            Text(opt.1)
-                                .font(.system(size: 11, weight: selectedFilterChannel == opt.0 ? .bold : .medium))
-                                .foregroundStyle(selectedFilterChannel == opt.0 ? Color.black : WalkmanTheme.silverLight)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 4.5)
-                                .background(
-                                    selectedFilterChannel == opt.0 ?
-                                        WalkmanTheme.hiResGoldGradient :
-                                        LinearGradient(colors: [Color.white.opacity(0.06), Color.white.opacity(0.03)], startPoint: .top, endPoint: .bottom)
-                                )
-                                .clipShape(Capsule())
-                                .overlay(
-                                    Capsule().stroke(selectedFilterChannel == opt.0 ? WalkmanTheme.hiResGold.opacity(0.4) : Color.white.opacity(0.10), lineWidth: 0.8)
-                                )
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-
-            Spacer()
-
-            Button(action: shuffleActiveZone) {
-                HStack(spacing: 5) {
-                    Image(systemName: "shuffle")
-                        .font(.system(size: 11, weight: .bold))
-                    Text("Shuffle Mood Zone (\(filteredTracks.count))")
-                        .font(.system(size: 11.5, weight: .bold))
-                }
-                .foregroundStyle(Color.black)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
-                .background(WalkmanTheme.hiResGoldGradient)
-                .clipShape(Capsule())
-                .shadow(color: Color.black.opacity(0.25), radius: 3, x: 0, y: 1)
-            }
-            .buttonStyle(.plain)
-            .disabled(filteredTracks.isEmpty)
-        }
-    }
-
-    private func quadrantBackgrounds(size: CGSize) -> some View {
-        let halfW = size.width / 2
-        let halfH = size.height / 2
-
-        return ZStack {
-            RadialGradient(
-                colors: [Color(red: 0.95, green: 0.65, blue: 0.20).opacity(0.14), Color.clear],
-                center: .center,
-                startRadius: 20,
-                endRadius: min(halfW, halfH) * 1.2
-            )
-            .frame(width: halfW, height: halfH)
-            .offset(x: halfW / 2, y: -halfH / 2)
-
-            RadialGradient(
-                colors: [Color(red: 0.85, green: 0.20, blue: 0.35).opacity(0.14), Color.clear],
-                center: .center,
-                startRadius: 20,
-                endRadius: min(halfW, halfH) * 1.2
-            )
-            .frame(width: halfW, height: halfH)
-            .offset(x: -halfW / 2, y: -halfH / 2)
-
-            RadialGradient(
-                colors: [Color(red: 0.20, green: 0.35, blue: 0.75).opacity(0.14), Color.clear],
-                center: .center,
-                startRadius: 20,
-                endRadius: min(halfW, halfH) * 1.2
-            )
-            .frame(width: halfW, height: halfH)
-            .offset(x: -halfW / 2, y: -halfH / 2)
-
-            RadialGradient(
-                colors: [Color(red: 0.18, green: 0.70, blue: 0.55).opacity(0.14), Color.clear],
-                center: .center,
-                startRadius: 20,
-                endRadius: min(halfW, halfH) * 1.2
-            )
-            .frame(width: halfW, height: halfH)
-            .offset(x: halfW / 2, y: halfH / 2)
-        }
-    }
-
-    private func coordinateCrosshairs(size: CGSize) -> some View {
-        ZStack {
-            Rectangle()
-                .fill(Color.white.opacity(0.08))
-                .frame(width: size.width - 40, height: 1)
-
-            Rectangle()
-                .fill(Color.white.opacity(0.08))
-                .frame(width: 1, height: size.height - 40)
-
-            Circle()
-                .stroke(WalkmanTheme.hiResGold.opacity(0.25), lineWidth: 0.8)
-                .frame(width: 28, height: 28)
-
-            VStack {
-                HStack {
-                    Text("INTENSE / FAST")
-                        .font(.system(size: 9.5, weight: .bold))
-                        .foregroundStyle(WalkmanTheme.silverMuted.opacity(0.6))
-                        .padding(14)
-                    Spacer()
-                    Text("UPBEAT / ENERGETIC")
-                        .font(.system(size: 9.5, weight: .bold))
-                        .foregroundStyle(WalkmanTheme.hiResGold.opacity(0.75))
-                        .padding(14)
-                }
-                Spacer()
-                HStack {
-                    Text("MELLOW / EMOTIONAL")
-                        .font(.system(size: 9.5, weight: .bold))
-                        .foregroundStyle(WalkmanTheme.silverMuted.opacity(0.6))
-                        .padding(14)
-                    Spacer()
-                    Text("RELAXED / PEACEFUL")
-                        .font(.system(size: 9.5, weight: .bold))
-                        .foregroundStyle(Color(red: 0.20, green: 0.75, blue: 0.55).opacity(0.75))
-                        .padding(14)
-                }
-            }
-
-            VStack {
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.up")
-                    Text("High Arousal (Energy / Speed)")
-                }
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(WalkmanTheme.silverDark)
-                .padding(.top, 8)
-
-                Spacer()
-
-                HStack {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.left")
-                        Text("Sad / Melancholic")
-                    }
-                    Spacer()
-                    HStack(spacing: 4) {
-                        Text("Joyful / Upbeat")
-                        Image(systemName: "arrow.right")
-                    }
-                }
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(WalkmanTheme.silverDark)
-                .padding(.horizontal, 24)
-
-                Spacer()
-
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.down")
-                    Text("Low Arousal (Calm / Ambient)")
-                }
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(WalkmanTheme.silverDark)
-                .padding(.bottom, 8)
-            }
-        }
-    }
-
-    private func trackGalaxyNode(track: Track, in size: CGSize, isHighlighted: Bool, isPlaying: Bool) -> some View {
-        let val = track.senseMeValence ?? 0.0
-        let aro = track.senseMeArousal ?? 0.0
-
-        let posX = (size.width / 2) + CGFloat(val) * ((size.width - 100) / 2)
-        let posY = (size.height / 2) - CGFloat(aro) * ((size.height - 100) / 2)
-
-        let isHovered = hoveredTrack?.id == track.id
-
-        return ZStack {
-            if isPlaying {
-                Circle()
-                    .stroke(WalkmanTheme.hiResGold.opacity(0.4), lineWidth: 1.5)
-                    .frame(width: 26, height: 26)
-                    .scaleEffect(1.2)
-            }
-
-            Circle()
-                .fill(
-                    isPlaying ?
-                        WalkmanTheme.hiResGoldGradient :
-                        (isHighlighted ?
-                            LinearGradient(colors: [Color.white, WalkmanTheme.hiResGoldLight], startPoint: .top, endPoint: .bottom) :
-                            LinearGradient(colors: [Color.white.opacity(0.2), Color.white.opacity(0.1)], startPoint: .top, endPoint: .bottom))
-                )
-                .frame(width: isPlaying ? 11 : (isHovered ? 12 : 7.5), height: isPlaying ? 11 : (isHovered ? 12 : 7.5))
-                .shadow(
-                    color: isHighlighted ? WalkmanTheme.hiResGold.opacity(0.6) : Color.clear,
-                    radius: isHovered || isPlaying ? 6 : 2
-                )
-        }
-        .position(x: posX, y: posY)
-        .opacity(isHighlighted ? 1.0 : 0.25)
-        .onHover { hovering in
-            if hovering {
-                self.hoveredTrack = track
-            } else if self.hoveredTrack?.id == track.id {
-                self.hoveredTrack = nil
-            }
-        }
-        .onTapGesture {
-            player.play(track: track, in: filteredTracks)
-        }
-    }
-
-    private func hoverPopover(for track: Track, in size: CGSize) -> some View {
-        let val = track.senseMeValence ?? 0.0
-        let aro = track.senseMeArousal ?? 0.0
-
-        let posX = (size.width / 2) + CGFloat(val) * ((size.width - 100) / 2)
-        let posY = (size.height / 2) - CGFloat(aro) * ((size.height - 100) / 2)
-
-        let clampX = min(max(posX, 120), size.width - 120)
-        let clampY = max(posY - 60, 50)
-
-        return HStack(spacing: 8) {
-            TrackCoverThumbnail(track: track, size: 36, isPlaying: player.currentTrack?.id == track.id && player.isPlaying)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(track.title)
-                    .font(.system(size: 11.5, weight: .bold))
-                    .foregroundStyle(Color.white)
-                    .lineLimit(1)
-
-                Text(track.artist.isEmpty ? "Unknown Artist" : track.artist)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(WalkmanTheme.silverLight)
-                    .lineLimit(1)
-
-                HStack(spacing: 5) {
-                    if let bpm = track.senseMeBpm, bpm > 0 {
-                        Text("\(Int(bpm.rounded())) BPM")
-                            .font(.system(size: 9, weight: .heavy, design: .monospaced))
-                            .foregroundStyle(WalkmanTheme.hiResGold)
-                    }
-                    Text("V: \(String(format: "%.2f", val)) • A: \(String(format: "%.2f", aro))")
-                        .font(.system(size: 9, design: .monospaced))
-                        .foregroundStyle(WalkmanTheme.silverMuted)
-                }
-            }
-        }
-        .padding(8)
-        .background(WalkmanTheme.card.opacity(0.92))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(WalkmanTheme.hiResGold.opacity(0.4), lineWidth: 0.8)
-        )
-        .shadow(color: Color.black.opacity(0.4), radius: 6, x: 0, y: 3)
-        .position(x: clampX, y: clampY)
-        .allowsHitTesting(false)
-    }
-
-    private func shuffleActiveZone() {
-        let targets = filteredTracks
-        guard !targets.isEmpty else { return }
-        let shuffled = targets.shuffled()
-        if let first = shuffled.first {
-            player.isShuffle = true
-            player.play(track: first, in: shuffled)
-        }
     }
 }
 
