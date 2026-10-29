@@ -32,6 +32,7 @@ def test_schema_constants():
     assert struct.unpack(">I", hdr[16:20])[0] == 4
 
 
+@pytest.mark.skipif(ANALYZED_FLAC is None, reason="Test hardware FLAC not mounted or present")
 def test_ground_truth_analyzed_file_detection():
     assert ANALYZED_FLAC is not None and ANALYZED_FLAC.exists()
     info = senseme_engine.is_senseme_analyzed(ANALYZED_FLAC)
@@ -44,6 +45,7 @@ def test_ground_truth_analyzed_file_detection():
     assert "Relax" in info["channels"] or "Lounge" in info["channels"]
 
 
+@pytest.mark.skipif(ANALYZED_FLAC is None and ORIG_FLAC is None, reason="Test hardware FLAC not mounted or present")
 def test_ground_truth_unanalyzed_file_detection(tmp_path):
     if ORIG_FLAC and ORIG_FLAC.exists() and not senseme_engine.is_senseme_analyzed(ORIG_FLAC)["isAnalyzed"]:
         info = senseme_engine.is_senseme_analyzed(ORIG_FLAC)
@@ -56,6 +58,7 @@ def test_ground_truth_unanalyzed_file_detection(tmp_path):
         assert info["isAnalyzed"] is False
 
 
+@pytest.mark.skipif(ANALYZED_FLAC is None, reason="Test hardware FLAC not mounted or present")
 def test_payload_builder_exact_match():
     assert ANALYZED_FLAC is not None and ANALYZED_FLAC.exists()
     ref_bytes = senseme_engine.read_flac_smfm(ANALYZED_FLAC)
@@ -73,6 +76,7 @@ def test_payload_builder_exact_match():
     assert synth == ref_bytes
 
 
+@pytest.mark.skipif(ANALYZED_FLAC is None and ORIG_FLAC is None, reason="Test hardware FLAC not mounted or present")
 def test_dsp_analysis_and_injection(tmp_path):
     copy_path = tmp_path / "test_track.flac"
     if ORIG_FLAC and ORIG_FLAC.exists() and not senseme_engine.is_senseme_analyzed(ORIG_FLAC)["isAnalyzed"]:

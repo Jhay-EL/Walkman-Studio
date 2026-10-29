@@ -227,9 +227,9 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
     public static func hasCopySuffix(_ filename: String) -> Bool {
         let name = (filename as NSString).deletingPathExtension
         let patterns = [
-            #"\s*\(\d+\)$"#,
+            #"\s+\([1-9]\d{0,1}\)$"#,
             #"\s*-\s*copy.*$"#,
-            #"_\d+$"#,
+            #"\s+copy\s*\d*$"#,
             #"\s*-\s*[\w\-]+-pc.*$"#
         ]
         for pattern in patterns {
@@ -452,9 +452,9 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
     public static func cleanFilenameForMatching(_ filename: String) -> String {
         var base = (filename as NSString).deletingPathExtension
         let patterns = [
-            #"\s*\(\d+\)$"#,
+            #"\s+\([1-9]\d{0,1}\)$"#,
             #"\s*-\s*copy.*$"#,
-            #"_\d+$"#,
+            #"\s+copy\s*\d*$"#,
             #"\s*-\s*[\w\-]+-pc.*$"#,
             #"^\d{1,3}[\s\.\-_]+\s*"#
         ]
@@ -520,7 +520,30 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
             }
         }
 
-        guard !scanDirs.isEmpty else {
+        var allTracks: [Track] = []
+        var effectiveDrives = drives
+
+        if !scanDirs.isEmpty {
+            let result = await LibraryScanner.shared.scan(directories: scanDirs)
+            allTracks.append(contentsOf: result.tracks)
+        }
+
+        // Include local library tracks and folders
+        let localTracks = await MainActor.run { LocalMusicLibraryService.shared.tracks }
+        let localFolders = await MainActor.run { LocalMusicLibraryService.shared.folders }
+        for folder in localFolders {
+            let pseudoDrive = WalkmanDrive.localLibrary(at: folder.url, name: folder.displayName)
+            if !effectiveDrives.contains(where: { $0.mountPoint == pseudoDrive.mountPoint }) {
+                effectiveDrives.append(pseudoDrive)
+            }
+        }
+        for lt in localTracks {
+            if !allTracks.contains(where: { $0.id == lt.id }) {
+                allTracks.append(lt)
+            }
+        }
+
+        guard !allTracks.isEmpty else {
             await MainActor.run {
                 self.duplicateGroups = []
                 self.cachedTracks = []
@@ -533,14 +556,13 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
             return []
         }
 
-        // 1. Scan/retrieve all tracks across all drives via LibraryScanner
-        let result = await LibraryScanner.shared.scan(directories: scanDirs)
-        let allTracks = result.tracks
+        let finalTracks = allTracks
+        let finalDrives = effectiveDrives
         let currentScope = self.detectionScope
 
         // 2. Run duplicate clustering in background
         let groups = await Task.detached(priority: .userInitiated) { () -> [DuplicateGroup] in
-            return Self.computeDuplicateGroups(tracks: allTracks, drives: drives, scope: currentScope)
+            return Self.computeDuplicateGroups(tracks: finalTracks, drives: finalDrives, scope: currentScope)
         }.value
 
         let crossCount = groups.filter { $0.isCrossDrive }.count
@@ -548,8 +570,8 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
         let recoverable = groups.reduce(0) { $0 + $1.recoverableBytes }
 
         await MainActor.run {
-            self.cachedTracks = allTracks
-            self.cachedDrives = drives
+            self.cachedTracks = finalTracks
+            self.cachedDrives = finalDrives
             self.duplicateGroups = groups
             self.totalRecoverableBytes = recoverable
             self.crossDriveCount = crossCount
@@ -582,7 +604,10 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
             if track.fullPath.localizedCaseInsensitiveContains("SD_CARD") || track.fullPath.localizedCaseInsensitiveContains("SDCARD") {
                 return ("MicroSD Card", .microsd, "/Volumes/SD_CARD")
             }
-            return ("Internal Flash", .internal, "/Volumes/WALKMAN")
+            if track.fullPath.hasPrefix("/Volumes/") {
+                return ("Internal Flash", .internal, "/Volumes/WALKMAN")
+            }
+            return ("Local Library", .local, (track.fullPath as NSString).deletingLastPathComponent)
         }
 
         func makeItem(_ track: Track) -> DuplicateTrackItem {
@@ -749,7 +774,8 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
             let tKey = normalizeTitle(track.title.isEmpty ? track.filename : track.title)
             let aKey = normalizeArtist(track.artist)
             guard !tKey.isEmpty else { continue }
-            if aKey.isEmpty && isGenericOrAmbiguousTitle(tKey) { continue }
+            // Safety: Disallow cross-drive grouping for unknown artist or generic titles
+            guard !aKey.isEmpty, !isGenericOrAmbiguousTitle(tKey) else { continue }
             crossDriveTitleArtistBuckets["\(tKey)::\(aKey)", default: []].append(track)
         }
 
@@ -771,32 +797,45 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
                     guard intVer == sdVer else { return false }
 
                     // Tier 1a: FLAC Stream MD5 verification
+                    var isConfirmedMatch = false
                     if intTrack.format.uppercased() == "FLAC" && sdTrack.format.uppercased() == "FLAC" {
                         let md5A = flacMd5Cache[intTrack.fullPath] ?? readFLACAudioStreamMD5(at: intTrack.fullPath)
                         let md5B = flacMd5Cache[sdTrack.fullPath] ?? readFLACAudioStreamMD5(at: sdTrack.fullPath)
                         if let a = md5A { flacMd5Cache[intTrack.fullPath] = a }
                         if let b = md5B { flacMd5Cache[sdTrack.fullPath] = b }
                         if let a = md5A, let b = md5B, a == b {
-                            return true
+                            isConfirmedMatch = true
                         }
                     }
 
                     // Tier 1b: ISRC tag verification
-                    let isrcA = isrcCache[intTrack.fullPath] ?? readFastISRC(at: intTrack.fullPath, format: intTrack.format)
-                    let isrcB = isrcCache[sdTrack.fullPath] ?? readFastISRC(at: sdTrack.fullPath, format: sdTrack.format)
-                    if let a = isrcA { isrcCache[intTrack.fullPath] = a }
-                    if let b = isrcB { isrcCache[sdTrack.fullPath] = b }
-                    if let a = isrcA, let b = isrcB, !a.isEmpty, !b.isEmpty {
-                        if a == b {
-                            return true
-                        } else {
-                            return false // Different official recordings
+                    if !isConfirmedMatch {
+                        let isrcA = isrcCache[intTrack.fullPath] ?? readFastISRC(at: intTrack.fullPath, format: intTrack.format)
+                        let isrcB = isrcCache[sdTrack.fullPath] ?? readFastISRC(at: sdTrack.fullPath, format: sdTrack.format)
+                        if let a = isrcA { isrcCache[intTrack.fullPath] = a }
+                        if let b = isrcB { isrcCache[sdTrack.fullPath] = b }
+                        if let a = isrcA, let b = isrcB, !a.isEmpty, !b.isEmpty {
+                            if a == b {
+                                isConfirmedMatch = true
+                            } else {
+                                return false // Different official recordings
+                            }
                         }
+                    }
+
+                    // In .exactSameAlbum mode, if audio hash / ISRC did not verify bit-exact identity,
+                    // the tracks MUST belong to the same album release to prevent deleting studio tracks!
+                    if !isConfirmedMatch && scope == .exactSameAlbum {
+                        let albA = normalizeAlbum(intTrack.album)
+                        let albB = normalizeAlbum(sdTrack.album)
+                        guard !albA.isEmpty, !albB.isEmpty, albA == albB else { return false }
                     }
 
                     // Tier 2: Duration check
                     if intTrack.durationSeconds > 0 && sdTrack.durationSeconds > 0 {
                         guard abs(intTrack.durationSeconds - sdTrack.durationSeconds) <= 1.5 else { return false }
+                    } else if !isConfirmedMatch {
+                        return false // Disallow unverified duration-less matches
                     }
 
                     // Tier 2: SenseMe Acoustic Correlation
@@ -845,6 +884,19 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
                 let v1 = extractVersionTag(from: "\(track.title) \(track.album) \(track.fullPath)")
                 for i in 0..<clusters.count {
                     let leader = clusters[i][0]
+
+                    // Safety: If both tracks have distinct positive track numbers, they are different album tracks (e.g. Part 1 vs Part 2)!
+                    let tNumA = Int(track.trackNum.components(separatedBy: "/").first ?? "")
+                    let tNumLeader = Int(leader.trackNum.components(separatedBy: "/").first ?? "")
+                    if let numA = tNumA, let numLeader = tNumLeader, numA > 0, numLeader > 0, numA != numLeader {
+                        let aIsCopy = hasCopySuffix(track.filename)
+                        let leaderIsCopy = hasCopySuffix(leader.filename)
+                        let md5Match = (track.format.uppercased() == "FLAC" && leader.format.uppercased() == "FLAC" &&
+                                        flacMd5Cache[track.fullPath] == flacMd5Cache[leader.fullPath] &&
+                                        flacMd5Cache[track.fullPath] != nil)
+                        guard aIsCopy || leaderIsCopy || md5Match else { continue }
+                    }
+
                     let v2 = extractVersionTag(from: "\(leader.title) \(leader.album) \(leader.fullPath)")
                     guard v1 == v2 else { continue }
 
@@ -935,7 +987,8 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
         var filenameBuckets: [String: [Track]] = [:]
         for track in tracks where !assignedPaths.contains(track.fullPath) {
             let fnKey = cleanFilenameForMatching(track.filename)
-            guard !fnKey.isEmpty else { continue }
+            // Safety: Disallow very short or generic filename stems from forming broad buckets
+            guard !fnKey.isEmpty, fnKey.count > 2, !isGenericOrAmbiguousTitle(fnKey) else { continue }
             let driveMount = resolveDrive(for: track).mountPoint
             filenameBuckets["\(driveMount)::\(fnKey)", default: []].append(track)
         }
@@ -965,13 +1018,17 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
                         if !aTrack.isEmpty && !aLeader.isEmpty && aTrack != aLeader {
                             continue
                         }
-
-                        if track.durationSeconds <= 0 || leader.durationSeconds <= 0 ||
-                           abs(track.durationSeconds - leader.durationSeconds) <= 1.5 {
-                            clusters[i].append(track)
-                            placed = true
-                            break
+                        if aTrack.isEmpty && aLeader.isEmpty && track.album != leader.album {
+                            continue
                         }
+
+                        // Durations must be valid and within 1.5 seconds
+                        guard track.durationSeconds > 5.0 && leader.durationSeconds > 5.0 else { continue }
+                        guard abs(track.durationSeconds - leader.durationSeconds) <= 1.5 else { continue }
+
+                        clusters[i].append(track)
+                        placed = true
+                        break
                     }
                     if !placed {
                         clusters.append([track])
@@ -1151,6 +1208,9 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
         let success = await WalkmanEngine.shared.deleteTrackFile(atPath: path)
         LibraryScanner.shared.removeFromCache(fullPath: path)
         CoverArtCache.shared.invalidate(forFullPath: path, artist: item.track.primaryArtist, album: item.track.album)
+        await MainActor.run {
+            LocalMusicLibraryService.shared.deleteTrack(track: item.track, moveToTrash: false)
+        }
 
         // 2. Remove from cachedTracks
         self.cachedTracks.removeAll(where: { $0.fullPath == path })

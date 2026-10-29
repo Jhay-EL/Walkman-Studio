@@ -4,6 +4,7 @@ Integration tests for FastAPI endpoints in backend/main.py.
 
 import tempfile
 from pathlib import Path
+import pytest
 from fastapi.testclient import TestClient
 from backend.main import app
 
@@ -71,7 +72,10 @@ def test_api_senseme_endpoints():
         Path("/Users/workstation/Desktop/06. ILYSB (STRIPPED) 12 tone Senseme analyzed.flac"),
         Path("/Volumes/SD_CARD/MUSIC/LANY/Make Out/06. ILYSB (STRIPPED).flac"),
     ]
-    analyzed_flac = str(next(p for p in candidate_paths if p.exists()))
+    analyzed_flac_path = next((p for p in candidate_paths if p.exists()), None)
+    if not analyzed_flac_path:
+        pytest.skip("Test hardware FLAC not mounted or present")
+    analyzed_flac = str(analyzed_flac_path)
     res = client.get(f"/api/senseme/inspect?file_path={analyzed_flac}")
     assert res.status_code == 200
     data = res.json()
@@ -95,7 +99,10 @@ def test_api_transfer_with_senseme():
         Path("/Users/workstation/Desktop/06. ILYSB (STRIPPED) 12 tone Senseme analyzed.flac"),
         Path("/Volumes/SD_CARD/MUSIC/LANY/Make Out/06. ILYSB (STRIPPED).flac"),
     ]
-    source_flac = str(next(p for p in candidate_paths if p.exists()))
+    source_flac_path = next((p for p in candidate_paths if p.exists()), None)
+    if not source_flac_path:
+        pytest.skip("Test hardware FLAC not mounted or present")
+    source_flac = str(source_flac_path)
     with tempfile.TemporaryDirectory() as tmp_dir:
         mount = Path(tmp_dir)
         res = client.post("/api/transfer", json={

@@ -662,14 +662,21 @@ public final class AudioTagger: @unchecked Sendable {
     // -----------------------------------------------------------------------
     // Path & Filename Heuristic Extractor
     // -----------------------------------------------------------------------
-    public static func extractFromPath(url: URL) -> (artist: String, album: String, title: String) {
+    public static func extractFromPath(url: URL) -> (artist: String, album: String, title: String, trackNumber: String) {
         let stem = url.deletingPathExtension().lastPathComponent
         var title = stem
+        var detectedTrack = ""
 
-        if let regex = try? NSRegularExpression(pattern: #"^(\d+[-_])?\d+[\.\s\-_]+(.*)$"#, options: []),
+        if let regex = try? NSRegularExpression(pattern: #"^(?:(?:cd|disc|d)[\s\-_]*\d+[\s\-_]+)?(?:(\d+)[-_])?(\d{1,3})[\.\s\-_]+(.*)$"#, options: [.caseInsensitive]),
            let match = regex.firstMatch(in: stem, range: NSRange(location: 0, length: stem.utf16.count)) {
-            if let r2 = Range(match.range(at: 2), in: stem) {
-                let stripped = String(stem[r2]).trimmingCharacters(in: .whitespaces)
+            if match.range(at: 2).location != NSNotFound, let r2 = Range(match.range(at: 2), in: stem) {
+                let numStr = String(stem[r2])
+                if let val = Int(numStr), val > 0 {
+                    detectedTrack = String(val)
+                }
+            }
+            if match.range(at: 3).location != NSNotFound, let r3 = Range(match.range(at: 3), in: stem) {
+                let stripped = String(stem[r3]).trimmingCharacters(in: .whitespaces)
                 if !stripped.isEmpty {
                     title = stripped
                 }
@@ -718,7 +725,8 @@ public final class AudioTagger: @unchecked Sendable {
         return (
             WalkmanEngine.sanitizeWalkmanText(finalArtist, stripExplicitMarkers: false),
             WalkmanEngine.sanitizeWalkmanText(dirAlbum),
-            WalkmanEngine.sanitizeWalkmanText(title)
+            WalkmanEngine.sanitizeWalkmanText(title),
+            detectedTrack
         )
     }
 
@@ -849,11 +857,12 @@ public final class AudioTagger: @unchecked Sendable {
         }
 
         // Tier 4: Directory & Filename Heuristics
-        if m.artist.isEmpty || m.artist.lowercased() == "unknown artist" || m.album.isEmpty || m.album.lowercased() == "unknown album" || m.title.isEmpty || m.title.lowercased() == "unknown" {
+        if m.artist.isEmpty || m.artist.lowercased() == "unknown artist" || m.album.isEmpty || m.album.lowercased() == "unknown album" || m.title.isEmpty || m.title.lowercased() == "unknown" || m.trackNumber.isEmpty {
             let heur = Self.extractFromPath(url: fileURL)
             if (m.artist.isEmpty || m.artist.lowercased() == "unknown artist") && !heur.artist.isEmpty && heur.artist.lowercased() != "unknown artist" { m.artist = heur.artist }
             if (m.album.isEmpty || m.album.lowercased() == "unknown album") && !heur.album.isEmpty && heur.album.lowercased() != "unknown album" { m.album = heur.album }
             if (m.title.isEmpty || m.title.lowercased() == "unknown") && !heur.title.isEmpty && heur.title.lowercased() != "unknown" { m.title = heur.title }
+            if m.trackNumber.isEmpty && !heur.trackNumber.isEmpty { m.trackNumber = heur.trackNumber }
         }
 
         m.title = WalkmanEngine.sanitizeWalkmanText(m.title)

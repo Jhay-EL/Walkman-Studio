@@ -999,7 +999,7 @@ private struct DuplicateTrackRow: View {
                 .foregroundStyle(Color(red: 200/255, green: 160/255, blue: 255/255))
                 .clipShape(Capsule())
                 .fixedSize(horizontal: true, vertical: false)
-            } else {
+            } else if item.isMicroSD {
                 HStack(spacing: 4) {
                     Image(systemName: "sdcard.fill")
                     Text("MicroSD")
@@ -1009,6 +1009,19 @@ private struct DuplicateTrackRow: View {
                 .padding(.vertical, 3.5)
                 .background(Color.blue.opacity(0.2))
                 .foregroundStyle(Color(red: 130/255, green: 200/255, blue: 255/255))
+                .clipShape(Capsule())
+                .fixedSize(horizontal: true, vertical: false)
+            } else {
+                HStack(spacing: 4) {
+                    Image(systemName: "folder.fill")
+                    Text(item.driveName.isEmpty ? "Local" : item.driveName)
+                        .lineLimit(1)
+                }
+                .font(WalkmanFont.badge)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3.5)
+                .background(Color.teal.opacity(0.2))
+                .foregroundStyle(Color(red: 120/255, green: 230/255, blue: 210/255))
                 .clipShape(Capsule())
                 .fixedSize(horizontal: true, vertical: false)
             }

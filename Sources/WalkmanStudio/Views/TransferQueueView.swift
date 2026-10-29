@@ -40,11 +40,41 @@ public struct TransferQueueView: View {
         self.drives = drives
         self.activeDrive = activeDrive
         self.onTransferComplete = onTransferComplete
-        _targetDriveId = State(initialValue: activeDrive?.mountPoint ?? drives.first?.mountPoint ?? "")
+        let initialId: String
+        if let active = activeDrive {
+            initialId = active.mountPoint
+        } else if let first = drives.first {
+            initialId = first.mountPoint
+        } else {
+            initialId = "local_library"
+        }
+        _targetDriveId = State(initialValue: initialId)
+    }
+
+    private var defaultLocalURL: URL {
+        if let first = LocalMusicLibraryService.shared.folders.first {
+            return first.url
+        }
+        let musicURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Music/Walkman Studio Library")
+        try? FileManager.default.createDirectory(at: musicURL, withIntermediateDirectories: true)
+        return musicURL
+    }
+
+    private var isLocalDestination: Bool {
+        targetDriveId == "local_library" || targetDriveId.hasPrefix("local_folder_") || (drives.isEmpty && !targetDriveId.hasPrefix("/Volumes"))
     }
 
     private var selectedTarget: WalkmanDrive? {
-        drives.first(where: { $0.mountPoint == targetDriveId }) ?? activeDrive
+        if isLocalDestination {
+            if targetDriveId.hasPrefix("local_folder_") {
+                let folderId = String(targetDriveId.dropFirst("local_folder_".count))
+                if let folder = LocalMusicLibraryService.shared.folders.first(where: { $0.id == folderId }) {
+                    return WalkmanDrive.localLibrary(at: folder.url, name: "Local: \(folder.displayName)")
+                }
+            }
+            return WalkmanDrive.localLibrary(at: defaultLocalURL, name: "Local Music Library")
+        }
+        return drives.first(where: { $0.mountPoint == targetDriveId }) ?? activeDrive ?? (drives.isEmpty ? WalkmanDrive.localLibrary(at: defaultLocalURL) : nil)
     }
 
     private var queueTotalBytes: Int64 {
@@ -194,19 +224,29 @@ public struct TransferQueueView: View {
                         // Card 1: Target Destination Drive
                         VStack(alignment: .leading, spacing: 5) {
                             HStack(spacing: 5) {
-                                Image(systemName: targetMode == .learning ? "character.book.closed.fill" : "hifispeaker.fill")
+                                Image(systemName: isLocalDestination ? "internaldrive.fill" : (targetMode == .learning ? "character.book.closed.fill" : "hifispeaker.fill"))
                                     .font(.system(size: 10))
-                                    .foregroundStyle(targetMode == .learning ? WalkmanTheme.hiResGold : WalkmanTheme.silverMuted)
-                                Text(targetMode == .learning ? "TARGET: /LEARNING" : "DESTINATION DRIVE")
+                                    .foregroundStyle(isLocalDestination ? WalkmanTheme.silverLight : (targetMode == .learning ? WalkmanTheme.hiResGold : WalkmanTheme.silverMuted))
+                                Text(isLocalDestination ? "TARGET: LOCAL STORAGE" : (targetMode == .learning ? "TARGET: /LEARNING" : "DESTINATION DRIVE"))
                                     .font(WalkmanFont.sectionHeader)
-                                    .foregroundStyle(targetMode == .learning ? WalkmanTheme.hiResGold.opacity(0.9) : Color.white.opacity(0.4))
+                                    .foregroundStyle(isLocalDestination ? WalkmanTheme.silverLight.opacity(0.85) : (targetMode == .learning ? WalkmanTheme.hiResGold.opacity(0.9) : Color.white.opacity(0.4)))
                             }
 
                             Picker("", selection: $targetDriveId) {
-                                ForEach(drives) { d in
-                                    let dev = WalkmanDeviceDetector.shared.detectDevices(drives: drives).first(where: { $0.drives.contains(where: { $0.mountPoint == d.mountPoint }) })
-                                    let label = (drives.count > 2 && dev != nil) ? "\(dev!.specificModel) • \(d.name)" : d.name
-                                    Text(label).tag(d.mountPoint)
+                                if !drives.isEmpty {
+                                    Section("Walkman Storage") {
+                                        ForEach(drives) { d in
+                                            let dev = WalkmanDeviceDetector.shared.detectDevices(drives: drives).first(where: { $0.drives.contains(where: { $0.mountPoint == d.mountPoint }) })
+                                            let label = (drives.count > 2 && dev != nil) ? "\(dev!.specificModel) • \(d.name)" : d.name
+                                            Text(label).tag(d.mountPoint)
+                                        }
+                                    }
+                                }
+                                Section("Local Storage") {
+                                    Text("Local Music Library").tag("local_library")
+                                    ForEach(LocalMusicLibraryService.shared.folders) { f in
+                                        Text("Folder: \(f.displayName)").tag("local_folder_\(f.id)")
+                                    }
                                 }
                             }
                             .labelsHidden()
@@ -234,7 +274,7 @@ public struct TransferQueueView: View {
                                     }
                                 }
                             } else {
-                                Text("No Walkman drive detected")
+                                Text("No Destination Selected")
                                     .font(WalkmanFont.subheadline)
                                     .foregroundStyle(.orange)
                             }
@@ -541,6 +581,41 @@ public struct TransferQueueView: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 6))
                                 .frame(maxWidth: 180)
                             }
+
+                            // Sort Queue Menu
+                            Menu {
+                                Button {
+                                    sortQueueByTrackNumber()
+                                } label: {
+                                    Label("Sort by Track Number", systemImage: "number")
+                                }
+                                Button {
+                                    sortQueueByFilename()
+                                } label: {
+                                    Label("Sort by Filename (A-Z)", systemImage: "doc.plaintext")
+                                }
+                                Button {
+                                    sortQueueByArtistAlbum()
+                                } label: {
+                                    Label("Sort by Artist & Album", systemImage: "music.note.list")
+                                }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.up.arrow.down")
+                                        .font(.system(size: 10, weight: .semibold))
+                                    Text("Sort")
+                                        .font(WalkmanFont.calloutMedium)
+                                }
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 5)
+                                .background(Color.white.opacity(0.08))
+                                .foregroundStyle(.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.12), lineWidth: 1))
+                            }
+                            .menuIndicator(.hidden)
+                            .buttonStyle(.plain)
+                            .help("Sort queue items by track number, filename, or album")
 
                             // Add More Files Button
                             Button(action: openFilePicker) {
@@ -914,15 +989,24 @@ public struct TransferQueueView: View {
     }
 
     private func handleDrop(providers: [NSItemProvider]) {
+        let group = DispatchGroup()
+        let lock = NSLock()
+        var droppedURLs: [URL] = []
+
         for provider in providers {
+            group.enter()
             provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { item, _ in
+                defer { group.leave() }
                 guard let data = item as? Data,
                       let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
-
-                DispatchQueue.main.async {
-                    addURLToQueue(url)
-                }
+                lock.lock()
+                droppedURLs.append(url)
+                lock.unlock()
             }
+        }
+
+        group.notify(queue: .main) {
+            self.addURLsToQueue(droppedURLs)
         }
     }
 
@@ -937,26 +1021,91 @@ public struct TransferQueueView: View {
         panel.allowedContentTypes = types
 
         if panel.runModal() == .OK {
-            for url in panel.urls {
-                addURLToQueue(url)
-            }
+            addURLsToQueue(panel.urls)
         }
     }
 
     private func addURLToQueue(_ url: URL) {
-        var isDir: ObjCBool = false
-        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) {
-            if isDir.boolValue {
-                if let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: nil) {
-                    for case let fileURL as URL in enumerator {
-                        let ext = fileURL.pathExtension.lowercased()
-                        if ["flac", "mp3", "m4a", "m4b", "wav", "aac", "alac", "aiff", "dsf", "dff", "wma", "ogg", "opus"].contains(ext) {
-                            enqueueSingleFile(fileURL)
+        addURLsToQueue([url])
+    }
+
+    private func addURLsToQueue(_ urls: [URL]) {
+        let supportedExtensions: Set<String> = [
+            "flac", "mp3", "m4a", "m4b", "wav", "aac", "alac", "aiff", "dsf", "dff", "wma", "ogg", "opus"
+        ]
+        var collectedURLs: [URL] = []
+
+        for url in urls {
+            var isDir: ObjCBool = false
+            if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) {
+                if isDir.boolValue {
+                    if let enumerator = FileManager.default.enumerator(
+                        at: url,
+                        includingPropertiesForKeys: [.isDirectoryKey],
+                        options: [.skipsHiddenFiles]
+                    ) {
+                        for case let fileURL as URL in enumerator {
+                            let ext = fileURL.pathExtension.lowercased()
+                            if supportedExtensions.contains(ext) {
+                                collectedURLs.append(fileURL)
+                            }
                         }
                     }
+                } else if supportedExtensions.contains(url.pathExtension.lowercased()) {
+                    collectedURLs.append(url)
                 }
-            } else {
-                enqueueSingleFile(url)
+            }
+        }
+
+        // Natural Finder-style sorting ensures 01 - Song, 02 - Song, ... are perfectly ordered
+        collectedURLs.sort { urlA, urlB in
+            urlA.path.localizedStandardCompare(urlB.path) == .orderedAscending
+        }
+
+        for fileURL in collectedURLs {
+            enqueueSingleFile(fileURL)
+        }
+    }
+
+    private func sortQueueByTrackNumber() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            queue.sort { a, b in
+                if a.album != b.album && !a.album.isEmpty && !b.album.isEmpty {
+                    return a.album.localizedStandardCompare(b.album) == .orderedAscending
+                }
+                let tA = Int(a.trackNumber.components(separatedBy: "/").first ?? "") ?? 0
+                let tB = Int(b.trackNumber.components(separatedBy: "/").first ?? "") ?? 0
+                if tA != tB && tA > 0 && tB > 0 {
+                    return tA < tB
+                }
+                return a.sourceURL.path.localizedStandardCompare(b.sourceURL.path) == .orderedAscending
+            }
+        }
+    }
+
+    private func sortQueueByFilename() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            queue.sort {
+                $0.sourceURL.lastPathComponent.localizedStandardCompare($1.sourceURL.lastPathComponent) == .orderedAscending
+            }
+        }
+    }
+
+    private func sortQueueByArtistAlbum() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            queue.sort { a, b in
+                if a.artist != b.artist {
+                    return a.artist.localizedStandardCompare(b.artist) == .orderedAscending
+                }
+                if a.album != b.album {
+                    return a.album.localizedStandardCompare(b.album) == .orderedAscending
+                }
+                let tA = Int(a.trackNumber.components(separatedBy: "/").first ?? "") ?? 0
+                let tB = Int(b.trackNumber.components(separatedBy: "/").first ?? "") ?? 0
+                if tA != tB && tA > 0 && tB > 0 {
+                    return tA < tB
+                }
+                return a.sourceURL.path.localizedStandardCompare(b.sourceURL.path) == .orderedAscending
             }
         }
     }
@@ -976,6 +1125,7 @@ public struct TransferQueueView: View {
         if !pathFallback.artist.isEmpty { item.artist = WalkmanEngine.sanitizeWalkmanText(pathFallback.artist, stripExplicitMarkers: false) }
         if !pathFallback.album.isEmpty { item.album = WalkmanEngine.sanitizeWalkmanText(pathFallback.album) }
         if !pathFallback.title.isEmpty { item.title = WalkmanEngine.sanitizeWalkmanText(pathFallback.title) }
+        if !pathFallback.trackNumber.isEmpty { item.trackNumber = pathFallback.trackNumber }
 
         Task.detached(priority: .userInitiated) {
             let meta = AudioTagger.shared.readMetadata(fileURL: url)
@@ -1528,6 +1678,11 @@ public struct TransferQueueView: View {
                 }
             }
 
+            if isLocalDestination {
+                LocalMusicLibraryService.shared.addFolders(urls: [targetRootDir])
+                LocalMusicLibraryService.shared.rescanFolder(url: targetRootDir)
+            }
+
             isProcessing = false
             onTransferComplete()
         }
@@ -1611,8 +1766,24 @@ private struct QueueItemRow: View {
 
                 // Track Details & Metadata Hierarchy
                 VStack(alignment: .leading, spacing: 3) {
-                    // Line 1: Title & Badges
+                    // Line 1: Track Number Badge + Title & Badges
                     HStack(spacing: 6) {
+                        let tNum = item.trackNumber.components(separatedBy: "/").first?.trimmingCharacters(in: .whitespaces) ?? ""
+                        if !tNum.isEmpty, let numInt = Int(tNum), numInt > 0 {
+                            Text(String(format: "%02d", numInt))
+                                .font(WalkmanFont.monoSmall)
+                                .foregroundStyle(WalkmanTheme.hiResGoldLight)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1.5)
+                                .background(WalkmanTheme.hiResGold.opacity(0.14))
+                                .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+                                        .stroke(WalkmanTheme.hiResGold.opacity(0.35), lineWidth: 0.75)
+                                )
+                                .help("Track \(numInt)")
+                        }
+
                         Text(item.title.isEmpty ? item.sourceURL.deletingPathExtension().lastPathComponent : item.title)
                             .font(WalkmanFont.bodyBold)
                             .foregroundStyle(.white)
