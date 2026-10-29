@@ -1073,11 +1073,11 @@ public struct LocalLibraryView: View {
                     .font(.system(size: 22, weight: .bold))
                     .foregroundStyle(.white)
 
-                Text("Import music folders from any location on your Mac or external drives. Walkman Studio indexes your tracks and albums into a dedicated database, just like Apple Music—ready to play, inspect metadata, check for duplicates, and transfer to Sony Walkman.")
+                Text("Import music folders to organize, play, and transfer tracks to your Sony Walkman.")
                     .font(.system(size: 13))
                     .foregroundStyle(WalkmanTheme.silverMuted)
                     .multilineTextAlignment(.center)
-                    .frame(maxWidth: 520)
+                    .frame(maxWidth: 440)
             }
 
             VStack(spacing: 12) {
