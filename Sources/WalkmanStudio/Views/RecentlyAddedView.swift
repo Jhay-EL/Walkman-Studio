@@ -168,6 +168,15 @@ public struct RecentlyAddedView: View {
         self.displayedTracks = finalRankedTracks
         self.currentPlaybackQueue = finalRankedTracks.map(\.track)
         self.visibleTrackIds = Set(finalRankedTracks.map(\.id))
+        syncQueue()
+    }
+
+    private func syncQueue() {
+        let queue = currentPlaybackQueue
+        player.activeQueueProvider = { queue }
+        if player.isPlaying {
+            player.currentQueue = queue
+        }
     }
     
     private var isPlayingFromVisibleQueue: Bool {
@@ -249,6 +258,9 @@ public struct RecentlyAddedView: View {
         }
         .onChange(of: sortOrder) { _, newOrder in
             recomputeDisplayedTracks(newSortOrder: newOrder)
+        }
+        .onDisappear {
+            player.activeQueueProvider = nil
         }
     }
     

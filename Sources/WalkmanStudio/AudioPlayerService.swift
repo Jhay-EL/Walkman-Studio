@@ -51,8 +51,16 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
     /// Optional external tracks provider (e.g. from connected Walkman DAP or Local Library)
     public var fallbackTracksProvider: (@MainActor () -> [Track])?
 
+    /// Optional dynamic queue provider for the currently selected/focused tab (e.g. Songs, Recently Added)
+    public var activeQueueProvider: (@MainActor () -> [Track]?)?
+
     /// Effective queue guaranteed to return a usable list of tracks
     public var effectiveQueue: [Track] {
+        if Thread.isMainThread {
+            if let active = MainActor.assumeIsolated({ activeQueueProvider?() }), !active.isEmpty {
+                return active
+            }
+        }
         if !currentQueue.isEmpty {
             return currentQueue
         }
@@ -422,7 +430,13 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
     }
 
     public func playNext() {
-        let queue = effectiveQueue
+        let queue: [Track]
+        if Thread.isMainThread, let active = MainActor.assumeIsolated({ activeQueueProvider?() }), !active.isEmpty {
+            queue = active
+            self.currentQueue = active
+        } else {
+            queue = effectiveQueue
+        }
         guard !queue.isEmpty else { return }
 
         guard let current = currentTrack else {
@@ -456,7 +470,13 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
     }
 
     public func playPrevious() {
-        let queue = effectiveQueue
+        let queue: [Track]
+        if Thread.isMainThread, let active = MainActor.assumeIsolated({ activeQueueProvider?() }), !active.isEmpty {
+            queue = active
+            self.currentQueue = active
+        } else {
+            queue = effectiveQueue
+        }
         guard !queue.isEmpty else { return }
 
         guard let current = currentTrack else {

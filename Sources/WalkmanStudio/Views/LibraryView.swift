@@ -114,6 +114,15 @@ public struct LibraryView: View {
         
         self.displayedTracks = finalTracks
         self.visibleTrackIds = Set(finalTracks.map(\.id))
+        syncQueue()
+    }
+
+    private func syncQueue() {
+        let currentVisible = visibleTracks
+        player.activeQueueProvider = { currentVisible }
+        if player.isPlaying {
+            player.currentQueue = currentVisible
+        }
     }
     
     private func formatDuration(_ seconds: Double) -> String {
@@ -210,6 +219,9 @@ public struct LibraryView: View {
         }
         .onChange(of: sortOrder) {
             recomputeDisplayedTracks()
+        }
+        .onDisappear {
+            player.activeQueueProvider = nil
         }
     }
     

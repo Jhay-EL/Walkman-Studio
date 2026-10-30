@@ -571,8 +571,8 @@ public struct FullScreenNowPlayingView: View {
                     Button(action: {
                         if player.currentTrack != nil {
                             player.togglePlayPause()
-                        } else if let first = libraryTracks.first {
-                            player.play(track: first, in: libraryTracks)
+                        } else if let first = player.effectiveQueue.first ?? libraryTracks.first {
+                            player.play(track: first, in: player.effectiveQueue)
                         }
                     }) {
                         Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")

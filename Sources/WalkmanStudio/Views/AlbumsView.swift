@@ -39,6 +39,7 @@ public struct AlbumsView: View {
     let onSelectTrack: (Track) -> Void
     var onEditAlbum: ((AlbumItem) -> Void)? = nil
     var onEditTrack: ((Track) -> Void)? = nil
+    var onEditTrackWithList: ((Track, [Track]) -> Void)? = nil
     var onTrimCutTrack: ((Track) -> Void)? = nil
     var onDeleteAlbum: ((AlbumItem) -> Void)? = nil
     var onDeleteTrack: ((Track) -> Void)? = nil
@@ -70,6 +71,7 @@ public struct AlbumsView: View {
         onSelectTrack: @escaping (Track) -> Void,
         onEditAlbum: ((AlbumItem) -> Void)? = nil,
         onEditTrack: ((Track) -> Void)? = nil,
+        onEditTrackWithList: ((Track, [Track]) -> Void)? = nil,
         onTrimCutTrack: ((Track) -> Void)? = nil,
         onDeleteAlbum: ((AlbumItem) -> Void)? = nil,
         onDeleteTrack: ((Track) -> Void)? = nil,
@@ -83,6 +85,7 @@ public struct AlbumsView: View {
         self.onSelectTrack = onSelectTrack
         self.onEditAlbum = onEditAlbum
         self.onEditTrack = onEditTrack
+        self.onEditTrackWithList = onEditTrackWithList
         self.onTrimCutTrack = onTrimCutTrack
         self.onDeleteAlbum = onDeleteAlbum
         self.onDeleteTrack = onDeleteTrack
@@ -267,8 +270,13 @@ public struct AlbumsView: View {
                         onEditAlbum?(album)
                     },
                     onEditTrack: { tr in
-                        onEditTrack?(tr)
+                        if let onEditTrackWithList = onEditTrackWithList {
+                            onEditTrackWithList(tr, album.tracks)
+                        } else {
+                            onEditTrack?(tr)
+                        }
                     },
+                    onEditTrackWithList: onEditTrackWithList,
                     onTrimCutTrack: { tr in
                         onTrimCutTrack?(tr)
                     },
@@ -322,6 +330,7 @@ public struct AlbumsView: View {
             }
         }
         .onAppear {
+            player.activeQueueProvider = nil
             if cachedAlbums.isEmpty && precomputedAlbums == nil && !tracks.isEmpty {
                 cachedAlbums = Self.buildAlbums(from: tracks)
                 recomputeDisplayedAlbums()
@@ -1151,6 +1160,7 @@ private struct AlbumDetailView: View {
     let onSelectTrack: (Track) -> Void
     var onEditAlbum: (() -> Void)? = nil
     var onEditTrack: ((Track) -> Void)? = nil
+    var onEditTrackWithList: ((Track, [Track]) -> Void)? = nil
     var onTrimCutTrack: ((Track) -> Void)? = nil
     var onDeleteAlbum: (() -> Void)? = nil
     var onDeleteTrack: ((Track) -> Void)? = nil
@@ -1303,7 +1313,11 @@ private struct AlbumDetailView: View {
                                     player.playOrToggle(track: track, in: album.tracks)
                                 },
                                 onEdit: {
-                                    onEditTrack?(track)
+                                    if let onEditTrackWithList = onEditTrackWithList {
+                                        onEditTrackWithList(track, album.tracks)
+                                    } else {
+                                        onEditTrack?(track)
+                                    }
                                 },
                                 onTrimCut: {
                                     onTrimCutTrack?(track)

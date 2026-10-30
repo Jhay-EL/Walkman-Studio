@@ -130,8 +130,8 @@ public struct TrackPreviewBar: View {
                 action: {
                     if player.currentTrack != nil {
                         player.togglePlayPause()
-                    } else if let first = libraryTracks.first ?? player.effectiveQueue.first {
-                        player.play(track: first, in: !libraryTracks.isEmpty ? libraryTracks : player.effectiveQueue)
+                    } else if let first = player.effectiveQueue.first ?? libraryTracks.first {
+                        player.play(track: first, in: player.effectiveQueue)
                     }
                 }
             )

@@ -79,15 +79,19 @@ public struct LocalLibraryView: View {
     let onInspectTrack: (Track) -> Void
     var onDeleteTrack: ((Track) -> Void)? = nil
     var onEditTrack: ((Track) -> Void)? = nil
+    var onEditTrackWithList: ((Track, [Track]) -> Void)? = nil
     var onTrimCutTrack: ((Track) -> Void)? = nil
     var onGoToTransfer: (() -> Void)? = nil
     var onEditAlbum: ((AlbumItem) -> Void)? = nil
     var onTransferComplete: (() -> Void)? = nil
 
-    private static let defaultSortOrder = [
+    private static let defaultSongsSortOrder = [
         KeyPathComparator(\Track.artist),
         KeyPathComparator(\Track.album),
         KeyPathComparator(\Track.trackNum)
+    ]
+    private static let defaultRecentSortOrder = [
+        KeyPathComparator(\Track.dateAdded, order: .reverse)
     ]
 
     @ObservedObject private var player = AudioPlayerService.shared
@@ -95,7 +99,8 @@ public struct LocalLibraryView: View {
 
     @State private var displayMode: LocalDisplayMode = .songs
     @State private var sortOption: LocalSortOption = .artistAZ
-    @State private var sortOrder = defaultSortOrder
+    @State private var songsSortOrder = defaultSongsSortOrder
+    @State private var recentSortOrder = defaultRecentSortOrder
     @State private var formatFilter: String = "ALL"
     @State private var searchQuery: String = ""
     @State private var isDropTargeted: Bool = false
@@ -132,6 +137,7 @@ public struct LocalLibraryView: View {
         onInspectTrack: @escaping (Track) -> Void,
         onDeleteTrack: ((Track) -> Void)? = nil,
         onEditTrack: ((Track) -> Void)? = nil,
+        onEditTrackWithList: ((Track, [Track]) -> Void)? = nil,
         onTrimCutTrack: ((Track) -> Void)? = nil,
         onGoToTransfer: (() -> Void)? = nil,
         onEditAlbum: ((AlbumItem) -> Void)? = nil,
@@ -146,6 +152,7 @@ public struct LocalLibraryView: View {
         self.onInspectTrack = onInspectTrack
         self.onDeleteTrack = onDeleteTrack
         self.onEditTrack = onEditTrack
+        self.onEditTrackWithList = onEditTrackWithList
         self.onTrimCutTrack = onTrimCutTrack
         self.onGoToTransfer = onGoToTransfer
         self.onEditAlbum = onEditAlbum
@@ -228,6 +235,45 @@ public struct LocalLibraryView: View {
         isLoading || localService.isScanning
     }
 
+    private func applySortOption(_ option: LocalSortOption, to list: inout [Track]) {
+        switch option {
+        case .titleAZ:
+            list.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+        case .titleZA:
+            list.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedDescending }
+        case .artistAZ:
+            list.sort {
+                if $0.artist != $1.artist {
+                    return $0.artist.localizedCaseInsensitiveCompare($1.artist) == .orderedAscending
+                }
+                if $0.album != $1.album {
+                    return $0.album.localizedCaseInsensitiveCompare($1.album) == .orderedAscending
+                }
+                return $0.trackNum < $1.trackNum
+            }
+        case .albumAZ:
+            list.sort {
+                if $0.album != $1.album {
+                    return $0.album.localizedCaseInsensitiveCompare($1.album) == .orderedAscending
+                }
+                return $0.trackNum < $1.trackNum
+            }
+        case .dateNewest:
+            list.sort { $0.dateAdded > $1.dateAdded }
+        case .dateOldest:
+            list.sort { $0.dateAdded < $1.dateAdded }
+        case .duration:
+            list.sort { $0.durationSeconds > $1.durationSeconds }
+        case .bitrate:
+            list.sort {
+                let qualityA = $0.sampleRate * $0.bitsPerSample
+                let qualityB = $1.sampleRate * $1.bitsPerSample
+                if qualityA != qualityB { return qualityA > qualityB }
+                return $0.bitrateKbps > $1.bitrateKbps
+            }
+        }
+    }
+
     var filteredTracks: [Track] {
         let q = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         var list = effectiveTracks
@@ -255,48 +301,76 @@ public struct LocalLibraryView: View {
         }
 
         // 3. Sorting
-        if sortOrder != Self.defaultSortOrder {
-            list = list.sorted(using: sortOrder)
+        if songsSortOrder != Self.defaultSongsSortOrder {
+            list = list.sorted(using: songsSortOrder)
         } else {
-            switch sortOption {
-            case .titleAZ:
-                list.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
-            case .titleZA:
-                list.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedDescending }
-            case .artistAZ:
-                list.sort {
-                    if $0.artist != $1.artist {
-                        return $0.artist.localizedCaseInsensitiveCompare($1.artist) == .orderedAscending
-                    }
-                    if $0.album != $1.album {
-                        return $0.album.localizedCaseInsensitiveCompare($1.album) == .orderedAscending
-                    }
-                    return $0.trackNum < $1.trackNum
-                }
-            case .albumAZ:
-                list.sort {
-                    if $0.album != $1.album {
-                        return $0.album.localizedCaseInsensitiveCompare($1.album) == .orderedAscending
-                    }
-                    return $0.trackNum < $1.trackNum
-                }
-            case .dateNewest:
-                list.sort { $0.dateAdded > $1.dateAdded }
-            case .dateOldest:
-                list.sort { $0.dateAdded < $1.dateAdded }
-            case .duration:
-                list.sort { $0.durationSeconds > $1.durationSeconds }
-            case .bitrate:
-                list.sort {
-                    let qualityA = $0.sampleRate * $0.bitsPerSample
-                    let qualityB = $1.sampleRate * $1.bitsPerSample
-                    if qualityA != qualityB { return qualityA > qualityB }
-                    return $0.bitrateKbps > $1.bitrateKbps
-                }
-            }
+            applySortOption(sortOption, to: &list)
         }
 
         return list
+    }
+
+    var recentlyAddedTracks: [Track] {
+        let q = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        var list = effectiveTracks
+
+        // 1. Format Filter
+        if formatFilter != "ALL" {
+            switch formatFilter {
+            case "HI-RES":
+                list = list.filter { $0.bitsPerSample > 16 || $0.sampleRate > 48000 }
+            default:
+                list = list.filter { $0.format.uppercased() == formatFilter }
+            }
+        }
+
+        // 2. Search Query
+        if !q.isEmpty {
+            list = list.filter { tr in
+                tr.title.localizedCaseInsensitiveContains(q) ||
+                tr.artist.localizedCaseInsensitiveContains(q) ||
+                tr.album.localizedCaseInsensitiveContains(q) ||
+                tr.genre.localizedCaseInsensitiveContains(q) ||
+                tr.filename.localizedCaseInsensitiveContains(q) ||
+                tr.fullPath.localizedCaseInsensitiveContains(q)
+            }
+        }
+
+        // 3. Sorting
+        if recentSortOrder != Self.defaultRecentSortOrder {
+            list = list.sorted(using: recentSortOrder)
+        } else if sortOption != .artistAZ {
+            applySortOption(sortOption, to: &list)
+        } else {
+            list.sort { $0.dateAdded > $1.dateAdded }
+        }
+
+        return list
+    }
+
+    var currentTabTracks: [Track] {
+        switch displayMode {
+        case .songs:
+            return filteredTracks
+        case .recentlyAdded:
+            return recentlyAddedTracks
+        default:
+            return filteredTracks
+        }
+    }
+
+    private func syncQueueWithActiveTab() {
+        if displayMode == .songs || displayMode == .recentlyAdded {
+            let active = currentTabTracks
+            player.activeQueueProvider = { [self] in
+                self.currentTabTracks
+            }
+            if player.isPlaying {
+                player.currentQueue = active
+            }
+        } else {
+            player.activeQueueProvider = nil
+        }
     }
 
     private func openFolderPicker() {
@@ -315,18 +389,20 @@ public struct LocalLibraryView: View {
     }
 
     private func togglePlaybackAll() {
-        guard let first = filteredTracks.first else { return }
-        if player.isPlaying && filteredTracks.contains(where: { $0.id == player.currentTrack?.id }) {
+        let tracksToPlay = currentTabTracks
+        guard let first = tracksToPlay.first else { return }
+        if player.isPlaying && tracksToPlay.contains(where: { $0.id == player.currentTrack?.id }) {
             player.pause()
         } else {
             selectedTrackId = first.id
-            player.play(track: first, in: filteredTracks)
+            player.play(track: first, in: tracksToPlay)
         }
     }
 
     private func shufflePlaybackAll() {
-        guard !filteredTracks.isEmpty else { return }
-        let shuffled = filteredTracks.shuffled()
+        let tracksToPlay = currentTabTracks
+        guard !tracksToPlay.isEmpty else { return }
+        let shuffled = tracksToPlay.shuffled()
         if let first = shuffled.first {
             selectedTrackId = first.id
             player.play(track: first, in: shuffled)
@@ -385,7 +461,33 @@ public struct LocalLibraryView: View {
         }
         .background(WalkmanTheme.background.ignoresSafeArea())
         .onChange(of: sortOption) { _, _ in
-            sortOrder = Self.defaultSortOrder
+            if displayMode == .songs {
+                songsSortOrder = Self.defaultSongsSortOrder
+            } else if displayMode == .recentlyAdded {
+                recentSortOrder = Self.defaultRecentSortOrder
+            }
+            syncQueueWithActiveTab()
+        }
+        .onChange(of: songsSortOrder) { _, _ in
+            syncQueueWithActiveTab()
+        }
+        .onChange(of: recentSortOrder) { _, _ in
+            syncQueueWithActiveTab()
+        }
+        .onChange(of: displayMode) { _, _ in
+            syncQueueWithActiveTab()
+        }
+        .onChange(of: searchQuery) { _, _ in
+            syncQueueWithActiveTab()
+        }
+        .onChange(of: formatFilter) { _, _ in
+            syncQueueWithActiveTab()
+        }
+        .onAppear {
+            syncQueueWithActiveTab()
+        }
+        .onDisappear {
+            player.activeQueueProvider = nil
         }
         .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
             handleDrop(providers: providers)
@@ -673,7 +775,7 @@ public struct LocalLibraryView: View {
     // SONGS TABLE VIEW (Native macOS Table with multi-column sorting & context menu)
     // -------------------------------------------------------------------------
     private var songsTableView: some View {
-        Table(filteredTracks, selection: $selectedTrackId, sortOrder: $sortOrder) {
+        Table(filteredTracks, selection: $selectedTrackId, sortOrder: $songsSortOrder) {
             TableColumn("#", value: \.trackNum) { track in
                 Text(track.trackNum.isEmpty ? "—" : track.trackNum)
                     .font(WalkmanFont.monoSmall)
@@ -851,16 +953,8 @@ public struct LocalLibraryView: View {
     // -------------------------------------------------------------------------
     // RECENTLY ADDED TRACKS TABLE VIEW
     // -------------------------------------------------------------------------
-    private var recentlyAddedTracks: [Track] {
-        var list = filteredTracks
-        if sortOrder == Self.defaultSortOrder && sortOption == .artistAZ {
-            list.sort { $0.dateAdded > $1.dateAdded }
-        }
-        return list
-    }
-
     private var recentlyAddedTableView: some View {
-        Table(recentlyAddedTracks, selection: $selectedTrackId, sortOrder: $sortOrder) {
+        Table(recentlyAddedTracks, selection: $selectedTrackId, sortOrder: $recentSortOrder) {
             TableColumn("#") { track in
                 let idx = (recentlyAddedTracks.firstIndex(where: { $0.id == track.id }) ?? 0) + 1
                 Text("\(idx)")
@@ -1142,6 +1236,13 @@ public struct LocalLibraryView: View {
             onEditTrack: { track in
                 onEditTrack?(track)
             },
+            onEditTrackWithList: { track, list in
+                if let onEditTrackWithList = onEditTrackWithList {
+                    onEditTrackWithList(track, list)
+                } else {
+                    onEditTrack?(track)
+                }
+            },
             onTrimCutTrack: { track in
                 onTrimCutTrack?(track)
             },
@@ -1179,6 +1280,13 @@ public struct LocalLibraryView: View {
             },
             onEditTrack: { track in
                 onEditTrack?(track)
+            },
+            onEditTrackWithList: { track, list in
+                if let onEditTrackWithList = onEditTrackWithList {
+                    onEditTrackWithList(track, list)
+                } else {
+                    onEditTrack?(track)
+                }
             },
             onTrimCutTrack: { track in
                 onTrimCutTrack?(track)
