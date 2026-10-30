@@ -62,13 +62,18 @@ Rather than adopting generic consumer software aesthetics or futuristic cyber/ga
 
 ### 2. Liquid Glass Segmented Controls & Tabs
 Segmented format bars and category switchers must follow this exact architecture across all views:
-* **Outer Capsule Track**: 
-  - `padding(3)`, `background(Color.white.opacity(0.04))`, `clipShape(Capsule())`, `overlay(Capsule().stroke(Color.white.opacity(0.10), lineWidth: 0.8))`.
-  - Spacing between tabs: 4pt.
+
+* **Outer Capsule Track**:
+  - `padding(3)`, `frame(height: 38)`, `background(Color.white.opacity(0.04))`, `clipShape(Capsule())`, `overlay(Capsule().stroke(Color.white.opacity(0.10), lineWidth: 0.8))`.
+  - Add `.fixedSize(horizontal: true, vertical: false)` to prevent horizontal stretching.
+  - Spacing between tab pills: 4pt.
+  - **Geometry**: The outer track is exactly **38pt tall**. Inner tab pills are exactly **32pt tall** (3pt inset padding each side = 38pt total).
+
 * **Unselected & Idle State (Clean Transparency)**:
   - When a tab is neither hovered nor selected, its pill background and border stroke are **completely transparent** (`Color.clear`).
   - Text and icons float cleanly on the track with `Color.white.opacity(0.70)`.
-  - **Full Round Click Box (Easy Hit Target)**: Must apply `.contentShape(Capsule())` backed by a non-zero alpha hit surface (`Color.white.opacity(0.001)`) across the entire capsule (`minHeight: 32`, 14pt horizontal padding, 7pt vertical padding). Users must never have to click directly on label text glyphs; clicking anywhere in the round pill area triggers selection immediately.
+  - **Full Round Click Box (Easy Hit Target)**: Must apply `.contentShape(Capsule())` backed by a non-zero alpha hit surface (`Color.white.opacity(0.001)`) across the entire capsule (`frame(height: 32)` — never `minHeight`, 14pt horizontal padding, 7pt vertical padding). Users must never have to click directly on label text glyphs; clicking anywhere in the round pill area triggers selection immediately.
+
 * **Hover State (Tactile Liquid Glass Lift)**:
   - Subtly expands on hover using spring physics: `.scaleEffect(isHovered ? 1.03 : 1.0)` with `.animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)`.
   - Lights up with a frosted glass body: `Color.white.opacity(0.09)`.
@@ -77,6 +82,7 @@ Segmented format bars and category switchers must follow this exact architecture
   - Subtle physical drop shadow (`Color.black.opacity(0.15), radius: 2, y: 1`).
   - Text brightens to crisp `Color.white`.
   - Cursor changes to `NSCursor.pointingHand`.
+
 * **Selected State (Seamless Gliding Lens)**:
   - Active Liquid Glass pill: `Color.white.opacity(isHiRes ? 0.13 : 0.16)`.
   - Bright specular refraction highlight (`LinearGradient` from `Color.white.opacity(isHovered ? 0.42 : 0.35)` to `clear`, height 6pt).
@@ -87,23 +93,73 @@ Segmented format bars and category switchers must follow this exact architecture
   - **Data Isolation**: The visual highlight state (`activeHighlightId`) animates independently; the underlying filter data state updates without animation to keep data filtering instant (< 1ms).
 
 ### 3. Action Buttons & Hit Targets
-* **Enlarged Touch Targets for Small Screens**:
-  - Primary and secondary buttons must maintain minimum heights of `32pt` to `34pt` with generous horizontal padding (12pt–16pt) for easy clicking on laptop and small displays.
+
+All toolbar action buttons (Play, Shuffle, etc.) are standardized at **38pt tall** with **19pt corner radius** for a consistent pill shape aligned to the toolbar height.
+
+* **Standard Button Height**: `frame(height: 38)` — never `minHeight`. Corner radius: `19pt`.
+* **Horizontal Padding**: `padding(.horizontal, 14)` for labeled buttons; icon-only buttons use a fixed `38×38` square frame.
+* **`LiquidGlassButtonStyle` Variants**:
+  - `.prominent` — opaque gold-tinted fill for the primary action (e.g. "Play Hi-Res", "Play All"). Text foreground: near-black `Color(red: 20/255, green: 20/255, blue: 24/255)`.
+  - `.glass` — frosted liquid glass body for secondary actions (e.g. Shuffle). Text foreground: `WalkmanTheme.silverLight`.
 * **Hover & Press Kinetics**:
   - Buttons use `.scaleEffect(configuration.isPressed ? 0.97 : (isHovered ? 1.025 : 1.0))` with spring physics (`.spring(response: 0.22, dampingFraction: 0.70)`).
   - Subtle black shadow elevation increases on hover (`radius: 6, y: 3`) and compresses on press (`radius: 2, y: 1`).
   - Pointing hand cursor (`NSCursor.pointingHand`) on hover with proper push/pop balancing.
 
 ### 4. Search Capsules & Input Fields
-* **Liquid Glass Capsule**: Continuous rounded rectangle or capsule with `minHeight: 36` and 12pt horizontal padding.
-* **Subdued Frosted Fill**: `Color.white.opacity(0.06)` with top specular sheen gradient (7pt).
+
+* **Liquid Glass Capsule**: Continuous rounded rectangle with `frame(height: 38)` — never `minHeight` — and 12pt horizontal padding.
+* **Corner Radius**: `10pt` (continuous style).
+* **Subdued Frosted Fill**: `Color.white.opacity(0.06)` with top specular sheen gradient (7pt, `Color.white.opacity(0.12)` → `clear`).
 * **Active State Focus**: Border stroke transitions from `Color.white.opacity(0.12)` when empty to `Color.white.opacity(0.30)` when active or query is present.
+* **Shadow**: `Color.black.opacity(0.15), radius: 2.5, y: 1`.
 
 ### 5. Cards & Panels (`LiquidGlassModifier`)
 * Modifiers use clean frosted materials with solid card overlays.
 * Border strokes provide crisp physical definition without glowing outlines.
 * Multi-layer drop shadows use `Color.black` exclusively.
 
-### 6. Badges, Indicators & Pills
+### 6. Count Indicator Pills (Toolbar Stat Badges)
+
+Count pills display the active item tally (tracks, albums, artists) in the toolbar. All count pills are standardized at **38pt tall** across every view.
+
+* **Geometry**: `frame(height: 38)`, `padding(.horizontal, 14)`, `clipShape(Capsule())`, `.fixedSize(horizontal: true, vertical: false)`.
+* **Icon Size**: `font(.system(size: 11.5, weight: .bold))`.
+* **Label Size**: `font(.system(size: 12.5, weight: .medium, design: .monospaced))`.
+* **Background**: Two-layer `ZStack`:
+  1. Base tint fill (see per-view palette below).
+  2. Top specular sheen — `LinearGradient` from `Color.white.opacity(0.10)` → `clear`, height 8pt, applied via a `VStack` + `Spacer`.
+* **Rim Stroke**: `LinearGradient` capsule stroke (`lineWidth: 0.8`) running top-to-bottom:
+  - Standard views (All Songs, Recently Added, Albums, Artists): `Color.white.opacity(0.45)` → `.opacity(0.20)` → `.opacity(0.0)`.
+  - Hi-Res Audio view: `WalkmanTheme.hiResGold.opacity(0.45)` → `.opacity(0.20)` → `.opacity(0.0)`.
+* **Shadow**: `Color.black.opacity(0.10), radius: 2, x: 0, y: 1`.
+
+#### Per-View Palette
+
+| View | Icon Color | Label Color | Base Fill |
+|---|---|---|---|
+| All Songs | `Color.white.opacity(0.55)` | `WalkmanTheme.silverLight` | `Color.white.opacity(0.08)` |
+| Recently Added | `Color.white.opacity(0.55)` | `WalkmanTheme.silverLight` | `Color.white.opacity(0.08)` |
+| Albums | `Color.white.opacity(0.55)` | `WalkmanTheme.silverLight` | `Color.white.opacity(0.08)` |
+| Artists | `Color.white.opacity(0.55)` | `WalkmanTheme.silverLight` | `Color.white.opacity(0.08)` |
+| Playlists | `Color.white.opacity(0.55)` | `WalkmanTheme.silverLight` | `Color.white.opacity(0.08)` |
+| Hi-Res Audio | `WalkmanTheme.hiResGold` | `WalkmanTheme.hiResGoldLight` | `WalkmanTheme.hiResGold.opacity(0.08)` |
+
+> **Rule**: Never apply white liquid glass styling to the Hi-Res Audio count pill — the gold tint palette must be preserved.
+
+### 7. Toolbar Height Alignment Summary
+
+All interactive toolbar elements share a unified **38pt height baseline**:
+
+| Element | `frame(height)` | Corner Radius | Notes |
+|---|---|---|---|
+| Search capsule | `38` | `10pt` | `frame(height: 38)` — never `minHeight` |
+| Segmented bar outer track | `38` | Capsule | `padding(3)` inset → inner pills are 32pt |
+| Segmented bar inner tab pills | `32` | Capsule | `frame(height: 32)` — never `minHeight` |
+| Primary action button (labeled) | `38` | `19pt` | `padding(.horizontal, 14)` |
+| Secondary action button (icon-only) | `38×38` | `19pt` | Square frame, full circle pill |
+| Count indicator pill | `38` | Capsule | `padding(.horizontal, 14)` |
+
+### 8. Audio Badges & Status Indicators
 * Status indicators (e.g. active drive beacon dot, compliance verified checkmark, Selected badge) use clean flat fills.
 * Audio badges (e.g. Hi-Res Audio, FW version) use subtle, natural black drop shadows (`Color.black.opacity(0.18)`), never colored gold or neon halos.
