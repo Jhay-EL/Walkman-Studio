@@ -132,7 +132,7 @@ public struct MetadataStudioView: View {
         return try? NSRegularExpression(pattern: pattern)
     }()
 
-    public nonisolated static func parseLyrics(_ raw: String?) -> [ParsedLyricLine] {
+    public nonisolated static func parseLyrics(_ raw: String?, durationSeconds: Double = 0) -> [ParsedLyricLine] {
         guard let raw = raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
         let rawLines = raw.components(separatedBy: .newlines)
         
@@ -210,6 +210,29 @@ public struct MetadataStudioView: View {
                     return a.id < b.id
                 }
                 return tA < tB
+            }
+        } else if !result.isEmpty && durationSeconds > 10.0 {
+            // Synthesize progressive chronological timestamps for unsynced plain text lyrics
+            let nonEmpty = result.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            if !nonEmpty.isEmpty {
+                let startSec: Double = 2.5
+                let endSec: Double = max(startSec + 3.0, durationSeconds - 3.0)
+                let step: Double = (endSec - startSec) / Double(max(1, nonEmpty.count))
+                var synthesized: [ParsedLyricLine] = []
+                for (i, line) in nonEmpty.enumerated() {
+                    let t = startSec + Double(i) * step
+                    let m = Int(t) / 60
+                    let s = Int(t) % 60
+                    let formatted = String(format: "%02d:%02d", m, s)
+                    synthesized.append(ParsedLyricLine(
+                        id: line.id,
+                        timestamp: "[\(formatted)]",
+                        formattedTimestamp: formatted,
+                        timeInSeconds: t,
+                        text: line.text
+                    ))
+                }
+                return synthesized
             }
         }
         

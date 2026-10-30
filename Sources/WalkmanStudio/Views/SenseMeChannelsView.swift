@@ -1022,12 +1022,10 @@ public struct SenseMeChannelsView: View {
 
         let firstTrack = currentTracks[0]
         player.isShuffle = true
-        let startTime = firstTrack.senseMeHighlightSec ?? 0.0
         player.play(
             track: firstTrack,
             coverArt: nil,
-            in: currentTracks,
-            startTime: startTime > 5.0 ? startTime : nil
+            in: currentTracks
         )
     }
 
@@ -1157,8 +1155,7 @@ public struct SenseMeChannelsView: View {
 
         let first = channelTracks[0]
         player.isShuffle = true
-        let startTime = first.senseMeHighlightSec ?? 0.0
-        player.play(track: first, coverArt: nil, in: channelTracks, startTime: startTime > 5.0 ? startTime : nil)
+        player.play(track: first, coverArt: nil, in: channelTracks)
     }
 
     private func startBatchAnalysis() {

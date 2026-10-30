@@ -61,39 +61,51 @@ public final class LyricsService: @unchecked Sendable {
             options: .regularExpression
         )
 
-        // 3. Strip artist prefix if repeated in the title (e.g. "Harry Styles - Sign of the Times")
+        // 3. Strip artist prefix if repeated in the title (e.g. "Bruno Mars - It Will Rain")
         if let art = artist?.trimmingCharacters(in: .whitespacesAndNewlines), !art.isEmpty {
-            let artLower = art.lowercased()
-            let tLower = t.lowercased()
-            for sep in [" - ", " – ", " — ", " : ", ": "] {
-                let prefix = artLower + sep
-                if tLower.hasPrefix(prefix) {
-                    t = String(t.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
-                    break
+            let primary = Track.parsePrimaryAndFeaturedArtist(from: art).primary.trimmingCharacters(in: .whitespacesAndNewlines)
+            let artParts = art.components(separatedBy: CharacterSet(charactersIn: ";,")).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            var candidates = [art, primary] + artParts
+            candidates = candidates.filter { !$0.isEmpty }
+            for c in candidates {
+                let cLower = c.lowercased()
+                let tLower = t.lowercased()
+                for sep in [" - ", " – ", " — ", " : ", ": "] {
+                    let prefix = cLower + sep
+                    if tLower.hasPrefix(prefix) {
+                        t = String(t.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+                        break
+                    }
                 }
             }
         }
 
         // 4. Remove feat / ft
         t = t.replacingOccurrences(
-            of: #"\s*[\(\[](feat\.|ft\.|featuring).*?[\)\]]"#,
+            of: #"\s*[\(\[].*?(feat\.|ft\.|featuring).*?[\)\]]"#,
             with: "",
             options: [.regularExpression, .caseInsensitive]
         )
         // 5. Remove video / audio / visualizer / lyric video
         t = t.replacingOccurrences(
-            of: #"\s*[\(\[](official|music video|video|audio|lyrics? video|visualizer|hd|4k|hq).*?[\)\]]"#,
+            of: #"\s*[\(\[].*?(official|music video|video|audio|lyrics? video|visualizer|hd|4k|hq).*?[\)\]]"#,
             with: "",
             options: [.regularExpression, .caseInsensitive]
         )
         // 6. Remove remaster / deluxe / version / edit
         t = t.replacingOccurrences(
-            of: #"\s*[\(\[](remaster|remastered|deluxe|bonus|anniversary|version|edit|mono|stereo|radio edit).*?[\)\]]"#,
+            of: #"\s*[\(\[].*?(remaster|remastered|deluxe|bonus|anniversary|version|edit|mono|stereo|radio edit).*?[\)\]]"#,
+            with: "",
+            options: [.regularExpression, .caseInsensitive]
+        )
+        // 7. Remove live / acoustic / remix / session / festival / tour / explicit
+        t = t.replacingOccurrences(
+            of: #"\s*[\(\[].*?(live|acoustic|piano|remix|mix|session|unplugged|orchestral|festival|tour|explicit).*?[\)\]]"#,
             with: "",
             options: [.regularExpression, .caseInsensitive]
         )
 
-        // 7. Strip surrounding quotes if any
+        // 8. Strip surrounding quotes if any
         if (t.hasPrefix("\"") && t.hasSuffix("\"")) || (t.hasPrefix("'") && t.hasSuffix("'")) {
             t = String(t.dropFirst().dropLast())
         }
@@ -141,6 +153,21 @@ public final class LyricsService: @unchecked Sendable {
             return res
         }
 
+        // If cleanTitle didn't yield synced lyrics, check raw title in case it has a specific synced entry
+        if cleanTitle != title && !primaryArtist.isEmpty {
+            if let rawLoose = await queryLrclibGetLoose(title: title, artist: primaryArtist), rawLoose.synced {
+                return rawLoose
+            }
+            if let rawResult = await queryLrclibSearch(
+                title: title,
+                artist: primaryArtist,
+                duration: durationSeconds,
+                allowedChars: allowed
+            ), rawResult.synced {
+                return rawResult
+            }
+        }
+
         // Direct match plain lyrics from /api/get loose
         if !primaryArtist.isEmpty && !cleanTitle.isEmpty {
             if let looseRes = await queryLrclibGetLoose(title: cleanTitle, artist: primaryArtist), !looseRes.lyrics.isEmpty {
@@ -158,7 +185,7 @@ public final class LyricsService: @unchecked Sendable {
             return ovhResult
         }
 
-        // 3. Fallback: try with raw title if cleaned title differed
+        // Fallback with raw title if cleaned title differed
         if cleanTitle != title && !primaryArtist.isEmpty {
             if let rawGet = await queryLrclibGetLoose(title: title, artist: primaryArtist) {
                 return rawGet

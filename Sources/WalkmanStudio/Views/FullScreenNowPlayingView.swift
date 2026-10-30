@@ -14,6 +14,7 @@ public struct FullScreenNowPlayingView: View {
     @State private var isLoadingLyrics: Bool = false
     @State private var lyricsError: String? = nil
     @State private var activeLyricId: Int? = nil
+    @State private var hasInitialScrolled: Bool = false
     @State private var hoveredLyricId: Int? = nil
     @State private var isArtworkHovered: Bool = false
     @State private var lastNonZeroVolume: Float = 0.8
@@ -758,7 +759,9 @@ public struct FullScreenNowPlayingView: View {
                         )
                     )
                     .onAppear {
-                        updateActiveLyric(proxy: proxy)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                            updateActiveLyric(proxy: proxy, forceScroll: true)
+                        }
                     }
                     .onChange(of: progress.currentTime) {
                         updateActiveLyric(proxy: proxy)
@@ -766,12 +769,17 @@ public struct FullScreenNowPlayingView: View {
                     .onChange(of: player.isPlaying) {
                         updateActiveLyric(proxy: proxy)
                     }
-                    .onChange(of: parsedLines.count) {
-                        updateActiveLyric(proxy: proxy)
+                    .onChange(of: parsedLines) {
+                        activeLyricId = nil
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                            updateActiveLyric(proxy: proxy, forceScroll: true)
+                        }
                     }
                     .onChange(of: player.currentTrack?.id) {
                         activeLyricId = nil
-                        updateActiveLyric(proxy: proxy)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                            updateActiveLyric(proxy: proxy, forceScroll: true)
+                        }
                     }
                 }
             }
@@ -782,7 +790,7 @@ public struct FullScreenNowPlayingView: View {
     /// Lead time (0.3s / 300ms) to ensure lyric highlighting anticipates vocal onset with zero lag, matching Track Details pane.
     private let lyricLeadTimeSeconds: Double = 0.3
 
-    private func updateActiveLyric(proxy: ScrollViewProxy) {
+    private func updateActiveLyric(proxy: ScrollViewProxy, forceScroll: Bool = false) {
         guard !parsedLines.isEmpty else { return }
         let now = progress.currentTime + lyricLeadTimeSeconds
         var targetId: Int? = nil
@@ -796,8 +804,9 @@ public struct FullScreenNowPlayingView: View {
             }
         }
 
-        if targetId != activeLyricId {
+        if forceScroll || targetId != activeLyricId {
             activeLyricId = targetId
+            hasInitialScrolled = true
             if let id = targetId {
                 withAnimation(.easeInOut(duration: 0.28)) {
                     proxy.scrollTo(id, anchor: UnitPoint(x: 0.5, y: 0.35))
@@ -966,29 +975,34 @@ public struct FullScreenNowPlayingView: View {
             self.parsedLines = []
             self.lyricsError = nil
             self.isLoadingLyrics = false
+            self.activeLyricId = nil
+            self.hasInitialScrolled = false
             return
         }
 
         self.isLoadingLyrics = true
         self.lyricsError = nil
+        self.activeLyricId = nil
+        self.hasInitialScrolled = false
 
         DispatchQueue.global(qos: .userInitiated).async {
             let fileURL = URL(fileURLWithPath: track.fullPath)
-            if !forceOnline {
-                if let local = AudioTagger.shared.extractLyrics(fileURL: fileURL),
-                   !local.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    let parsed = MetadataStudioView.parseLyrics(local)
-                    DispatchQueue.main.async {
-                        guard self.player.currentTrack?.id == track.id else { return }
-                        self.lyrics = local
-                        self.parsedLines = parsed
-                        self.isLoadingLyrics = false
-                    }
-                    return
+            let local = !forceOnline ? AudioTagger.shared.extractLyrics(fileURL: fileURL) : nil
+            let localParsed = (local != nil && !local!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ?
+                MetadataStudioView.parseLyrics(local, durationSeconds: track.durationSeconds) : []
+            let isLocalSynced = local != nil && local!.contains("[") && localParsed.contains(where: { $0.timeInSeconds != nil })
+
+            if isLocalSynced {
+                DispatchQueue.main.async {
+                    guard self.player.currentTrack?.id == track.id else { return }
+                    self.lyrics = local
+                    self.parsedLines = localParsed
+                    self.isLoadingLyrics = false
                 }
+                return
             }
 
-            // Fetch online lyrics via LyricsService
+            // If local lyrics are missing or plain text (unsynced), fetch synchronized lyrics online via LyricsService
             Task {
                 do {
                     let res = try await LyricsService.shared.fetchLyrics(
@@ -1000,15 +1014,22 @@ public struct FullScreenNowPlayingView: View {
                     await MainActor.run {
                         guard self.player.currentTrack?.id == track.id else { return }
                         self.lyrics = res.lyrics
-                        self.parsedLines = MetadataStudioView.parseLyrics(res.lyrics)
+                        self.parsedLines = MetadataStudioView.parseLyrics(res.lyrics, durationSeconds: track.durationSeconds)
                         self.isLoadingLyrics = false
                     }
                 } catch {
                     await MainActor.run {
                         guard self.player.currentTrack?.id == track.id else { return }
-                        self.lyrics = nil
-                        self.parsedLines = []
-                        self.lyricsError = "No lyrics found online"
+                        if let local = local, !localParsed.isEmpty {
+                            // Fallback to local plain lyrics with synthesized progressive timestamps
+                            self.lyrics = local
+                            self.parsedLines = localParsed
+                            self.lyricsError = nil
+                        } else {
+                            self.lyrics = nil
+                            self.parsedLines = []
+                            self.lyricsError = "No lyrics found online"
+                        }
                         self.isLoadingLyrics = false
                     }
                 }
