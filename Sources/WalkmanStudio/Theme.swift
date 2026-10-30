@@ -173,6 +173,116 @@ public extension View {
             tint: tint
         ))
     }
+
+    func studioGlassCard(cornerRadius: CGFloat = 14) -> some View {
+        self.modifier(StudioGlassCardModifier(cornerRadius: cornerRadius))
+    }
+
+    func modalGlassChassis(cornerRadius: CGFloat = 16) -> some View {
+        self.modifier(ModalGlassChassisModifier(cornerRadius: cornerRadius))
+    }
+}
+
+// MARK: - Studio Glass Card Modifier (§5)
+public struct StudioGlassCardModifier: ViewModifier {
+    public var cornerRadius: CGFloat = 14
+
+    public init(cornerRadius: CGFloat = 14) {
+        self.cornerRadius = cornerRadius
+    }
+
+    public func body(content: Content) -> some View {
+        content
+            .background(
+                ZStack {
+                    WalkmanTheme.card.opacity(0.85)
+                        .background(.ultraThinMaterial)
+
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color.white.opacity(0.16), location: 0.0),
+                                .init(color: Color.white.opacity(0.03), location: 0.5),
+                                .init(color: Color.clear, location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 8)
+                        Spacer(minLength: 0)
+                    }
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color.white.opacity(0.24), location: 0.0),
+                                .init(color: Color.white.opacity(0.10), location: 0.5),
+                                .init(color: Color.white.opacity(0.04), location: 1.0)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.85
+                    )
+            )
+            .shadow(color: Color.black.opacity(0.22), radius: 8, x: 0, y: 3)
+    }
+}
+
+// MARK: - Modal Glass Chassis Modifier (§9)
+public struct ModalGlassChassisModifier: ViewModifier {
+    public var cornerRadius: CGFloat = 16
+
+    public init(cornerRadius: CGFloat = 16) {
+        self.cornerRadius = cornerRadius
+    }
+
+    public func body(content: Content) -> some View {
+        content
+            .background(
+                ZStack {
+                    WalkmanTheme.card.opacity(0.92)
+                        .background(.ultraThinMaterial)
+
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color.white.opacity(0.24), location: 0.0),
+                                .init(color: Color.white.opacity(0.05), location: 0.5),
+                                .init(color: Color.clear, location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 10)
+                        Spacer(minLength: 0)
+                    }
+                }
+                .ignoresSafeArea()
+            )
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color.white.opacity(0.35), location: 0.0),
+                                .init(color: Color.white.opacity(0.14), location: 0.5),
+                                .init(color: Color.white.opacity(0.06), location: 1.0)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.85
+                    )
+                    .allowsHitTesting(false)
+            )
+            .shadow(color: Color.black.opacity(0.45), radius: 28, x: 0, y: 12)
+    }
 }
 
 public struct LiquidGlassButtonStyle: ButtonStyle {
@@ -182,6 +292,7 @@ public struct LiquidGlassButtonStyle: ButtonStyle {
         case glass       // Translucent clear liquid glass
         case capsule     // Pill-shaped translucent glass
         case subtle      // Subtle low-contrast frosted glass
+        case destructive // Red-tinted warning/delete liquid glass
     }
     
     public var variant: Variant
@@ -228,13 +339,15 @@ public struct LiquidGlassButtonStyle: ButtonStyle {
                             Color.white.opacity(isHovered ? 0.14 : 0.08)
                         case .subtle:
                             Color.white.opacity(isHovered ? 0.10 : 0.05)
+                        case .destructive:
+                            Color.red.opacity(isHovered ? 0.22 : 0.12)
                         }
                         
                         // Surface optical liquid gloss (top specular reflection)
                         VStack(spacing: 0) {
                             LinearGradient(
                                 stops: [
-                                    .init(color: Color.white.opacity(variant == .prominent ? 0.65 : 0.35), location: 0.0),
+                                    .init(color: Color.white.opacity(variant == .prominent ? 0.65 : (variant == .destructive ? 0.28 : 0.35)), location: 0.0),
                                     .init(color: Color.white.opacity(0.0), location: 1.0)
                                 ],
                                 startPoint: .top,
@@ -249,6 +362,15 @@ public struct LiquidGlassButtonStyle: ButtonStyle {
                 .overlay(
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                         .stroke(
+                            variant == .destructive ?
+                            LinearGradient(
+                                stops: [
+                                    .init(color: Color.red.opacity(isHovered ? 0.55 : 0.30), location: 0.0),
+                                    .init(color: Color.red.opacity(isHovered ? 0.25 : 0.10), location: 1.0)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ) :
                             LinearGradient(
                                 stops: [
                                     .init(color: Color.white.opacity(isHovered ? 0.60 : 0.38), location: 0.0),
@@ -529,5 +651,74 @@ public struct LiquidGlassHoverPill: View {
             x: 0,
             y: 1
         )
+    }
+}
+
+// MARK: - Hi-Res Badge
+public struct HiResBadge: View {
+    public init() {}
+    public var body: some View {
+        Text("HR")
+            .font(.system(size: 8.5, weight: .black, design: .serif))
+            .foregroundStyle(.black)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1.5)
+            .background(WalkmanTheme.hiResGoldGradient)
+            .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+    }
+}
+
+// MARK: - Liquid Glass Icon Badge (§9)
+public struct LiquidGlassIconBadge: View {
+    public let icon: String
+    public var size: CGFloat = 32
+    public var cornerRadius: CGFloat = 9
+
+    public init(icon: String, size: CGFloat = 32, cornerRadius: CGFloat = 9) {
+        self.icon = icon
+        self.size = size
+        self.cornerRadius = cornerRadius
+    }
+
+    public var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(Color.white.opacity(0.08))
+
+            VStack(spacing: 0) {
+                LinearGradient(
+                    stops: [
+                        .init(color: Color.white.opacity(0.28), location: 0.0),
+                        .init(color: Color.clear, location: 1.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: size * 0.32)
+                Spacer(minLength: 0)
+            }
+
+            Image(systemName: icon)
+                .font(.system(size: size * 0.42, weight: .semibold))
+                .foregroundStyle(WalkmanTheme.silverLight)
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        stops: [
+                            .init(color: Color.white.opacity(0.38), location: 0.0),
+                            .init(color: Color.white.opacity(0.12), location: 0.5),
+                            .init(color: Color.white.opacity(0.04), location: 1.0)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.85
+                )
+        )
+        .shadow(color: Color.black.opacity(0.25), radius: 3, y: 1.5)
     }
 }

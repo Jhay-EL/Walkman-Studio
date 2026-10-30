@@ -18,6 +18,7 @@ Rather than adopting generic consumer software aesthetics or futuristic cyber/ga
 * **No Colored Shadows / Halos**: Colored drop shadows (e.g. gold, green, cyan, or orange glow halos) are strictly prohibited across the entire design system.
 * **No Luminescent Bloom**: Indicators, beacons, and highlighted states must not emit light or glow outward. Status dots, badges, and compliance checkmarks are rendered with crisp vector geometry and solid contrast without neon bloom.
 * **Deprecation of `goldGlow`**: The design system sets `WalkmanTheme.goldGlow` to `Color.clear`.
+* **Zero Color Theming for System Tools & Dialogs**: System administration workflows, confirmation alerts, duplicate guardrail popups, and Backup & Restore operations must remain completely unthemed. Never apply arbitrary warm/gold or orange tinting to dialog containers, progress bars, radio buttons, or destructive warning banners. The interface uses pure, optical platinum/silver Liquid Glass exclusively.
 
 ### 3. Tactile Physical Depth
 * **Natural Spatial Shadows**: Elevation and depth are achieved exclusively with subtle, neutral black drop shadows (`Color.black.opacity(...)`).
@@ -114,10 +115,13 @@ All toolbar action buttons (Play, Shuffle, etc.) are standardized at **38pt tall
 * **Active State Focus**: Border stroke transitions from `Color.white.opacity(0.12)` when empty to `Color.white.opacity(0.30)` when active or query is present.
 * **Shadow**: `Color.black.opacity(0.15), radius: 2.5, y: 1`.
 
-### 5. Cards & Panels (`LiquidGlassModifier`)
-* Modifiers use clean frosted materials with solid card overlays.
-* Border strokes provide crisp physical definition without glowing outlines.
-* Multi-layer drop shadows use `Color.black` exclusively.
+### 5. Cards & Section Panels (`backupRestoreGlassCard`)
+* **Layered Optical Material**:
+  - Base: `WalkmanTheme.card.opacity(0.85)` over `.ultraThinMaterial`.
+  - Top Specular Refraction: 8pt linear gradient from `Color.white.opacity(0.16)` to `Color.white.opacity(0.03)` down to `Color.clear`.
+  - Hairline Edge Bezel: 0.85pt continuous stroke gradient (`Color.white.opacity(0.24)` down to `0.04`).
+  - Spatial Shadow: `Color.black.opacity(0.22), radius: 8, x: 0, y: 3`.
+* **Zero Accent Border Theming**: Cards never use gold, green, or orange outer borders. Active/selected cards (e.g. drive partitions, backup scope, discovered archives) indicate selection through an increased border opacity (`Color.white.opacity(0.35)` vs `0.10`) and subtle interior fill highlight (`Color.white.opacity(0.08)` vs `0.02`).
 
 ### 6. Count Indicator Pills (Toolbar Stat Badges)
 
@@ -143,9 +147,10 @@ Count pills display the active item tally (tracks, albums, artists) in the toolb
 | Albums | `Color.white.opacity(0.55)` | `WalkmanTheme.silverLight` | `Color.white.opacity(0.08)` |
 | Artists | `Color.white.opacity(0.55)` | `WalkmanTheme.silverLight` | `Color.white.opacity(0.08)` |
 | Playlists | `Color.white.opacity(0.55)` | `WalkmanTheme.silverLight` | `Color.white.opacity(0.08)` |
+| Duplicates | `Color.white.opacity(0.55)` | `WalkmanTheme.silverLight` | `Color.white.opacity(0.08)` |
 | Hi-Res Audio | `WalkmanTheme.hiResGold` | `WalkmanTheme.hiResGoldLight` | `WalkmanTheme.hiResGold.opacity(0.08)` |
 
-> **Rule**: Never apply white liquid glass styling to the Hi-Res Audio count pill — the gold tint palette must be preserved.
+> **Rule**: Never apply white liquid glass styling to the Hi-Res Audio count pill — the gold tint palette must be preserved. In the Duplicates view, duplicate scanning is strictly scoped to the same storage drive, and the segmented filter bar presents Same Storage and Quality Diff (with Cyan contextual accent) while preserving the standard Liquid Glass sliding lens and specular sheen. In the Transfer & Convert view, the destination mode segmented bar glides between Music Library and Language Study (with Hi-Res gold styling when active), the hardware optimization chips float cleanly over obsidian as 32pt Liquid Glass toggle capsules with top specular refraction sheens, and the Primary Action ("Start Transfer" / "Browse Audio Files...") adheres to the 38pt prominent Liquid Glass button standard.
 
 ### 7. Toolbar Height Alignment Summary
 
@@ -163,3 +168,58 @@ All interactive toolbar elements share a unified **38pt height baseline**:
 ### 8. Audio Badges & Status Indicators
 * Status indicators (e.g. active drive beacon dot, compliance verified checkmark, Selected badge) use clean flat fills.
 * Audio badges (e.g. Hi-Res Audio, FW version) use subtle, natural black drop shadows (`Color.black.opacity(0.18)`), never colored gold or neon halos.
+
+### 9. Modal Dialog Sheets & Alert Containers
+Modal dialog sheets (`DuplicateImportGuardSheet`, `BackupAlbumPickerSheet`, `BackupTrackPickerSheet`, `BackupConfirmationSheet`, `RestoreConfirmationSheet`) provide critical system interventions and selections without visual distraction:
+* **Frosted Dialog Chassis**:
+  - Backdrop: `WalkmanTheme.card.opacity(0.92)` over `.ultraThinMaterial`.
+  - Top Specular Refraction Sheen: 10pt linear gradient (`Color.white.opacity(0.24)` → `Color.white.opacity(0.05)` → `Color.clear`).
+  - Hairline Border Gradient: 0.85pt continuous stroke from `Color.white.opacity(0.35)` down to `Color.white.opacity(0.06)`.
+  - Modal Drop Shadow: Spatial neutral black shadow (`Color.black.opacity(0.45), radius: 28, x: 0, y: 12`).
+* **Unthemed Liquid Glass Header Badges**:
+  - Frame: 44×44 or 48×48 continuous rounded rectangle (`cornerRadius: 12`).
+  - Surface: `Color.white.opacity(0.08)` with 12–14pt top specular reflection sheen (`Color.white.opacity(0.28)` → `Color.clear`).
+  - Hairline Rim: 0.85pt stroke gradient (`Color.white.opacity(0.38)` → `0.12` → `0.04`).
+  - Iconography: Pure silver/platinum (`WalkmanTheme.silverLight`). Never use solid orange/yellow warning boxes.
+* **Tactile Sheet Close Button (`SheetCloseButton`)**:
+  - Frame: Fixed 28×28 circular hit target.
+  - Base Fill: `Color.white.opacity(0.08)`, expanding to `Color.white.opacity(0.16)` on hover.
+  - Border Stroke: 0.8pt hairline (`Color.white.opacity(0.12)` → `0.30` on hover).
+  - Kinetics & Accessibility: `.scaleEffect(isHovered ? 1.08 : 1.0)`, `NSCursor.pointingHand`, and bound to `.keyboardShortcut(.cancelAction)` (`Esc`).
+* **Action Footer Layout**:
+  - Direct, clear action nomenclature (e.g. `"Skip Duplicates"`, `"Add All Anyway"` rather than verbose duplicate descriptions).
+  - Secondary / Cancel: 38pt height `LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19)` with silver text.
+  - Primary Action: 38pt height `LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 19)` with platinum gradient and near-black text (`Color(red: 20/255, green: 20/255, blue: 24/255)`).
+
+### 10. Asynchronous Operations & Progressive Import UX
+* **Zero UI Thread Blocking**:
+  - File system enumeration, nested directory walking, duplicate hash calculation, and tag extraction must **never** run on `@MainActor`.
+  - All disk scanning is offloaded to detached background tasks (`Task.detached(priority: .userInitiated)`), keeping the SwiftUI runloop fully responsive at 60/120fps.
+* **Liquid Glass Live Import Progress UI**:
+  - When dragging and dropping audio folders into the Transfer Queue or Library, the view transitions to a dedicated Liquid Glass importing container rather than freezing or leaving the drop zone blank.
+  - Real-time track counter ("Importing track X of Y..."), monospaced file pill, and an optical progress bar (`ImportProgressBar`) featuring a top specular reflection sheen and neutral drop shadow.
+  - Queue-level progress banner for unobtrusive background importing when the user is navigating away from the drop target.
+
+### 11. Storage-Scoped Data Workflows (Duplicates & Backup/Restore Partition Safety)
+* **Same-Storage Scoping for Deduplication**:
+  - In Sony Walkman devices, the internal flash storage and external MicroSD expansion card have distinct mount points and FAT32/exFAT directory trees.
+  - Duplicate detection is strictly scoped within the **same storage partition** (Internal vs. Internal, SD Card vs. SD Card). The legacy "All" vs "Same Storage" split is consolidated into an automatic same-storage engine to prevent unintentional deletion across partitions.
+* **Dedicated Partition Pickers**:
+  - Both Source and Target drive pickers in Backup & Restore use tactile Liquid Glass partition cards displaying clean drive labels, partition types (Internal Flash vs. MicroSD Card), and exact byte metrics (`formatBytes(usedBytes)` • `formatBytes(freeBytes)`).
+  - Active partition selection is indicated with a clean `WalkmanTheme.silverLight` checkmark and an active 1.2pt platinum stroke without gold or colored halos.
+
+### 12. Component Baseline Height & Radius Standardization
+A unified dimensional scale enforces physical alignment across the entire console:
+
+| Component Type | Height | Corner Radius | Style Variant | Hit Target Rule |
+|---|---|---|---|---|
+| Search Capsule | `38pt` | `10pt` | Frosted Glass Fill | Minimum 12pt horizontal inset |
+| Mode / Segmented Track | `38pt` | Capsule | Glass Capsule Track | Inset `padding(3)`, inner pills: `32pt` |
+| Mode / Tab Inner Pill | `32pt` | Capsule | Gliding Glass Lens | Full capsule click box via `.contentShape(Capsule())` |
+| Primary Action Button | `38pt` | `19pt` | `.prominent` (Platinum) | Near-black text on white/platinum glass |
+| Secondary Action Button | `38pt` | `19pt` | `.glass` (Translucent) | Silver text with hairline glass rim |
+| Utility / Mini Action Button | `28pt` | `8pt` | `.glass` (Compact) | In-row actions (Browse, Reveal, Cancel) |
+| Toolbar Count Pill | `38pt` | Capsule | Specular Sheen Pill | `padding(.horizontal, 14)` |
+| Modal Sheet Close Button | `28×28pt` | Circle | Glass Circle | Hover spring scale `1.08`, `NSCursor.pointingHand` |
+| Dialog / Modal Chassis | Dynamic | `16pt` | Frosted Modal Overlay | 10pt specular sheen, 0.85pt hairline border |
+| Studio Card / Section Panel | Dynamic | `14pt` | Glass Card Modifier | 8pt specular sheen, 0.85pt hairline border |
