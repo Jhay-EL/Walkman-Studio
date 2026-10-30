@@ -8,9 +8,10 @@ public struct TransferSyncSheet: View {
     let targetMode: TransferTargetMode
     let preset: String
     let presetDescription: String
-    let onConfirm: () -> Void
+    let onConfirm: (_ skipDuplicates: Bool) -> Void
     let onCancel: () -> Void
 
+    @State private var skipDuplicates: Bool = true
     @State private var isConfirmHovered: Bool = false
     @State private var isCancelHovered: Bool = false
 
@@ -20,7 +21,7 @@ public struct TransferSyncSheet: View {
         targetMode: TransferTargetMode,
         preset: String,
         presetDescription: String,
-        onConfirm: @escaping () -> Void,
+        onConfirm: @escaping (_ skipDuplicates: Bool) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.queue = queue
@@ -30,6 +31,10 @@ public struct TransferSyncSheet: View {
         self.presetDescription = presetDescription
         self.onConfirm = onConfirm
         self.onCancel = onCancel
+    }
+
+    private var duplicateItems: [TransferItem] {
+        queue.filter { $0.isDuplicateOnWalkman }
     }
 
     private var totalBytes: Int64 {
@@ -128,6 +133,43 @@ public struct TransferSyncSheet: View {
                         .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.85)
                 )
 
+                // Duplicate Guardrail Section (Active when duplicates are detected)
+                if !duplicateItems.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.orange)
+                            Text("Duplicate Guardrail")
+                                .font(WalkmanFont.calloutBold)
+                                .foregroundStyle(.white)
+                            Spacer()
+                            Text("\(duplicateItems.count) of \(queue.count) already on Walkman")
+                                .font(WalkmanFont.captionBold)
+                                .foregroundStyle(.orange)
+                        }
+
+                        Text("Some tracks in your queue already exist in the Walkman library. To avoid duplicate audio files taking up storage, you can automatically skip them.")
+                            .font(WalkmanFont.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Toggle(isOn: $skipDuplicates) {
+                            Text("Skip existing duplicate tracks (Recommended)")
+                                .font(WalkmanFont.bodyMedium)
+                                .foregroundStyle(.white)
+                        }
+                        .toggleStyle(.checkbox)
+                    }
+                    .padding(12)
+                    .background(Color.orange.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(Color.orange.opacity(0.35), lineWidth: 1)
+                    )
+                }
+
                 // Staged Track List Preview
                 VStack(alignment: .leading, spacing: 6) {
                     Text("TRACKS TO BE TRANSFERRED (\(queue.count))")
@@ -158,10 +200,27 @@ public struct TransferSyncSheet: View {
                                     }
 
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(itm.title.isEmpty ? itm.sourceURL.deletingPathExtension().lastPathComponent : itm.title)
-                                            .font(WalkmanFont.bodyMedium)
-                                            .foregroundStyle(.primary)
-                                            .lineLimit(1)
+                                        HStack(spacing: 6) {
+                                            Text(itm.title.isEmpty ? itm.sourceURL.deletingPathExtension().lastPathComponent : itm.title)
+                                                .font(WalkmanFont.bodyMedium)
+                                                .foregroundStyle(.primary)
+                                                .lineLimit(1)
+
+                                            if itm.isDuplicateOnWalkman {
+                                                HStack(spacing: 3) {
+                                                    Image(systemName: "exclamationmark.triangle.fill")
+                                                        .font(.system(size: 8))
+                                                    Text(skipDuplicates ? "Will Skip" : "Duplicate")
+                                                        .font(WalkmanFont.badge)
+                                                }
+                                                .padding(.horizontal, 4.5)
+                                                .padding(.vertical, 1.5)
+                                                .background(Color.orange.opacity(0.18))
+                                                .foregroundStyle(.orange)
+                                                .clipShape(RoundedRectangle(cornerRadius: 3))
+                                                .help(itm.duplicateMatchInfo ?? "Already present on Walkman library")
+                                            }
+                                        }
                                         Text(itm.artist.isEmpty ? "Unknown Artist" : itm.artist)
                                             .font(WalkmanFont.subheadline)
                                             .foregroundStyle(.secondary)
@@ -230,7 +289,9 @@ public struct TransferSyncSheet: View {
                 }
 
                 // Start Transfer Button
-                Button(action: onConfirm) {
+                Button(action: {
+                    onConfirm(skipDuplicates)
+                }) {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.right.circle.fill")
                             .font(.system(size: 13, weight: .bold))

@@ -76,6 +76,7 @@ public enum WalkmanFont {
     // Large & Section Headings
     public static let title1 = Font.system(size: 22, weight: .bold)
     public static let title2 = Font.system(size: 18, weight: .bold)
+    public static let title = title2
     public static let title3 = Font.system(size: 15, weight: .semibold)
     public static let headline = Font.system(size: 14, weight: .semibold)
 
@@ -93,6 +94,8 @@ public enum WalkmanFont {
     public static let subheadline = Font.system(size: 11.5, weight: .regular)
     public static let subheadlineMedium = Font.system(size: 11.5, weight: .medium)
     public static let subheadlineBold = Font.system(size: 11.5, weight: .bold)
+    public static let caption = Font.system(size: 11, weight: .regular)
+    public static let captionBold = Font.system(size: 11, weight: .bold)
     public static let sectionHeader = Font.system(size: 11, weight: .bold)
 
     // Monospaced Audio Metadata & Timestamps

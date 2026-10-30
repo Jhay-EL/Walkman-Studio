@@ -776,6 +776,7 @@ public struct ContentView: View {
                                 TransferQueueView(
                                     drives: drives,
                                     activeDrive: activeDrive,
+                                    libraryTracks: tracks,
                                     onTransferComplete: { refreshLibrary() }
                                 )
                                 .padding(14)

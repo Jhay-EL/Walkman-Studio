@@ -64,6 +64,8 @@ public struct SongMetadataEditorSheet: View {
     @State private var isError: Bool = false
     @State private var isFetchingOnlineInfo: Bool = false
     @State private var showTrimCutSheet: Bool = false
+    @State private var showPermissionSheet: Bool = false
+    @State private var isPermissionError: Bool = false
 
     // Hover states for footer buttons
     @State private var isCancelHovered: Bool = false
@@ -349,7 +351,7 @@ public struct SongMetadataEditorSheet: View {
         Task {
             let url = URL(fileURLWithPath: track.fullPath)
             do {
-                // 1. Write tags and embedded artwork
+                // 1. Write tags, embedded lyrics, and embedded artwork
                 try AudioTagger.shared.writeMetadata(
                     fileURL: url,
                     title: saveTitle,
@@ -358,16 +360,22 @@ public struct SongMetadataEditorSheet: View {
                     trackNumber: saveTrackNum,
                     year: saveYear,
                     genre: saveGenre,
-                    coverArtData: saveCover
+                    coverArtData: saveCover,
+                    lyrics: saveLyricsText.isEmpty ? nil : saveLyricsText
                 )
 
-                // 2. Handle lyrics if changed
-                if didLyricsChange {
-                    if saveLyricsText.isEmpty {
-                        try? AudioTagger.shared.deleteLyrics(fileURL: url)
-                    } else {
-                        try? AudioTagger.shared.saveLyrics(fileURL: url, lyrics: saveLyricsText)
-                    }
+                // 2. Hardware Compliance: Synchronized Companion .LRC Lyrics for Sony Walkman
+                let lrcURL = url.deletingPathExtension().appendingPathExtension("lrc")
+                let lrcExists = FileManager.default.fileExists(atPath: lrcURL.path)
+
+                if saveLyricsText.isEmpty {
+                    try? AudioTagger.shared.deleteLyrics(fileURL: url)
+                } else if didLyricsChange || !lrcExists {
+                    try? WalkmanEngine.shared.writeCompanionLyrics(
+                        destinationAudioURL: url,
+                        lyrics: saveLyricsText,
+                        durationSeconds: track.durationSeconds
+                    )
                 }
 
                 // 3. Invalidate & update caches
@@ -430,7 +438,14 @@ public struct SongMetadataEditorSheet: View {
             } catch {
                 await MainActor.run {
                     self.isSaving = false
-                    self.statusMessage = "Error saving: \(error.localizedDescription)"
+                    let isPerm = WalkmanStoragePermissionHelper.isPermissionError(error)
+                    self.isPermissionError = isPerm
+                    if isPerm {
+                        self.statusMessage = "Storage permission required to edit file."
+                        self.showPermissionSheet = true
+                    } else {
+                        self.statusMessage = "Error saving: \(error.localizedDescription)"
+                    }
                     self.isError = true
                 }
             }
@@ -542,6 +557,19 @@ public struct SongMetadataEditorSheet: View {
                 },
                 onDismiss: {
                     showTrimCutSheet = false
+                }
+            )
+        }
+        .sheet(isPresented: $showPermissionSheet) {
+            StoragePermissionRequestSheet(
+                fileURL: URL(fileURLWithPath: track.fullPath),
+                onGranted: {
+                    showPermissionSheet = false
+                    isPermissionError = false
+                    saveAllChanges()
+                },
+                onDismiss: {
+                    showPermissionSheet = false
                 }
             )
         }
@@ -1080,13 +1108,27 @@ public struct SongMetadataEditorSheet: View {
                             .scaleEffect(0.6)
                             .frame(width: 14, height: 14)
                     } else {
-                        Image(systemName: isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                        Image(systemName: isPermissionError ? "lock.shield.fill" : (isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"))
                             .font(.system(size: 12))
                             .foregroundStyle(isError ? Color.orange : Color.green)
                     }
                     Text(msg)
                         .font(WalkmanFont.calloutMedium)
                         .foregroundStyle(isError ? Color.orange : (isSaving ? WalkmanTheme.silverLight : Color.green))
+
+                    if isPermissionError {
+                        Button(action: { showPermissionSheet = true }) {
+                            Text("Grant Permission...")
+                                .font(WalkmanFont.captionBold)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Color.orange.opacity(0.2))
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(Color.orange.opacity(0.4), lineWidth: 0.8))
+                                .foregroundStyle(Color.orange)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
 

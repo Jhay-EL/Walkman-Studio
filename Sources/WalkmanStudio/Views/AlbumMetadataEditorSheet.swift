@@ -43,6 +43,8 @@ public struct AlbumMetadataEditorSheet: View {
     @State private var isFetchingOnlineInfo: Bool = false
     @State private var isAnalyzingSenseMe: Bool = false
     @State private var senseMeProgress: (current: Int, total: Int, title: String)? = nil
+    @State private var showPermissionSheet: Bool = false
+    @State private var permissionFileURL: URL? = nil
 
     // Hover states
     @State private var isCancelHovered: Bool = false
@@ -336,6 +338,7 @@ public struct AlbumMetadataEditorSheet: View {
             }
 
             var updatedTracks: [Track] = []
+            var permissionErrorURL: URL? = nil
 
             for (index, row) in rows.enumerated() {
                 await MainActor.run {
@@ -398,8 +401,21 @@ public struct AlbumMetadataEditorSheet: View {
                     updated.hasArtwork = hasArt
                     updatedTracks.append(updated)
                 } catch {
+                    if WalkmanStoragePermissionHelper.isPermissionError(error) {
+                        permissionErrorURL = trackURL
+                    }
                     print("[AlbumMetadataEditor] Error saving track \(row.track.filename): \(error.localizedDescription)")
                 }
+            }
+
+            if let permURL = permissionErrorURL, updatedTracks.isEmpty {
+                await MainActor.run {
+                    self.isSaving = false
+                    self.permissionFileURL = permURL
+                    self.showPermissionSheet = true
+                    self.saveStatus = "Storage permission required to edit files."
+                }
+                return
             }
 
             if artModified {
@@ -519,6 +535,21 @@ public struct AlbumMetadataEditorSheet: View {
                 .allowsHitTesting(false)
         )
         .shadow(color: Color.black.opacity(0.45), radius: 24, x: 0, y: 10)
+        .sheet(isPresented: $showPermissionSheet) {
+            if let fURL = permissionFileURL ?? trackRows.first.map({ URL(fileURLWithPath: $0.track.fullPath) }) {
+                StoragePermissionRequestSheet(
+                    fileURL: fURL,
+                    onGranted: {
+                        showPermissionSheet = false
+                        permissionFileURL = nil
+                        saveAlbumChanges()
+                    },
+                    onDismiss: {
+                        showPermissionSheet = false
+                    }
+                )
+            }
+        }
         .onAppear {
             loadInitialData()
         }
@@ -993,7 +1024,28 @@ public struct AlbumMetadataEditorSheet: View {
             }
 
             HStack(spacing: 12) {
-                if let err = errorMessage {
+                if permissionFileURL != nil {
+                    HStack(spacing: 6) {
+                        Image(systemName: "lock.shield.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.orange)
+                        Text(saveStatus)
+                            .font(WalkmanFont.subheadline)
+                            .foregroundStyle(.orange)
+
+                        Button(action: { showPermissionSheet = true }) {
+                            Text("Grant Permission...")
+                                .font(WalkmanFont.captionBold)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Color.orange.opacity(0.2))
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(Color.orange.opacity(0.4), lineWidth: 0.8))
+                                .foregroundStyle(Color.orange)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } else if let err = errorMessage {
                     HStack(spacing: 5) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 11))

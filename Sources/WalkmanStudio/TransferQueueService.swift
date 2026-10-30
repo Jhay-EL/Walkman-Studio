@@ -43,6 +43,16 @@ public final class TransferQueueService: ObservableObject {
                 continue
             }
 
+            let dupCheck = WalkmanDuplicateGuard.shared.checkTrack(
+                title: track.title,
+                artist: track.artist,
+                album: track.album,
+                durationSeconds: track.durationSeconds,
+                sourceURL: url,
+                targetDrive: nil,
+                targetMode: .music
+            )
+
             let item = TransferItem(
                 sourceURL: url,
                 status: .pending,
@@ -57,7 +67,9 @@ public final class TransferQueueService: ObservableObject {
                 sampleRate: track.sampleRate,
                 bitsPerSample: track.bitsPerSample,
                 format: url.pathExtension.uppercased(),
-                sizeBytes: track.sizeBytes
+                sizeBytes: track.sizeBytes,
+                isDuplicateOnWalkman: dupCheck.isDuplicate,
+                duplicateMatchInfo: dupCheck.reason
             )
 
             let targetUrl = url
@@ -109,6 +121,17 @@ public final class TransferQueueService: ObservableObject {
             if !pathFallback.album.isEmpty { item.album = WalkmanEngine.sanitizeWalkmanText(pathFallback.album) }
             if !pathFallback.title.isEmpty { item.title = WalkmanEngine.sanitizeWalkmanText(pathFallback.title) }
             if !pathFallback.trackNumber.isEmpty { item.trackNumber = pathFallback.trackNumber }
+
+            let dupCheck = WalkmanDuplicateGuard.shared.checkTrack(
+                title: item.title,
+                artist: item.artist,
+                album: item.album,
+                sourceURL: url,
+                targetDrive: nil,
+                targetMode: .music
+            )
+            item.isDuplicateOnWalkman = dupCheck.isDuplicate
+            item.duplicateMatchInfo = dupCheck.reason
 
             let targetUrl = url
             Task.detached(priority: .userInitiated) {
@@ -168,6 +191,7 @@ public final class TransferQueueService: ObservableObject {
     public func transferDirectly(
         tracks: [Track],
         to targetDrive: WalkmanDrive,
+        skipDuplicates: Bool = true,
         progress: @escaping (_ current: Int, _ total: Int, _ trackTitle: String) -> Void
     ) async throws -> Int {
         let targetRootDir = URL(fileURLWithPath: targetDrive.musicDir)
@@ -205,6 +229,22 @@ public final class TransferQueueService: ObservableObject {
                 ext: ext
             )
 
+            // Duplicate Guardrail Check
+            if skipDuplicates {
+                let dupCheck = WalkmanDuplicateGuard.shared.checkTrack(
+                    title: curTitle,
+                    artist: curArtist,
+                    album: curAlbum,
+                    durationSeconds: track.durationSeconds,
+                    sourceURL: src,
+                    targetDrive: targetDrive,
+                    targetMode: .music
+                )
+                if dupCheck.isDuplicate || FileManager.default.fileExists(atPath: dest.path) {
+                    continue
+                }
+            }
+
             let albumDir = dest.deletingLastPathComponent()
             try FileManager.default.createDirectory(at: albumDir, withIntermediateDirectories: true)
 
@@ -226,8 +266,8 @@ public final class TransferQueueService: ObservableObject {
             }
 
             // Hardware Compliance 2: Strict ID3v2.3 UTF-16 on MP3 / Vorbis Comments on FLAC
+            let lyrics = AudioTagger.shared.extractLyrics(fileURL: src)
             if ext == "mp3" || ext == "flac" || ext == "m4a" {
-                let lyrics = AudioTagger.shared.extractLyrics(fileURL: src)
                 try? AudioTagger.shared.writeMetadata(
                     fileURL: dest,
                     title: curTitle,
@@ -238,6 +278,15 @@ public final class TransferQueueService: ObservableObject {
                     genre: track.genre.isEmpty ? nil : track.genre,
                     coverArtData: finalArtData,
                     lyrics: lyrics
+                )
+            }
+
+            // Hardware Compliance 3: Sony Walkman Synchronized Companion .LRC Lyrics
+            if let lyrics = lyrics, !lyrics.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                try? WalkmanEngine.shared.writeCompanionLyrics(
+                    destinationAudioURL: dest,
+                    lyrics: lyrics,
+                    durationSeconds: track.durationSeconds
                 )
             }
 

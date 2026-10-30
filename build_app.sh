@@ -109,6 +109,16 @@ cat << EOF > "$APP_BUNDLE/Contents/Info.plist"
     <string>NSApplication</string>
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
+    <key>NSRemovableVolumesUsageDescription</key>
+    <string>Walkman Studio requires access to your Sony Walkman and removable SD card storage to read, write, and update music tags, cover art, and synchronized lyrics.</string>
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>Walkman Studio requires access to your Desktop folder to import music files into your library and transfer them to your Walkman.</string>
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>Walkman Studio requires access to your Documents folder to import music and save Walkman backups.</string>
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>Walkman Studio requires access to your Downloads folder to import downloaded music files.</string>
+    <key>NSFileProviderDomainUsageDescription</key>
+    <string>Walkman Studio requires access to files to manage your Walkman music library.</string>
 </dict>
 </plist>
 EOF

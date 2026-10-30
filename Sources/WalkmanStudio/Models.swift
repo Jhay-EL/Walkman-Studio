@@ -612,6 +612,7 @@ public enum TransferStatus: Equatable, Sendable {
     case optimizing
     case converting
     case success
+    case skipped(String)
     case failed(String)
 }
 
@@ -647,6 +648,8 @@ public struct TransferItem: Identifiable, Sendable {
     public var isFetchingOnline: Bool
     public var isOptimizing: Bool
     public var isExpanded: Bool
+    public var isDuplicateOnWalkman: Bool
+    public var duplicateMatchInfo: String?
 
     public init(
         sourceURL: URL,
@@ -669,7 +672,9 @@ public struct TransferItem: Identifiable, Sendable {
         isLyricsSynced: Bool = false,
         isFetchingOnline: Bool = false,
         isOptimizing: Bool = false,
-        isExpanded: Bool = false
+        isExpanded: Bool = false,
+        isDuplicateOnWalkman: Bool = false,
+        duplicateMatchInfo: String? = nil
     ) {
         self.id = UUID()
         self.sourceURL = sourceURL
@@ -693,6 +698,8 @@ public struct TransferItem: Identifiable, Sendable {
         self.isFetchingOnline = isFetchingOnline
         self.isOptimizing = isOptimizing
         self.isExpanded = isExpanded
+        self.isDuplicateOnWalkman = isDuplicateOnWalkman
+        self.duplicateMatchInfo = duplicateMatchInfo
     }
 
     /// Converts this item into a preview Track compatible with the audio player

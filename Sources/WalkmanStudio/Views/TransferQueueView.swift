@@ -25,6 +25,13 @@ public struct TransferQueueView: View {
     @State private var itemToEdit: TransferItem? = nil
     @State private var showTransferConfirmation: Bool = false
     @State private var showClearConfirmation: Bool = false
+    @State private var showDuplicateImportSheet: Bool = false
+
+    // Duplicate Prevention Guardrail State
+    private let libraryTracks: [Track]
+    @State private var duplicateImportCandidates: [DuplicateImportCandidate] = []
+    @State private var pendingNonDuplicateURLs: [URL] = []
+    @State private var pendingAllImportURLs: [URL] = []
 
     // Hardware Optimization & Sync Toggles
     @State private var optimizeArtwork: Bool = true
@@ -42,9 +49,15 @@ public struct TransferQueueView: View {
     // Audio Player Observation
     @ObservedObject private var player = AudioPlayerService.shared
 
-    public init(drives: [WalkmanDrive], activeDrive: WalkmanDrive?, onTransferComplete: @escaping () -> Void) {
+    public init(
+        drives: [WalkmanDrive],
+        activeDrive: WalkmanDrive?,
+        libraryTracks: [Track] = [],
+        onTransferComplete: @escaping () -> Void
+    ) {
         self.drives = drives
         self.activeDrive = activeDrive
+        self.libraryTracks = libraryTracks
         self.onTransferComplete = onTransferComplete
         let initialId: String
         if let active = activeDrive {
@@ -103,6 +116,10 @@ public struct TransferQueueView: View {
                    item.album.lowercased().contains(q) ||
                    item.filename.lowercased().contains(q)
         }
+    }
+
+    private var duplicatesInQueue: [TransferItem] {
+        queue.filter { $0.isDuplicateOnWalkman }
     }
 
     private var modeButtonsView: some View {
@@ -646,6 +663,42 @@ public struct TransferQueueView: View {
                         .background(WalkmanTheme.card.opacity(0.9))
                         .overlay(Rectangle().frame(height: 1).foregroundStyle(WalkmanTheme.border), alignment: .bottom)
 
+                        // Duplicate Guardrail Banner (If duplicates exist in the queue)
+                        if !duplicatesInQueue.isEmpty && !isProcessing {
+                            HStack(spacing: 10) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(.orange)
+
+                                Text("\(duplicatesInQueue.count) track(s) in queue already exist on your Walkman library.")
+                                    .font(WalkmanFont.calloutMedium)
+                                    .foregroundStyle(.white)
+
+                                Spacer()
+
+                                Button(action: removeDuplicatesFromQueue) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "trash")
+                                            .font(.system(size: 10))
+                                        Text("Remove Duplicates")
+                                            .font(WalkmanFont.captionBold)
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(Color.orange.opacity(0.2))
+                                    .foregroundStyle(.orange)
+                                    .clipShape(RoundedRectangle(cornerRadius: 5))
+                                    .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.orange.opacity(0.4), lineWidth: 0.8))
+                                }
+                                .buttonStyle(.plain)
+                                .help("Remove all duplicate tracks from the queue to avoid redundant copies")
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(Color.orange.opacity(0.12))
+                            .overlay(Rectangle().frame(height: 1).foregroundStyle(Color.orange.opacity(0.25)), alignment: .bottom)
+                        }
+
                         // Scrollable Queue Cards List
                         ScrollView {
                             LazyVStack(spacing: 6) {
@@ -734,12 +787,37 @@ public struct TransferQueueView: View {
                 targetMode: targetMode,
                 preset: selectedPreset,
                 presetDescription: presetDescription(selectedPreset),
-                onConfirm: {
+                onConfirm: { skipDuplicates in
                     showTransferConfirmation = false
-                    startBatchTransfer()
+                    startBatchTransfer(skipExistingDuplicates: skipDuplicates)
                 },
                 onCancel: {
                     showTransferConfirmation = false
+                }
+            )
+        }
+        .sheet(isPresented: $showDuplicateImportSheet) {
+            DuplicateImportGuardSheet(
+                candidates: duplicateImportCandidates,
+                nonDuplicateCount: pendingNonDuplicateURLs.count,
+                totalCount: pendingAllImportURLs.count,
+                targetDriveName: selectedTarget?.name ?? "Walkman",
+                onSkipDuplicates: {
+                    showDuplicateImportSheet = false
+                    for url in pendingNonDuplicateURLs {
+                        enqueueSingleFile(url)
+                    }
+                },
+                onAddAll: {
+                    showDuplicateImportSheet = false
+                    for url in pendingAllImportURLs {
+                        let isDup = duplicateImportCandidates.contains(where: { $0.url == url })
+                        let info = duplicateImportCandidates.first(where: { $0.url == url })?.matchReason
+                        enqueueSingleFile(url, isDuplicate: isDup, duplicateInfo: info)
+                    }
+                },
+                onCancel: {
+                    showDuplicateImportSheet = false
                 }
             )
         }
@@ -1068,8 +1146,73 @@ public struct TransferQueueView: View {
             urlA.path.localizedStandardCompare(urlB.path) == .orderedAscending
         }
 
+        guard !collectedURLs.isEmpty else { return }
+
+        // Duplicate Guardrail: Check incoming tracks against Walkman library
+        var duplicates: [DuplicateImportCandidate] = []
+        var nonDuplicates: [URL] = []
+
+        let target = selectedTarget
+        let mode = targetMode
+        let libTracks = libraryTracks
+
         for fileURL in collectedURLs {
-            enqueueSingleFile(fileURL)
+            let pathFallback = AudioTagger.extractFromPath(url: fileURL)
+            var title = pathFallback.title
+            var artist = pathFallback.artist
+            var album = pathFallback.album
+            var duration: Double = 0
+
+            if let meta = AudioTagger.shared.readMetadata(fileURL: fileURL) {
+                if !meta.title.isEmpty && meta.title.lowercased() != "unknown" { title = meta.title }
+                if !meta.artist.isEmpty && meta.artist.lowercased() != "unknown artist" { artist = meta.artist }
+                if !meta.album.isEmpty && meta.album.lowercased() != "unknown album" { album = meta.album }
+                duration = meta.durationSeconds
+            }
+
+            let check = WalkmanDuplicateGuard.shared.checkTrack(
+                title: title,
+                artist: artist,
+                album: album,
+                durationSeconds: duration,
+                sourceURL: fileURL,
+                targetDrive: target,
+                targetMode: mode,
+                existingTracks: libTracks
+            )
+
+            if check.isDuplicate {
+                duplicates.append(
+                    DuplicateImportCandidate(
+                        url: fileURL,
+                        title: title.isEmpty ? fileURL.deletingPathExtension().lastPathComponent : title,
+                        artist: artist.isEmpty ? "Unknown Artist" : artist,
+                        album: album,
+                        durationSeconds: duration,
+                        matchingWalkmanTrack: check.matchingTrack,
+                        matchReason: check.reason ?? "Already present on Walkman library"
+                    )
+                )
+            } else {
+                nonDuplicates.append(fileURL)
+            }
+        }
+
+        if !duplicates.isEmpty {
+            self.duplicateImportCandidates = duplicates
+            self.pendingNonDuplicateURLs = nonDuplicates
+            self.pendingAllImportURLs = collectedURLs
+            self.showDuplicateImportSheet = true
+        } else {
+            for fileURL in collectedURLs {
+                enqueueSingleFile(fileURL)
+            }
+        }
+    }
+
+    private func removeDuplicatesFromQueue() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            queue.removeAll(where: { $0.isDuplicateOnWalkman })
         }
     }
 
@@ -1116,12 +1259,14 @@ public struct TransferQueueView: View {
         }
     }
 
-    private func enqueueSingleFile(_ url: URL) {
+    private func enqueueSingleFile(_ url: URL, isDuplicate: Bool = false, duplicateInfo: String? = nil) {
         if queue.contains(where: { $0.sourceURL == url }) { return }
 
         var item = TransferItem(sourceURL: url)
         item.title = WalkmanEngine.sanitizeWalkmanText(url.deletingPathExtension().lastPathComponent)
         item.format = url.pathExtension.uppercased()
+        item.isDuplicateOnWalkman = isDuplicate
+        item.duplicateMatchInfo = duplicateInfo
 
         if let attr = try? FileManager.default.attributesOfItem(atPath: url.path) {
             item.sizeBytes = attr[.size] as? Int64 ?? 0
@@ -1132,6 +1277,22 @@ public struct TransferQueueView: View {
         if !pathFallback.album.isEmpty { item.album = WalkmanEngine.sanitizeWalkmanText(pathFallback.album) }
         if !pathFallback.title.isEmpty { item.title = WalkmanEngine.sanitizeWalkmanText(pathFallback.title) }
         if !pathFallback.trackNumber.isEmpty { item.trackNumber = pathFallback.trackNumber }
+
+        if !item.isDuplicateOnWalkman {
+            let dupCheck = WalkmanDuplicateGuard.shared.checkTrack(
+                title: item.title,
+                artist: item.artist,
+                album: item.album,
+                sourceURL: url,
+                targetDrive: selectedTarget,
+                targetMode: targetMode,
+                existingTracks: libraryTracks
+            )
+            if dupCheck.isDuplicate {
+                item.isDuplicateOnWalkman = true
+                item.duplicateMatchInfo = dupCheck.reason
+            }
+        }
 
         Task.detached(priority: .userInitiated) {
             let meta = AudioTagger.shared.readMetadata(fileURL: url)
@@ -1178,6 +1339,23 @@ public struct TransferQueueView: View {
                     self.queue[idx].isArtworkOptimized = resolvedOpt
                     self.queue[idx].lyrics = existingLyrics
                     self.queue[idx].isLyricsSynced = existingLyrics?.contains("[0") == true
+
+                    if !self.queue[idx].isDuplicateOnWalkman {
+                        let dupCheck = WalkmanDuplicateGuard.shared.checkTrack(
+                            title: self.queue[idx].title,
+                            artist: self.queue[idx].artist,
+                            album: self.queue[idx].album,
+                            durationSeconds: self.queue[idx].durationSeconds,
+                            sourceURL: url,
+                            targetDrive: self.selectedTarget,
+                            targetMode: self.targetMode,
+                            existingTracks: self.libraryTracks
+                        )
+                        if dupCheck.isDuplicate {
+                            self.queue[idx].isDuplicateOnWalkman = true
+                            self.queue[idx].duplicateMatchInfo = dupCheck.reason
+                        }
+                    }
 
                     if self.targetMode != .learning && self.autoFetchMetadata && self.queue[idx].isMissingMetadata {
                         self.optimizeSingleTrack(self.queue[idx])
@@ -1379,7 +1557,7 @@ public struct TransferQueueView: View {
         }
     }
 
-    private func startBatchTransfer() {
+    private func startBatchTransfer(skipExistingDuplicates: Bool = true) {
         guard let target = selectedTarget else { return }
         isProcessing = true
 
@@ -1487,6 +1665,31 @@ public struct TransferQueueView: View {
                 )
 
                 let albumDir = dest.deletingLastPathComponent()
+
+                // Duplicate Guardrail: Check if track is already present on target Walkman storage
+                if skipExistingDuplicates {
+                    let dupCheck = WalkmanDuplicateGuard.shared.checkTrack(
+                        title: curTitle,
+                        artist: curArtist,
+                        album: curAlbum,
+                        durationSeconds: queue[i].durationSeconds,
+                        sourceURL: src,
+                        targetDrive: target,
+                        targetMode: targetMode,
+                        existingTracks: libraryTracks
+                    )
+                    if dupCheck.isDuplicate || FileManager.default.fileExists(atPath: dest.path) {
+                        let reason = dupCheck.reason ?? "Already exists on \(target.name)"
+                        await MainActor.run {
+                            if i < self.queue.count {
+                                self.queue[i].status = .skipped(reason)
+                                self.queue[i].isDuplicateOnWalkman = true
+                                self.queue[i].duplicateMatchInfo = reason
+                            }
+                        }
+                        continue
+                    }
+                }
 
                 do {
                     try FileManager.default.createDirectory(at: albumDir, withIntermediateDirectories: true)
@@ -1608,9 +1811,9 @@ public struct TransferQueueView: View {
                     }
 
                     // 3. Companion .LRC Lyrics / Transcript Writing
-                    if targetMode != .learning && fetchLyrics {
+                    if targetMode != .learning {
                         var lyrToWrite = queue[i].lyrics
-                        if lyrToWrite == nil || lyrToWrite!.isEmpty {
+                        if (lyrToWrite == nil || lyrToWrite!.isEmpty) && fetchLyrics {
                             let tit = queue[i].title.isEmpty ? src.deletingPathExtension().lastPathComponent : queue[i].title
                             if let fetched = try? await LyricsService.shared.fetchLyrics(
                                 title: tit,
@@ -1804,6 +2007,22 @@ private struct QueueItemRow: View {
                                 .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                                 .clipShape(RoundedRectangle(cornerRadius: 2.5))
                         }
+
+                        if item.isDuplicateOnWalkman {
+                            HStack(spacing: 3) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 8))
+                                Text("On Walkman")
+                                    .font(WalkmanFont.badge)
+                            }
+                            .padding(.horizontal, 4.5)
+                            .padding(.vertical, 1.5)
+                            .background(Color.orange.opacity(0.18))
+                            .foregroundStyle(.orange)
+                            .clipShape(RoundedRectangle(cornerRadius: 2.5))
+                            .overlay(RoundedRectangle(cornerRadius: 2.5).stroke(Color.orange.opacity(0.4), lineWidth: 0.6))
+                            .help(item.duplicateMatchInfo ?? "Already present on Walkman library")
+                        }
                     }
 
                     // Line 2: Artist • Album (Year)
@@ -1933,6 +2152,22 @@ private struct QueueItemRow: View {
                     .padding(.vertical, 3)
                     .background(Color.green.opacity(0.12))
                     .clipShape(Capsule())
+
+                case .skipped(let reason):
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.uturn.right.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.orange)
+                        Text(reason)
+                            .font(WalkmanFont.badge)
+                            .foregroundStyle(.orange)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color.orange.opacity(0.12))
+                    .clipShape(Capsule())
+                    .help(reason)
 
                 case .failed(let err):
                     HStack(spacing: 4) {
