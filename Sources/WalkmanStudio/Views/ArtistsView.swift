@@ -385,7 +385,7 @@ public struct ArtistsView: View {
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 7)
-        .frame(minHeight: 34)
+        .frame(height: 38)
         .background(
             ZStack {
                 Color.white.opacity(0.06)
@@ -463,15 +463,8 @@ public struct ArtistsView: View {
                     .fixedSize(horizontal: true, vertical: false)
             }
             
-            HStack(spacing: 6) {
-                artistCountPill
-                    .fixedSize(horizontal: true, vertical: false)
-                
-                if let artist = activeArtist {
-                    trackCountPill(for: artist)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-            }
+            artistCountPill
+                .fixedSize(horizontal: true, vertical: false)
         }
     }
     
@@ -488,15 +481,8 @@ public struct ArtistsView: View {
                         .fixedSize(horizontal: true, vertical: false)
                 }
                 
-                HStack(spacing: 6) {
-                    artistCountPill
-                        .fixedSize(horizontal: true, vertical: false)
-                    
-                    if let artist = activeArtist {
-                        trackCountPill(for: artist)
-                            .fixedSize(horizontal: true, vertical: false)
-                    }
-                }
+                artistCountPill
+                    .fixedSize(horizontal: true, vertical: false)
             }
             
             ScrollView(.horizontal, showsIndicators: false) {
@@ -522,11 +508,6 @@ public struct ArtistsView: View {
             if let artist = activeArtist {
                 HStack(spacing: 8) {
                     artistActionButtons(for: artist)
-                        .fixedSize(horizontal: true, vertical: false)
-                    
-                    Spacer(minLength: 4)
-                    
-                    trackCountPill(for: artist)
                         .fixedSize(horizontal: true, vertical: false)
                 }
             }
@@ -563,12 +544,12 @@ public struct ArtistsView: View {
                         .font(.system(size: 13, weight: .semibold))
                         .lineLimit(1)
                 }
-                .padding(.horizontal, 13)
+                .padding(.horizontal, 14)
                 .padding(.vertical, 7)
-                .frame(minHeight: 33)
+                .frame(height: 38)
                 .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
             }
-            .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 16.5))
+            .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 19))
             .fixedSize(horizontal: true, vertical: false)
             .disabled(artist.tracks.isEmpty)
             .help("Play all tracks by \(artist.name)")
@@ -586,12 +567,12 @@ public struct ArtistsView: View {
                         .font(.system(size: 13, weight: .medium))
                         .lineLimit(1)
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 14)
                 .padding(.vertical, 7)
-                .frame(minHeight: 33)
+                .frame(height: 38)
                 .foregroundStyle(WalkmanTheme.silverLight)
             }
-            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 16.5))
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
             .fixedSize(horizontal: true, vertical: false)
             .disabled(artist.tracks.isEmpty)
             .help("Shuffle tracks by \(artist.name)")
@@ -599,44 +580,51 @@ public struct ArtistsView: View {
     }
     
     private var artistCountPill: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 6) {
             Image(systemName: "person.2")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 11.5, weight: .semibold))
                 .foregroundStyle(WalkmanTheme.silverMuted)
             Text(displayedArtists.count == 1 ? "1 Artist" : "\(displayedArtists.count.formatted()) Artists")
-                .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                .font(.system(size: 12.5, weight: .medium, design: .monospaced))
                 .foregroundStyle(WalkmanTheme.silverLight)
                 .lineLimit(1)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color.white.opacity(0.04))
+        .padding(.horizontal, 14)
+        .frame(height: 38)
+        .background(
+            ZStack {
+                Color.white.opacity(0.04)
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(0.12), location: 0.0),
+                            .init(color: .clear, location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 6)
+                    Spacer(minLength: 0)
+                }
+            }
+        )
         .clipShape(Capsule())
         .overlay(
             Capsule()
-                .stroke(Color.white.opacity(0.08), lineWidth: 0.8)
+                .stroke(
+                    LinearGradient(
+                        stops: [
+                            .init(color: Color.white.opacity(0.20), location: 0.0),
+                            .init(color: Color.white.opacity(0.08), location: 0.5),
+                            .init(color: Color.clear, location: 1.0)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.85
+                )
         )
-        .fixedSize(horizontal: true, vertical: false)
-    }
-    
-    private func trackCountPill(for artist: ArtistItem) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: "music.note")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(WalkmanTheme.silverMuted)
-            Text("\(artist.trackCount) Tracks")
-                .font(.system(size: 11.5, weight: .medium, design: .monospaced))
-                .foregroundStyle(WalkmanTheme.silverLight)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color.white.opacity(0.04))
-        .clipShape(Capsule())
-        .overlay(
-            Capsule()
-                .stroke(Color.white.opacity(0.08), lineWidth: 0.8)
-        )
+        .shadow(color: Color.black.opacity(0.10), radius: 2, x: 0, y: 1)
         .fixedSize(horizontal: true, vertical: false)
     }
     
@@ -1466,6 +1454,7 @@ private struct ArtistFormatSegmentedBarView: View {
             }
         }
         .padding(3)
+        .frame(height: 38)
         .background(Color.white.opacity(0.04))
         .clipShape(Capsule())
         .overlay(
@@ -1511,7 +1500,7 @@ private struct ArtistFormatTabPillView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 7)
-            .frame(minHeight: 32)
+            .frame(height: 32)
             .fixedSize(horizontal: true, vertical: false)
             .foregroundStyle(
                 isSelected ?
