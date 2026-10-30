@@ -366,7 +366,6 @@ public struct SenseMeChannelsView: View {
     var onNavigateToLocalLibrary: (() -> Void)? = nil
 
     @State private var activeIndex: Int = 0
-    @State private var trackFilterQuery: String = ""
     @State private var dragOffset: CGFloat = 0.0
     @State private var lastStepTimestamp: TimeInterval = 0
     @State private var isStepping: Bool = false
@@ -758,185 +757,12 @@ public struct SenseMeChannelsView: View {
     }
 
     // -------------------------------------------------------------------------
-    // BOTTOM SECTION: CHANNEL TRACKLIST & PLAY CONTROLS
+    // BOTTOM SECTION: CHANNEL TRACKLIST
     // -------------------------------------------------------------------------
     private var bottomTracklistSection: some View {
         let currentTracks = tracks(for: selectedChannel)
 
         return VStack(spacing: 0) {
-            // Action Toolbar (Filter, Play All, Shuffle) OR Empty Channel Banner
-            if currentTracks.isEmpty {
-                HStack(spacing: 8) {
-                    Image(systemName: "speaker.slash.fill")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(WalkmanTheme.hiResGold)
-
-                    Text("No tracks available in \"\(selectedChannel.name)\" channel")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(WalkmanTheme.silverLight)
-
-                    Text("• Playback stopped")
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(WalkmanTheme.silverMuted)
-
-                    Spacer()
-                }
-                .padding(.horizontal, 22)
-                .padding(.vertical, 8)
-                .background(Color.white.opacity(0.025))
-            } else {
-                HStack(spacing: 10) {
-                    // Filter search inside channel
-                    HStack(spacing: 7) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 12.5))
-                            .foregroundStyle(WalkmanTheme.silverMuted)
-
-                        TextField("Filter channel...", text: $trackFilterQuery)
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 13))
-
-                        if !trackFilterQuery.isEmpty {
-                            Button(action: { trackFilterQuery = "" }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 11.5))
-                                    .foregroundStyle(WalkmanTheme.silverMuted)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .frame(width: 210, height: 34)
-                    .background(
-                        ZStack {
-                            Capsule()
-                                .fill(Color.white.opacity(0.06))
-                            VStack(spacing: 0) {
-                                LinearGradient(
-                                    stops: [
-                                        .init(color: .white.opacity(0.12), location: 0.0),
-                                        .init(color: .clear, location: 1.0)
-                                    ],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                                .frame(height: 6)
-                                Spacer(minLength: 0)
-                            }
-                            .clipShape(Capsule())
-                        }
-                    )
-                    .clipShape(Capsule())
-                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 0.8))
-
-                    // Play All Button (Liquid Glass Hi-Res Gold)
-                    Button(action: { playAll(in: currentTracks) }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "play.fill")
-                                .font(.system(size: 12.5, weight: .bold))
-                            Text("Play All")
-                                .font(.system(size: 13, weight: .bold))
-                        }
-                        .foregroundStyle(Color.black)
-                        .padding(.horizontal, 18)
-                        .frame(height: 34)
-                        .background(
-                            ZStack {
-                                WalkmanTheme.hiResGoldGradient
-
-                                VStack(spacing: 0) {
-                                    LinearGradient(
-                                        stops: [
-                                            .init(color: Color.white.opacity(0.42), location: 0.0),
-                                            .init(color: Color.clear, location: 1.0)
-                                        ],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                    .frame(height: 7)
-                                    Spacer(minLength: 0)
-                                }
-                                .clipShape(Capsule())
-                            }
-                        )
-                        .clipShape(Capsule())
-                        .overlay(
-                            Capsule()
-                                .strokeBorder(
-                                    LinearGradient(
-                                        stops: [
-                                            .init(color: Color.white.opacity(0.50), location: 0.0),
-                                            .init(color: Color.white.opacity(0.15), location: 1.0)
-                                        ],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    ),
-                                    lineWidth: 0.8
-                                )
-                        )
-                        .shadow(color: WalkmanTheme.hiResGold.opacity(0.30), radius: 5, x: 0, y: 2)
-                    }
-                    .buttonStyle(.plain)
-
-                    // Shuffle Button (Liquid Glass Translucent Frosted)
-                    Button(action: { shuffleAll(in: currentTracks) }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "shuffle")
-                                .font(.system(size: 12.5, weight: .semibold))
-                            Text("Shuffle")
-                                .font(.system(size: 13, weight: .semibold))
-                        }
-                        .foregroundStyle(WalkmanTheme.silverLight)
-                        .padding(.horizontal, 16)
-                        .frame(height: 34)
-                        .background(
-                            ZStack {
-                                Capsule()
-                                    .fill(Color.white.opacity(0.08))
-
-                                VStack(spacing: 0) {
-                                    LinearGradient(
-                                        stops: [
-                                            .init(color: Color.white.opacity(0.24), location: 0.0),
-                                            .init(color: Color.clear, location: 1.0)
-                                        ],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                    .frame(height: 7)
-                                    Spacer(minLength: 0)
-                                }
-                                .clipShape(Capsule())
-                            }
-                        )
-                        .clipShape(Capsule())
-                        .overlay(
-                            Capsule()
-                                .strokeBorder(
-                                    LinearGradient(
-                                        stops: [
-                                            .init(color: Color.white.opacity(0.24), location: 0.0),
-                                            .init(color: Color.white.opacity(0.08), location: 1.0)
-                                        ],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    ),
-                                    lineWidth: 0.8
-                                )
-                        )
-                        .shadow(color: Color.black.opacity(0.25), radius: 3, x: 0, y: 1.5)
-                    }
-                    .buttonStyle(.plain)
-
-                    Spacer()
-                }
-                .padding(.horizontal, 22)
-                .padding(.vertical, 8)
-                .background(WalkmanTheme.background.opacity(0.75))
-            }
-
-            Divider().overlay(Color.white.opacity(0.06))
-
             // Channel Tracks Table
             if currentTracks.isEmpty {
                 VStack(spacing: 12) {
@@ -959,7 +785,7 @@ public struct SenseMeChannelsView: View {
                 .padding(.bottom, 88)
             } else {
                 SenseMeChannelTableView(
-                    tracks: filteredTracks(from: currentTracks),
+                    tracks: currentTracks,
                     allChannelTracks: currentTracks,
                     onInspectTrack: onInspectTrack,
                     onEditTrack: onEditTrack,
@@ -967,17 +793,6 @@ public struct SenseMeChannelsView: View {
                     onGoToTransfer: onGoToTransfer
                 )
             }
-        }
-    }
-
-    private func filteredTracks(from source: [Track]) -> [Track] {
-        let q = trackFilterQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if q.isEmpty { return source }
-        return source.filter { tr in
-            tr.title.localizedCaseInsensitiveContains(q) ||
-            tr.artist.localizedCaseInsensitiveContains(q) ||
-            tr.album.localizedCaseInsensitiveContains(q) ||
-            tr.genre.localizedCaseInsensitiveContains(q)
         }
     }
 
@@ -1344,25 +1159,6 @@ public struct SenseMeChannelsView: View {
         player.isShuffle = true
         let startTime = first.senseMeHighlightSec ?? 0.0
         player.play(track: first, coverArt: nil, in: channelTracks, startTime: startTime > 5.0 ? startTime : nil)
-    }
-
-    private func playAll(in channelTracks: [Track]) {
-        guard let first = channelTracks.first else {
-            player.stopAndClear()
-            return
-        }
-        player.play(track: first, in: channelTracks)
-    }
-
-    private func shuffleAll(in channelTracks: [Track]) {
-        let fresh = generateRandomizedPlaylist(for: selectedChannel)
-        guard let first = fresh.first else {
-            player.stopAndClear()
-            return
-        }
-        player.isShuffle = true
-        let startTime = first.senseMeHighlightSec ?? 0.0
-        player.play(track: first, in: fresh, startTime: startTime > 5.0 ? startTime : nil)
     }
 
     private func startBatchAnalysis() {
