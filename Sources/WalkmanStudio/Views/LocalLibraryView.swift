@@ -6,6 +6,7 @@ public enum LocalDisplayMode: String, CaseIterable, Identifiable, Sendable {
     case songs = "Songs"
     case albums = "Albums"
     case artists = "Artists"
+    case recentlyAdded = "Recently Added"
     case folders = "Folders"
 
     public var id: String { rawValue }
@@ -15,6 +16,7 @@ public enum LocalDisplayMode: String, CaseIterable, Identifiable, Sendable {
         case .songs: return "music.note.list"
         case .albums: return "square.stack.fill"
         case .artists: return "music.mic"
+        case .recentlyAdded: return "clock.arrow.circlepath"
         case .folders: return "folder.fill"
         }
     }
@@ -192,6 +194,28 @@ public struct LocalLibraryView: View {
         return String(format: "%d:%02d", mins, secs)
     }
 
+    private static let relativeDateFormatter: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .full
+        return f
+    }()
+
+    private static let absoluteDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        return f
+    }()
+
+    private func formatDateAdded(_ date: Date) -> String {
+        let now = Date()
+        let interval = now.timeIntervalSince(date)
+        if interval < 7 * 86400 && interval >= 0 {
+            return Self.relativeDateFormatter.localizedString(for: date, relativeTo: now)
+        }
+        return Self.absoluteDateFormatter.string(from: date)
+    }
+
     var effectiveTracks: [Track] {
         localService.tracks.isEmpty ? tracks : localService.tracks
     }
@@ -352,6 +376,8 @@ public struct LocalLibraryView: View {
                     albumsGridView
                 case .artists:
                     artistsGridView
+                case .recentlyAdded:
+                    recentlyAddedTableView
                 case .folders:
                     foldersManagerView
                 }
@@ -808,86 +834,7 @@ public struct LocalLibraryView: View {
             .width(min: 50, ideal: 64, max: 80)
         }
         .contextMenu(forSelectionType: Track.ID.self) { selection in
-            if let firstId = selection.first, let track = filteredTracks.first(where: { $0.id == firstId }) {
-                let isThisPlaying = player.currentTrack?.id == track.id && player.isPlaying
-
-                Button(isThisPlaying ? "Pause Playback" : "Play Preview") {
-                    self.selectedTrackId = track.id
-                    if isThisPlaying {
-                        player.pause()
-                    } else {
-                        player.play(track: track, in: filteredTracks)
-                    }
-                }
-
-                Divider()
-
-                Button {
-                    onEditTrack?(track)
-                } label: {
-                    Label("Edit Song Metadata...", systemImage: "square.and.pencil")
-                }
-
-                Button {
-                    onTrimCutTrack?(track)
-                } label: {
-                    Label("Trim & Cut Audio...", systemImage: "scissors")
-                }
-
-                Button {
-                    ArtworkExportService.exportArtwork(for: track)
-                } label: {
-                    Label("Export Cover Art to Mac...", systemImage: "square.and.arrow.down")
-                }
-
-                Divider()
-
-                Button {
-                    let targets = filteredTracks.filter { selection.contains($0.id) }
-                    let toTransfer = targets.isEmpty ? [track] : targets
-                    handleTransferToWalkman(tracks: toTransfer)
-                } label: {
-                    Label(selection.count > 1 ? "Transfer \(selection.count) Tracks to Walkman" : "Transfer to Walkman", systemImage: "arrow.right.circle.fill")
-                }
-
-                if let onTransfer = onGoToTransfer {
-                    Button {
-                        let targets = filteredTracks.filter { selection.contains($0.id) }
-                        let toQueue = targets.isEmpty ? [track] : targets
-                        TransferQueueService.shared.enqueue(tracks: toQueue)
-                        onTransfer()
-                    } label: {
-                        Label("Send to Transfer & Convert...", systemImage: "arrow.up.arrow.down.circle")
-                    }
-                }
-
-                Button("Inspect Metadata & Artwork (Cmd+I)") {
-                    onInspectTrack(track)
-                }
-
-                Divider()
-
-                Button("Reveal in Finder") {
-                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: track.fullPath)])
-                }
-
-                Button("Copy Path") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(track.fullPath, forType: .string)
-                }
-
-                Divider()
-
-                Button(role: .destructive) {
-                    let targets = filteredTracks.filter { selection.contains($0.id) }
-                    let toDelete = targets.isEmpty ? [track] : targets
-                    for tr in toDelete {
-                        onDeleteTrack?(tr)
-                    }
-                } label: {
-                    Label(selection.count > 1 ? "Remove \(selection.count) Songs from Local Library" : "Remove from Local Library", systemImage: "trash")
-                }
-            }
+            trackContextMenu(for: selection, in: filteredTracks)
         } primaryAction: { selection in
             if let firstId = selection.first, let track = filteredTracks.first(where: { $0.id == firstId }) {
                 self.selectedTrackId = track.id
@@ -899,6 +846,279 @@ public struct LocalLibraryView: View {
             }
         }
         .tableScrollBottomInset(88)
+    }
+
+    // -------------------------------------------------------------------------
+    // RECENTLY ADDED TRACKS TABLE VIEW
+    // -------------------------------------------------------------------------
+    private var recentlyAddedTracks: [Track] {
+        var list = filteredTracks
+        if sortOrder == Self.defaultSortOrder && sortOption == .artistAZ {
+            list.sort { $0.dateAdded > $1.dateAdded }
+        }
+        return list
+    }
+
+    private var recentlyAddedTableView: some View {
+        Table(recentlyAddedTracks, selection: $selectedTrackId, sortOrder: $sortOrder) {
+            TableColumn("#") { track in
+                let idx = (recentlyAddedTracks.firstIndex(where: { $0.id == track.id }) ?? 0) + 1
+                Text("\(idx)")
+                    .font(WalkmanFont.monoSmall)
+                    .foregroundStyle(WalkmanTheme.silverMuted)
+            }
+            .width(min: 28, ideal: 36, max: 46)
+
+            TableColumn("Title", value: \.title) { track in
+                let isCurrent = player.currentTrack?.id == track.id
+                let isPlayingThis = isCurrent && player.isPlaying
+
+                HStack(spacing: 8) {
+                    Button(action: {
+                        self.selectedTrackId = track.id
+                        if isPlayingThis {
+                            player.pause()
+                        } else {
+                            player.play(track: track, in: recentlyAddedTracks)
+                        }
+                    }) {
+                        TrackCoverThumbnail(track: track, size: 30, isPlaying: isPlayingThis)
+                    }
+                    .buttonStyle(.plain)
+                    .help(isPlayingThis ? "Pause" : "Play preview")
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 5) {
+                            Text(track.title)
+                                .font(isPlayingThis ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
+                                .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : .white)
+                                .lineLimit(1)
+
+                            if isPlayingThis {
+                                Image(systemName: "speaker.wave.2.fill")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(WalkmanTheme.silverLight)
+                            }
+
+                            if track.isLanguageStudy {
+                                Image(systemName: "character.book.closed.fill")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(WalkmanTheme.silverMuted)
+                                    .help("Language Study & Audiobooks")
+                            }
+                        }
+                    }
+                }
+            }
+            .width(min: 130, ideal: 220)
+
+            TableColumn("Artist", value: \.artist) { track in
+                Text(track.artist.isEmpty ? "Unknown Artist" : track.artist)
+                    .font(WalkmanFont.callout)
+                    .foregroundStyle(Color.white.opacity(0.85))
+                    .lineLimit(1)
+            }
+            .width(min: 90, ideal: 140)
+
+            TableColumn("Album", value: \.album) { track in
+                Text(track.album.isEmpty ? "—" : track.album)
+                    .font(WalkmanFont.callout)
+                    .foregroundStyle(Color.secondary)
+                    .lineLimit(1)
+            }
+            .width(min: 90, ideal: 150)
+
+            TableColumn("Format", value: \.format) { track in
+                let hiRes = isHiRes(track)
+                HStack(spacing: 4.5) {
+                    Text(track.format)
+                        .font(WalkmanFont.badge)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(
+                            ZStack {
+                                Color.white.opacity(hiRes ? 0.08 : 0.05)
+                                VStack(spacing: 0) {
+                                    LinearGradient(
+                                        stops: [
+                                            .init(color: .white.opacity(0.12), location: 0),
+                                            .init(color: .clear, location: 1)
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                    .frame(height: 3)
+                                    Spacer(minLength: 0)
+                                }
+                            }
+                        )
+                        .foregroundStyle(hiRes ? WalkmanTheme.silverLight : Color.white.opacity(0.7))
+                        .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+                                .stroke(Color.white.opacity(hiRes ? 0.22 : 0.09), lineWidth: 0.6)
+                        )
+
+                    if hiRes {
+                        HStack(spacing: 2.5) {
+                            Image(systemName: "waveform")
+                                .font(.system(size: 7, weight: .black))
+                            Text("Hi-Res")
+                                .font(WalkmanFont.badge)
+                        }
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(WalkmanTheme.hiResGoldGradient)
+                        .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                        .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+                                .stroke(WalkmanTheme.hiResGoldLight.opacity(0.6), lineWidth: 0.6)
+                        )
+                        .shadow(color: Color.black.opacity(0.2), radius: 1.5, x: 0, y: 0.5)
+                    }
+                }
+            }
+            .width(min: 65, ideal: 85, max: 110)
+
+            TableColumn("SenseMe") { track in
+                if track.isSenseMeAnalyzed {
+                    HStack(spacing: 3) {
+                        Image(systemName: "waveform.path.ecg")
+                            .font(.system(size: 7.5, weight: .bold))
+                        Text("12 TONE")
+                            .font(WalkmanFont.badge)
+                    }
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule().fill(Color(red: 255/255, green: 145/255, blue: 0/255).opacity(0.18))
+                    )
+                    .overlay(
+                        Capsule().stroke(Color(red: 255/255, green: 165/255, blue: 30/255).opacity(0.55), lineWidth: 0.8)
+                    )
+                    .foregroundStyle(Color(red: 255/255, green: 195/255, blue: 80/255))
+                    .help("Sony 12 Tone / SenseMe Analyzed • \(track.senseMeChannels.joined(separator: ", "))")
+                } else {
+                    Text("—")
+                        .font(WalkmanFont.monoSmall)
+                        .foregroundStyle(Color.secondary.opacity(0.35))
+                }
+            }
+            .width(min: 60, ideal: 76, max: 90)
+
+            TableColumn("Date Added", value: \.dateAdded) { track in
+                Text(formatDateAdded(track.dateAdded))
+                    .font(WalkmanFont.callout)
+                    .foregroundStyle(Color.secondary)
+                    .lineLimit(1)
+            }
+            .width(min: 90, ideal: 120, max: 160)
+
+            TableColumn("Duration", value: \.durationSeconds) { track in
+                Text(formatDuration(track.durationSeconds))
+                    .font(WalkmanFont.monoSmall)
+                    .foregroundStyle(Color.white.opacity(0.85))
+            }
+            .width(min: 50, ideal: 64, max: 80)
+        }
+        .contextMenu(forSelectionType: Track.ID.self) { selection in
+            trackContextMenu(for: selection, in: recentlyAddedTracks)
+        } primaryAction: { selection in
+            if let firstId = selection.first, let track = recentlyAddedTracks.first(where: { $0.id == firstId }) {
+                self.selectedTrackId = track.id
+                if player.currentTrack?.id == track.id && player.isPlaying {
+                    player.pause()
+                } else {
+                    player.play(track: track, in: recentlyAddedTracks)
+                }
+            }
+        }
+        .tableScrollBottomInset(88)
+    }
+
+    @ViewBuilder
+    private func trackContextMenu(for selection: Set<Track.ID>, in sourceTracks: [Track]) -> some View {
+        if let firstId = selection.first, let track = sourceTracks.first(where: { $0.id == firstId }) {
+            let isThisPlaying = player.currentTrack?.id == track.id && player.isPlaying
+
+            Button(isThisPlaying ? "Pause Playback" : "Play Preview") {
+                self.selectedTrackId = track.id
+                if isThisPlaying {
+                    player.pause()
+                } else {
+                    player.play(track: track, in: sourceTracks)
+                }
+            }
+
+            Divider()
+
+            Button {
+                onEditTrack?(track)
+            } label: {
+                Label("Edit Song Metadata...", systemImage: "square.and.pencil")
+            }
+
+            Button {
+                onTrimCutTrack?(track)
+            } label: {
+                Label("Trim & Cut Audio...", systemImage: "scissors")
+            }
+
+            Button {
+                ArtworkExportService.exportArtwork(for: track)
+            } label: {
+                Label("Export Cover Art to Mac...", systemImage: "square.and.arrow.down")
+            }
+
+            Divider()
+
+            Button {
+                let targets = sourceTracks.filter { selection.contains($0.id) }
+                let toTransfer = targets.isEmpty ? [track] : targets
+                handleTransferToWalkman(tracks: toTransfer)
+            } label: {
+                Label(selection.count > 1 ? "Transfer \(selection.count) Tracks to Walkman" : "Transfer to Walkman", systemImage: "arrow.right.circle.fill")
+            }
+
+            if let onTransfer = onGoToTransfer {
+                Button {
+                    let targets = sourceTracks.filter { selection.contains($0.id) }
+                    let toQueue = targets.isEmpty ? [track] : targets
+                    TransferQueueService.shared.enqueue(tracks: toQueue)
+                    onTransfer()
+                } label: {
+                    Label("Send to Transfer & Convert...", systemImage: "arrow.up.arrow.down.circle")
+                }
+            }
+
+            Button("Inspect Metadata & Artwork (Cmd+I)") {
+                onInspectTrack(track)
+            }
+
+            Divider()
+
+            Button("Reveal in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: track.fullPath)])
+            }
+
+            Button("Copy Path") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(track.fullPath, forType: .string)
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                let targets = sourceTracks.filter { selection.contains($0.id) }
+                let toDelete = targets.isEmpty ? [track] : targets
+                for tr in toDelete {
+                    onDeleteTrack?(tr)
+                }
+            } label: {
+                Label(selection.count > 1 ? "Remove \(selection.count) Songs from Local Library" : "Remove from Local Library", systemImage: "trash")
+            }
+        }
     }
 
     // -------------------------------------------------------------------------
