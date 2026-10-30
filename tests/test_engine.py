@@ -289,3 +289,142 @@ def test_detect_walkman_device_info():
         assert info["firmware_version"] == "1.02"
         assert info["display_resolution"] == "800x480"
 
+
+def test_detect_android_walkman_device_info():
+    """Verify accurate detection of Android Walkman models (NW-A306, NW-ZX707, NW-WM1AM2)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        xml_content = """<?xml version="1.0" encoding="ISO-8859-1"?>
+<devices xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <device>
+    <identification>
+      <class>WALKMAN/Standard/AudioOnly</class>
+      <model>NW-A300Series</model>
+      <marketingname>WALKMAN NW-A300Series</marketingname>
+      <vendor>Sony Corporation</vendor>
+      <firmwareversion>2.01</firmwareversion>
+    </identification>
+    <display index="0">
+      <width unit="pixels">1280</width>
+      <height unit="pixels">720</height>
+    </display>
+  </device>
+</devices>"""
+        (tmp_path / "default-capability.xml").write_text(xml_content, encoding="latin-1")
+        (tmp_path / "Music").mkdir()
+
+        mock_drive = [{
+            "id": "A306_CARD",
+            "name": "SD_CARD (MicroSD)",
+            "mount_point": str(tmp_path),
+            "type": "microsd",
+            "total_bytes": 32 * 1024 * 1024 * 1024,
+            "used_bytes": 1000000,
+            "free_bytes": 31 * 1024 * 1024 * 1024,
+            "percent_used": 0.1,
+            "has_cfw": False,
+            "music_dir": str(tmp_path / "Music"),
+        }]
+
+        info = walkman_engine.detect_walkman_device_info(mock_drive)
+        assert info is not None
+        assert info["model_raw"] == "NW-A300Series"
+        assert info["specific_model"] == "NW-A306"
+        assert "Sony Walkman NW-A306" in info["display_name"]
+        assert info["is_non_android"] is False
+        assert info["firmware_version"] == "2.01"
+        assert info["display_resolution"] == "1280x720"
+
+
+def test_scan_android_walkman_music_directory():
+    """Verify that scan_walkman_library detects tracks in /Music/ (Android standard title-case)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        music_dir = tmp_path / "Music" / "Daft Punk" / "Discovery"
+        music_dir.mkdir(parents=True)
+        (music_dir / "01 - One More Time.flac").write_bytes(b"dummy")
+
+        res = walkman_engine.scan_walkman_library(tmp_path)
+        assert res["total_tracks"] == 1
+        assert res["tracks"][0]["artist"] == "Daft Punk"
+        assert res["tracks"][0]["album"] == "Discovery"
+        assert res["tracks"][0]["title"] == "One More Time"
+
+
+def test_reject_generic_usb_drive():
+    """Verify that a generic USB thumb drive with a /Music/ folder is strictly rejected."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        (tmp_path / "Music").mkdir()
+
+        mock_drive = [{
+            "id": "SANDISK",
+            "name": "SANDISK_ULTRA",
+            "mount_point": str(tmp_path),
+            "type": "microsd",
+            "total_bytes": 64 * 1024 * 1024 * 1024,
+            "used_bytes": 1000000,
+            "free_bytes": 63 * 1024 * 1024 * 1024,
+            "percent_used": 0.1,
+            "has_cfw": False,
+            "music_dir": str(tmp_path / "Music"),
+        }]
+
+        info = walkman_engine.detect_walkman_device_info(mock_drive)
+        assert info is None, "Generic USB drive must be rejected by Walkman Studio"
+
+
+def test_reject_generic_android_phone():
+    """Verify that a generic Android phone SD card (e.g. Samsung/Pixel) is strictly rejected."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        (tmp_path / "Android" / "data" / "com.sec.android.app.music").mkdir(parents=True)
+        (tmp_path / "LOST.DIR").mkdir()
+        (tmp_path / "Music").mkdir()
+
+        mock_drive = [{
+            "id": "SAMSUNG_SD",
+            "name": "EVO_PLUS",
+            "mount_point": str(tmp_path),
+            "type": "microsd",
+            "total_bytes": 128 * 1024 * 1024 * 1024,
+            "used_bytes": 1000000,
+            "free_bytes": 127 * 1024 * 1024 * 1024,
+            "percent_used": 0.1,
+            "has_cfw": False,
+            "music_dir": str(tmp_path / "Music"),
+        }]
+
+        info = walkman_engine.detect_walkman_device_info(mock_drive)
+        assert info is None, "Generic Android phone SD card must be rejected by Walkman Studio"
+
+
+def test_detect_sony_android_walkman_via_package():
+    """Verify that a Sony Android Walkman is recognized via com.sony.walkman package data even without capability XML."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        (tmp_path / "Android" / "data" / "com.sony.walkman").mkdir(parents=True)
+        (tmp_path / "Music").mkdir()
+
+        mock_drive = [{
+            "id": "SONY_A306_CARD",
+            "name": "WALKMAN_SD",
+            "mount_point": str(tmp_path),
+            "type": "microsd",
+            "total_bytes": 128 * 1024 * 1024 * 1024,
+            "used_bytes": 1000000,
+            "free_bytes": 127 * 1024 * 1024 * 1024,
+            "percent_used": 0.1,
+            "has_cfw": False,
+            "music_dir": str(tmp_path / "Music"),
+        }]
+
+        info = walkman_engine.detect_walkman_device_info(mock_drive)
+        assert info is not None
+        assert info["model_raw"] == "NW-A300Series"
+        assert info["specific_model"] == "NW-A306"
+        assert info["is_non_android"] is False
+        assert info["display_resolution"] == "1280x720"
+
+
+

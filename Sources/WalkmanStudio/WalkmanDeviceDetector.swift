@@ -95,6 +95,69 @@ public final class WalkmanDeviceDetector: Sendable {
             ]
         ),
         (
+            category: "NW-A Series (Android Walkman DAP)",
+            models: [
+                SupportedWalkmanModel(
+                    series: "NW-A300 Series",
+                    modelCode: "NW-A306 / NW-A307",
+                    description: "High-Resolution Audio, S-Master HX, DSEE Ultimate, Android 12 / 13, 3.6-inch HD display, USB-C",
+                    releaseYear: "2023",
+                    storageOptions: "32GB / 64GB Internal + MicroSD",
+                    osType: "Android Walkman OS (Android 12/13)"
+                ),
+                SupportedWalkmanModel(
+                    series: "NW-A100 Series",
+                    modelCode: "NW-A105 / NW-A106 / NW-A107 / NW-A100TPS",
+                    description: "High-Resolution Audio, S-Master HX, DSEE Ultimate, Android 9, Vinyl Processor, USB-C",
+                    releaseYear: "2019",
+                    storageOptions: "16GB / 32GB / 64GB + MicroSD",
+                    osType: "Android Walkman OS (Android 9)"
+                )
+            ]
+        ),
+        (
+            category: "NW-ZX Series (Android Walkman Flagship)",
+            models: [
+                SupportedWalkmanModel(
+                    series: "NW-ZX700 Series",
+                    modelCode: "NW-ZX706 / NW-ZX707",
+                    description: "Flagship High-Res DAP, Balanced 4.4mm, Native DSD, S-Master HX, Android 12, 5.0-inch HD display",
+                    releaseYear: "2023",
+                    storageOptions: "64GB Internal + MicroSD",
+                    osType: "Android Walkman OS (Android 12)"
+                ),
+                SupportedWalkmanModel(
+                    series: "NW-ZX500 Series",
+                    modelCode: "NW-ZX505 / NW-ZX507",
+                    description: "High-Res DAP, Balanced 4.4mm, Native DSD 11.2MHz, S-Master HX, Android 9, Aluminum chassis",
+                    releaseYear: "2019",
+                    storageOptions: "16GB / 64GB Internal + MicroSD",
+                    osType: "Android Walkman OS (Android 9)"
+                )
+            ]
+        ),
+        (
+            category: "Signature Series (Android Reference Flagships)",
+            models: [
+                SupportedWalkmanModel(
+                    series: "NW-WM1 Series M2",
+                    modelCode: "NW-WM1AM2",
+                    description: "Signature Series Reference Flagship, Precision Milled Aluminum, Balanced 4.4mm, Android 11, S-Master HX",
+                    releaseYear: "2022",
+                    storageOptions: "128GB Internal + MicroSD",
+                    osType: "Android Walkman OS (Android 11)"
+                ),
+                SupportedWalkmanModel(
+                    series: "NW-WM1 Series M2",
+                    modelCode: "NW-WM1ZM2",
+                    description: "Ultimate Reference Flagship, 99.99% Gold-Plated OFC Chassis, Kimber Kable, Balanced 4.4mm, Android 11",
+                    releaseYear: "2022",
+                    storageOptions: "256GB Internal + MicroSD",
+                    osType: "Android Walkman OS (Android 11)"
+                )
+            ]
+        ),
+        (
             category: "NW-ZX Series (Non-Android Flagships)",
             models: [
                 SupportedWalkmanModel(
@@ -187,40 +250,9 @@ public final class WalkmanDeviceDetector: Sendable {
     ]
     
     // -------------------------------------------------------------------------
-    // Unsupported Android Walkmans (For Explicit Clarity)
+    // Unsupported Models (Legacy placeholder, all Sony Android Walkmans supported)
     // -------------------------------------------------------------------------
-    public static let unsupportedAndroidModels: [UnsupportedWalkmanModel] = [
-        UnsupportedWalkmanModel(
-            modelCode: "NW-A100 / NW-A105 / NW-A106",
-            androidVersion: "Android 9",
-            reason: "Runs Android OS with MTP protocol. Not a USB Mass Storage device."
-        ),
-        UnsupportedWalkmanModel(
-            modelCode: "NW-A300 / NW-A306 / NW-A307",
-            androidVersion: "Android 12 / 13",
-            reason: "Runs Android OS with MTP protocol. Uses Android MediaStore."
-        ),
-        UnsupportedWalkmanModel(
-            modelCode: "NW-ZX500 / NW-ZX507",
-            androidVersion: "Android 9",
-            reason: "Runs Android OS with MTP protocol. Not compatible with S-Master HX CFW."
-        ),
-        UnsupportedWalkmanModel(
-            modelCode: "NW-ZX700 / NW-ZX707",
-            androidVersion: "Android 12",
-            reason: "Runs Android OS with MTP protocol."
-        ),
-        UnsupportedWalkmanModel(
-            modelCode: "NW-WM1AM2",
-            androidVersion: "Android 11",
-            reason: "2nd-gen Android flagship with MTP and standard Android audio stack."
-        ),
-        UnsupportedWalkmanModel(
-            modelCode: "NW-WM1ZM2",
-            androidVersion: "Android 11",
-            reason: "2nd-gen Android flagship with MTP and standard Android audio stack."
-        )
-    ]
+    public static let unsupportedAndroidModels: [UnsupportedWalkmanModel] = []
     
     // -------------------------------------------------------------------------
     // Accurate Detection from Hardware Volumes
@@ -235,20 +267,19 @@ public final class WalkmanDeviceDetector: Sendable {
         public let rawXml: String?
     }
     
-    /// Checks whether a model identifier belongs to a supported non-Android Sony Walkman DAP
+    /// Checks whether a model identifier belongs to a supported Sony Walkman DAP (Sony OS or Android DAP)
     public static func isSupportedModel(modelRaw: String) -> Bool {
         let clean = modelRaw.uppercased().replacingOccurrences(of: "-", with: "").replacingOccurrences(of: " ", with: "")
         
-        // Unsupported Android models (use Android MTP, not non-Android USB mass storage)
-        let unsupportedAndroid = ["A100", "A105", "A106", "A300", "A306", "A307", "ZX500", "ZX507", "ZX700", "ZX707", "WM1AM2", "WM1ZM2"]
-        for token in unsupportedAndroid {
-            if clean.contains(token) {
-                return false
-            }
-        }
-        
-        // Supported Non-Android Sony DAP series tokens
+        // Supported Sony DAP series tokens (Non-Android & Android-based Walkmans)
         let supported = [
+            // Android-based Walkman Series
+            "A300", "A306", "A307",
+            "A100", "A105", "A106", "A107",
+            "ZX700", "ZX706", "ZX707",
+            "ZX500", "ZX505", "ZX507",
+            "WM1AM2", "WM1ZM2",
+            // Non-Android Sony DAP series
             "A50", "A55", "A56", "A57",
             "A40", "A45", "A46", "A47",
             "A30", "A35", "A36", "A37",
@@ -279,14 +310,26 @@ public final class WalkmanDeviceDetector: Sendable {
             return "nw-a50"
         }
         
-        if raw.contains("WM1Z") {
+        if raw.contains("WM1ZM2") {
+            return "nw-wm1zm2"
+        } else if raw.contains("WM1AM2") {
+            return "nw-wm1am2"
+        } else if raw.contains("WM1Z") {
             return "nw-wm1z"
         } else if raw.contains("WM1") {
             return "nw-wm1a"
+        } else if raw.contains("ZX700") || raw.contains("ZX706") || raw.contains("ZX707") {
+            return "nw-zx700"
+        } else if raw.contains("ZX500") || raw.contains("ZX505") || raw.contains("ZX507") {
+            return "nw-zx500"
         } else if raw.contains("ZX300") {
             return "nw-zx300"
         } else if raw.contains("ZX100") {
             return "nw-zx100"
+        } else if raw.contains("A300") || raw.contains("A306") || raw.contains("A307") {
+            return "nw-a300"
+        } else if raw.contains("A100") || raw.contains("A105") || raw.contains("A106") || raw.contains("A107") {
+            return "nw-a100"
         } else if raw.contains("A50") || raw.contains("A55") || raw.contains("A56") || raw.contains("A57") {
             return "nw-a50"
         } else if raw.contains("A40") || raw.contains("A45") || raw.contains("A46") || raw.contains("A47") {
@@ -353,14 +396,22 @@ public final class WalkmanDeviceDetector: Sendable {
             )
         }
         
-        // No XML: check for hardware signature files
+        // No XML: check for authentic Sony hardware signature files
         let volName = volumeURL.lastPathComponent.uppercased()
         let hasDevIcon = FileManager.default.fileExists(atPath: volumeURL.appendingPathComponent("DevIcon.fil").path)
         let hasSonyCardInd = FileManager.default.fileExists(atPath: volumeURL.appendingPathComponent("Sony_Card.IND").path)
             || FileManager.default.fileExists(atPath: volumeURL.appendingPathComponent("SONY_CARD.IND").path)
         let hasMusicDir = FileManager.default.fileExists(atPath: volumeURL.appendingPathComponent("MUSIC").path)
+            || FileManager.default.fileExists(atPath: volumeURL.appendingPathComponent("Music").path)
         
-        // Internal heuristic: Volume name contains "WALKMAN" or starts with "NW-"
+        // Strict Sony Android Walkman app data signatures (never present on generic non-Sony Android devices)
+        let hasSonyWalkmanPackage = FileManager.default.fileExists(atPath: volumeURL.appendingPathComponent("Android/data/com.sony.snei.walkman").path)
+            || FileManager.default.fileExists(atPath: volumeURL.appendingPathComponent("Android/data/com.sony.walkman").path)
+            || FileManager.default.fileExists(atPath: volumeURL.appendingPathComponent("Android/media/com.sony.snei.walkman").path)
+            || FileManager.default.fileExists(atPath: volumeURL.appendingPathComponent("Android/media/com.sony.walkman").path)
+            || FileManager.default.fileExists(atPath: volumeURL.appendingPathComponent("Android/data/com.sony.walkman.soundsettings").path)
+        
+        // Internal heuristic: Volume name contains "WALKMAN" or starts with "NW-" AND has DevIcon or Music
         if (volName.contains("WALKMAN") || volName.hasPrefix("NW-")) && (hasDevIcon || hasMusicDir) {
             return VolumeInspectionResult(
                 isWalkman: true,
@@ -373,14 +424,31 @@ public final class WalkmanDeviceDetector: Sendable {
             )
         }
         
-        // MicroSD heuristic: has Sony_Card.IND or (DevIcon.fil with MUSIC folder)
-        if hasSonyCardInd || (hasDevIcon && hasMusicDir) {
+        // MicroSD heuristic: MUST possess authentic Sony Walkman signatures:
+        // 1. Sony_Card.IND (Sony format marker)
+        // 2. DevIcon.fil with MUSIC/Music folder (Sony device icon)
+        // 3. Sony Walkman Android package data (com.sony.walkman / com.sony.snei.walkman)
+        // 4. Volume name starts with "NW-" with MUSIC/Music folder
+        let isAuthenticSonyMicroSD = hasSonyCardInd
+            || (hasDevIcon && hasMusicDir)
+            || (hasSonyWalkmanPackage && hasMusicDir)
+            || (volName.hasPrefix("NW-") && hasMusicDir)
+            
+        if isAuthenticSonyMicroSD {
+            let model: String?
+            if volName.hasPrefix("NW-") {
+                model = volName
+            } else if hasSonyWalkmanPackage {
+                model = "NW-A300Series"
+            } else {
+                model = nil
+            }
             return VolumeInspectionResult(
                 isWalkman: true,
                 isSupported: true,
                 isInternal: false,
                 isMicroSD: true,
-                modelRaw: nil,
+                modelRaw: model,
                 vendor: "Sony Corporation",
                 rawXml: nil
             )
@@ -494,6 +562,12 @@ public final class WalkmanDeviceDetector: Sendable {
         return devices
     }
     
+    public static func isAndroidModel(modelRaw: String) -> Bool {
+        let clean = modelRaw.uppercased().replacingOccurrences(of: "-", with: "").replacingOccurrences(of: " ", with: "")
+        let androidTokens = ["A100", "A105", "A106", "A107", "A300", "A306", "A307", "ZX500", "ZX505", "ZX507", "ZX700", "ZX706", "ZX707", "WM1AM2", "WM1ZM2"]
+        return androidTokens.contains(where: { clean.contains($0) })
+    }
+
     private func parseCapabilityXml(xml: String, internalCapacityGb: Double, hasCfw: Bool) -> WalkmanDeviceInfo {
         let modelRaw = Self.extractXmlTag(tag: "model", from: xml) ?? "NW-A50Series"
         let marketingName = Self.extractXmlTag(tag: "marketingname", from: xml) ?? "WALKMAN \(modelRaw)"
@@ -501,7 +575,10 @@ public final class WalkmanDeviceDetector: Sendable {
         let firmwareVersion = Self.extractXmlTag(tag: "firmwareversion", from: xml) ?? "1.02"
         let width = Self.extractXmlTag(tag: "width", from: xml) ?? "800"
         let height = Self.extractXmlTag(tag: "height", from: xml) ?? "480"
-        let resolution = "\(width)x\(height)"
+        
+        let isAndroid = Self.isAndroidModel(modelRaw: modelRaw)
+        let resolution = isAndroid && width == "800" ? "1280x720" : "\(width)x\(height)"
+        let fw = isAndroid && firmwareVersion == "1.02" ? "Android Walkman OS" : firmwareVersion
         
         // Extract supported audio formats
         var formats: [String] = []
@@ -530,8 +607,8 @@ public final class WalkmanDeviceDetector: Sendable {
             seriesName: seriesName,
             specificModel: specificModel,
             vendor: vendor,
-            firmwareVersion: firmwareVersion,
-            isNonAndroid: true,
+            firmwareVersion: fw,
+            isNonAndroid: !isAndroid,
             hasCfw: hasCfw,
             displayResolution: resolution,
             internalCapacityGb: internalCapacityGb,
@@ -542,7 +619,23 @@ public final class WalkmanDeviceDetector: Sendable {
     private func resolveSpecificModel(modelRaw: String, capacityGb: Double, hasCfw: Bool) -> (series: String, specific: String, display: String) {
         let upper = modelRaw.uppercased()
         
-        if upper.contains("A50") {
+        if upper.contains("A300") || upper.contains("A306") || upper.contains("A307") {
+            let specific = capacityGb < 45 ? "NW-A306" : "NW-A307"
+            return ("NW-A300 Series", specific, "Sony Walkman \(specific)")
+        } else if upper.contains("A100") || upper.contains("A105") || upper.contains("A106") || upper.contains("A107") {
+            let specific = capacityGb < 25 ? "NW-A105" : (capacityGb < 45 ? "NW-A106" : "NW-A107")
+            return ("NW-A100 Series", specific, "Sony Walkman \(specific)")
+        } else if upper.contains("ZX700") || upper.contains("ZX706") || upper.contains("ZX707") {
+            let specific = capacityGb < 45 ? "NW-ZX706" : "NW-ZX707"
+            return ("NW-ZX700 Series", specific, "Sony Walkman \(specific)")
+        } else if upper.contains("ZX500") || upper.contains("ZX505") || upper.contains("ZX507") {
+            let specific = capacityGb < 25 ? "NW-ZX505" : "NW-ZX507"
+            return ("NW-ZX500 Series", specific, "Sony Walkman \(specific)")
+        } else if upper.contains("WM1AM2") {
+            return ("NW-WM1 Series M2", "NW-WM1AM2", "Sony Walkman NW-WM1AM2")
+        } else if upper.contains("WM1ZM2") {
+            return ("NW-WM1 Series M2", "NW-WM1ZM2", "Sony Walkman NW-WM1ZM2")
+        } else if upper.contains("A50") {
             let specific: String
             if capacityGb < 20 {
                 // 16GB model
@@ -589,9 +682,33 @@ public final class WalkmanDeviceDetector: Sendable {
     
     private func detectFromFilesystemHeuristics(drive: WalkmanDrive, drives: [WalkmanDrive], capacityGb: Double, hasCfw: Bool) -> WalkmanDeviceInfo {
         let name = drive.name.uppercased()
+        let mountUrl = URL(fileURLWithPath: drive.mountPoint)
+        
+        let hasSonyPkg = FileManager.default.fileExists(atPath: mountUrl.appendingPathComponent("Android/data/com.sony.walkman").path)
+            || FileManager.default.fileExists(atPath: mountUrl.appendingPathComponent("Android/data/com.sony.snei.walkman").path)
+            || FileManager.default.fileExists(atPath: mountUrl.appendingPathComponent("Android/media/com.sony.walkman").path)
+            || FileManager.default.fileExists(atPath: mountUrl.appendingPathComponent("Android/data/com.sony.walkman.soundsettings").path)
+        
+        let hasSonyCardInd = FileManager.default.fileExists(atPath: mountUrl.appendingPathComponent("Sony_Card.IND").path)
+            || FileManager.default.fileExists(atPath: mountUrl.appendingPathComponent("SONY_CARD.IND").path)
+        let hasDevIcon = FileManager.default.fileExists(atPath: mountUrl.appendingPathComponent("DevIcon.fil").path)
         
         let seriesRaw: String
-        if name.contains("ZX300") {
+        if name.contains("WM1ZM2") {
+            seriesRaw = "NW-WM1ZM2"
+        } else if name.contains("WM1AM2") {
+            seriesRaw = "NW-WM1AM2"
+        } else if name.contains("ZX700") || name.contains("ZX707") {
+            seriesRaw = "NW-ZX700Series"
+        } else if name.contains("ZX500") || name.contains("ZX507") {
+            seriesRaw = "NW-ZX500Series"
+        } else if name.contains("A300") || name.contains("A306") || name.contains("A307") {
+            seriesRaw = "NW-A300Series"
+        } else if name.contains("A100") || name.contains("A105") || name.contains("A106") {
+            seriesRaw = "NW-A100Series"
+        } else if hasSonyPkg {
+            seriesRaw = "NW-A300Series"
+        } else if name.contains("ZX300") {
             seriesRaw = "NW-ZX300Series"
         } else if name.contains("WM1") {
             seriesRaw = "NW-WM1Series"
@@ -603,9 +720,13 @@ public final class WalkmanDeviceDetector: Sendable {
             seriesRaw = "NW-A30Series"
         } else if name.contains("ZX100") {
             seriesRaw = "NW-ZX100"
+        } else if hasSonyCardInd || hasDevIcon {
+            seriesRaw = "NW-A50Series"
         } else {
             seriesRaw = "Generic"
         }
+        
+        let isAndroid = Self.isAndroidModel(modelRaw: seriesRaw)
         
         if seriesRaw != "Generic" {
             let (seriesName, specificModel, displayName) = resolveSpecificModel(modelRaw: seriesRaw, capacityGb: capacityGb, hasCfw: hasCfw)
@@ -616,10 +737,10 @@ public final class WalkmanDeviceDetector: Sendable {
                 seriesName: seriesName,
                 specificModel: specificModel,
                 vendor: "Sony Corporation",
-                firmwareVersion: "Sony OS DAP",
-                isNonAndroid: true,
+                firmwareVersion: isAndroid ? "Android Walkman OS" : "Sony OS DAP",
+                isNonAndroid: !isAndroid,
                 hasCfw: hasCfw,
-                displayResolution: "800x480",
+                displayResolution: isAndroid ? "1280x720" : "800x480",
                 internalCapacityGb: capacityGb,
                 supportedAudioFormats: ["FLAC", "MP3", "WAV", "AIFF", "ALAC", "DSD", "APE"]
             )

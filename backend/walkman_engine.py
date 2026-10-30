@@ -543,28 +543,69 @@ def detect_walkman_drives(allow_virtual: bool = False) -> List[Dict[str, Any]]:
             candidates.append(vol)
 
         # 1. First pass: look for internal WALKMAN
-        has_internal = any("WALKMAN" in v.name.upper() and "SD" not in v.name.upper() for v in candidates)
+        has_internal = any(
+            ("WALKMAN" in v.name.upper() or v.name.upper().startswith("NW-"))
+            and "SD" not in v.name.upper()
+            and "MICROSD" not in v.name.upper()
+            for v in candidates
+        )
 
         for vol in candidates:
             vol_name = vol.name.upper()
 
-            is_internal = "WALKMAN" in vol_name and ("SD" not in vol_name and "MICROSD" not in vol_name)
+            is_internal = ("WALKMAN" in vol_name or vol_name.startswith("NW-")) and ("SD" not in vol_name and "MICROSD" not in vol_name)
+            
+            # Capability XML validation
+            xml_file = vol / "default-capability.xml"
+            xml_upper = vol / "DEFAULT-CAPABILITY.XML"
+            xml_target = xml_file if xml_file.is_file() else (xml_upper if xml_upper.is_file() else None)
+            xml_exists = False
+            if xml_target:
+                try:
+                    c = xml_target.read_text(encoding="latin-1").lower()
+                    if "sony" in c or "walkman" in c or "nw-" in c:
+                        xml_exists = True
+                except Exception:
+                    pass
+
+            devicon_exists = (vol / "DevIcon.fil").exists() or (vol / "DEVICON.FIL").exists()
             sony_card_exists = (
                 (vol / "Sony_Card.IND").exists()
                 or (vol / "SONY_CARD.IND").exists()
                 or (vol / "sony_card.ind").exists()
-                or ("SD" in vol_name and "CARD" in vol_name)
             )
-            music_exists = (vol / "MUSIC").is_dir()
+            music_exists = (vol / "MUSIC").is_dir() or (vol / "Music").is_dir()
             cfw_exists = (vol / "CFW").is_dir()
 
-            # If internal Walkman is mounted, any other non-system external volume is the MicroSD
-            is_secondary_sd = has_internal and not is_internal
+            # Authentic Sony Walkman Android package markers
+            sony_android_pkg_exists = (
+                (vol / "Android" / "data" / "com.sony.walkman").is_dir()
+                or (vol / "Android" / "data" / "com.sony.snei.walkman").is_dir()
+                or (vol / "Android" / "media" / "com.sony.walkman").is_dir()
+                or (vol / "Android" / "data" / "com.sony.walkman.soundsettings").is_dir()
+            )
 
-            if is_internal or music_exists or cfw_exists or sony_card_exists or is_secondary_sd:
+            # Secondary companion SD card only when an authentic internal Walkman is mounted simultaneously
+            is_companion_sd = has_internal and not is_internal and (
+                "SD" in vol_name or "CARD" in vol_name or sony_card_exists or music_exists
+            )
+
+            # Strict authentic Walkman verification
+            is_authentic_walkman = (
+                xml_exists
+                or (is_internal and (music_exists or devicon_exists))
+                or sony_card_exists
+                or (devicon_exists and music_exists)
+                or (sony_android_pkg_exists and music_exists)
+                or (vol_name.startswith("NW-") and music_exists)
+                or is_companion_sd
+            )
+
+            if is_authentic_walkman:
                 try:
                     usage = psutil.disk_usage(str(vol))
                     d_type = "internal" if is_internal else "microsd"
+                    resolved_music = (vol / "Music") if (vol / "Music").is_dir() else (vol / "MUSIC")
                     drives.append({
                         "id": vol.name,
                         "name": vol.name if is_internal else f"{vol.name} (MicroSD)",
@@ -575,7 +616,7 @@ def detect_walkman_drives(allow_virtual: bool = False) -> List[Dict[str, Any]]:
                         "free_bytes": usage.free,
                         "percent_used": usage.percent,
                         "has_cfw": cfw_exists,
-                        "music_dir": str(vol / "MUSIC"),
+                        "music_dir": str(resolved_music),
                     })
                 except Exception:
                     continue
@@ -656,7 +697,33 @@ def detect_walkman_device_info(drives: Optional[List[Dict[str, Any]]] = None) ->
         height = get_tag("height", "480")
 
         upper = model_raw.upper()
-        if "A50" in upper:
+        is_android = any(k in upper for k in ["A100", "A105", "A106", "A107", "A300", "A306", "A307", "ZX500", "ZX505", "ZX507", "ZX700", "ZX706", "ZX707", "WM1AM2", "WM1ZM2"])
+
+        if "A300" in upper or "A306" in upper or "A307" in upper:
+            specific = "NW-A306" if capacity_gb < 45 else "NW-A307"
+            series = "NW-A300 Series"
+            width, height = "1280", "720"
+        elif "A100" in upper or "A105" in upper or "A106" in upper:
+            specific = "NW-A105" if capacity_gb < 25 else ("NW-A106" if capacity_gb < 45 else "NW-A107")
+            series = "NW-A100 Series"
+            width, height = "1280", "720"
+        elif "ZX700" in upper or "ZX706" in upper or "ZX707" in upper:
+            specific = "NW-ZX706" if capacity_gb < 45 else "NW-ZX707"
+            series = "NW-ZX700 Series"
+            width, height = "1280", "720"
+        elif "ZX500" in upper or "ZX505" in upper or "ZX507" in upper:
+            specific = "NW-ZX505" if capacity_gb < 25 else "NW-ZX507"
+            series = "NW-ZX500 Series"
+            width, height = "1280", "720"
+        elif "WM1AM2" in upper:
+            specific = "NW-WM1AM2"
+            series = "NW-WM1 Series M2"
+            width, height = "1280", "720"
+        elif "WM1ZM2" in upper:
+            specific = "NW-WM1ZM2"
+            series = "NW-WM1 Series M2"
+            width, height = "1280", "720"
+        elif "A50" in upper:
             specific = "NW-A55L" if capacity_gb < 20 else ("NW-A56" if capacity_gb < 45 else "NW-A57")
             series = "NW-A50 Series"
         elif "A40" in upper:
@@ -685,25 +752,76 @@ def detect_walkman_device_info(drives: Optional[List[Dict[str, Any]]] = None) ->
             "specific_model": specific,
             "vendor": vendor,
             "firmware_version": firmware_ver,
-            "is_non_android": True,
+            "is_non_android": not is_android,
             "has_cfw": has_cfw,
             "display_resolution": f"{width}x{height}",
             "internal_capacity_gb": round(capacity_gb, 1),
         }
 
-    return {
-        "model_raw": "NW-A50Series",
-        "marketing_name": "WALKMAN NW-A50Series",
-        "display_name": "Sony Walkman NW-A55L" + (" (Walkman One CFW)" if has_cfw else ""),
-        "series_name": "NW-A50 Series",
-        "specific_model": "NW-A55L",
-        "vendor": "Sony Corporation",
-        "firmware_version": "1.02",
-        "is_non_android": True,
-        "has_cfw": has_cfw,
-        "display_resolution": "800x480",
-        "internal_capacity_gb": round(capacity_gb, 1),
-    }
+    # If no capability XML is found, verify authentic Sony hardware indicators
+    is_virtual = any("virtual" in d.get("id", "").lower() or ".walkman_virtual" in d.get("mount_point", "") for d in drives)
+    if is_virtual:
+        return {
+            "model_raw": "NW-A50Series",
+            "marketing_name": "WALKMAN NW-A50Series",
+            "display_name": "Sony Walkman NW-A55L" + (" (Walkman One CFW)" if has_cfw else ""),
+            "series_name": "NW-A50 Series",
+            "specific_model": "NW-A55L",
+            "vendor": "Sony Corporation",
+            "firmware_version": "1.02",
+            "is_non_android": True,
+            "has_cfw": has_cfw,
+            "display_resolution": "800x480",
+            "internal_capacity_gb": round(capacity_gb, 1),
+        }
+
+    # 1. Check for Sony Android Walkman packages (com.sony.walkman / com.sony.snei.walkman)
+    for d in drives:
+        mp = Path(d["mount_point"])
+        has_sony_pkg = (
+            (mp / "Android" / "data" / "com.sony.walkman").is_dir()
+            or (mp / "Android" / "data" / "com.sony.snei.walkman").is_dir()
+            or (mp / "Android" / "media" / "com.sony.walkman").is_dir()
+            or (mp / "Android" / "data" / "com.sony.walkman.soundsettings").is_dir()
+        )
+        if has_sony_pkg:
+            return {
+                "model_raw": "NW-A300Series",
+                "marketing_name": "WALKMAN NW-A300Series",
+                "display_name": "Sony Walkman NW-A306",
+                "series_name": "NW-A300 Series",
+                "specific_model": "NW-A306",
+                "vendor": "Sony Corporation",
+                "firmware_version": "Android Walkman OS",
+                "is_non_android": False,
+                "has_cfw": False,
+                "display_resolution": "1280x720",
+                "internal_capacity_gb": round(capacity_gb, 1),
+            }
+
+    # 2. Check for authentic Sony non-Android markers (Sony_Card.IND, DevIcon.fil, or WALKMAN / NW- volume)
+    for d in drives:
+        mp = Path(d["mount_point"])
+        has_sony_ind = (mp / "Sony_Card.IND").exists() or (mp / "SONY_CARD.IND").exists() or (mp / "sony_card.ind").exists()
+        has_devicon = (mp / "DevIcon.fil").exists() or (mp / "DEVICON.FIL").exists()
+        vol_name = mp.name.upper()
+        if has_sony_ind or has_devicon or "WALKMAN" in vol_name or vol_name.startswith("NW-"):
+            return {
+                "model_raw": "NW-A50Series",
+                "marketing_name": "WALKMAN NW-A50Series",
+                "display_name": "Sony Walkman NW-A55L" + (" (Walkman One CFW)" if has_cfw else ""),
+                "series_name": "NW-A50 Series",
+                "specific_model": "NW-A55L",
+                "vendor": "Sony Corporation",
+                "firmware_version": "1.02",
+                "is_non_android": True,
+                "has_cfw": has_cfw,
+                "display_resolution": "800x480",
+                "internal_capacity_gb": round(capacity_gb, 1),
+            }
+
+    # Non-Sony drive / unsupported device: strictly reject to prevent false positives
+    return None
 
 
 def init_virtual_walkman() -> None:
@@ -881,7 +999,11 @@ def scan_walkman_library(drive_mount: str | Path) -> Dict[str, Any]:
     """
     music_dir = Path(drive_mount) / "MUSIC"
     if not music_dir.exists():
-        return {"tracks": [], "albums": [], "artists": [], "total_tracks": 0}
+        alt_music = Path(drive_mount) / "Music"
+        if alt_music.exists():
+            music_dir = alt_music
+        else:
+            return {"tracks": [], "albums": [], "artists": [], "total_tracks": 0}
 
     conn = _get_cache_conn()
     cursor = conn.cursor()
@@ -1040,7 +1162,11 @@ def scan_walkman_library(drive_mount: str | Path) -> Dict[str, Any]:
     # Batch insert newly discovered tracks into cache
     if new_cache_rows:
         cursor.executemany("""
-            INSERT OR REPLACE INTO tracks_cache VALUES
+            INSERT OR REPLACE INTO tracks_cache (
+                full_path, mtime, size, format, title, artist, album, track_num,
+                year, genre, duration_seconds, bitrate_kbps, sample_rate, bits_per_sample,
+                has_artwork, relative_path
+            ) VALUES
             (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, new_cache_rows)
         conn.commit()

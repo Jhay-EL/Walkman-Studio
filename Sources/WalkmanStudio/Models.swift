@@ -458,6 +458,14 @@ public struct WalkmanDeviceInfo: Sendable, Hashable, Codable {
     public let internalCapacityGb: Double
     public let supportedAudioFormats: [String]
     
+    public var isAndroid: Bool {
+        !isNonAndroid
+    }
+    
+    public var osFamily: String {
+        isNonAndroid ? "Sony OS (Linux DAP)" : "Android Walkman OS"
+    }
+    
     public init(
         modelRaw: String,
         marketingName: String,

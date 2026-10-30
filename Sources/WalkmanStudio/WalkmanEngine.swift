@@ -559,17 +559,21 @@ public final class WalkmanEngine: @unchecked Sendable {
             }
         }
 
-        // Phase 3: Check for companion MicroSD cards formatted as SD_CARD or MEMORY_CARD with a MUSIC/ directory
-        for cand in candidates {
-            let upperName = cand.name.uppercased()
-            let isSdNamed = upperName == "SD_CARD" || upperName.contains("SD_CARD") || upperName.contains("MEMORY_CARD") || upperName.contains("SONY_CARD")
-            let hasMusic = FileManager.default.fileExists(atPath: cand.url.appendingPathComponent("MUSIC").path)
-            
-            let alreadyInternal = internalCandidates.contains(where: { $0.path == cand.path })
-            let alreadySd = microsdCandidates.contains(where: { $0.path == cand.path })
-            
-            if (isSdNamed && hasMusic) && !alreadyInternal && !alreadySd {
-                microsdCandidates.append(cand)
+        // Phase 3: Check for companion MicroSD cards when an authentic internal Walkman is mounted
+        // Standalone MicroSD cards must pass Phase 2 inspection with authentic Sony signatures
+        if !internalCandidates.isEmpty {
+            for cand in candidates {
+                let upperName = cand.name.uppercased()
+                let isSdNamed = upperName == "SD_CARD" || upperName.contains("SD_CARD") || upperName.contains("MEMORY_CARD") || upperName.contains("SONY_CARD")
+                let hasMusic = FileManager.default.fileExists(atPath: cand.url.appendingPathComponent("MUSIC").path)
+                    || FileManager.default.fileExists(atPath: cand.url.appendingPathComponent("Music").path)
+                
+                let alreadyInternal = internalCandidates.contains(where: { $0.path == cand.path })
+                let alreadySd = microsdCandidates.contains(where: { $0.path == cand.path })
+                
+                if isSdNamed && hasMusic && !alreadyInternal && !alreadySd {
+                    microsdCandidates.append(cand)
+                }
             }
         }
 
@@ -589,6 +593,14 @@ public final class WalkmanEngine: @unchecked Sendable {
                 displayName = cand.name.contains("(MicroSD)") ? cand.name : "\(cand.name) (MicroSD)"
             }
 
+            let musicPath: String
+            let titleMusic = cand.url.appendingPathComponent("Music")
+            if FileManager.default.fileExists(atPath: titleMusic.path) {
+                musicPath = titleMusic.path
+            } else {
+                musicPath = cand.url.appendingPathComponent("MUSIC").path
+            }
+
             return WalkmanDrive(
                 name: displayName,
                 mountPoint: cand.path,
@@ -598,7 +610,7 @@ public final class WalkmanEngine: @unchecked Sendable {
                 freeBytes: freeBytes,
                 percentUsed: percentUsed,
                 hasCfw: cfwExists,
-                musicDir: cand.url.appendingPathComponent("MUSIC").path
+                musicDir: musicPath
             )
         }
 

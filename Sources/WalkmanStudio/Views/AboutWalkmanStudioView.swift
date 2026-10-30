@@ -114,7 +114,7 @@ public struct AboutWalkmanStudioView: View {
                     Circle()
                         .fill(Color.green)
                         .frame(width: 6, height: 6)
-                    Text("Non-Android Sony OS / Linux Architecture")
+                    Text("Universal Sony Walkman Architecture • Sony OS & Android DAP")
                         .font(WalkmanFont.badge)
                         .foregroundStyle(WalkmanTheme.silver)
                 }
@@ -349,10 +349,10 @@ public struct AboutWalkmanStudioView: View {
                 }
                 
                 HStack(spacing: 8) {
-                    Image(systemName: "info.circle")
+                    Image(systemName: "checkmark.seal.fill")
                         .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                    Text("Android Walkmans (NW-A100/A300, NW-ZX500) use MTP and are not supported.")
+                        .foregroundStyle(Color.green)
+                    Text("Fully supports both classic Sony OS (Linux DAP) and modern Android-based Walkmans (NW-A100, NW-A300, NW-ZX500, NW-ZX700, NW-WM1M2).")
                         .font(WalkmanFont.subheadline)
                         .foregroundStyle(.secondary)
                 }
