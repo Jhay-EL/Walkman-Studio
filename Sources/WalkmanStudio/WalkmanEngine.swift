@@ -707,11 +707,19 @@ public final class WalkmanEngine: @unchecked Sendable {
     /// Ensures compatibility with Sony Walkman firmware:
     /// 1. Walkman NW-A45/A55/A50/A30 requires chronological [mm:ss.xx] timestamps to unlock the "Display Lyrics" option.
     ///    If plain text lyrics are provided, timestamps are synthesized sequentially across the song's duration.
-    /// 2. Enforces standard CRLF (\r\n) line endings and clean UTF-8 encoding.
+    /// 2. Enforces standard CRLF (\r\n) line endings, UTF-8 without BOM, strict [mm:ss.xx] timestamps, and chronological order.
     public func writeCompanionLyrics(destinationAudioURL: URL, lyrics: String, durationSeconds: Double = 0) throws {
         let lrcURL = destinationAudioURL.deletingPathExtension().appendingPathExtension("lrc")
         let formattedLyrics = prepareWalkmanLRC(lyrics: lyrics, durationSeconds: durationSeconds)
-        try formattedLyrics.write(to: lrcURL, atomically: true, encoding: .utf8)
+        guard !formattedLyrics.isEmpty else { return }
+
+        do {
+            try formattedLyrics.write(to: lrcURL, atomically: true, encoding: .utf8)
+        } catch {
+            // Non-atomic fallback for external FAT32/exFAT Walkman volumes
+            try formattedLyrics.write(to: lrcURL, atomically: false, encoding: .utf8)
+        }
+
         let cPath = (lrcURL.path as NSString).fileSystemRepresentation
         removexattr(cPath, "com.apple.TextEncoding", 0)
         let dotfileURL = lrcURL.deletingLastPathComponent().appendingPathComponent("._" + lrcURL.lastPathComponent)
@@ -719,18 +727,111 @@ public final class WalkmanEngine: @unchecked Sendable {
         sync()
     }
 
-    /// Prepares lyrics text for Sony Walkman: ensures every line has [mm:ss.xx] timestamps and CRLF endings.
+    /// Prepares lyrics text for Sony Walkman: ensures every line has [mm:ss.xx] timestamps, CRLF endings,
+    /// chronological ordering, strips incompatible headers, and adjusts for any [offset:+/-ms] tag.
     public func prepareWalkmanLRC(lyrics: String, durationSeconds: Double = 0) -> String {
         let rawLines = lyrics.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
-        let hasAnyTimestamps = rawLines.contains { line in
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            return (trimmed.hasPrefix("[0") || trimmed.hasPrefix("[1") || trimmed.hasPrefix("[2") || trimmed.hasPrefix("[3")) && trimmed.contains(":")
+        guard !rawLines.isEmpty else { return "" }
+
+        // 1. Check for global [offset:+/-ms] tag (e.g. [offset:500] or [offset:-200])
+        var offsetSeconds = 0.0
+        for line in rawLines {
+            let lower = line.lowercased()
+            if lower.hasPrefix("[offset:") {
+                let inside = lower.dropFirst(8).replacingOccurrences(of: "]", with: "").trimmingCharacters(in: .whitespaces)
+                if let ms = Double(inside) {
+                    offsetSeconds = ms / 1000.0
+                }
+            }
         }
 
-        if hasAnyTimestamps {
-            // Already timestamped: normalize line endings to CRLF and filter out empty lines
-            let cleanLines = rawLines.filter { !$0.isEmpty }
-            return cleanLines.joined(separator: "\r\n") + "\r\n"
+        // 2. Regex to match timestamp tag(s) like [mm:ss.xx], [m:ss.xxx], or [hh:mm:ss.xx]
+        let timestampRegex = try? NSRegularExpression(
+            pattern: "\\[(?:(\\d{1,3}):)?(\\d{1,2}):(\\d{2})(?:[.:](\\d{1,3}))?\\]",
+            options: []
+        )
+
+        struct TimedLine {
+            let timeSeconds: Double
+            let formattedText: String
+        }
+
+        var timedLines: [TimedLine] = []
+        var hasAnyTimestamps = false
+
+        for line in rawLines {
+            if line.isEmpty { continue }
+            let lower = line.lowercased()
+            // Skip non-lyric metadata headers that break or confuse Walkman RTOS parser
+            if lower.hasPrefix("[ti:") || lower.hasPrefix("[ar:") ||
+               lower.hasPrefix("[al:") || lower.hasPrefix("[by:") ||
+               lower.hasPrefix("[offset:") || lower.hasPrefix("[length:") ||
+               lower.hasPrefix("[re:") || lower.hasPrefix("[ve:") {
+                continue
+            }
+
+            let nsLine = line as NSString
+            let matches = timestampRegex?.matches(in: line, range: NSRange(location: 0, length: nsLine.length)) ?? []
+
+            if !matches.isEmpty {
+                hasAnyTimestamps = true
+                let rawText = timestampRegex?.stringByReplacingMatches(
+                    in: line,
+                    range: NSRange(location: 0, length: nsLine.length),
+                    withTemplate: ""
+                ) ?? ""
+
+                let trimmedText = rawText.trimmingCharacters(in: .whitespaces)
+                let textFormatted = trimmedText.isEmpty ? "" : (rawText.hasPrefix(" ") ? " " + trimmedText : trimmedText)
+
+                for match in matches {
+                    var h = 0.0
+                    var m = 0.0
+                    var s = 0.0
+                    var cs = 0.0
+
+                    if match.range(at: 1).location != NSNotFound {
+                        h = Double(nsLine.substring(with: match.range(at: 1))) ?? 0.0
+                    }
+                    if match.range(at: 2).location != NSNotFound {
+                        m = Double(nsLine.substring(with: match.range(at: 2))) ?? 0.0
+                    }
+                    if match.range(at: 3).location != NSNotFound {
+                        s = Double(nsLine.substring(with: match.range(at: 3))) ?? 0.0
+                    }
+                    if match.range(at: 4).location != NSNotFound {
+                        let msStr = nsLine.substring(with: match.range(at: 4))
+                        if msStr.count == 1 {
+                            cs = (Double(msStr) ?? 0.0) * 10.0
+                        } else if msStr.count == 2 {
+                            cs = Double(msStr) ?? 0.0
+                        } else if msStr.count >= 3 {
+                            let prefix = String(msStr.prefix(2))
+                            cs = Double(prefix) ?? 0.0
+                        }
+                    }
+
+                    let totalSec = (h * 3600.0) + (m * 60.0) + s + (cs / 100.0)
+                    let adjustedSec = max(0.0, totalSec + offsetSeconds)
+                    timedLines.append(TimedLine(timeSeconds: adjustedSec, formattedText: textFormatted))
+                }
+            }
+        }
+
+        if hasAnyTimestamps && !timedLines.isEmpty {
+            // Sort chronologically as strictly required by Sony Walkman OS
+            timedLines.sort { $0.timeSeconds < $1.timeSeconds }
+
+            var formattedLines: [String] = []
+            for item in timedLines {
+                let totalS = Int(item.timeSeconds)
+                let minutes = totalS / 60
+                let seconds = totalS % 60
+                let centis = Int(((item.timeSeconds - Double(totalS)) * 100.0).rounded())
+                let lineStr = String(format: "[%02d:%02d.%02d]%@", minutes, seconds, min(99, max(0, centis)), item.formattedText)
+                formattedLines.append(lineStr)
+            }
+            return formattedLines.joined(separator: "\r\n") + "\r\n"
         }
 
         // Plain text lyrics: synthesize sequential timestamps so the Sony Walkman RTOS firmware
@@ -743,16 +844,16 @@ public final class WalkmanEngine: @unchecked Sendable {
         let endSec: Double = max(startSec + 2.0, effectiveDuration - 3.0)
         let step: Double = (endSec - startSec) / Double(max(1, nonEmptyLines.count))
 
-        var timedLines: [String] = []
+        var timedLinesOut: [String] = []
         for (i, line) in nonEmptyLines.enumerated() {
             let t = startSec + Double(i) * step
             let m = Int(t) / 60
             let s = Int(t) % 60
             let cs = Int((t - Double(Int(t))) * 100)
-            timedLines.append(String(format: "[%02d:%02d.%02d]%@", m, s, cs, line))
+            timedLinesOut.append(String(format: "[%02d:%02d.%02d]%@", m, s, min(99, max(0, cs)), line))
         }
 
-        return timedLines.joined(separator: "\r\n") + "\r\n"
+        return timedLinesOut.joined(separator: "\r\n") + "\r\n"
     }
 
     /// Saves folder.jpg and cover.jpg Baseline RGB JPEGs in the destination album directory

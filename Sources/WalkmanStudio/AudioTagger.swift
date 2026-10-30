@@ -1417,6 +1417,8 @@ public final class AudioTagger: @unchecked Sendable {
                     if offset + 4 <= d.count {
                         let count = Int(d[offset]) | (Int(d[offset+1]) << 8) | (Int(d[offset+2]) << 16) | (Int(d[offset+3]) << 24)
                         offset += 4
+                        var syncedCandidate: String? = nil
+                        var plainCandidate: String? = nil
                         for _ in 0..<count {
                             guard offset + 4 <= d.count else { break }
                             let cLen = Int(d[offset]) | (Int(d[offset+1]) << 8) | (Int(d[offset+2]) << 16) | (Int(d[offset+3]) << 24)
@@ -1430,13 +1432,19 @@ public final class AudioTagger: @unchecked Sendable {
                                     if k == "LYRICS" || k == "UNSYNCEDLYRICS" || k == "UNSYNCED LYRICS" || k == "SYNCEDLYRICS" || k == "SYNCED LYRICS" {
                                         let v = parts[1...].joined(separator: "=").trimmingCharacters(in: .whitespacesAndNewlines)
                                         if !v.isEmpty {
-                                            return v
+                                            if (k.contains("SYNCED") && !k.contains("UNSYNCED")) || v.contains("[") {
+                                                syncedCandidate = v
+                                            } else if plainCandidate == nil {
+                                                plainCandidate = v
+                                            }
                                         }
                                     }
                                 }
                             }
                             offset += cLen
                         }
+                        if let s = syncedCandidate { return s }
+                        if let p = plainCandidate { return p }
                     }
                 }
                 return nil
@@ -1474,21 +1482,10 @@ public final class AudioTagger: @unchecked Sendable {
     }
 
     public func saveLyrics(fileURL: URL, lyrics: String) throws {
-        let lrcURL = fileURL.deletingPathExtension().appendingPathExtension("lrc")
-        do {
-            try lyrics.write(to: lrcURL, atomically: true, encoding: .utf8)
-        } catch {
-            // Non-atomic fallback for external FAT32/exFAT Walkman volumes
-            try lyrics.write(to: lrcURL, atomically: false, encoding: .utf8)
-        }
-
-        // Clean macOS metadata shadow file and xattrs on external storage
-        let cPath = (lrcURL.path as NSString).fileSystemRepresentation
-        removexattr(cPath, "com.apple.TextEncoding", 0)
-        let dotfileURL = lrcURL.deletingLastPathComponent().appendingPathComponent("._" + lrcURL.lastPathComponent)
-        try? FileManager.default.removeItem(at: dotfileURL)
-        sync()
-
+        try WalkmanEngine.shared.writeCompanionLyrics(
+            destinationAudioURL: fileURL,
+            lyrics: lyrics
+        )
         lyricsCache.setObject(lyrics as NSString, forKey: fileURL as NSURL)
     }
 
