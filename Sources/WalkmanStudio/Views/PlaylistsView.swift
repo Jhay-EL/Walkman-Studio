@@ -647,13 +647,14 @@ public struct PlaylistsView: View {
                                         Image(systemName: "plus")
                                             .font(.system(size: 11, weight: .bold))
                                         Text("New Playlist")
-                                            .font(.system(size: 12, weight: .semibold))
+                                            .font(.system(size: 12.5, weight: .semibold))
                                     }
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 6)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 7)
+                                    .frame(height: 38)
                                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                                 }
-                                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 14))
+                                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 19))
                                 .disabled(activeDrive == nil)
                                 .opacity(activeDrive == nil ? 0.5 : 1.0)
                                 
@@ -754,13 +755,14 @@ public struct PlaylistsView: View {
                                             Image(systemName: "plus.circle")
                                                 .font(.system(size: 11, weight: .bold))
                                             Text("Add From Library")
-                                                .font(.system(size: 12, weight: .semibold))
+                                                .font(.system(size: 12.5, weight: .semibold))
                                         }
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 6)
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 7)
+                                        .frame(height: 38)
                                         .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                                     }
-                                    .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 14))
+                                    .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 19))
                                     .padding(.top, 4)
                                     
                                     Spacer()
@@ -1055,9 +1057,8 @@ public struct PlaylistsView: View {
                         .foregroundStyle(banner.contains("error") || banner.contains("Failed") ? Color.red : WalkmanTheme.silverLight)
                         .lineLimit(1)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4.5)
-                .frame(maxWidth: 240)
+                .padding(.horizontal, 12)
+                .frame(height: 38)
                 .background(Color.white.opacity(0.05))
                 .clipShape(Capsule())
                 .overlay(
@@ -1066,6 +1067,8 @@ public struct PlaylistsView: View {
             }
             
             Spacer()
+            
+            playlistCountPill
             
             // Right: New Playlist Action Button
             Button(action: createNewPlaylist) {
@@ -1078,16 +1081,114 @@ public struct PlaylistsView: View {
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 7)
-                .frame(minHeight: 32)
+                .frame(height: 38)
                 .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
             }
-            .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 16))
+            .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 19))
             .disabled(activeDrive == nil)
             .opacity(activeDrive == nil ? 0.5 : 1.0)
             .help("Create new .m3u8 playlist on Walkman")
         }
         .padding(.horizontal, 4)
         .background(Color.clear)
+    }
+    
+    private var playlistCountPill: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "music.note.list")
+                .font(.system(size: 11.5, weight: .bold))
+                .foregroundStyle(Color.white.opacity(0.55))
+            Text(playlists.count == 1 ? "1 Playlist" : "\(playlists.count.formatted()) Playlists")
+                .font(.system(size: 12.5, weight: .medium, design: .monospaced))
+                .foregroundStyle(WalkmanTheme.silverLight)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 38)
+        .background(
+            ZStack {
+                Color.white.opacity(0.08)
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(0.10), location: 0.0),
+                            .init(color: .clear, location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 8)
+                    Spacer(minLength: 0)
+                }
+            }
+        )
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(
+                    LinearGradient(
+                        stops: [
+                            .init(color: Color.white.opacity(0.45), location: 0.0),
+                            .init(color: Color.white.opacity(0.20), location: 0.5),
+                            .init(color: Color.white.opacity(0.0), location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 0.8
+                )
+        )
+        .shadow(color: Color.black.opacity(0.10), radius: 2, x: 0, y: 1)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+    
+    private var playlistTrackCountPill: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "music.note")
+                .font(.system(size: 11.5, weight: .bold))
+                .foregroundStyle(Color.white.opacity(0.55))
+            Text(playlistTracks.count == 1 ? "1 Track" : "\(playlistTracks.count.formatted()) Tracks")
+                .font(.system(size: 12.5, weight: .medium, design: .monospaced))
+                .foregroundStyle(WalkmanTheme.silverLight)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 38)
+        .background(
+            ZStack {
+                Color.white.opacity(0.08)
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(0.10), location: 0.0),
+                            .init(color: .clear, location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 8)
+                    Spacer(minLength: 0)
+                }
+            }
+        )
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(
+                    LinearGradient(
+                        stops: [
+                            .init(color: Color.white.opacity(0.45), location: 0.0),
+                            .init(color: Color.white.opacity(0.20), location: 0.5),
+                            .init(color: Color.white.opacity(0.0), location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 0.8
+                )
+        )
+        .shadow(color: Color.black.opacity(0.10), radius: 2, x: 0, y: 1)
+        .fixedSize(horizontal: true, vertical: false)
     }
     
     // MARK: - Responsive Detail Header Subviews
@@ -1100,11 +1201,12 @@ public struct PlaylistsView: View {
                 if editingPlaylistId == pl.id && renameLocation == .header {
                     headerRenameView(pl: pl)
                 } else {
-                    playlistTitleSection(pl: pl, showSubtitle: true)
+                    playlistTitleSection(pl: pl, showSubtitle: false)
                 }
                 
                 Spacer(minLength: 8)
                 
+                playlistTrackCountPill
                 sortMenuButton
                 addFromLibraryButton(compact: false)
             }
@@ -1115,11 +1217,12 @@ public struct PlaylistsView: View {
                 if editingPlaylistId == pl.id && renameLocation == .header {
                     headerRenameView(pl: pl)
                 } else {
-                    playlistTitleSection(pl: pl, showSubtitle: true)
+                    playlistTitleSection(pl: pl, showSubtitle: false)
                 }
                 
                 Spacer(minLength: 6)
                 
+                playlistTrackCountPill
                 sortMenuButton
                 addFromLibraryButton(compact: true)
             }
@@ -1152,10 +1255,7 @@ public struct PlaylistsView: View {
                 }
                 
                 HStack(alignment: .center, spacing: 8) {
-                    Text("\(playlistTracks.count) \(playlistTracks.count == 1 ? "track" : "tracks") in sequence")
-                        .font(WalkmanFont.callout)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    playlistTrackCountPill
                     
                     Spacer(minLength: 8)
                     
@@ -1191,10 +1291,7 @@ public struct PlaylistsView: View {
                 }
                 
                 HStack(alignment: .center, spacing: 6) {
-                    Text("\(playlistTracks.count) tracks")
-                        .font(WalkmanFont.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    playlistTrackCountPill
                     
                     Spacer(minLength: 6)
                     
@@ -1213,12 +1310,12 @@ public struct PlaylistsView: View {
                 .textFieldStyle(.plain)
                 .font(WalkmanFont.title3)
                 .foregroundStyle(.white)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
+                .padding(.horizontal, 12)
+                .frame(height: 38)
                 .background(WalkmanTheme.surface)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .stroke(Color.white.opacity(0.30), lineWidth: 1)
                 )
                 .focused($isHeaderRenameFocused)
@@ -1234,21 +1331,23 @@ public struct PlaylistsView: View {
                         .font(.system(size: 12, weight: .semibold))
                         .lineLimit(1)
                 }
-                .padding(.horizontal, 11)
-                .padding(.vertical, 5)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .frame(height: 38)
                 .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
             }
-            .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 8))
+            .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 19))
             .fixedSize(horizontal: true, vertical: false)
             
             Button(action: cancelRename) {
                 Text("Cancel")
                     .font(WalkmanFont.callout)
                     .foregroundStyle(WalkmanTheme.silverMuted)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .frame(height: 38)
             }
-            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
             .fixedSize(horizontal: true, vertical: false)
         }
     }
@@ -1307,12 +1406,12 @@ public struct PlaylistsView: View {
                     .font(.system(size: 12.5, weight: .semibold))
                     .lineLimit(1)
             }
-            .padding(.horizontal, compact ? 11 : 14)
-            .padding(.vertical, 6)
-            .frame(minHeight: 32)
+            .padding(.horizontal, compact ? 12 : 14)
+            .padding(.vertical, 7)
+            .frame(height: 38)
             .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
         }
-        .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 16))
+        .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 19))
         .fixedSize(horizontal: true, vertical: false)
     }
 }
@@ -1796,17 +1895,17 @@ private struct PlaylistSortMenuButton: View {
                         startPoint: .top,
                         endPoint: .bottom
                     )
-                    .frame(height: 7)
+                    .frame(height: 8)
                     Spacer(minLength: 0)
                 }
                 .clipShape(Circle())
                 
                 // Sort icon only
                 Image(systemName: "arrow.up.arrow.down")
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(isHovered ? Color.white : WalkmanTheme.silverLight)
             }
-            .frame(width: 32, height: 32)
+            .frame(width: 38, height: 38)
             .clipShape(Circle())
             .overlay(
                 Circle()
@@ -2024,6 +2123,7 @@ private struct ModalBrowsingModeSegmentedBarView: View {
             }
         }
         .padding(3)
+        .frame(height: 38)
         .background(Color.white.opacity(0.04))
         .clipShape(Capsule())
         .overlay(
@@ -2062,9 +2162,9 @@ private struct ModalBrowsingModeTabPillView: View {
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
             }
-            .padding(.horizontal, 13)
-            .padding(.vertical, 6.5)
-            .frame(minHeight: 30)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .frame(height: 32)
             .fixedSize(horizontal: true, vertical: false)
             .foregroundStyle(
                 isSelected ? Color.white : (isHovered ? Color.white : Color.white.opacity(0.70))
@@ -2134,6 +2234,7 @@ private struct ModalFormatSegmentedBarView: View {
             }
         }
         .padding(3)
+        .frame(height: 38)
         .background(Color.white.opacity(0.04))
         .clipShape(Capsule())
         .overlay(
@@ -2174,9 +2275,9 @@ private struct ModalFormatTabPillView: View {
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
             }
-            .padding(.horizontal, 11)
-            .padding(.vertical, 5)
-            .frame(minHeight: 28)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .frame(height: 32)
             .fixedSize(horizontal: true, vertical: false)
             .foregroundStyle(
                 isSelected ?
@@ -2618,8 +2719,7 @@ private struct AddTracksModal: View {
                         }
                     }
                     .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .frame(minHeight: 34)
+                    .frame(height: 38)
                     .background(
                         ZStack {
                             Color.white.opacity(0.06)
@@ -2886,8 +2986,9 @@ private struct AddTracksModal: View {
                 .font(WalkmanFont.calloutMedium)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 7)
+                .frame(height: 38)
                 .foregroundStyle(WalkmanTheme.silverLight)
-                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 14))
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
                 .keyboardShortcut(.cancelAction)
                 
                 if !selectedTrackPaths.isEmpty {
@@ -2907,9 +3008,10 @@ private struct AddTracksModal: View {
                         }
                         .padding(.horizontal, 18)
                         .padding(.vertical, 7)
+                        .frame(height: 38)
                         .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                     }
-                    .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 14))
+                    .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 19))
                     .keyboardShortcut(.defaultAction)
                 } else {
                     Button(action: onDismiss) {
@@ -2923,9 +3025,10 @@ private struct AddTracksModal: View {
                         }
                         .padding(.horizontal, 20)
                         .padding(.vertical, 7)
+                        .frame(height: 38)
                         .foregroundStyle(addedInSessionPaths.isEmpty ? WalkmanTheme.silverLight : Color(red: 20/255, green: 20/255, blue: 24/255))
                     }
-                    .buttonStyle(LiquidGlassButtonStyle(variant: addedInSessionPaths.isEmpty ? .glass : .prominent, cornerRadius: 14))
+                    .buttonStyle(LiquidGlassButtonStyle(variant: addedInSessionPaths.isEmpty ? .glass : .prominent, cornerRadius: 19))
                     .keyboardShortcut(.defaultAction)
                 }
             }
