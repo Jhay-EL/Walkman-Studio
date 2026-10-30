@@ -785,199 +785,150 @@ public struct SenseMeChannelsView: View {
                 .padding(.vertical, 8)
                 .background(Color.white.opacity(0.025))
             } else {
-                HStack {
-                    Spacer()
+                HStack(spacing: 10) {
+                    // Filter search inside channel
+                    HStack(spacing: 7) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 12.5))
+                            .foregroundStyle(WalkmanTheme.silverMuted)
 
-                    // LIQUID GLASS WRAPPED CONTROLS CLUSTER
-                    HStack(spacing: 8) {
-                        // Filter search inside channel
-                        HStack(spacing: 6) {
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 11))
-                                .foregroundStyle(WalkmanTheme.silverMuted)
+                        TextField("Filter channel...", text: $trackFilterQuery)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 13))
 
-                            TextField("Filter channel...", text: $trackFilterQuery)
-                                .textFieldStyle(.plain)
-                                .font(.system(size: 12))
-
-                            if !trackFilterQuery.isEmpty {
-                                Button(action: { trackFilterQuery = "" }) {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.system(size: 10.5))
-                                        .foregroundStyle(WalkmanTheme.silverMuted)
-                                }
-                                .buttonStyle(.plain)
+                        if !trackFilterQuery.isEmpty {
+                            Button(action: { trackFilterQuery = "" }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 11.5))
+                                    .foregroundStyle(WalkmanTheme.silverMuted)
                             }
+                            .buttonStyle(.plain)
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .frame(width: 165)
-                        .background(
-                            ZStack {
-                                Capsule()
-                                    .fill(Color.white.opacity(0.06))
-                                VStack(spacing: 0) {
-                                    LinearGradient(
-                                        stops: [
-                                            .init(color: .white.opacity(0.12), location: 0.0),
-                                            .init(color: .clear, location: 1.0)
-                                        ],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                    .frame(height: 5)
-                                    Spacer(minLength: 0)
-                                }
-                                .clipShape(Capsule())
-                            }
-                        )
-                        .clipShape(Capsule())
-                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 0.8))
-
-                        // Play All Button (Liquid Glass Hi-Res Gold)
-                        Button(action: { playAll(in: currentTracks) }) {
-                            HStack(spacing: 5) {
-                                Image(systemName: "play.fill")
-                                    .font(.system(size: 11, weight: .bold))
-                                Text("Play All")
-                                    .font(.system(size: 12, weight: .bold))
-                            }
-                            .foregroundStyle(Color.black)
-                            .padding(.horizontal, 13)
-                            .padding(.vertical, 6)
-                            .background(
-                                ZStack {
-                                    WalkmanTheme.hiResGoldGradient
-
-                                    VStack(spacing: 0) {
-                                        LinearGradient(
-                                            stops: [
-                                                .init(color: Color.white.opacity(0.42), location: 0.0),
-                                                .init(color: Color.clear, location: 1.0)
-                                            ],
-                                            startPoint: .top,
-                                            endPoint: .bottom
-                                        )
-                                        .frame(height: 6)
-                                        Spacer(minLength: 0)
-                                    }
-                                    .clipShape(Capsule())
-                                }
-                            )
-                            .clipShape(Capsule())
-                            .overlay(
-                                Capsule()
-                                    .strokeBorder(
-                                        LinearGradient(
-                                            stops: [
-                                                .init(color: Color.white.opacity(0.50), location: 0.0),
-                                                .init(color: Color.white.opacity(0.15), location: 1.0)
-                                            ],
-                                            startPoint: .top,
-                                            endPoint: .bottom
-                                        ),
-                                        lineWidth: 0.8
-                                    )
-                            )
-                            .shadow(color: WalkmanTheme.hiResGold.opacity(0.28), radius: 4, x: 0, y: 1.5)
-                        }
-                        .buttonStyle(.plain)
-
-                        // Shuffle Button (Liquid Glass Translucent Frosted)
-                        Button(action: { shuffleAll(in: currentTracks) }) {
-                            HStack(spacing: 5) {
-                                Image(systemName: "shuffle")
-                                    .font(.system(size: 11, weight: .semibold))
-                                Text("Shuffle")
-                                    .font(.system(size: 12, weight: .semibold))
-                            }
-                            .foregroundStyle(WalkmanTheme.silverLight)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(
-                                ZStack {
-                                    Capsule()
-                                        .fill(Color.white.opacity(0.08))
-
-                                    VStack(spacing: 0) {
-                                        LinearGradient(
-                                            stops: [
-                                                .init(color: Color.white.opacity(0.24), location: 0.0),
-                                                .init(color: Color.clear, location: 1.0)
-                                            ],
-                                            startPoint: .top,
-                                            endPoint: .bottom
-                                        )
-                                        .frame(height: 6)
-                                        Spacer(minLength: 0)
-                                    }
-                                    .clipShape(Capsule())
-                                }
-                            )
-                            .clipShape(Capsule())
-                            .overlay(
-                                Capsule()
-                                    .strokeBorder(
-                                        LinearGradient(
-                                            stops: [
-                                                .init(color: Color.white.opacity(0.24), location: 0.0),
-                                                .init(color: Color.white.opacity(0.08), location: 1.0)
-                                            ],
-                                            startPoint: .top,
-                                            endPoint: .bottom
-                                        ),
-                                        lineWidth: 0.8
-                                    )
-                            )
-                        }
-                        .buttonStyle(.plain)
                     }
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 5)
+                    .padding(.horizontal, 12)
+                    .frame(width: 210, height: 34)
                     .background(
                         ZStack {
                             Capsule()
-                                .fill(.ultraThinMaterial)
-
-                            Capsule()
-                                .fill(Color(red: 18 / 255, green: 19 / 255, blue: 24 / 255).opacity(0.68))
-
-                            Capsule()
-                                .fill(Color.white.opacity(0.04))
-
+                                .fill(Color.white.opacity(0.06))
                             VStack(spacing: 0) {
                                 LinearGradient(
                                     stops: [
-                                        .init(color: .white.opacity(0.28), location: 0.0),
-                                        .init(color: .white.opacity(0.06), location: 0.5),
+                                        .init(color: .white.opacity(0.12), location: 0.0),
                                         .init(color: .clear, location: 1.0)
                                     ],
                                     startPoint: .top,
                                     endPoint: .bottom
                                 )
-                                .frame(height: 7)
+                                .frame(height: 6)
                                 Spacer(minLength: 0)
                             }
                             .clipShape(Capsule())
                         }
                     )
                     .clipShape(Capsule())
-                    .overlay(
-                        Capsule()
-                            .strokeBorder(
-                                LinearGradient(
-                                    stops: [
-                                        .init(color: .white.opacity(0.26), location: 0.0),
-                                        .init(color: .white.opacity(0.10), location: 0.5),
-                                        .init(color: .white.opacity(0.04), location: 1.0)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 0.8
-                            )
-                    )
-                    .shadow(color: Color.black.opacity(0.35), radius: 8, x: 0, y: 3)
+                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 0.8))
+
+                    // Play All Button (Liquid Glass Hi-Res Gold)
+                    Button(action: { playAll(in: currentTracks) }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 12.5, weight: .bold))
+                            Text("Play All")
+                                .font(.system(size: 13, weight: .bold))
+                        }
+                        .foregroundStyle(Color.black)
+                        .padding(.horizontal, 18)
+                        .frame(height: 34)
+                        .background(
+                            ZStack {
+                                WalkmanTheme.hiResGoldGradient
+
+                                VStack(spacing: 0) {
+                                    LinearGradient(
+                                        stops: [
+                                            .init(color: Color.white.opacity(0.42), location: 0.0),
+                                            .init(color: Color.clear, location: 1.0)
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                    .frame(height: 7)
+                                    Spacer(minLength: 0)
+                                }
+                                .clipShape(Capsule())
+                            }
+                        )
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(
+                                    LinearGradient(
+                                        stops: [
+                                            .init(color: Color.white.opacity(0.50), location: 0.0),
+                                            .init(color: Color.white.opacity(0.15), location: 1.0)
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    ),
+                                    lineWidth: 0.8
+                                )
+                        )
+                        .shadow(color: WalkmanTheme.hiResGold.opacity(0.30), radius: 5, x: 0, y: 2)
+                    }
+                    .buttonStyle(.plain)
+
+                    // Shuffle Button (Liquid Glass Translucent Frosted)
+                    Button(action: { shuffleAll(in: currentTracks) }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "shuffle")
+                                .font(.system(size: 12.5, weight: .semibold))
+                            Text("Shuffle")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .padding(.horizontal, 16)
+                        .frame(height: 34)
+                        .background(
+                            ZStack {
+                                Capsule()
+                                    .fill(Color.white.opacity(0.08))
+
+                                VStack(spacing: 0) {
+                                    LinearGradient(
+                                        stops: [
+                                            .init(color: Color.white.opacity(0.24), location: 0.0),
+                                            .init(color: Color.clear, location: 1.0)
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                    .frame(height: 7)
+                                    Spacer(minLength: 0)
+                                }
+                                .clipShape(Capsule())
+                            }
+                        )
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(
+                                    LinearGradient(
+                                        stops: [
+                                            .init(color: Color.white.opacity(0.24), location: 0.0),
+                                            .init(color: Color.white.opacity(0.08), location: 1.0)
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    ),
+                                    lineWidth: 0.8
+                                )
+                        )
+                        .shadow(color: Color.black.opacity(0.25), radius: 3, x: 0, y: 1.5)
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
                 }
                 .padding(.horizontal, 22)
                 .padding(.vertical, 8)
