@@ -584,8 +584,7 @@ public struct HiResAudioView: View {
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 7.5)
-        .frame(minHeight: 36)
+        .frame(height: 38)
         .background(
             ZStack {
                 Color.white.opacity(0.06)
@@ -632,20 +631,20 @@ public struct HiResAudioView: View {
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 7)
-                .frame(minHeight: 34)
+                .frame(height: 38)
                 .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
             }
-            .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 17))
+            .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 19))
             .disabled(displayedTracks.isEmpty)
             .help(isPlayingFromHiResQueue ? "Pause playback" : "Play Hi-Res tracks in order")
             
             Button(action: shufflePlaybackHiRes) {
                 Image(systemName: "shuffle")
                     .font(.system(size: 12, weight: .semibold))
-                    .frame(width: 34, height: 34)
+                    .frame(width: 38, height: 38)
                     .foregroundStyle(WalkmanTheme.silverLight)
             }
-            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 17))
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
             .disabled(displayedTracks.isEmpty)
             .help("Shuffle Hi-Res tracks")
         }
@@ -654,20 +653,49 @@ public struct HiResAudioView: View {
     private var trackCountPill: some View {
         HStack(spacing: 5) {
             Image(systemName: countPillIcon)
-                .font(.system(size: 10, weight: .bold))
+                .font(.system(size: 11.5, weight: .bold))
                 .foregroundStyle(WalkmanTheme.hiResGold)
             Text(countPillText)
-                .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                .font(.system(size: 12.5, weight: .medium, design: .monospaced))
                 .foregroundStyle(WalkmanTheme.hiResGoldLight)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(WalkmanTheme.hiResGold.opacity(0.08))
+        .padding(.horizontal, 14)
+        .frame(height: 38)
+        .background(
+            ZStack {
+                WalkmanTheme.hiResGold.opacity(0.08)
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(0.10), location: 0.0),
+                            .init(color: .clear, location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 8)
+                    Spacer(minLength: 0)
+                }
+            }
+        )
         .clipShape(Capsule())
         .overlay(
             Capsule()
-                .stroke(WalkmanTheme.hiResGold.opacity(0.24), lineWidth: 0.8)
+                .stroke(
+                    LinearGradient(
+                        stops: [
+                            .init(color: WalkmanTheme.hiResGold.opacity(0.45), location: 0.0),
+                            .init(color: WalkmanTheme.hiResGold.opacity(0.20), location: 0.5),
+                            .init(color: WalkmanTheme.hiResGold.opacity(0.0),  location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 0.8
+                )
         )
+        .shadow(color: Color.black.opacity(0.10), radius: 2, x: 0, y: 1)
+        .fixedSize(horizontal: true, vertical: false)
     }
     
     private var countPillIcon: String {
@@ -1001,6 +1029,7 @@ private struct HiResSegmentedBarView: View {
             }
         }
         .padding(3)
+        .frame(height: 38)
         .background(Color.white.opacity(0.04))
         .clipShape(Capsule())
         .overlay(
@@ -1046,7 +1075,7 @@ private struct HiResTabPillView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 7)
-            .frame(minHeight: 32)
+            .frame(height: 32)
             .fixedSize(horizontal: true, vertical: false)
             .foregroundStyle(
                 isSelected ?
