@@ -500,7 +500,7 @@ public struct AlbumsView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7.5)
-        .frame(minHeight: 36)
+        .frame(height: 38)
         .background(
             ZStack {
                 Color.white.opacity(0.06)
@@ -543,22 +543,52 @@ public struct AlbumsView: View {
     }
     
     private var albumCountPill: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 6) {
             Image(systemName: "square.stack")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 11.5, weight: .semibold))
                 .foregroundStyle(WalkmanTheme.silverMuted)
             Text(displayedAlbums.count == 1 ? "1 Album" : "\(displayedAlbums.count.formatted()) Albums")
-                .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                .font(.system(size: 12.5, weight: .medium, design: .monospaced))
                 .foregroundStyle(WalkmanTheme.silverLight)
+                .lineLimit(1)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color.white.opacity(0.04))
+        .padding(.horizontal, 14)
+        .frame(height: 38)
+        .background(
+            ZStack {
+                Color.white.opacity(0.04)
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(0.12), location: 0.0),
+                            .init(color: .clear, location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 6)
+                    Spacer(minLength: 0)
+                }
+            }
+        )
         .clipShape(Capsule())
         .overlay(
             Capsule()
-                .stroke(Color.white.opacity(0.08), lineWidth: 0.8)
+                .stroke(
+                    LinearGradient(
+                        stops: [
+                            .init(color: Color.white.opacity(0.20), location: 0.0),
+                            .init(color: Color.white.opacity(0.08), location: 0.5),
+                            .init(color: Color.clear, location: 1.0)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.85
+                )
         )
+        .shadow(color: Color.black.opacity(0.10), radius: 2, x: 0, y: 1)
+        .fixedSize(horizontal: true, vertical: false)
     }
     
     private var emptyStateView: some View {
@@ -743,6 +773,7 @@ private struct AlbumFormatSegmentedBarView: View {
             }
         }
         .padding(3)
+        .frame(height: 38)
         .background(Color.white.opacity(0.04))
         .clipShape(Capsule())
         .overlay(
@@ -788,7 +819,7 @@ private struct AlbumFormatTabPillView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 7)
-            .frame(minHeight: 32)
+            .frame(height: 32)
             .fixedSize(horizontal: true, vertical: false)
             .foregroundStyle(
                 isSelected ?
