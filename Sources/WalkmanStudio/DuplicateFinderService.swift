@@ -190,10 +190,10 @@ public struct DuplicateGroup: Identifiable, Hashable, Sendable {
 }
 
 public enum DuplicateFilter: String, CaseIterable, Identifiable, Sendable {
-    case all = "All Duplicates"
-    case crossDrive = "Cross-Drive (Internal vs SD)"
-    case qualityDifference = "Quality Discrepancy"
     case sameDrive = "Same Storage"
+    case qualityDifference = "Quality Diff"
+
+    public static var all: DuplicateFilter { .sameDrive }
 
     public var id: String { rawValue }
 }
@@ -768,99 +768,6 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
             }
         }
 
-        // MARK: - Phase 2: Cross-Drive Duplicates (Internal Flash vs MicroSD)
-        var crossDriveTitleArtistBuckets: [String: [Track]] = [:]
-        for track in tracks where !assignedPaths.contains(track.fullPath) {
-            let tKey = normalizeTitle(track.title.isEmpty ? track.filename : track.title)
-            let aKey = normalizeArtist(track.artist)
-            guard !tKey.isEmpty else { continue }
-            // Safety: Disallow cross-drive grouping for unknown artist or generic titles
-            guard !aKey.isEmpty, !isGenericOrAmbiguousTitle(tKey) else { continue }
-            crossDriveTitleArtistBuckets["\(tKey)::\(aKey)", default: []].append(track)
-        }
-
-        for (_, bucket) in crossDriveTitleArtistBuckets {
-            let unassigned = bucket.filter { !assignedPaths.contains($0.fullPath) }
-            guard unassigned.count > 1 else { continue }
-
-            let internalTracks = unassigned.filter { resolveDrive(for: $0).type == .internal }
-            let sdTracks = unassigned.filter { resolveDrive(for: $0).type == .microsd }
-            guard !internalTracks.isEmpty && !sdTracks.isEmpty else { continue }
-
-            for intTrack in internalTracks {
-                guard !assignedPaths.contains(intTrack.fullPath) else { continue }
-                let intVer = extractVersionTag(from: "\(intTrack.title) \(intTrack.album) \(intTrack.fullPath)")
-
-                let matches = sdTracks.filter { sdTrack in
-                    guard !assignedPaths.contains(sdTrack.fullPath) else { return false }
-                    let sdVer = extractVersionTag(from: "\(sdTrack.title) \(sdTrack.album) \(sdTrack.fullPath)")
-                    guard intVer == sdVer else { return false }
-
-                    // Tier 1a: FLAC Stream MD5 verification
-                    var isConfirmedMatch = false
-                    if intTrack.format.uppercased() == "FLAC" && sdTrack.format.uppercased() == "FLAC" {
-                        let md5A = flacMd5Cache[intTrack.fullPath] ?? readFLACAudioStreamMD5(at: intTrack.fullPath)
-                        let md5B = flacMd5Cache[sdTrack.fullPath] ?? readFLACAudioStreamMD5(at: sdTrack.fullPath)
-                        if let a = md5A { flacMd5Cache[intTrack.fullPath] = a }
-                        if let b = md5B { flacMd5Cache[sdTrack.fullPath] = b }
-                        if let a = md5A, let b = md5B, a == b {
-                            isConfirmedMatch = true
-                        }
-                    }
-
-                    // Tier 1b: ISRC tag verification
-                    if !isConfirmedMatch {
-                        let isrcA = isrcCache[intTrack.fullPath] ?? readFastISRC(at: intTrack.fullPath, format: intTrack.format)
-                        let isrcB = isrcCache[sdTrack.fullPath] ?? readFastISRC(at: sdTrack.fullPath, format: sdTrack.format)
-                        if let a = isrcA { isrcCache[intTrack.fullPath] = a }
-                        if let b = isrcB { isrcCache[sdTrack.fullPath] = b }
-                        if let a = isrcA, let b = isrcB, !a.isEmpty, !b.isEmpty {
-                            if a == b {
-                                isConfirmedMatch = true
-                            } else {
-                                return false // Different official recordings
-                            }
-                        }
-                    }
-
-                    // In .exactSameAlbum mode, if audio hash / ISRC did not verify bit-exact identity,
-                    // the tracks MUST belong to the same album release to prevent deleting studio tracks!
-                    if !isConfirmedMatch && scope == .exactSameAlbum {
-                        let albA = normalizeAlbum(intTrack.album)
-                        let albB = normalizeAlbum(sdTrack.album)
-                        guard !albA.isEmpty, !albB.isEmpty, albA == albB else { return false }
-                    }
-
-                    // Tier 2: Duration check
-                    if intTrack.durationSeconds > 0 && sdTrack.durationSeconds > 0 {
-                        guard abs(intTrack.durationSeconds - sdTrack.durationSeconds) <= 1.5 else { return false }
-                    } else if !isConfirmedMatch {
-                        return false // Disallow unverified duration-less matches
-                    }
-
-                    // Tier 2: SenseMe Acoustic Correlation
-                    return areAcousticallyCorrelated(trackA: intTrack, trackB: sdTrack)
-                }
-
-                if !matches.isEmpty {
-                    let cluster = [intTrack] + matches
-                    for tr in cluster { assignedPaths.insert(tr.fullPath) }
-                    let items = cluster.map { makeItem($0) }
-                    let cleanTitle = intTrack.title.isEmpty ? intTrack.filename : intTrack.title
-                    let cleanArtist = intTrack.primaryArtist.isEmpty ? "Unknown Artist" : intTrack.primaryArtist
-                    let groupId = "cross::\(intTrack.fullPath)::\(cluster.count)"
-                    results.append(DuplicateGroup(
-                        id: groupId,
-                        title: cleanTitle,
-                        artist: cleanArtist,
-                        album: intTrack.album,
-                        matchReason: .crossDrive,
-                        items: items
-                    ))
-                }
-            }
-        }
-
         // MARK: - Phase 3: Same-Drive, Same-Album Duplicates
         var sameAlbumBuckets: [String: [Track]] = [:]
         for track in tracks where !assignedPaths.contains(track.fullPath) {
@@ -1053,7 +960,7 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
             }
         }
 
-        // MARK: - Phase 6: Cross-Album Match (Only in .crossAlbum Scope)
+        // MARK: - Phase 6: Cross-Album Match (Only in .crossAlbum Scope, Same Storage)
         if scope == .crossAlbum {
             var crossAlbumBuckets: [String: [Track]] = [:]
             for track in tracks where !assignedPaths.contains(track.fullPath) {
@@ -1061,7 +968,8 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
                 let aKey = normalizeArtist(track.artist)
                 guard !tKey.isEmpty else { continue }
                 if aKey.isEmpty && isGenericOrAmbiguousTitle(tKey) { continue }
-                crossAlbumBuckets["\(tKey)::\(aKey)", default: []].append(track)
+                let driveMount = resolveDrive(for: track).mountPoint
+                crossAlbumBuckets["\(driveMount)::\(tKey)::\(aKey)", default: []].append(track)
             }
 
             for (_, bucket) in crossAlbumBuckets {
