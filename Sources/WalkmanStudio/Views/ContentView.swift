@@ -19,6 +19,7 @@ public struct ContentView: View {
     @State private var showAboutSheet: Bool = false
     @State private var showManageFoldersSheet: Bool = false
     @State private var trackToEdit: Track? = nil
+    @State private var trackListToEdit: [Track] = []
     @State private var trackToTrimCut: Track? = nil
     @State private var albumToEdit: AlbumItem? = nil
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
@@ -69,6 +70,55 @@ public struct ContentView: View {
             return playing
         }
         return nil
+    }
+
+    private func getEditingTrackList(for track: Track) -> [Track] {
+        if !trackListToEdit.isEmpty && trackListToEdit.contains(where: { $0.id == track.id }) {
+            return trackListToEdit
+        }
+        
+        let pool = localLibrary.tracks.contains(where: { $0.id == track.id }) ? localLibrary.tracks : tracks
+
+        // If track belongs to an album, group all tracks for this album and sort by trackNum
+        let trimmedAlb = track.album.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedAlb.isEmpty {
+            if let found = cachedAlbums.first(where: { $0.name.localizedCaseInsensitiveCompare(trimmedAlb) == .orderedSame }) {
+                if found.tracks.contains(where: { $0.id == track.id }) || found.tracks.count > 1 {
+                    return found.tracks
+                }
+            }
+            if let found = LocalMusicLibraryService.shared.precomputedAlbums.first(where: { $0.name.localizedCaseInsensitiveCompare(trimmedAlb) == .orderedSame }) {
+                if found.tracks.contains(where: { $0.id == track.id }) || found.tracks.count > 1 {
+                    return found.tracks
+                }
+            }
+            let matching = pool.filter {
+                $0.album.trimmingCharacters(in: .whitespacesAndNewlines).localizedCaseInsensitiveCompare(trimmedAlb) == .orderedSame
+            }
+            if matching.count > 1 {
+                return matching.sorted {
+                    let num0 = Int($0.trackNum.components(separatedBy: "/").first ?? "0") ?? 0
+                    let num1 = Int($1.trackNum.components(separatedBy: "/").first ?? "0") ?? 0
+                    if num0 != num1 && num0 > 0 && num1 > 0 {
+                        return num0 < num1
+                    }
+                    return $0.title.localizedStandardCompare($1.title) == .orderedAscending
+                }
+            }
+        }
+
+        if selectedTab == .recentlyAdded {
+            return cachedRecentTracks.isEmpty ? tracks : cachedRecentTracks
+        }
+        if selectedTab == .hiRes {
+            return tracks.filter { $0.bitsPerSample > 16 || $0.sampleRate > 48000 }
+        }
+        return pool
+    }
+
+    private var editingTrackList: [Track] {
+        guard let track = trackToEdit else { return [] }
+        return getEditingTrackList(for: track)
     }
     
     private func selectDevice(_ device: WalkmanDevice) {
@@ -438,11 +488,31 @@ public struct ContentView: View {
                     .font(.system(size: 22, weight: .bold))
                     .foregroundStyle(.white)
                 
-                Text("Plug in your Sony Walkman via USB cable and ensure USB Mass Storage mode is enabled on the player.")
+                Text("Plug in your Sony Walkman via USB cable or insert your MicroSD card. Both Sony OS and Android-based Walkmans are supported.")
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 440)
+            }
+            
+            if let usbDev = WalkmanUSBDetector.shared.connectedDevices.first(where: { $0.isAndroid }) {
+                VStack(spacing: 6) {
+                    HStack(spacing: 8) {
+                        WalkmanDeviceIconView(size: 28, modelName: usbDev.modelName, hasBackground: false)
+                        Text("\(usbDev.modelName) Connected via USB")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                    Text("For maximum transfer speeds, insert your MicroSD card directly into your Mac, or ensure File Transfer mode is active on your Walkman.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .frame(maxWidth: 440)
             }
             
             if let unsupported = WalkmanEngine.shared.lastUnsupportedModel {
@@ -450,11 +520,11 @@ public struct ContentView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(WalkmanTheme.hiResGold)
-                        Text("Unsupported Model: \(unsupported)")
+                        Text("Unrecognized Device: \(unsupported)")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(.white)
                     }
-                    Text("Walkman Studio is designed exclusively for non-Android Sony OS Walkmans. Android-based Walkmans use MTP and are not supported.")
+                    Text("Ensure your Sony Walkman or MicroSD card is properly formatted with a /Music/ or /MUSIC/ directory.")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -610,6 +680,10 @@ public struct ContentView: View {
                                 onEditTrack: { track in
                                     self.trackToEdit = track
                                 },
+                                onEditTrackWithList: { track, list in
+                                    self.trackListToEdit = list
+                                    self.trackToEdit = track
+                                },
                                 onTrimCutTrack: { track in
                                     self.trackToTrimCut = track
                                 },
@@ -708,6 +782,10 @@ public struct ContentView: View {
                                     onEditTrack: { track in
                                         self.trackToEdit = track
                                     },
+                                    onEditTrackWithList: { track, list in
+                                        self.trackListToEdit = list
+                                        self.trackToEdit = track
+                                    },
                                     onTrimCutTrack: { track in
                                         self.trackToTrimCut = track
                                     },
@@ -730,6 +808,10 @@ public struct ContentView: View {
                                     onEditTrack: { track in
                                         self.trackToEdit = track
                                     },
+                                    onEditTrackWithList: { track, list in
+                                        self.trackListToEdit = list
+                                        self.trackToEdit = track
+                                    },
                                     onTrimCutTrack: { track in
                                         self.trackToTrimCut = track
                                     }
@@ -748,6 +830,10 @@ public struct ContentView: View {
                                         self.albumToEdit = album
                                     },
                                     onEditTrack: { track in
+                                        self.trackToEdit = track
+                                    },
+                                    onEditTrackWithList: { track, list in
+                                        self.trackListToEdit = list
                                         self.trackToEdit = track
                                     },
                                     onTrimCutTrack: { track in
@@ -959,6 +1045,7 @@ public struct ContentView: View {
         .sheet(item: $trackToEdit) { track in
             SongMetadataEditorSheet(
                 track: track,
+                trackList: getEditingTrackList(for: track),
                 onSavedTrack: { updatedTrack in
                     if self.player.currentTrack?.id == updatedTrack.id {
                         self.player.updateTrackInfo(track: updatedTrack)
@@ -969,9 +1056,13 @@ public struct ContentView: View {
                         self.updateTracksInMemory([updatedTrack])
                         self.refreshLibrary()
                     }
+                    if let idx = self.trackListToEdit.firstIndex(where: { $0.id == updatedTrack.id }) {
+                        self.trackListToEdit[idx] = updatedTrack
+                    }
                 },
                 onDismiss: {
                     trackToEdit = nil
+                    trackListToEdit = []
                 }
             )
         }

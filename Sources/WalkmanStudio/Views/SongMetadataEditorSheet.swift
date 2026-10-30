@@ -2,7 +2,8 @@ import SwiftUI
 import AppKit
 
 public struct SongMetadataEditorSheet: View {
-    let track: Track
+    @State private var track: Track
+    @State private var trackList: [Track]
     let onSaved: () -> Void
     let onSavedTrack: ((Track) -> Void)?
     let onDismiss: () -> Void
@@ -67,20 +68,79 @@ public struct SongMetadataEditorSheet: View {
     @State private var showPermissionSheet: Bool = false
     @State private var isPermissionError: Bool = false
 
-    // Hover states for footer buttons
-    @State private var isCancelHovered: Bool = false
-    @State private var isSaveHovered: Bool = false
+    private let initialTrackList: [Track]
 
     public init(
         track: Track,
+        trackList: [Track] = [],
         onSaved: @escaping () -> Void = {},
         onSavedTrack: ((Track) -> Void)? = nil,
         onDismiss: @escaping () -> Void
     ) {
-        self.track = track
+        self._track = State(initialValue: track)
+        self.initialTrackList = trackList
+        let list = trackList.isEmpty ? [track] : trackList
+        self._trackList = State(initialValue: list)
         self.onSaved = onSaved
         self.onSavedTrack = onSavedTrack
         self.onDismiss = onDismiss
+    }
+
+    private var currentIndex: Int {
+        trackList.firstIndex(where: { $0.id == track.id }) ?? 0
+    }
+
+    private var canGoPrevious: Bool {
+        currentIndex > 0
+    }
+
+    private var canGoNext: Bool {
+        currentIndex < trackList.count - 1
+    }
+
+    private var isModified: Bool {
+        title != track.title ||
+        artist != track.artist ||
+        album != track.album ||
+        trackNumber != track.trackNum ||
+        year != track.year ||
+        genre != track.genre ||
+        isCoverArtModified ||
+        isLyricsModified
+    }
+
+    private func goToPreviousTrack() {
+        guard canGoPrevious && !isSaving else { return }
+        let prevIndex = currentIndex - 1
+        let prevTrack = trackList[prevIndex]
+        navigateToTrack(prevTrack)
+    }
+
+    private func goToNextTrack() {
+        guard canGoNext && !isSaving else { return }
+        let nextIndex = currentIndex + 1
+        let nextTrack = trackList[nextIndex]
+        navigateToTrack(nextTrack)
+    }
+
+    private func navigateToTrack(_ targetTrack: Track) {
+        if isModified {
+            saveAllChanges(dismissOnSuccess: false) {
+                switchTrack(to: targetTrack)
+            }
+        } else {
+            switchTrack(to: targetTrack)
+        }
+    }
+
+    private func switchTrack(to newTrack: Track) {
+        if player.isPlaying {
+            player.pause()
+        }
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+            self.track = newTrack
+            self.loadInitialData()
+        }
     }
 
     private func loadInitialData() {
@@ -90,6 +150,13 @@ public struct SongMetadataEditorSheet: View {
         trackNumber = track.trackNum
         year = track.year
         genre = track.genre
+
+        isCoverArtModified = false
+        isLyricsModified = false
+        statusMessage = nil
+        isError = false
+        lyricsStatusMessage = nil
+        lyricsErrorMessage = nil
 
         let url = URL(fileURLWithPath: track.fullPath)
 
@@ -332,12 +399,13 @@ public struct SongMetadataEditorSheet: View {
         }
     }
 
-    private func saveAllChanges() {
+    private func saveAllChanges(dismissOnSuccess: Bool = true, onCompletion: (() -> Void)? = nil) {
         guard !isSaving else { return }
         isSaving = true
         statusMessage = "Saving tags & artwork to Walkman..."
         isError = false
 
+        let currentTrack = self.track
         let saveTitle = self.title
         let saveArtist = self.artist
         let saveAlbum = self.album
@@ -349,7 +417,7 @@ public struct SongMetadataEditorSheet: View {
         let didLyricsChange = (lyricsDraft != (originalLyrics ?? ""))
 
         Task {
-            let url = URL(fileURLWithPath: track.fullPath)
+            let url = URL(fileURLWithPath: currentTrack.fullPath)
             do {
                 // 1. Write tags, embedded lyrics, and embedded artwork
                 try AudioTagger.shared.writeMetadata(
@@ -374,21 +442,21 @@ public struct SongMetadataEditorSheet: View {
                     try? WalkmanEngine.shared.writeCompanionLyrics(
                         destinationAudioURL: url,
                         lyrics: saveLyricsText,
-                        durationSeconds: track.durationSeconds
+                        durationSeconds: currentTrack.durationSeconds
                     )
                 }
 
                 // 3. Invalidate & update caches
                 AudioTagger.shared.invalidateCaches(fileURL: url)
-                CoverArtCache.shared.invalidate(forFullPath: track.fullPath, artist: track.primaryArtist, album: track.album)
-                CoverArtCache.shared.invalidate(forFullPath: track.fullPath, artist: saveArtist, album: saveAlbum)
+                CoverArtCache.shared.invalidate(forFullPath: currentTrack.fullPath, artist: currentTrack.primaryArtist, album: currentTrack.album)
+                CoverArtCache.shared.invalidate(forFullPath: currentTrack.fullPath, artist: saveArtist, album: saveAlbum)
                 if self.isCoverArtModified, let sc = saveCover, !sc.isEmpty, let newImg = NSImage(data: sc) {
-                    CoverArtCache.shared.storeThumbnail(newImg, forFullPath: track.fullPath, artist: saveArtist, album: saveAlbum)
+                    CoverArtCache.shared.storeThumbnail(newImg, forFullPath: currentTrack.fullPath, artist: saveArtist, album: saveAlbum)
                 }
                 
-                let hasArt = self.isCoverArtModified ? (saveCover != nil && !saveCover!.isEmpty) : track.hasArtwork
+                let hasArt = self.isCoverArtModified ? (saveCover != nil && !saveCover!.isEmpty) : currentTrack.hasArtwork
                 LibraryScanner.shared.updateTrackInCache(
-                    fullPath: track.fullPath,
+                    fullPath: currentTrack.fullPath,
                     title: saveTitle,
                     artist: saveArtist,
                     album: saveAlbum,
@@ -398,7 +466,7 @@ public struct SongMetadataEditorSheet: View {
                     hasArtwork: hasArt
                 )
 
-                var updatedTrack = track
+                var updatedTrack = currentTrack
                 updatedTrack.title = saveTitle
                 updatedTrack.artist = saveArtist
                 updatedTrack.album = saveAlbum
@@ -422,17 +490,25 @@ public struct SongMetadataEditorSheet: View {
                     self.isSaving = false
                     self.statusMessage = "Saved successfully!"
                     self.isError = false
+                    self.track = updatedTrack
+                    if let idx = self.trackList.firstIndex(where: { $0.id == updatedTrack.id }) {
+                        self.trackList[idx] = updatedTrack
+                    }
                     self.onSavedTrack?(updatedTrack)
                     self.onSaved()
 
                     NotificationCenter.default.post(
                         name: .trackMetadataDidUpdate,
                         object: nil,
-                        userInfo: ["trackId": track.id, "track": updatedTrack]
+                        userInfo: ["trackId": currentTrack.id, "track": updatedTrack]
                     )
 
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                        self.onDismiss()
+                    if dismissOnSuccess {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            self.onDismiss()
+                        }
+                    } else {
+                        onCompletion?()
                     }
                 }
             } catch {
@@ -497,7 +573,7 @@ public struct SongMetadataEditorSheet: View {
                         lyricsTab
                     }
                 }
-                .padding(.horizontal, 22)
+                .padding(.horizontal, 24)
                 .padding(.vertical, 10)
             }
 
@@ -508,46 +584,7 @@ public struct SongMetadataEditorSheet: View {
             footerBar
         }
         .frame(minWidth: 960, idealWidth: 1040, maxWidth: 1160, minHeight: 660, idealHeight: 740, maxHeight: 860)
-        .background(
-            ZStack {
-                WalkmanTheme.card.opacity(0.88)
-                    .background(.ultraThinMaterial)
-
-                // Top specular refraction sheen
-                VStack(spacing: 0) {
-                    LinearGradient(
-                        stops: [
-                            .init(color: .white.opacity(0.20), location: 0.0),
-                            .init(color: .white.opacity(0.04), location: 0.5),
-                            .init(color: .clear, location: 1.0)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 7)
-                    Spacer(minLength: 0)
-                }
-            }
-            .ignoresSafeArea()
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(
-                    LinearGradient(
-                        stops: [
-                            .init(color: .white.opacity(0.18), location: 0.0),
-                            .init(color: .white.opacity(0.08), location: 0.5),
-                            .init(color: .white.opacity(0.05), location: 1.0)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: 0.85
-                )
-                .allowsHitTesting(false)
-        )
-        .shadow(color: Color.black.opacity(0.45), radius: 24, x: 0, y: 10)
+        .modalGlassChassis(cornerRadius: 16)
         .sheet(isPresented: $showTrimCutSheet) {
             TrimAndCutSheet(
                 track: track,
@@ -566,7 +603,7 @@ public struct SongMetadataEditorSheet: View {
                 onGranted: {
                     showPermissionSheet = false
                     isPermissionError = false
-                    saveAllChanges()
+                    saveAllChanges(dismissOnSuccess: true)
                 },
                 onDismiss: {
                     showPermissionSheet = false
@@ -574,6 +611,9 @@ public struct SongMetadataEditorSheet: View {
             )
         }
         .onAppear {
+            if self.trackList.count <= 1 && self.initialTrackList.count > 1 {
+                self.trackList = self.initialTrackList
+            }
             loadInitialData()
         }
     }
@@ -581,21 +621,28 @@ public struct SongMetadataEditorSheet: View {
     // MARK: - Header Bar
     private var headerBar: some View {
         HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(WalkmanTheme.silverGradient)
-                    .frame(width: 30, height: 30)
+            LiquidGlassIconBadge(icon: "music.note", size: 32)
 
-                Image(systemName: "music.note")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-            }
-            .shadow(color: Color.black.opacity(0.20), radius: 3, y: 1)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 8) {
+                    Text("Song Metadata Editor")
+                        .font(WalkmanFont.title3)
+                        .foregroundStyle(.white)
 
-            VStack(alignment: .leading, spacing: 1.5) {
-                Text("Song Metadata Editor")
-                    .font(WalkmanFont.title3)
-                    .foregroundStyle(.white)
+                    if trackList.count > 1 {
+                        Text("\(currentIndex + 1) of \(trackList.count)")
+                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(WalkmanTheme.silverLight)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .stroke(Color.white.opacity(0.12), lineWidth: 0.8)
+                            )
+                    }
+                }
 
                 Text(track.filename)
                     .font(WalkmanFont.monoSmall)
@@ -607,9 +654,9 @@ public struct SongMetadataEditorSheet: View {
 
             SheetCloseButton(action: onDismiss)
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 22)
         .padding(.top, 14)
-        .padding(.bottom, 10)
+        .padding(.bottom, 12)
     }
 
     // MARK: - Hero Summary Card
@@ -625,6 +672,7 @@ public struct SongMetadataEditorSheet: View {
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 } else {
                     TrackCoverThumbnail(track: track, size: 60)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
             }
             .overlay(
@@ -637,21 +685,11 @@ public struct SongMetadataEditorSheet: View {
                 HStack(spacing: 7) {
                     Text(title.isEmpty ? track.filename : title)
                         .font(.system(size: 15.5, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(WalkmanTheme.silverLight)
                         .lineLimit(1)
 
                     if isHiRes {
-                        Text("Hi-Res")
-                            .font(WalkmanFont.badge)
-                            .padding(.horizontal, 5.5)
-                            .padding(.vertical, 2)
-                            .background(WalkmanTheme.hiResGoldGradient)
-                            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                            .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                    .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
-                            )
+                        HiResBadge()
                             .fixedSize()
                     }
                 }
@@ -660,7 +698,7 @@ public struct SongMetadataEditorSheet: View {
                 let dispAlbum = album.isEmpty ? track.album : album
                 Text("\(dispArtist) — \(dispAlbum)")
                     .font(WalkmanFont.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(WalkmanTheme.silverMuted)
                     .lineLimit(1)
 
                 HStack(spacing: 6) {
@@ -669,19 +707,19 @@ public struct SongMetadataEditorSheet: View {
                         .padding(.horizontal, 5)
                         .padding(.vertical, 2)
                         .background(Color.white.opacity(0.08))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(WalkmanTheme.silverLight)
                         .clipShape(RoundedRectangle(cornerRadius: 3))
 
                     Text(formatDuration(track.durationSeconds))
                         .font(WalkmanFont.monoSmall)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
 
                     Text("•")
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color.white.opacity(0.20))
 
                     Text(track.bitrateKbps > 0 ? "\(track.bitrateKbps) kbps" : "Lossless")
                         .font(WalkmanFont.monoSmall)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
                 }
             }
 
@@ -690,28 +728,41 @@ public struct SongMetadataEditorSheet: View {
             // Actions: Preview & Trim & Cut
             HStack(spacing: 10) {
                 let isThisPlaying = (player.currentTrack?.id == track.id && player.isPlaying)
-                LiquidGlassActionButton(
-                    icon: isThisPlaying ? "pause.fill" : "play.fill",
-                    label: isThisPlaying ? "Playing" : "Preview",
-                    isProminent: isThisPlaying,
-                    action: {
-                        if isThisPlaying {
-                            player.pause()
-                        } else {
-                            player.play(track: track)
-                        }
+                Button(action: {
+                    if isThisPlaying {
+                        player.pause()
+                    } else {
+                        player.play(track: track)
                     }
-                )
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: isThisPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 11.5, weight: .bold))
+                        Text(isThisPlaying ? "Playing" : "Preview")
+                            .font(WalkmanFont.calloutBold)
+                    }
+                    .foregroundStyle(isThisPlaying ? Color(red: 20/255, green: 20/255, blue: 24/255) : WalkmanTheme.silverLight)
+                    .padding(.horizontal, 14)
+                    .frame(height: 32)
+                }
+                .buttonStyle(LiquidGlassButtonStyle(variant: isThisPlaying ? .prominent : .glass, cornerRadius: 16))
 
-                LiquidGlassActionButton(
-                    icon: "scissors",
-                    label: "Trim & Cut...",
-                    action: { showTrimCutSheet = true }
-                )
+                Button(action: { showTrimCutSheet = true }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "scissors")
+                            .font(.system(size: 11.5, weight: .bold))
+                        Text("Trim & Cut...")
+                            .font(WalkmanFont.calloutBold)
+                    }
+                    .foregroundStyle(WalkmanTheme.silverLight)
+                    .padding(.horizontal, 14)
+                    .frame(height: 32)
+                }
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 16))
             }
         }
         .padding(14)
-        .liquidGlass(cornerRadius: 12, borderOpacity: 0.28)
+        .studioGlassCard(cornerRadius: 14)
         .padding(.horizontal, 20)
         .padding(.top, 10)
     }
@@ -719,38 +770,42 @@ public struct SongMetadataEditorSheet: View {
     // MARK: - Tags & Specs Tab
     private var tagsAndSpecsTab: some View {
         VStack(alignment: .leading, spacing: 14) {
-            // Action to fetch online info
-            HStack {
-                Text("SONG TAGS")
-                    .font(WalkmanFont.sectionHeader)
-                    .foregroundStyle(.tertiary)
+            // Song Tags & Metadata Card
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("SONG TAGS & METADATA")
+                        .font(WalkmanFont.sectionHeader)
+                        .foregroundStyle(.tertiary)
 
-                Spacer()
+                    Spacer()
 
-                LiquidGlassActionButton(
-                    icon: isFetchingOnlineInfo ? "arrow.triangle.2.circlepath" : "sparkles",
-                    label: isFetchingOnlineInfo ? "Matching..." : "Auto-Fill Online Info",
-                    isDisabled: isFetchingOnlineInfo,
-                    action: fetchOnlineMetadataInfo
-                )
-                .help("Query iTunes and Deezer databases to auto-populate title, artist, album, year, and genre")
-            }
-
-            // Input Fields Grid
-            VStack(spacing: 10) {
-                EditorField(label: "Title", text: $title)
-
-                HStack(spacing: 12) {
-                    EditorField(label: "Artist", text: $artist)
-                    EditorField(label: "Album", text: $album)
+                    LiquidGlassActionButton(
+                        icon: isFetchingOnlineInfo ? "arrow.triangle.2.circlepath" : "sparkles",
+                        label: isFetchingOnlineInfo ? "Matching..." : "Auto-Fill Online Info",
+                        isDisabled: isFetchingOnlineInfo,
+                        action: fetchOnlineMetadataInfo
+                    )
+                    .help("Query iTunes and Deezer databases to auto-populate title, artist, album, year, and genre")
                 }
 
-                HStack(spacing: 12) {
-                    EditorField(label: "Track #", text: $trackNumber)
-                    EditorField(label: "Year", text: $year)
-                    EditorField(label: "Genre", text: $genre)
+                // Input Fields Grid
+                VStack(spacing: 10) {
+                    EditorField(label: "Title", text: $title)
+
+                    HStack(spacing: 12) {
+                        EditorField(label: "Artist", text: $artist)
+                        EditorField(label: "Album", text: $album)
+                    }
+
+                    HStack(spacing: 12) {
+                        EditorField(label: "Track #", text: $trackNumber)
+                        EditorField(label: "Year", text: $year)
+                        EditorField(label: "Genre", text: $genre)
+                    }
                 }
             }
+            .padding(16)
+            .studioGlassCard(cornerRadius: 14)
 
             // SONY 12 TONE / SENSEME
             VStack(alignment: .leading, spacing: 8) {
@@ -774,11 +829,11 @@ public struct SongMetadataEditorSheet: View {
                 HStack(spacing: 12) {
                     ZStack {
                         Circle()
-                            .fill(isSenseMeAnalyzed ? Color(red: 255/255, green: 145/255, blue: 0/255).opacity(0.18) : Color.white.opacity(0.04))
+                            .fill(Color.white.opacity(isSenseMeAnalyzed ? 0.12 : 0.05))
                             .frame(width: 32, height: 32)
                         Image(systemName: isSenseMeAnalyzed ? "checkmark.circle.fill" : (isAnalyzingSenseMe ? "arrow.triangle.2.circlepath" : "circle.dashed"))
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(isSenseMeAnalyzed ? Color(red: 255/255, green: 185/255, blue: 50/255) : Color.white.opacity(0.3))
+                            .foregroundStyle(isSenseMeAnalyzed ? WalkmanTheme.silverLight : Color.white.opacity(0.3))
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
@@ -801,9 +856,9 @@ public struct SongMetadataEditorSheet: View {
                         }
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(Capsule().fill(Color(red: 255/255, green: 145/255, blue: 0/255).opacity(0.18)))
-                        .overlay(Capsule().stroke(Color(red: 255/255, green: 165/255, blue: 30/255).opacity(0.55), lineWidth: 0.8))
-                        .foregroundStyle(Color(red: 255/255, green: 195/255, blue: 80/255))
+                        .background(Capsule().fill(Color.white.opacity(0.08)))
+                        .overlay(Capsule().stroke(Color.white.opacity(0.20), lineWidth: 0.8))
+                        .foregroundStyle(WalkmanTheme.silverLight)
                     } else if !isAnalyzingSenseMe {
                         Text("NOT ANALYZED")
                             .font(WalkmanFont.badge)
@@ -814,7 +869,7 @@ public struct SongMetadataEditorSheet: View {
                     }
                 }
                 .padding(12)
-                .liquidGlass(cornerRadius: 10, borderOpacity: 0.22)
+                .studioGlassCard(cornerRadius: 12)
             }
 
             // Audio Specs Card
@@ -842,7 +897,7 @@ public struct SongMetadataEditorSheet: View {
                     }
                 }
                 .padding(12)
-                .liquidGlass(cornerRadius: 10, borderOpacity: 0.22)
+                .studioGlassCard(cornerRadius: 12)
             }
         }
     }
@@ -955,7 +1010,7 @@ public struct SongMetadataEditorSheet: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .padding(12)
-                    .liquidGlass(cornerRadius: 10, borderOpacity: 0.22)
+                    .studioGlassCard(cornerRadius: 12)
 
                     // Action buttons
                     VStack(alignment: .leading, spacing: 8) {
@@ -1100,6 +1155,57 @@ public struct SongMetadataEditorSheet: View {
     // MARK: - Footer Bar
     private var footerBar: some View {
         HStack(spacing: 12) {
+            // Previous & Next Navigation Buttons on the bottom left
+            if trackList.count > 1 {
+                HStack(spacing: 6) {
+                    Button(action: goToPreviousTrack) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 11, weight: .bold))
+                            Text("Previous")
+                                .font(WalkmanFont.calloutMedium)
+                        }
+                        .foregroundStyle(canGoPrevious ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted.opacity(0.35))
+                        .padding(.horizontal, 12)
+                        .frame(height: 36)
+                    }
+                    .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 18))
+                    .disabled(!canGoPrevious || isSaving)
+                    .opacity(canGoPrevious ? 1.0 : 0.45)
+                    .help(canGoPrevious ? "Previous Track (⌘[)" : "First Track in Album")
+                    .keyboardShortcut("[", modifiers: [.command])
+
+                    Button(action: goToNextTrack) {
+                        HStack(spacing: 5) {
+                            Text("Next")
+                                .font(WalkmanFont.calloutMedium)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 11, weight: .bold))
+                        }
+                        .foregroundStyle(canGoNext ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted.opacity(0.35))
+                        .padding(.horizontal, 12)
+                        .frame(height: 36)
+                    }
+                    .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 18))
+                    .disabled(!canGoNext || isSaving)
+                    .opacity(canGoNext ? 1.0 : 0.45)
+                    .help(canGoNext ? "Next Track (⌘])" : "Last Track in Album")
+                    .keyboardShortcut("]", modifiers: [.command])
+
+                    Text("\(currentIndex + 1) of \(trackList.count)")
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 4)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule()
+                                .stroke(Color.white.opacity(0.12), lineWidth: 0.8)
+                        )
+                }
+            }
+
             // Status message
             if let msg = statusMessage {
                 HStack(spacing: 6) {
@@ -1134,32 +1240,22 @@ public struct SongMetadataEditorSheet: View {
 
             Spacer()
 
-            Button("Cancel") {
-                onDismiss()
+            Button(action: onDismiss) {
+                Text("Cancel")
+                    .font(WalkmanFont.calloutBold)
+                    .foregroundStyle(WalkmanTheme.silverLight)
+                    .padding(.horizontal, 22)
+                    .frame(height: 38)
             }
-            .font(WalkmanFont.calloutMedium)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 8.5)
-            .background(Color.white.opacity(isCancelHovered ? 0.12 : 0.06))
-            .clipShape(Capsule())
-            .overlay(
-                Capsule()
-                    .stroke(Color.white.opacity(isCancelHovered ? 0.22 : 0.10), lineWidth: 0.8)
-            )
-            .foregroundStyle(isCancelHovered ? .white : WalkmanTheme.silverLight)
-            .buttonStyle(.plain)
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
             .disabled(isSaving)
-            .onHover { h in
-                withAnimation(.spring(response: 0.22, dampingFraction: 0.72)) {
-                    isCancelHovered = h
-                }
-                if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-            }
+            .keyboardShortcut(.cancelAction)
 
-            Button(action: saveAllChanges) {
+            Button(action: { saveAllChanges(dismissOnSuccess: true) }) {
                 HStack(spacing: 7) {
                     if isSaving {
                         ProgressView()
+                            .controlSize(.small)
                             .scaleEffect(0.65)
                             .frame(width: 14, height: 14)
                         Text("Saving...")
@@ -1170,44 +1266,13 @@ public struct SongMetadataEditorSheet: View {
                     }
                 }
                 .font(WalkmanFont.headline)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 9.5)
-                .background(
-                    ZStack {
-                        WalkmanTheme.silverGradient
-                        VStack(spacing: 0) {
-                            LinearGradient(
-                                stops: [
-                                    .init(color: .white.opacity(0.40), location: 0.0),
-                                    .init(color: .clear, location: 1.0)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                            .frame(height: 5.5)
-                            Spacer(minLength: 0)
-                        }
-                        .clipShape(Capsule())
-                    }
-                )
                 .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                .clipShape(Capsule())
-                .overlay(
-                    Capsule()
-                        .stroke(Color.white.opacity(0.4), lineWidth: 0.8)
-                )
-                .shadow(color: Color.black.opacity(isSaveHovered ? 0.35 : 0.20), radius: isSaveHovered ? 4 : 2, y: 1.5)
-                .scaleEffect(isSaveHovered && !isSaving ? 1.03 : 1.0)
+                .padding(.horizontal, 24)
+                .frame(height: 38)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 19))
             .disabled(isSaving)
             .keyboardShortcut(.defaultAction)
-            .onHover { h in
-                withAnimation(.spring(response: 0.20, dampingFraction: 0.70)) {
-                    isSaveHovered = h
-                }
-                if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-            }
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 14)
@@ -1221,27 +1286,27 @@ private struct EditorSegmentedBar: View {
     @Namespace private var tabNamespace
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
             ForEach(SongMetadataEditorSheet.EditorTab.allCases) { tab in
                 EditorTabButton(
                     tab: tab,
                     isSelected: selectedTab == tab,
                     namespace: tabNamespace,
                     action: {
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
-                            selectedTab = tab
-                        }
+                        selectedTab = tab
                     }
                 )
             }
         }
-        .padding(4)
+        .padding(3)
+        .frame(height: 38)
         .background(Color.white.opacity(0.04))
         .clipShape(Capsule())
         .overlay(
             Capsule()
                 .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
         )
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
 
@@ -1255,27 +1320,28 @@ private struct EditorTabButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 7) {
+            HStack(spacing: 6) {
                 Image(systemName: tab.icon)
-                    .font(.system(size: 12.5, weight: isSelected ? .semibold : .medium))
+                    .font(.system(size: 11.5, weight: isSelected ? .bold : .medium))
                 Text(tab.rawValue)
-                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                    .font(.system(size: 12.5, weight: isSelected ? .bold : .medium))
+                    .lineLimit(1)
             }
-            .foregroundStyle(isSelected ? Color.white : (isHovered ? Color.white : Color.white.opacity(0.65)))
-            .padding(.horizontal, 18)
-            .padding(.vertical, 8)
+            .foregroundStyle(isSelected ? Color.white : (isHovered ? Color.white : Color.white.opacity(0.70)))
+            .padding(.horizontal, 16)
+            .frame(height: 32)
             .background(
                 ZStack {
                     if isSelected {
                         Capsule()
                             .fill(Color.white.opacity(0.16))
-                            .matchedGeometryEffect(id: "activeEditorTab", in: namespace)
+                            .matchedGeometryEffect(id: "activeEditorTabLens", in: namespace)
 
                         VStack(spacing: 0) {
                             LinearGradient(
                                 stops: [
-                                    .init(color: .white.opacity(0.35), location: 0.0),
-                                    .init(color: .clear, location: 1.0)
+                                    .init(color: Color.white.opacity(isHovered ? 0.42 : 0.35), location: 0.0),
+                                    .init(color: Color.clear, location: 1.0)
                                 ],
                                 startPoint: .top,
                                 endPoint: .bottom
@@ -1287,7 +1353,21 @@ private struct EditorTabButton: View {
                         .matchedGeometryEffect(id: "activeEditorTabSheen", in: namespace)
                     } else if isHovered {
                         Capsule()
-                            .fill(Color.white.opacity(0.08))
+                            .fill(Color.white.opacity(0.09))
+
+                        VStack(spacing: 0) {
+                            LinearGradient(
+                                stops: [
+                                    .init(color: Color.white.opacity(0.20), location: 0.0),
+                                    .init(color: Color.clear, location: 1.0)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .frame(height: 5.5)
+                            Spacer(minLength: 0)
+                        }
+                        .clipShape(Capsule())
                     }
                 }
             )
@@ -1295,13 +1375,16 @@ private struct EditorTabButton: View {
                 Group {
                     if isSelected {
                         Capsule()
-                            .stroke(Color.white.opacity(0.32), lineWidth: 0.85)
+                            .stroke(Color.white.opacity(isHovered ? 0.45 : 0.34), lineWidth: 0.85)
                             .matchedGeometryEffect(id: "activeEditorTabBorder", in: namespace)
+                    } else if isHovered {
+                        Capsule()
+                            .stroke(Color.white.opacity(0.22), lineWidth: 0.85)
                     }
                 }
             )
-            .shadow(color: isSelected ? Color.black.opacity(0.25) : Color.clear, radius: 3, y: 1)
-            .scaleEffect(isHovered && !isSelected ? 1.02 : 1.0)
+            .shadow(color: isSelected ? Color.black.opacity(0.25) : (isHovered ? Color.black.opacity(0.15) : Color.clear), radius: isSelected ? 3 : 2, y: 1)
+            .scaleEffect(isHovered && !isSelected ? 1.03 : 1.0)
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -1386,105 +1469,45 @@ private struct LiquidGlassActionButton: View {
     var isDisabled: Bool = false
     let action: () -> Void
 
-    @State private var isHovered: Bool = false
-
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
+            HStack(spacing: 5) {
                 Image(systemName: icon)
-                    .font(.system(size: 11.5, weight: .bold))
+                    .font(.system(size: 11, weight: .semibold))
                 Text(label)
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(WalkmanFont.calloutBold)
+                    .lineLimit(1)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 7.5)
-            .background(
-                ZStack {
-                    if isProminent {
-                        WalkmanTheme.silverGradient
-                    } else if isDestructive {
-                        Color.red.opacity(isHovered ? 0.22 : 0.12)
-                    } else {
-                        Color.white.opacity(isHovered ? 0.14 : 0.07)
-                    }
-
-                    if !isProminent {
-                        VStack(spacing: 0) {
-                            LinearGradient(
-                                stops: [
-                                    .init(color: .white.opacity(isHovered ? 0.25 : 0.12), location: 0.0),
-                                    .init(color: .clear, location: 1.0)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                            .frame(height: 5)
-                            Spacer(minLength: 0)
-                        }
-                        .clipShape(Capsule())
-                    }
-                }
-            )
-            .clipShape(Capsule())
-            .overlay(
-                Capsule()
-                    .stroke(
-                        isProminent ? Color.white.opacity(0.4) :
-                        (isDestructive ? Color.red.opacity(isHovered ? 0.4 : 0.2) :
-                        Color.white.opacity(isHovered ? 0.28 : 0.12)),
-                        lineWidth: 0.8
-                    )
-            )
             .foregroundStyle(
                 isProminent ? Color(red: 20/255, green: 20/255, blue: 24/255) :
-                (isDestructive ? Color(red: 255/255, green: 120/255, blue: 110/255) :
-                (isHovered ? Color.white : WalkmanTheme.silverLight))
+                (isDestructive ? Color.red.opacity(0.90) : WalkmanTheme.silverLight)
             )
-            .shadow(color: Color.black.opacity(isHovered ? 0.25 : 0.12), radius: isHovered ? 4 : 2, y: 1)
-            .scaleEffect(isHovered && !isDisabled ? 1.03 : 1.0)
+            .padding(.horizontal, 12)
+            .frame(height: 28)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(
+            LiquidGlassButtonStyle(
+                variant: isProminent ? .prominent : (isDestructive ? .destructive : .glass),
+                cornerRadius: 8
+            )
+        )
         .disabled(isDisabled)
-        .onHover { h in
-            guard !isDisabled else { return }
-            withAnimation(.spring(response: 0.22, dampingFraction: 0.72)) {
-                isHovered = h
-            }
-            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-        }
     }
 }
 
 private struct SheetCloseButton: View {
     let action: () -> Void
-    @State private var isHovered: Bool = false
 
     var body: some View {
         Button(action: action) {
-            ZStack {
-                Circle()
-                    .fill(Color.white.opacity(isHovered ? 0.14 : 0.07))
-                    .frame(width: 28, height: 28)
-
-                Circle()
-                    .stroke(Color.white.opacity(isHovered ? 0.25 : 0.12), lineWidth: 0.8)
-                    .frame(width: 28, height: 28)
-
-                Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(isHovered ? Color.white : Color.white.opacity(0.65))
-            }
-            .scaleEffect(isHovered ? 1.08 : 1.0)
+            Image(systemName: "xmark")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(WalkmanTheme.silverLight)
+                .frame(width: 28, height: 28)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 14))
         .keyboardShortcut(.cancelAction)
         .help("Close")
-        .onHover { h in
-            withAnimation(.spring(response: 0.20, dampingFraction: 0.70)) {
-                isHovered = h
-            }
-            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-        }
     }
 }
 

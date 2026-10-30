@@ -465,15 +465,22 @@ public struct BackupRestoreView: View {
 
     private func topBarTitleGroup(compactSubtitle: Bool) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
-                .font(.system(size: 20))
-                .foregroundStyle(WalkmanTheme.hiResGoldGradient)
-                .fixedSize()
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(0.08))
+                    .frame(width: 36, height: 36)
+                    .overlay(Circle().stroke(Color.white.opacity(0.14), lineWidth: 0.85))
+
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(WalkmanTheme.silverLight)
+            }
+            .shadow(color: Color.black.opacity(0.20), radius: 3, y: 1)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text("Backup & Restore")
                     .font(WalkmanFont.title2)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(WalkmanTheme.silverLight)
                     .lineLimit(1)
 
                 Text(compactSubtitle ? "Safeguard or restore your Walkman library locally or to external storage" : "Safeguard or restore your Walkman library locally to your Mac or direct to an external drive")
@@ -485,32 +492,18 @@ public struct BackupRestoreView: View {
     }
 
     private var topBarModeSwitcher: some View {
-        HStack(spacing: 4) {
-            ForEach(Mode.allCases) { mode in
-                ModeSwitcherTabButton(
-                    mode: mode,
-                    isSelected: selectedMode == mode,
-                    onSelect: {
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            selectedMode = mode
-                        }
-                        if mode == .restore {
-                            refreshDestinationsAsync()
-                        }
-                    }
-                )
+        BackupRestoreModeSegmentedBar(
+            selectedMode: $selectedMode,
+            disabled: isBackingUp || isRestoring,
+            onSelect: { mode in
+                withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+                    selectedMode = mode
+                }
+                if mode == .restore {
+                    refreshDestinationsAsync()
+                }
             }
-        }
-        .padding(3)
-        .background(Color.black.opacity(0.35))
-        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .stroke(WalkmanTheme.border, lineWidth: 1)
         )
-        .fixedSize(horizontal: true, vertical: false)
-        .disabled(isBackingUp || isRestoring)
-        .opacity((isBackingUp || isRestoring) ? 0.6 : 1.0)
     }
 
     // MARK: - BACKUP VIEW
@@ -540,7 +533,7 @@ public struct BackupRestoreView: View {
                 HStack {
                     Label("1. SOURCE WALKMAN PARTITION", systemImage: "hifispeaker.fill")
                         .font(WalkmanFont.sectionHeader)
-                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .foregroundStyle(WalkmanTheme.silverLight)
                         .lineLimit(1)
 
                     Spacer(minLength: 8)
@@ -555,7 +548,7 @@ public struct BackupRestoreView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Label("1. SOURCE WALKMAN PARTITION", systemImage: "hifispeaker.fill")
                         .font(WalkmanFont.sectionHeader)
-                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .foregroundStyle(WalkmanTheme.silverLight)
                         .lineLimit(1)
 
                     if let info = deviceInfo {
@@ -586,13 +579,7 @@ public struct BackupRestoreView: View {
                 }
             }
         }
-        .padding(16)
-        .background(WalkmanTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(WalkmanTheme.border, lineWidth: 1)
-        )
+        .backupRestoreGlassCard(cornerRadius: 14)
     }
 
     private func sourcePartitionDriveButton(drive: WalkmanDrive) -> some View {
@@ -603,7 +590,7 @@ public struct BackupRestoreView: View {
             HStack(spacing: 10) {
                 Image(systemName: drive.type == .internal ? "internaldrive.fill" : "sdcard.fill")
                     .font(.system(size: 18))
-                    .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : WalkmanTheme.silverMuted)
+                    .foregroundStyle(isSelected ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
                     .frame(width: 22)
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -618,8 +605,8 @@ public struct BackupRestoreView: View {
                             .font(WalkmanFont.badge)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(isSelected ? WalkmanTheme.hiResGold.opacity(0.18) : Color.white.opacity(0.06))
-                            .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : .secondary)
+                            .background(isSelected ? Color.white.opacity(0.12) : Color.white.opacity(0.06))
+                            .foregroundStyle(isSelected ? WalkmanTheme.silverLight : .secondary)
                             .clipShape(Capsule())
                             .lineLimit(1)
                             .fixedSize(horizontal: true, vertical: false)
@@ -636,8 +623,8 @@ public struct BackupRestoreView: View {
 
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 16))
-                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(WalkmanTheme.silverLight)
                         .fixedSize()
                 }
             }
@@ -649,7 +636,7 @@ public struct BackupRestoreView: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(isSelected ? WalkmanTheme.hiResGold.opacity(0.6) : WalkmanTheme.border, lineWidth: isSelected ? 1.5 : 1)
+                    .stroke(isSelected ? Color.white.opacity(0.35) : WalkmanTheme.border, lineWidth: isSelected ? 1.2 : 0.85)
             )
         }
         .buttonStyle(.plain)
@@ -662,7 +649,7 @@ public struct BackupRestoreView: View {
                 HStack {
                     Label("2. BACKUP SCOPE", systemImage: "square.grid.2x2.fill")
                         .font(WalkmanFont.sectionHeader)
-                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .foregroundStyle(WalkmanTheme.silverLight)
                         .lineLimit(1)
 
                     Spacer(minLength: 8)
@@ -672,7 +659,7 @@ public struct BackupRestoreView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Label("2. BACKUP SCOPE", systemImage: "square.grid.2x2.fill")
                         .font(WalkmanFont.sectionHeader)
-                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .foregroundStyle(WalkmanTheme.silverLight)
                         .lineLimit(1)
 
                     backupScopeSelectionPill
@@ -692,7 +679,7 @@ public struct BackupRestoreView: View {
                             Image(systemName: scope.icon)
                                 .font(.system(size: 15))
                                 .frame(width: 24)
-                                .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : WalkmanTheme.silverMuted)
+                                .foregroundStyle(isSelected ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(scope.title)
@@ -715,15 +702,11 @@ public struct BackupRestoreView: View {
                                         Text(selectedAlbumKeys.isEmpty ? "Select Albums..." : "\(selectedAlbumKeys.count) Albums")
                                     }
                                     .font(WalkmanFont.calloutBold)
+                                    .foregroundStyle(WalkmanTheme.silver)
                                     .padding(.horizontal, 10)
-                                    .padding(.vertical, 5)
-                                    .background(WalkmanTheme.silverGradient)
-                                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                    .lineLimit(1)
-                                    .fixedSize(horizontal: true, vertical: false)
+                                    .frame(height: 28)
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
                             } else if scope == .tracks {
                                 Button(action: { showTrackPickerSheet = true }) {
                                     HStack(spacing: 5) {
@@ -731,20 +714,16 @@ public struct BackupRestoreView: View {
                                         Text(selectedTrackPaths.isEmpty ? "Select Tracks..." : "\(selectedTrackPaths.count) Tracks")
                                     }
                                     .font(WalkmanFont.calloutBold)
+                                    .foregroundStyle(WalkmanTheme.silver)
                                     .padding(.horizontal, 10)
-                                    .padding(.vertical, 5)
-                                    .background(WalkmanTheme.silverGradient)
-                                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                                    .lineLimit(1)
-                                    .fixedSize(horizontal: true, vertical: false)
+                                    .frame(height: 28)
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
                             }
 
                             Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
                                 .font(.system(size: 16))
-                                .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : Color.white.opacity(0.2))
+                                .foregroundStyle(isSelected ? WalkmanTheme.silverLight : Color.white.opacity(0.2))
                                 .fixedSize()
                         }
                         .padding(12)
@@ -754,20 +733,14 @@ public struct BackupRestoreView: View {
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .stroke(isSelected ? WalkmanTheme.hiResGold.opacity(0.4) : WalkmanTheme.border, lineWidth: 1)
+                                .stroke(isSelected ? Color.white.opacity(0.32) : WalkmanTheme.border, lineWidth: 0.85)
                         )
                     }
                     .buttonStyle(.plain)
                 }
             }
         }
-        .padding(16)
-        .background(WalkmanTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(WalkmanTheme.border, lineWidth: 1)
-        )
+        .backupRestoreGlassCard(cornerRadius: 14)
     }
 
     private var backupScopeSelectionPill: some View {
@@ -780,13 +753,14 @@ public struct BackupRestoreView: View {
                 .foregroundStyle(.secondary)
             Text(formatBytes(estimatedBytes))
                 .font(WalkmanFont.mono)
-                .foregroundStyle(WalkmanTheme.hiResGold)
+                .foregroundStyle(WalkmanTheme.silverLight)
                 .lineLimit(1)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
-        .background(Color.white.opacity(0.06))
+        .background(Color.white.opacity(0.08))
         .clipShape(Capsule())
+        .overlay(Capsule().stroke(Color.white.opacity(0.14), lineWidth: 0.85))
         .fixedSize(horizontal: true, vertical: false)
     }
 
@@ -797,7 +771,7 @@ public struct BackupRestoreView: View {
                 HStack {
                     Label("3. DESTINATION (LOCAL & EXTERNAL)", systemImage: "internaldrive.fill")
                         .font(WalkmanFont.sectionHeader)
-                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .foregroundStyle(WalkmanTheme.silverLight)
                         .lineLimit(1)
 
                     Spacer(minLength: 8)
@@ -807,7 +781,7 @@ public struct BackupRestoreView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Label("3. DESTINATION (LOCAL & EXTERNAL)", systemImage: "internaldrive.fill")
                         .font(WalkmanFont.sectionHeader)
-                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .foregroundStyle(WalkmanTheme.silverLight)
                         .lineLimit(1)
 
                     chooseCustomFolderButton
@@ -825,7 +799,7 @@ public struct BackupRestoreView: View {
                                 Image(systemName: dest.icon)
                                     .font(.system(size: 16))
                                     .frame(width: 24)
-                                    .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : WalkmanTheme.silverMuted)
+                                    .foregroundStyle(isSelected ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
 
                                 VStack(alignment: .leading, spacing: 2) {
                                     HStack(spacing: 6) {
@@ -858,7 +832,7 @@ public struct BackupRestoreView: View {
 
                                 Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
                                     .font(.system(size: 16))
-                                    .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : Color.white.opacity(0.2))
+                                    .foregroundStyle(isSelected ? WalkmanTheme.silverLight : Color.white.opacity(0.2))
                                     .fixedSize()
                             }
                             .padding(12)
@@ -868,7 +842,7 @@ public struct BackupRestoreView: View {
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                    .stroke(isSelected ? WalkmanTheme.hiResGold.opacity(0.4) : WalkmanTheme.border, lineWidth: 1)
+                                    .stroke(isSelected ? Color.white.opacity(0.32) : WalkmanTheme.border, lineWidth: 0.85)
                             )
                         }
                         .buttonStyle(.plain)
@@ -898,7 +872,7 @@ public struct BackupRestoreView: View {
                         Spacer()
                     }
                     .padding(12)
-                    .background(Color.white.opacity(0.01))
+                    .background(Color.white.opacity(0.02))
                     .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 9, style: .continuous)
@@ -907,27 +881,21 @@ public struct BackupRestoreView: View {
                 }
             }
         }
-        .padding(16)
-        .background(WalkmanTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(WalkmanTheme.border, lineWidth: 1)
-        )
+        .backupRestoreGlassCard(cornerRadius: 14)
     }
 
     private var chooseCustomFolderButton: some View {
         Button(action: { chooseCustomFolder() }) {
-            HStack(spacing: 4) {
+            HStack(spacing: 5) {
                 Image(systemName: "folder.badge.plus")
                 Text("Choose Custom Folder...")
             }
             .font(WalkmanFont.calloutMedium)
-            .foregroundStyle(WalkmanTheme.silverMuted)
-            .lineLimit(1)
-            .fixedSize(horizontal: true, vertical: false)
+            .foregroundStyle(WalkmanTheme.silver)
+            .padding(.horizontal, 10)
+            .frame(height: 28)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
     }
 
     // MARK: - Encryption Card
@@ -936,14 +904,14 @@ public struct BackupRestoreView: View {
             HStack {
                 Label("4. SECURITY & CRYPTOGRAPHY", systemImage: "lock.shield.fill")
                     .font(WalkmanFont.sectionHeader)
-                    .foregroundStyle(WalkmanTheme.hiResGold)
+                    .foregroundStyle(WalkmanTheme.silverLight)
                     .lineLimit(1)
 
                 Spacer()
 
                 Toggle("", isOn: $isEncrypted.animation(.easeInOut(duration: 0.2)))
                     .toggleStyle(.switch)
-                    .tint(WalkmanTheme.hiResGold)
+                    .tint(WalkmanTheme.silverLight)
                     .labelsHidden()
             }
 
@@ -959,8 +927,8 @@ public struct BackupRestoreView: View {
                         .font(WalkmanFont.badge)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(isEncrypted ? WalkmanTheme.hiResGold.opacity(0.2) : Color.white.opacity(0.05))
-                        .foregroundStyle(isEncrypted ? WalkmanTheme.hiResGold : .secondary)
+                        .background(isEncrypted ? Color.white.opacity(0.12) : Color.white.opacity(0.05))
+                        .foregroundStyle(isEncrypted ? WalkmanTheme.silverLight : .secondary)
                         .clipShape(Capsule())
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
@@ -974,13 +942,13 @@ public struct BackupRestoreView: View {
 
             if isEncrypted {
                 Divider()
-                    .overlay(WalkmanTheme.border)
+                    .overlay(Color.white.opacity(0.08))
 
                 VStack(spacing: 10) {
                     HStack(spacing: 12) {
                         Image(systemName: "key.fill")
                             .font(.system(size: 13))
-                            .foregroundStyle(WalkmanTheme.hiResGold)
+                            .foregroundStyle(WalkmanTheme.silverLight)
                             .frame(width: 18)
 
                         if showPassphrase {
@@ -1001,11 +969,11 @@ public struct BackupRestoreView: View {
                         .buttonStyle(.plain)
                     }
                     .padding(10)
-                    .background(Color.black.opacity(0.3))
+                    .background(Color.white.opacity(0.04))
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(WalkmanTheme.border, lineWidth: 1)
+                            .stroke(Color.white.opacity(0.12), lineWidth: 0.85)
                     )
 
                     HStack(spacing: 12) {
@@ -1031,11 +999,11 @@ public struct BackupRestoreView: View {
                         }
                     }
                     .padding(10)
-                    .background(Color.black.opacity(0.3))
+                    .background(Color.white.opacity(0.04))
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(WalkmanTheme.border, lineWidth: 1)
+                            .stroke(Color.white.opacity(0.12), lineWidth: 0.85)
                     )
 
                     if !passphrase.isEmpty && !confirmPassphrase.isEmpty && !passwordsMatch {
@@ -1046,13 +1014,7 @@ public struct BackupRestoreView: View {
                 }
             }
         }
-        .padding(16)
-        .background(WalkmanTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(isEncrypted ? WalkmanTheme.hiResGold.opacity(0.4) : WalkmanTheme.border, lineWidth: 1)
-        )
+        .backupRestoreGlassCard(cornerRadius: 14)
     }
 
     private var passwordsMatch: Bool {
@@ -1179,7 +1141,7 @@ public struct BackupRestoreView: View {
 
                     ProgressView(value: prog.fractionCompleted)
                         .progressViewStyle(.linear)
-                        .tint(WalkmanTheme.hiResGold)
+                        .tint(WalkmanTheme.silverLight)
 
                     HStack {
                         Text(prog.currentItemName)
@@ -1202,13 +1164,13 @@ public struct BackupRestoreView: View {
                             BackupRestoreService.shared.cancel()
                         }
                         .font(WalkmanFont.calloutMedium)
-                        .foregroundStyle(Color.red)
-                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.red.opacity(0.9))
+                        .padding(.horizontal, 12)
+                        .frame(height: 28)
+                        .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
                     }
                 }
-                .padding(14)
-                .background(WalkmanTheme.card)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .backupRestoreGlassCard(cornerRadius: 14)
             } else {
                 ViewThatFits(in: .horizontal) {
                     HStack {
@@ -1245,13 +1207,7 @@ public struct BackupRestoreView: View {
                         backupStartButton(fullWidth: true)
                     }
                 }
-                .padding(14)
-                .background(WalkmanTheme.card)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(WalkmanTheme.border, lineWidth: 1)
-                )
+                .backupRestoreGlassCard(cornerRadius: 14)
             }
         }
     }
@@ -1265,15 +1221,13 @@ public struct BackupRestoreView: View {
                 Text("Reveal in Finder")
             }
             .font(WalkmanFont.calloutBold)
+            .foregroundStyle(WalkmanTheme.silver)
             .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(WalkmanTheme.silverGradient)
-            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .frame(height: 28)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
     }
 
     private var backupSuccessDismissButton: some View {
@@ -1286,11 +1240,9 @@ public struct BackupRestoreView: View {
             Image(systemName: "xmark")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(WalkmanTheme.silverMuted)
-                .padding(6)
-                .background(Color.white.opacity(0.08))
-                .clipShape(Circle())
+                .frame(width: 24, height: 24)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 12))
         .help("Dismiss")
     }
 
@@ -1298,18 +1250,17 @@ public struct BackupRestoreView: View {
         Button(action: { showBackupConfirmSheet = true }) {
             HStack(spacing: 8) {
                 Image(systemName: isEncrypted ? "lock.fill" : "arrow.up.circle.fill")
+                    .font(.system(size: 13, weight: .bold))
                 Text(isEncrypted ? "Start Encrypted Backup" : "Start Backup")
+                    .font(WalkmanFont.calloutBold)
                     .lineLimit(1)
             }
-            .font(WalkmanFont.bodyBold)
-            .padding(.horizontal, 22)
-            .padding(.vertical, 10)
-            .frame(maxWidth: fullWidth ? .infinity : nil)
-            .background(canStartBackup ? WalkmanTheme.hiResGoldGradient : LinearGradient(colors: [Color.white.opacity(0.1), Color.white.opacity(0.05)], startPoint: .top, endPoint: .bottom))
             .foregroundStyle(canStartBackup ? Color(red: 20/255, green: 20/255, blue: 24/255) : Color.white.opacity(0.3))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .padding(.horizontal, 22)
+            .frame(height: 38)
+            .frame(maxWidth: fullWidth ? .infinity : nil)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LiquidGlassButtonStyle(variant: canStartBackup ? .prominent : .glass, cornerRadius: 19))
         .disabled(!canStartBackup)
     }
 
@@ -1404,7 +1355,7 @@ public struct BackupRestoreView: View {
                 HStack {
                     Label("1. SELECT BACKUP ARCHIVE", systemImage: "clock.arrow.circlepath")
                         .font(WalkmanFont.sectionHeader)
-                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .foregroundStyle(WalkmanTheme.silverLight)
                         .lineLimit(1)
 
                     Spacer(minLength: 8)
@@ -1414,7 +1365,7 @@ public struct BackupRestoreView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("1. SELECT BACKUP ARCHIVE", systemImage: "clock.arrow.circlepath")
                         .font(WalkmanFont.sectionHeader)
-                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .foregroundStyle(WalkmanTheme.silverLight)
                         .lineLimit(1)
 
                     discoveredBackupsActions
@@ -1450,7 +1401,7 @@ public struct BackupRestoreView: View {
                             HStack(spacing: 12) {
                                 Image(systemName: b.isEncrypted ? "lock.doc.fill" : "doc.zipper")
                                     .font(.system(size: 18))
-                                    .foregroundStyle(b.isEncrypted ? WalkmanTheme.hiResGold : WalkmanTheme.silverMuted)
+                                    .foregroundStyle(b.isEncrypted ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
 
                                 VStack(alignment: .leading, spacing: 2) {
                                     HStack(spacing: 6) {
@@ -1464,8 +1415,8 @@ public struct BackupRestoreView: View {
                                                 .font(WalkmanFont.badge)
                                                 .padding(.horizontal, 6)
                                                 .padding(.vertical, 1.5)
-                                                .background(WalkmanTheme.hiResGold.opacity(0.2))
-                                                .foregroundStyle(WalkmanTheme.hiResGold)
+                                                .background(Color.white.opacity(0.12))
+                                                .foregroundStyle(WalkmanTheme.silverLight)
                                                 .clipShape(Capsule())
                                                 .lineLimit(1)
                                                 .fixedSize(horizontal: true, vertical: false)
@@ -1510,7 +1461,7 @@ public struct BackupRestoreView: View {
 
                                 Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
                                     .font(.system(size: 16))
-                                    .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : Color.white.opacity(0.2))
+                                    .foregroundStyle(isSelected ? WalkmanTheme.silverLight : Color.white.opacity(0.2))
                                     .fixedSize()
                             }
                             .padding(12)
@@ -1520,7 +1471,7 @@ public struct BackupRestoreView: View {
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                    .stroke(isSelected ? WalkmanTheme.hiResGold.opacity(0.5) : WalkmanTheme.border, lineWidth: 1)
+                                    .stroke(isSelected ? Color.white.opacity(0.32) : WalkmanTheme.border, lineWidth: 0.85)
                             )
                         }
                         .buttonStyle(.plain)
@@ -1528,13 +1479,7 @@ public struct BackupRestoreView: View {
                 }
             }
         }
-        .padding(16)
-        .background(WalkmanTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(WalkmanTheme.border, lineWidth: 1)
-        )
+        .backupRestoreGlassCard(cornerRadius: 14)
     }
 
     private var discoveredBackupsActions: some View {
@@ -1545,18 +1490,21 @@ public struct BackupRestoreView: View {
                     Text("Browse Other Backup...")
                 }
                 .font(WalkmanFont.calloutMedium)
-                .foregroundStyle(WalkmanTheme.silverMuted)
+                .foregroundStyle(WalkmanTheme.silver)
+                .padding(.horizontal, 10)
+                .frame(height: 28)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
 
             Button(action: { refreshDestinationsAsync() }) {
                 Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 12))
-                    .foregroundStyle(WalkmanTheme.silverMuted)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(WalkmanTheme.silver)
+                    .frame(width: 28, height: 28)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
             .help("Rescan backup destinations")
         }
     }
@@ -1568,7 +1516,7 @@ public struct BackupRestoreView: View {
                 HStack {
                     Label("BACKUP METADATA & CONTENTS", systemImage: "info.circle.fill")
                         .font(WalkmanFont.sectionHeader)
-                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .foregroundStyle(WalkmanTheme.silverLight)
                         .lineLimit(1)
 
                     Spacer(minLength: 8)
@@ -1582,7 +1530,7 @@ public struct BackupRestoreView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Label("BACKUP METADATA & CONTENTS", systemImage: "info.circle.fill")
                         .font(WalkmanFont.sectionHeader)
-                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .foregroundStyle(WalkmanTheme.silverLight)
                         .lineLimit(1)
 
                     Text(backup.url.lastPathComponent)
@@ -1597,17 +1545,18 @@ public struct BackupRestoreView: View {
                 // Wide: 4-column horizontal stack
                 HStack(spacing: 20) {
                     inspectionStatItem(title: "Source Model", value: backup.manifest?.deviceName ?? "Sony Walkman", isMono: false, isGold: false)
-                    Divider().frame(height: 32).overlay(WalkmanTheme.border)
+                    Divider().frame(height: 32).overlay(Color.white.opacity(0.08))
                     inspectionStatItem(title: "Created", value: backup.dateModified.formatted(date: .abbreviated, time: .shortened), isMono: false, isGold: false)
-                    Divider().frame(height: 32).overlay(WalkmanTheme.border)
+                    Divider().frame(height: 32).overlay(Color.white.opacity(0.08))
                     inspectionStatItem(title: "Total Size", value: formatBytes(backup.sizeBytes), isMono: true, isGold: true)
-                    Divider().frame(height: 32).overlay(WalkmanTheme.border)
+                    Divider().frame(height: 32).overlay(Color.white.opacity(0.08))
                     inspectionStatItem(title: "Files", value: backup.manifest != nil ? "\(backup.manifest!.totalFiles) items" : "Protected", isMono: false, isGold: false)
                     Spacer()
                 }
                 .padding(12)
                 .background(Color.white.opacity(0.03))
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.white.opacity(0.08), lineWidth: 0.85))
 
                 // Narrow: 2x2 grid
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
@@ -1619,15 +1568,10 @@ public struct BackupRestoreView: View {
                 .padding(12)
                 .background(Color.white.opacity(0.03))
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.white.opacity(0.08), lineWidth: 0.85))
             }
         }
-        .padding(16)
-        .background(WalkmanTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(WalkmanTheme.border, lineWidth: 1)
-        )
+        .backupRestoreGlassCard(cornerRadius: 14)
     }
 
     private func inspectionStatItem(title: String, value: String, isMono: Bool, isGold: Bool) -> some View {
@@ -1638,7 +1582,7 @@ public struct BackupRestoreView: View {
                 .lineLimit(1)
             Text(value)
                 .font(isMono ? WalkmanFont.mono : WalkmanFont.bodyBold)
-                .foregroundStyle(isGold ? WalkmanTheme.hiResGold : .white)
+                .foregroundStyle(isGold ? WalkmanTheme.silverLight : .white)
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1649,7 +1593,7 @@ public struct BackupRestoreView: View {
         VStack(alignment: .leading, spacing: 10) {
             Label("2. TARGET WALKMAN RESTORE PARTITION", systemImage: "hifispeaker.fill")
                 .font(WalkmanFont.sectionHeader)
-                .foregroundStyle(WalkmanTheme.hiResGold)
+                .foregroundStyle(WalkmanTheme.silverLight)
                 .lineLimit(1)
 
             if drives.isEmpty {
@@ -1671,13 +1615,7 @@ public struct BackupRestoreView: View {
                 }
             }
         }
-        .padding(16)
-        .background(WalkmanTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(WalkmanTheme.border, lineWidth: 1)
-        )
+        .backupRestoreGlassCard(cornerRadius: 14)
     }
 
     private func targetPartitionDriveButton(drive: WalkmanDrive) -> some View {
@@ -1688,7 +1626,7 @@ public struct BackupRestoreView: View {
             HStack(spacing: 10) {
                 Image(systemName: drive.type == .internal ? "internaldrive.fill" : "sdcard.fill")
                     .font(.system(size: 18))
-                    .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : WalkmanTheme.silverMuted)
+                    .foregroundStyle(isSelected ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
                     .frame(width: 22)
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -1703,8 +1641,8 @@ public struct BackupRestoreView: View {
                             .font(WalkmanFont.badge)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(isSelected ? WalkmanTheme.hiResGold.opacity(0.18) : Color.white.opacity(0.06))
-                            .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : .secondary)
+                            .background(isSelected ? Color.white.opacity(0.12) : Color.white.opacity(0.06))
+                            .foregroundStyle(isSelected ? WalkmanTheme.silverLight : .secondary)
                             .clipShape(Capsule())
                             .lineLimit(1)
                             .fixedSize(horizontal: true, vertical: false)
@@ -1721,8 +1659,8 @@ public struct BackupRestoreView: View {
 
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 16))
-                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(WalkmanTheme.silverLight)
                         .fixedSize()
                 }
             }
@@ -1734,7 +1672,7 @@ public struct BackupRestoreView: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(isSelected ? WalkmanTheme.hiResGold.opacity(0.6) : WalkmanTheme.border, lineWidth: isSelected ? 1.5 : 1)
+                    .stroke(isSelected ? Color.white.opacity(0.35) : WalkmanTheme.border, lineWidth: isSelected ? 1.2 : 0.85)
             )
         }
         .buttonStyle(.plain)
@@ -1745,7 +1683,7 @@ public struct BackupRestoreView: View {
         VStack(alignment: .leading, spacing: 10) {
             Label("3. DECRYPTION PASSPHRASE", systemImage: "key.fill")
                 .font(WalkmanFont.sectionHeader)
-                .foregroundStyle(WalkmanTheme.hiResGold)
+                .foregroundStyle(WalkmanTheme.silverLight)
 
             Text("This backup is encrypted with AES-256-GCM. Enter the secret passphrase set during backup to authenticate and unpack your audio files.")
                 .font(WalkmanFont.callout)
@@ -1754,7 +1692,7 @@ public struct BackupRestoreView: View {
             HStack(spacing: 12) {
                 Image(systemName: "lock.fill")
                     .font(.system(size: 13))
-                    .foregroundStyle(WalkmanTheme.hiResGold)
+                    .foregroundStyle(WalkmanTheme.silverLight)
                     .frame(width: 18)
 
                 if showRestorePassphrase {
@@ -1777,20 +1715,14 @@ public struct BackupRestoreView: View {
                 .help(showRestorePassphrase ? "Hide Passphrase" : "Show Passphrase")
             }
             .padding(10)
-            .background(Color.black.opacity(0.3))
+            .background(Color.white.opacity(0.04))
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(WalkmanTheme.border, lineWidth: 1)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 0.85)
             )
         }
-        .padding(16)
-        .background(WalkmanTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(WalkmanTheme.border, lineWidth: 1)
-        )
+        .backupRestoreGlassCard(cornerRadius: 14)
     }
 
     // MARK: - Restore Action Panel
@@ -1905,7 +1837,7 @@ public struct BackupRestoreView: View {
 
                     ProgressView(value: prog.fractionCompleted)
                         .progressViewStyle(.linear)
-                        .tint(WalkmanTheme.hiResGold)
+                        .tint(WalkmanTheme.silverLight)
 
                     HStack {
                         Text(prog.currentItemName)
@@ -1928,13 +1860,13 @@ public struct BackupRestoreView: View {
                             BackupRestoreService.shared.cancel()
                         }
                         .font(WalkmanFont.calloutMedium)
-                        .foregroundStyle(Color.red)
-                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.red.opacity(0.9))
+                        .padding(.horizontal, 12)
+                        .frame(height: 28)
+                        .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
                     }
                 }
-                .padding(14)
-                .background(WalkmanTheme.card)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .backupRestoreGlassCard(cornerRadius: 14)
             } else {
                 let targetName = currentTargetDrive != nil ? cleanDriveName(currentTargetDrive!) : "Walkman"
                 ViewThatFits(in: .horizontal) {
@@ -1972,13 +1904,7 @@ public struct BackupRestoreView: View {
                         restoreStartButton(fullWidth: true)
                     }
                 }
-                .padding(14)
-                .background(WalkmanTheme.card)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(WalkmanTheme.border, lineWidth: 1)
-                )
+                .backupRestoreGlassCard(cornerRadius: 14)
             }
         }
     }
@@ -1993,11 +1919,9 @@ public struct BackupRestoreView: View {
             Image(systemName: "xmark")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(WalkmanTheme.silverMuted)
-                .padding(6)
-                .background(Color.white.opacity(0.08))
-                .clipShape(Circle())
+                .frame(width: 24, height: 24)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 12))
         .help("Dismiss")
     }
 
@@ -2005,18 +1929,17 @@ public struct BackupRestoreView: View {
         Button(action: { showRestoreConfirmSheet = true }) {
             HStack(spacing: 8) {
                 Image(systemName: "arrow.down.circle.fill")
+                    .font(.system(size: 13, weight: .bold))
                 Text("Restore to Walkman")
+                    .font(WalkmanFont.calloutBold)
                     .lineLimit(1)
             }
-            .font(WalkmanFont.bodyBold)
-            .padding(.horizontal, 22)
-            .padding(.vertical, 10)
-            .frame(maxWidth: fullWidth ? .infinity : nil)
-            .background(canStartRestore ? WalkmanTheme.hiResGoldGradient : LinearGradient(colors: [Color.white.opacity(0.1), Color.white.opacity(0.05)], startPoint: .top, endPoint: .bottom))
             .foregroundStyle(canStartRestore ? Color(red: 20/255, green: 20/255, blue: 24/255) : Color.white.opacity(0.3))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .padding(.horizontal, 22)
+            .frame(height: 38)
+            .frame(maxWidth: fullWidth ? .infinity : nil)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LiquidGlassButtonStyle(variant: canStartRestore ? .prominent : .glass, cornerRadius: 19))
         .disabled(!canStartRestore)
     }
 
@@ -2200,15 +2123,42 @@ private struct BackupAlbumPickerSheet: View {
             HStack(spacing: 14) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(WalkmanTheme.hiResGold.opacity(0.16))
+                        .fill(Color.white.opacity(0.08))
                         .frame(width: 44, height: 44)
+
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color.white.opacity(0.28), location: 0.0),
+                                .init(color: Color.white.opacity(0.0), location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 12)
+                        Spacer(minLength: 0)
+                    }
+                    .frame(width: 44, height: 44)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
                     Image(systemName: "square.stack.3d.up.fill")
-                        .font(.system(size: 20))
-                        .foregroundStyle(WalkmanTheme.hiResGoldGradient)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(WalkmanTheme.silverLight)
                 }
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(WalkmanTheme.hiResGold.opacity(0.35), lineWidth: 0.85)
+                        .stroke(
+                            LinearGradient(
+                                stops: [
+                                    .init(color: Color.white.opacity(0.38), location: 0.0),
+                                    .init(color: Color.white.opacity(0.12), location: 0.6),
+                                    .init(color: Color.white.opacity(0.04), location: 1.0)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 0.85
+                        )
                 )
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -2279,32 +2229,34 @@ private struct BackupAlbumPickerSheet: View {
                                     .background(Color.white.opacity(selectedFilter == filter ? 0.22 : 0.08))
                                     .clipShape(Capsule())
                             }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
+                            .foregroundStyle(selectedFilter == filter ? Color.white : Color.white.opacity(0.70))
+                            .padding(.horizontal, 12)
+                            .frame(height: 32)
                             .background(
                                 ZStack {
                                     if selectedFilter == filter {
-                                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                        Capsule()
                                             .fill(Color.white.opacity(0.16))
                                             .matchedGeometryEffect(id: "albumFilterHighlight", in: filterNamespace)
                                             .overlay(
-                                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                                Capsule()
                                                     .stroke(Color.white.opacity(0.32), lineWidth: 0.85)
                                             )
                                     }
                                 }
                             )
-                            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            .contentShape(Capsule())
                         }
                         .buttonStyle(.plain)
                     }
                 }
                 .padding(3)
+                .frame(height: 38)
                 .background(Color.white.opacity(0.04))
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .clipShape(Capsule())
                 .overlay(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
+                    Capsule()
+                        .stroke(Color.white.opacity(0.10), lineWidth: 0.85)
                 )
                 .fixedSize(horizontal: true, vertical: false)
 
@@ -2316,42 +2268,30 @@ private struct BackupAlbumPickerSheet: View {
                 }) {
                     HStack(spacing: 4) {
                         Image(systemName: "checkmark.square")
-                            .font(.system(size: 11))
+                            .font(.system(size: 11, weight: .bold))
                         Text("Select All")
                             .font(WalkmanFont.calloutMedium)
                     }
                     .foregroundStyle(WalkmanTheme.silver)
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, 12)
                     .frame(height: 38)
-                    .background(Color.white.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(Color.white.opacity(0.12), lineWidth: 0.85)
-                    )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
 
                 Button(action: {
                     localSelectedKeys.removeAll()
                 }) {
                     HStack(spacing: 4) {
                         Image(systemName: "xmark.square")
-                            .font(.system(size: 11))
+                            .font(.system(size: 11, weight: .bold))
                         Text("Clear")
                             .font(WalkmanFont.calloutMedium)
                     }
                     .foregroundStyle(WalkmanTheme.silverMuted)
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, 12)
                     .frame(height: 38)
-                    .background(Color.white.opacity(0.04))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(Color.white.opacity(0.10), lineWidth: 0.85)
-                    )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 14)
@@ -2418,18 +2358,10 @@ private struct BackupAlbumPickerSheet: View {
                     Text("Cancel")
                         .font(WalkmanFont.calloutMedium)
                         .foregroundStyle(WalkmanTheme.silverMuted)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 9)
-                        .background(Color.white.opacity(isCancelHovered ? 0.09 : 0.04))
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(Color.white.opacity(isCancelHovered ? 0.18 : 0.09), lineWidth: 0.8)
-                        )
-                        .scaleEffect(isCancelHovered ? 1.02 : 1.0)
+                        .padding(.horizontal, 18)
+                        .frame(height: 38)
                 }
-                .buttonStyle(.plain)
-                .onHover { isCancelHovered = $0 }
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
 
                 Button(action: {
                     selectedAlbumKeys = localSelectedKeys
@@ -2443,18 +2375,9 @@ private struct BackupAlbumPickerSheet: View {
                     }
                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                     .padding(.horizontal, 20)
-                    .padding(.vertical, 9)
-                    .background(WalkmanTheme.hiResGoldGradient)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(Color.white.opacity(0.25), lineWidth: 0.85)
-                    )
-                    .shadow(color: Color.black.opacity(isDoneHovered ? 0.35 : 0.18), radius: isDoneHovered ? 6 : 3, y: isDoneHovered ? 3 : 1)
-                    .scaleEffect(isDoneHovered ? 1.025 : 1.0)
+                    .frame(height: 38)
                 }
-                .buttonStyle(.plain)
-                .onHover { isDoneHovered = $0 }
+                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 19))
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 14)
@@ -2465,21 +2388,21 @@ private struct BackupAlbumPickerSheet: View {
         .frame(width: 820, height: 720)
         .background(
             ZStack {
-                WalkmanTheme.card.opacity(0.88)
+                WalkmanTheme.card.opacity(0.92)
                     .background(.ultraThinMaterial)
 
                 // Top specular sheen
                 VStack(spacing: 0) {
                     LinearGradient(
                         stops: [
-                            .init(color: .white.opacity(0.20), location: 0.0),
-                            .init(color: .white.opacity(0.04), location: 0.5),
+                            .init(color: .white.opacity(0.24), location: 0.0),
+                            .init(color: .white.opacity(0.05), location: 0.5),
                             .init(color: .clear, location: 1.0)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
-                    .frame(height: 7)
+                    .frame(height: 10)
                     Spacer(minLength: 0)
                 }
             }
@@ -2491,12 +2414,12 @@ private struct BackupAlbumPickerSheet: View {
                 .strokeBorder(
                     LinearGradient(
                         stops: [
-                            .init(color: .white.opacity(0.18), location: 0.0),
-                            .init(color: .white.opacity(0.08), location: 0.5),
-                            .init(color: .white.opacity(0.05), location: 1.0)
+                            .init(color: .white.opacity(0.35), location: 0.0),
+                            .init(color: .white.opacity(0.12), location: 0.5),
+                            .init(color: .white.opacity(0.06), location: 1.0)
                         ],
-                        startPoint: .top,
-                        endPoint: .bottom
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
                     ),
                     lineWidth: 0.85
                 )
@@ -2521,10 +2444,10 @@ private struct AlbumPickerRow: View {
                 // Tactile checkbox
                 ZStack {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(isChecked ? WalkmanTheme.hiResGold : Color.white.opacity(0.08))
+                        .fill(isChecked ? Color.white.opacity(0.92) : Color.white.opacity(0.08))
                         .frame(width: 22, height: 22)
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .stroke(isChecked ? WalkmanTheme.hiResGoldLight : Color.white.opacity(0.22), lineWidth: 1)
+                        .stroke(isChecked ? Color.white : Color.white.opacity(0.22), lineWidth: 1)
                         .frame(width: 22, height: 22)
                     if isChecked {
                         Image(systemName: "checkmark")
@@ -2578,11 +2501,11 @@ private struct AlbumPickerRow: View {
                         .font(WalkmanFont.badge)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(WalkmanTheme.hiResGold.opacity(0.20))
-                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .background(Color.white.opacity(0.12))
+                        .foregroundStyle(WalkmanTheme.silverLight)
                         .clipShape(Capsule())
                         .overlay(
-                            Capsule().stroke(WalkmanTheme.hiResGold.opacity(0.40), lineWidth: 0.8)
+                            Capsule().stroke(Color.white.opacity(0.22), lineWidth: 0.8)
                         )
                 }
 
@@ -2607,7 +2530,7 @@ private struct AlbumPickerRow: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(isChecked ? WalkmanTheme.hiResGold.opacity(0.35) : (isHovered ? Color.white.opacity(0.15) : WalkmanTheme.border), lineWidth: 0.85)
+                    .stroke(isChecked ? Color.white.opacity(0.35) : (isHovered ? Color.white.opacity(0.15) : WalkmanTheme.border), lineWidth: 0.85)
             )
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .scaleEffect(isHovered ? 1.01 : 1.0)
@@ -2701,15 +2624,42 @@ private struct BackupTrackPickerSheet: View {
             HStack(spacing: 14) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(WalkmanTheme.hiResGold.opacity(0.16))
+                        .fill(Color.white.opacity(0.08))
                         .frame(width: 44, height: 44)
+
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color.white.opacity(0.28), location: 0.0),
+                                .init(color: Color.white.opacity(0.0), location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 12)
+                        Spacer(minLength: 0)
+                    }
+                    .frame(width: 44, height: 44)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
                     Image(systemName: "music.note.list")
-                        .font(.system(size: 20))
-                        .foregroundStyle(WalkmanTheme.hiResGoldGradient)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(WalkmanTheme.silverLight)
                 }
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(WalkmanTheme.hiResGold.opacity(0.35), lineWidth: 0.85)
+                        .stroke(
+                            LinearGradient(
+                                stops: [
+                                    .init(color: Color.white.opacity(0.38), location: 0.0),
+                                    .init(color: Color.white.opacity(0.12), location: 0.6),
+                                    .init(color: Color.white.opacity(0.04), location: 1.0)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 0.85
+                        )
                 )
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -2780,32 +2730,34 @@ private struct BackupTrackPickerSheet: View {
                                     .background(Color.white.opacity(selectedFilter == filter ? 0.22 : 0.08))
                                     .clipShape(Capsule())
                             }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
+                            .foregroundStyle(selectedFilter == filter ? Color.white : Color.white.opacity(0.70))
+                            .padding(.horizontal, 12)
+                            .frame(height: 32)
                             .background(
                                 ZStack {
                                     if selectedFilter == filter {
-                                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                        Capsule()
                                             .fill(Color.white.opacity(0.16))
                                             .matchedGeometryEffect(id: "trackFilterHighlight", in: filterNamespace)
                                             .overlay(
-                                                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                                Capsule()
                                                     .stroke(Color.white.opacity(0.32), lineWidth: 0.85)
                                             )
                                     }
                                 }
                             )
-                            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            .contentShape(Capsule())
                         }
                         .buttonStyle(.plain)
                     }
                 }
                 .padding(3)
+                .frame(height: 38)
                 .background(Color.white.opacity(0.04))
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .clipShape(Capsule())
                 .overlay(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
+                    Capsule()
+                        .stroke(Color.white.opacity(0.10), lineWidth: 0.85)
                 )
                 .fixedSize(horizontal: true, vertical: false)
 
@@ -2817,42 +2769,30 @@ private struct BackupTrackPickerSheet: View {
                 }) {
                     HStack(spacing: 4) {
                         Image(systemName: "checkmark.square")
-                            .font(.system(size: 11))
+                            .font(.system(size: 11, weight: .bold))
                         Text("Select All")
                             .font(WalkmanFont.calloutMedium)
                     }
                     .foregroundStyle(WalkmanTheme.silver)
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, 12)
                     .frame(height: 38)
-                    .background(Color.white.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(Color.white.opacity(0.12), lineWidth: 0.85)
-                    )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
 
                 Button(action: {
                     localSelectedPaths.removeAll()
                 }) {
                     HStack(spacing: 4) {
                         Image(systemName: "xmark.square")
-                            .font(.system(size: 11))
+                            .font(.system(size: 11, weight: .bold))
                         Text("Clear")
                             .font(WalkmanFont.calloutMedium)
                     }
                     .foregroundStyle(WalkmanTheme.silverMuted)
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, 12)
                     .frame(height: 38)
-                    .background(Color.white.opacity(0.04))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(Color.white.opacity(0.10), lineWidth: 0.85)
-                    )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 14)
@@ -2919,18 +2859,10 @@ private struct BackupTrackPickerSheet: View {
                     Text("Cancel")
                         .font(WalkmanFont.calloutMedium)
                         .foregroundStyle(WalkmanTheme.silverMuted)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 9)
-                        .background(Color.white.opacity(isCancelHovered ? 0.09 : 0.04))
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(Color.white.opacity(isCancelHovered ? 0.18 : 0.09), lineWidth: 0.8)
-                        )
-                        .scaleEffect(isCancelHovered ? 1.02 : 1.0)
+                        .padding(.horizontal, 18)
+                        .frame(height: 38)
                 }
-                .buttonStyle(.plain)
-                .onHover { isCancelHovered = $0 }
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
 
                 Button(action: {
                     selectedTrackPaths = localSelectedPaths
@@ -2944,18 +2876,9 @@ private struct BackupTrackPickerSheet: View {
                     }
                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                     .padding(.horizontal, 20)
-                    .padding(.vertical, 9)
-                    .background(WalkmanTheme.hiResGoldGradient)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(Color.white.opacity(0.25), lineWidth: 0.85)
-                    )
-                    .shadow(color: Color.black.opacity(isDoneHovered ? 0.35 : 0.18), radius: isDoneHovered ? 6 : 3, y: isDoneHovered ? 3 : 1)
-                    .scaleEffect(isDoneHovered ? 1.025 : 1.0)
+                    .frame(height: 38)
                 }
-                .buttonStyle(.plain)
-                .onHover { isDoneHovered = $0 }
+                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 19))
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 14)
@@ -2966,21 +2889,21 @@ private struct BackupTrackPickerSheet: View {
         .frame(width: 860, height: 720)
         .background(
             ZStack {
-                WalkmanTheme.card.opacity(0.88)
+                WalkmanTheme.card.opacity(0.92)
                     .background(.ultraThinMaterial)
 
                 // Top specular sheen
                 VStack(spacing: 0) {
                     LinearGradient(
                         stops: [
-                            .init(color: .white.opacity(0.20), location: 0.0),
-                            .init(color: .white.opacity(0.04), location: 0.5),
+                            .init(color: .white.opacity(0.24), location: 0.0),
+                            .init(color: .white.opacity(0.05), location: 0.5),
                             .init(color: .clear, location: 1.0)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
-                    .frame(height: 7)
+                    .frame(height: 10)
                     Spacer(minLength: 0)
                 }
             }
@@ -2992,12 +2915,12 @@ private struct BackupTrackPickerSheet: View {
                 .strokeBorder(
                     LinearGradient(
                         stops: [
-                            .init(color: .white.opacity(0.18), location: 0.0),
-                            .init(color: .white.opacity(0.08), location: 0.5),
-                            .init(color: .white.opacity(0.05), location: 1.0)
+                            .init(color: .white.opacity(0.35), location: 0.0),
+                            .init(color: .white.opacity(0.12), location: 0.5),
+                            .init(color: .white.opacity(0.06), location: 1.0)
                         ],
-                        startPoint: .top,
-                        endPoint: .bottom
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
                     ),
                     lineWidth: 0.85
                 )
@@ -3029,10 +2952,10 @@ private struct TrackPickerRow: View {
                 // Tactile checkbox
                 ZStack {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(isChecked ? WalkmanTheme.hiResGold : Color.white.opacity(0.08))
+                        .fill(isChecked ? Color.white.opacity(0.92) : Color.white.opacity(0.08))
                         .frame(width: 20, height: 20)
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .stroke(isChecked ? WalkmanTheme.hiResGoldLight : Color.white.opacity(0.22), lineWidth: 1)
+                        .stroke(isChecked ? Color.white : Color.white.opacity(0.22), lineWidth: 1)
                         .frame(width: 20, height: 20)
                     if isChecked {
                         Image(systemName: "checkmark")
@@ -3060,11 +2983,11 @@ private struct TrackPickerRow: View {
                         .font(WalkmanFont.badge)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(WalkmanTheme.hiResGold.opacity(0.20))
-                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .background(Color.white.opacity(0.12))
+                        .foregroundStyle(WalkmanTheme.silverLight)
                         .clipShape(Capsule())
                         .overlay(
-                            Capsule().stroke(WalkmanTheme.hiResGold.opacity(0.40), lineWidth: 0.8)
+                            Capsule().stroke(Color.white.opacity(0.22), lineWidth: 0.8)
                         )
                 } else {
                     Text(track.format)
@@ -3094,7 +3017,7 @@ private struct TrackPickerRow: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(isChecked ? WalkmanTheme.hiResGold.opacity(0.35) : (isHovered ? Color.white.opacity(0.14) : WalkmanTheme.border), lineWidth: 0.85)
+                    .stroke(isChecked ? Color.white.opacity(0.35) : (isHovered ? Color.white.opacity(0.14) : WalkmanTheme.border), lineWidth: 0.85)
             )
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .scaleEffect(isHovered ? 1.008 : 1.0)
@@ -3138,15 +3061,42 @@ private struct BackupConfirmationSheet: View {
             HStack(spacing: 14) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(WalkmanTheme.hiResGold.opacity(0.16))
+                        .fill(Color.white.opacity(0.08))
                         .frame(width: 44, height: 44)
-                    Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
-                        .font(.system(size: 20))
-                        .foregroundStyle(WalkmanTheme.hiResGoldGradient)
+
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color.white.opacity(0.28), location: 0.0),
+                                .init(color: Color.white.opacity(0.0), location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 12)
+                        Spacer(minLength: 0)
+                    }
+                    .frame(width: 44, height: 44)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(WalkmanTheme.silverLight)
                 }
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(WalkmanTheme.hiResGold.opacity(0.35), lineWidth: 0.85)
+                        .stroke(
+                            LinearGradient(
+                                stops: [
+                                    .init(color: Color.white.opacity(0.38), location: 0.0),
+                                    .init(color: Color.white.opacity(0.12), location: 0.6),
+                                    .init(color: Color.white.opacity(0.04), location: 1.0)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 0.85
+                        )
                 )
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -3191,18 +3141,10 @@ private struct BackupConfirmationSheet: View {
                     Text("Cancel")
                         .font(WalkmanFont.calloutMedium)
                         .foregroundStyle(WalkmanTheme.silverMuted)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 9)
-                        .background(Color.white.opacity(isCancelHovered ? 0.09 : 0.04))
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(Color.white.opacity(isCancelHovered ? 0.18 : 0.09), lineWidth: 0.8)
-                        )
-                        .scaleEffect(isCancelHovered ? 1.02 : 1.0)
+                        .padding(.horizontal, 18)
+                        .frame(height: 38)
                 }
-                .buttonStyle(.plain)
-                .onHover { isCancelHovered = $0 }
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
 
                 Button(action: onConfirm) {
                     HStack(spacing: 6) {
@@ -3213,18 +3155,9 @@ private struct BackupConfirmationSheet: View {
                     }
                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                     .padding(.horizontal, 22)
-                    .padding(.vertical, 9)
-                    .background(WalkmanTheme.hiResGoldGradient)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(Color.white.opacity(0.25), lineWidth: 0.85)
-                    )
-                    .shadow(color: Color.black.opacity(isConfirmHovered ? 0.35 : 0.18), radius: isConfirmHovered ? 6 : 3, y: isConfirmHovered ? 3 : 1)
-                    .scaleEffect(isConfirmHovered ? 1.025 : 1.0)
+                    .frame(height: 38)
                 }
-                .buttonStyle(.plain)
-                .onHover { isConfirmHovered = $0 }
+                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 19))
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 14)
@@ -3232,21 +3165,21 @@ private struct BackupConfirmationSheet: View {
         .frame(width: 680, height: 580)
         .background(
             ZStack {
-                WalkmanTheme.card.opacity(0.88)
+                WalkmanTheme.card.opacity(0.92)
                     .background(.ultraThinMaterial)
 
                 // Top specular sheen
                 VStack(spacing: 0) {
                     LinearGradient(
                         stops: [
-                            .init(color: .white.opacity(0.20), location: 0.0),
-                            .init(color: .white.opacity(0.04), location: 0.5),
+                            .init(color: .white.opacity(0.24), location: 0.0),
+                            .init(color: .white.opacity(0.05), location: 0.5),
                             .init(color: .clear, location: 1.0)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
-                    .frame(height: 7)
+                    .frame(height: 10)
                     Spacer(minLength: 0)
                 }
             }
@@ -3258,12 +3191,12 @@ private struct BackupConfirmationSheet: View {
                 .strokeBorder(
                     LinearGradient(
                         stops: [
-                            .init(color: .white.opacity(0.18), location: 0.0),
-                            .init(color: .white.opacity(0.08), location: 0.5),
-                            .init(color: .white.opacity(0.05), location: 1.0)
+                            .init(color: .white.opacity(0.35), location: 0.0),
+                            .init(color: .white.opacity(0.12), location: 0.5),
+                            .init(color: .white.opacity(0.06), location: 1.0)
                         ],
-                        startPoint: .top,
-                        endPoint: .bottom
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
                     ),
                     lineWidth: 0.85
                 )
@@ -3275,7 +3208,7 @@ private struct BackupConfirmationSheet: View {
         HStack(spacing: 12) {
             Image(systemName: sourceDrive.type == .internal ? "internaldrive.fill" : "sdcard.fill")
                 .font(.system(size: 20))
-                .foregroundStyle(WalkmanTheme.hiResGold)
+                .foregroundStyle(WalkmanTheme.silverLight)
                 .frame(width: 32)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -3368,7 +3301,7 @@ private struct BackupConfirmationSheet: View {
 
                 HStack(spacing: 6) {
                     Image(systemName: scopeType.icon)
-                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .foregroundStyle(WalkmanTheme.silverLight)
                     Text(scopeType.title)
                         .font(WalkmanFont.calloutBold)
                         .foregroundStyle(.white)
@@ -3396,7 +3329,7 @@ private struct BackupConfirmationSheet: View {
                         .foregroundStyle(WalkmanTheme.silverMuted)
                     Text(formatBytes(estimatedBytes))
                         .font(WalkmanFont.calloutBold)
-                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .foregroundStyle(WalkmanTheme.silverLight)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -3414,7 +3347,7 @@ private struct BackupConfirmationSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: isEncrypted ? "lock.shield.fill" : "shield.slash")
-                    .foregroundStyle(isEncrypted ? WalkmanTheme.hiResGold : WalkmanTheme.silverMuted)
+                    .foregroundStyle(isEncrypted ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
                 Text(isEncrypted ? "AES-256-GCM Encrypted Container (PBKDF2 Key Derivation)" : "Standard Unencrypted Container")
                     .font(WalkmanFont.calloutBold)
                     .foregroundStyle(.white)
@@ -3470,15 +3403,42 @@ private struct RestoreConfirmationSheet: View {
             HStack(spacing: 14) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(WalkmanTheme.hiResGold.opacity(0.16))
+                        .fill(Color.white.opacity(0.08))
                         .frame(width: 44, height: 44)
+
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color.white.opacity(0.28), location: 0.0),
+                                .init(color: Color.white.opacity(0.0), location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 12)
+                        Spacer(minLength: 0)
+                    }
+                    .frame(width: 44, height: 44)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
                     Image(systemName: "arrow.down.doc.fill")
-                        .font(.system(size: 20))
-                        .foregroundStyle(WalkmanTheme.hiResGoldGradient)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(WalkmanTheme.silverLight)
                 }
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(WalkmanTheme.hiResGold.opacity(0.35), lineWidth: 0.85)
+                        .stroke(
+                            LinearGradient(
+                                stops: [
+                                    .init(color: Color.white.opacity(0.38), location: 0.0),
+                                    .init(color: Color.white.opacity(0.12), location: 0.6),
+                                    .init(color: Color.white.opacity(0.04), location: 1.0)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 0.85
+                        )
                 )
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -3523,18 +3483,10 @@ private struct RestoreConfirmationSheet: View {
                     Text("Cancel")
                         .font(WalkmanFont.calloutMedium)
                         .foregroundStyle(WalkmanTheme.silverMuted)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 9)
-                        .background(Color.white.opacity(isCancelHovered ? 0.09 : 0.04))
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(Color.white.opacity(isCancelHovered ? 0.18 : 0.09), lineWidth: 0.8)
-                        )
-                        .scaleEffect(isCancelHovered ? 1.02 : 1.0)
+                        .padding(.horizontal, 18)
+                        .frame(height: 38)
                 }
-                .buttonStyle(.plain)
-                .onHover { isCancelHovered = $0 }
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
 
                 Button(action: onConfirm) {
                     HStack(spacing: 6) {
@@ -3545,18 +3497,9 @@ private struct RestoreConfirmationSheet: View {
                     }
                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                     .padding(.horizontal, 22)
-                    .padding(.vertical, 9)
-                    .background(WalkmanTheme.hiResGoldGradient)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(Color.white.opacity(0.25), lineWidth: 0.85)
-                    )
-                    .shadow(color: Color.black.opacity(isConfirmHovered ? 0.35 : 0.18), radius: isConfirmHovered ? 6 : 3, y: isConfirmHovered ? 3 : 1)
-                    .scaleEffect(isConfirmHovered ? 1.025 : 1.0)
+                    .frame(height: 38)
                 }
-                .buttonStyle(.plain)
-                .onHover { isConfirmHovered = $0 }
+                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 19))
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 14)
@@ -3564,21 +3507,21 @@ private struct RestoreConfirmationSheet: View {
         .frame(width: 680, height: 580)
         .background(
             ZStack {
-                WalkmanTheme.card.opacity(0.88)
+                WalkmanTheme.card.opacity(0.92)
                     .background(.ultraThinMaterial)
 
                 // Top specular sheen
                 VStack(spacing: 0) {
                     LinearGradient(
                         stops: [
-                            .init(color: .white.opacity(0.20), location: 0.0),
-                            .init(color: .white.opacity(0.04), location: 0.5),
+                            .init(color: .white.opacity(0.24), location: 0.0),
+                            .init(color: .white.opacity(0.05), location: 0.5),
                             .init(color: .clear, location: 1.0)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
-                    .frame(height: 7)
+                    .frame(height: 10)
                     Spacer(minLength: 0)
                 }
             }
@@ -3590,12 +3533,12 @@ private struct RestoreConfirmationSheet: View {
                 .strokeBorder(
                     LinearGradient(
                         stops: [
-                            .init(color: .white.opacity(0.18), location: 0.0),
-                            .init(color: .white.opacity(0.08), location: 0.5),
-                            .init(color: .white.opacity(0.05), location: 1.0)
+                            .init(color: .white.opacity(0.35), location: 0.0),
+                            .init(color: .white.opacity(0.12), location: 0.5),
+                            .init(color: .white.opacity(0.06), location: 1.0)
                         ],
-                        startPoint: .top,
-                        endPoint: .bottom
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
                     ),
                     lineWidth: 0.85
                 )
@@ -3607,7 +3550,7 @@ private struct RestoreConfirmationSheet: View {
         HStack(spacing: 12) {
             Image(systemName: backup.isEncrypted ? "lock.doc.fill" : "doc.zipper")
                 .font(.system(size: 20))
-                .foregroundStyle(backup.isEncrypted ? WalkmanTheme.hiResGold : WalkmanTheme.silver)
+                .foregroundStyle(backup.isEncrypted ? WalkmanTheme.silverLight : WalkmanTheme.silver)
                 .frame(width: 32)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -3634,7 +3577,7 @@ private struct RestoreConfirmationSheet: View {
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(Color.white.opacity(0.08))
-                    .foregroundStyle(backup.isEncrypted ? WalkmanTheme.hiResGold : WalkmanTheme.silver)
+                    .foregroundStyle(backup.isEncrypted ? WalkmanTheme.silverLight : WalkmanTheme.silver)
                     .clipShape(Capsule())
 
                 Text(formatBytes(backup.sizeBytes))
@@ -3655,7 +3598,7 @@ private struct RestoreConfirmationSheet: View {
         HStack(spacing: 12) {
             Image(systemName: targetDrive.type == .internal ? "internaldrive.fill" : "sdcard.fill")
                 .font(.system(size: 20))
-                .foregroundStyle(WalkmanTheme.hiResGold)
+                .foregroundStyle(WalkmanTheme.silverLight)
                 .frame(width: 32)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -3677,7 +3620,7 @@ private struct RestoreConfirmationSheet: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text("\(formatBytes(targetDrive.freeBytes)) free")
                     .font(WalkmanFont.calloutBold)
-                    .foregroundStyle(WalkmanTheme.hiResGold)
+                    .foregroundStyle(WalkmanTheme.silverLight)
 
                 Text("of \(formatBytes(targetDrive.totalBytes)) total")
                     .font(WalkmanFont.subheadline)
@@ -3702,7 +3645,7 @@ private struct RestoreConfirmationSheet: View {
 
                 HStack(spacing: 6) {
                     Image(systemName: "folder.fill")
-                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .foregroundStyle(WalkmanTheme.silverLight)
                     Text("/MUSIC & /LEARNING Roots")
                         .font(WalkmanFont.calloutBold)
                         .foregroundStyle(.white)
@@ -3745,7 +3688,7 @@ private struct RestoreConfirmationSheet: View {
         HStack(spacing: 10) {
             Image(systemName: "info.circle.fill")
                 .font(.system(size: 16))
-                .foregroundStyle(WalkmanTheme.hiResGold)
+                .foregroundStyle(WalkmanTheme.silverLight)
 
             Text("Restoration unpacks track files, companion synchronized .LRC lyrics, and .M3U8 playlists directly to your Sony Walkman storage. Existing non-conflicting tracks are safely retained.")
                 .font(WalkmanFont.callout)
@@ -3791,6 +3734,8 @@ private struct SheetCloseButton: View {
         }
         .buttonStyle(.plain)
         .contentShape(Circle())
+        .keyboardShortcut(.cancelAction)
+        .help("Close")
         .onHover { hovering in
             guard isHovered != hovering else { return }
             isHovered = hovering
@@ -3803,42 +3748,179 @@ private struct SheetCloseButton: View {
 }
 
 // -----------------------------------------------------------------------------
-// MODE SWITCHER TAB BUTTON (ROUNDED CLICK BOX WITH HOVER EFFECT)
+// BACKUP RESTORE GLASS CARD MODIFIER
 // -----------------------------------------------------------------------------
-private struct ModeSwitcherTabButton: View {
+private struct BackupRestoreGlassCardModifier: ViewModifier {
+    var cornerRadius: CGFloat = 14
+
+    func body(content: Content) -> some View {
+        content
+            .padding(16)
+            .background(
+                ZStack {
+                    WalkmanTheme.card.opacity(0.85)
+                        .background(.ultraThinMaterial)
+
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color.white.opacity(0.16), location: 0.0),
+                                .init(color: Color.white.opacity(0.03), location: 0.5),
+                                .init(color: Color.clear, location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 8)
+                        Spacer(minLength: 0)
+                    }
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color.white.opacity(0.24), location: 0.0),
+                                .init(color: Color.white.opacity(0.10), location: 0.5),
+                                .init(color: Color.white.opacity(0.04), location: 1.0)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.85
+                    )
+            )
+            .shadow(color: Color.black.opacity(0.22), radius: 8, x: 0, y: 3)
+    }
+}
+
+private extension View {
+    func backupRestoreGlassCard(cornerRadius: CGFloat = 14) -> some View {
+        self.modifier(BackupRestoreGlassCardModifier(cornerRadius: cornerRadius))
+    }
+}
+
+// -----------------------------------------------------------------------------
+// LIQUID GLASS MODE SEGMENTED BAR (38pt Track Baseline with Sliding Lens)
+// -----------------------------------------------------------------------------
+private struct BackupRestoreModeSegmentedBar: View {
+    @Binding var selectedMode: BackupRestoreView.Mode
+    let disabled: Bool
+    let onSelect: (BackupRestoreView.Mode) -> Void
+    @Namespace private var segmentNamespace
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(BackupRestoreView.Mode.allCases) { mode in
+                BackupRestoreModeTabPill(
+                    mode: mode,
+                    isSelected: selectedMode == mode,
+                    namespace: segmentNamespace,
+                    onSelect: {
+                        onSelect(mode)
+                    }
+                )
+            }
+        }
+        .padding(3)
+        .frame(height: 38)
+        .background(Color.white.opacity(0.04))
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
+        )
+        .fixedSize(horizontal: true, vertical: false)
+        .disabled(disabled)
+        .opacity(disabled ? 0.6 : 1.0)
+    }
+}
+
+private struct BackupRestoreModeTabPill: View {
     let mode: BackupRestoreView.Mode
     let isSelected: Bool
+    let namespace: Namespace.ID
     let onSelect: () -> Void
-    @State private var isHovered = false
+    @State private var isHovered: Bool = false
 
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 6) {
                 Image(systemName: mode == .backup ? "arrow.up.doc.fill" : "arrow.down.doc.fill")
-                    .font(.system(size: 11))
+                    .font(.system(size: 11, weight: .semibold))
                 Text(mode.rawValue)
                     .font(WalkmanFont.calloutBold)
                     .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 7)
+            .foregroundStyle(isSelected ? Color.white : (isHovered ? Color.white : Color.white.opacity(0.70)))
+            .padding(.horizontal, 16)
+            .frame(height: 32)
             .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(isSelected ? Color.white.opacity(0.14) : (isHovered ? Color.white.opacity(0.08) : Color.white.opacity(0.001)))
+                ZStack {
+                    if isSelected {
+                        Capsule()
+                            .fill(Color.white.opacity(0.16))
+                            .matchedGeometryEffect(id: "activeBackupRestoreTabHighlight", in: namespace)
+
+                        // Top specular sheen
+                        VStack(spacing: 0) {
+                            LinearGradient(
+                                stops: [
+                                    .init(color: Color.white.opacity(isHovered ? 0.42 : 0.35), location: 0.0),
+                                    .init(color: Color.white.opacity(0.0), location: 1.0)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .frame(height: 6)
+                            Spacer(minLength: 0)
+                        }
+                        .clipShape(Capsule())
+                        .matchedGeometryEffect(id: "activeBackupRestoreTabSheen", in: namespace)
+                    } else if isHovered {
+                        Capsule()
+                            .fill(Color.white.opacity(0.09))
+
+                        VStack(spacing: 0) {
+                            LinearGradient(
+                                stops: [
+                                    .init(color: Color.white.opacity(0.20), location: 0.0),
+                                    .init(color: Color.clear, location: 1.0)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .frame(height: 5.5)
+                            Spacer(minLength: 0)
+                        }
+                        .clipShape(Capsule())
+                    } else {
+                        Color.white.opacity(0.001)
+                    }
+                }
             )
+            .clipShape(Capsule())
             .overlay(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .stroke(
-                        isSelected ? Color.white.opacity(0.30) : (isHovered ? Color.white.opacity(0.18) : Color.clear),
-                        lineWidth: 0.8
-                    )
+                ZStack {
+                    if isSelected {
+                        Capsule()
+                            .stroke(Color.white.opacity(isHovered ? 0.45 : 0.34), lineWidth: 0.85)
+                            .matchedGeometryEffect(id: "activeBackupRestoreTabBorder", in: namespace)
+                    } else if isHovered {
+                        Capsule()
+                            .stroke(Color.white.opacity(0.22), lineWidth: 0.85)
+                    }
+                }
             )
-            .foregroundStyle(isSelected ? .white : (isHovered ? .white : .secondary))
+            .shadow(color: Color.black.opacity(isSelected ? 0.25 : (isHovered ? 0.15 : 0)), radius: 3, x: 0, y: 1)
             .scaleEffect(isHovered ? 1.025 : 1.0)
-            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .contentShape(Capsule())
         .onHover { hovering in
             guard isHovered != hovering else { return }
             isHovered = hovering
@@ -3848,6 +3930,6 @@ private struct ModeSwitcherTabButton: View {
             if isHovered { isHovered = false; NSCursor.pop() }
         }
         .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
-        .animation(.easeInOut(duration: 0.12), value: isSelected)
+        .animation(.spring(response: 0.30, dampingFraction: 0.78), value: isSelected)
     }
 }

@@ -46,10 +46,6 @@ public struct AlbumMetadataEditorSheet: View {
     @State private var showPermissionSheet: Bool = false
     @State private var permissionFileURL: URL? = nil
 
-    // Hover states
-    @State private var isCancelHovered: Bool = false
-    @State private var isSaveHovered: Bool = false
-
     public init(
         album: AlbumItem,
         onSaved: @escaping () -> Void,
@@ -479,7 +475,7 @@ public struct AlbumMetadataEditorSheet: View {
                         albumTagsColumn
                     }
                     .padding(16)
-                    .liquidGlass(cornerRadius: 14, borderOpacity: 0.28)
+                    .studioGlassCard(cornerRadius: 14)
 
                     // Bottom Section: Tracklist & Track Numbers
                     tracklistSection
@@ -495,46 +491,7 @@ public struct AlbumMetadataEditorSheet: View {
             footerBar
         }
         .frame(minWidth: 1040, idealWidth: 1120, maxWidth: 1240, minHeight: 700, idealHeight: 780, maxHeight: 900)
-        .background(
-            ZStack {
-                WalkmanTheme.card.opacity(0.88)
-                    .background(.ultraThinMaterial)
-
-                // Top specular refraction sheen
-                VStack(spacing: 0) {
-                    LinearGradient(
-                        stops: [
-                            .init(color: .white.opacity(0.20), location: 0.0),
-                            .init(color: .white.opacity(0.04), location: 0.5),
-                            .init(color: .clear, location: 1.0)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 7)
-                    Spacer(minLength: 0)
-                }
-            }
-            .ignoresSafeArea()
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(
-                    LinearGradient(
-                        stops: [
-                            .init(color: .white.opacity(0.18), location: 0.0),
-                            .init(color: .white.opacity(0.08), location: 0.5),
-                            .init(color: .white.opacity(0.05), location: 1.0)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: 0.85
-                )
-                .allowsHitTesting(false)
-        )
-        .shadow(color: Color.black.opacity(0.45), radius: 24, x: 0, y: 10)
+        .modalGlassChassis(cornerRadius: 16)
         .sheet(isPresented: $showPermissionSheet) {
             if let fURL = permissionFileURL ?? trackRows.first.map({ URL(fileURLWithPath: $0.track.fullPath) }) {
                 StoragePermissionRequestSheet(
@@ -558,18 +515,9 @@ public struct AlbumMetadataEditorSheet: View {
     // MARK: - Header Bar
     private var headerBar: some View {
         HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(WalkmanTheme.silverGradient)
-                    .frame(width: 30, height: 30)
+            LiquidGlassIconBadge(icon: "square.stack.fill", size: 32)
 
-                Image(systemName: "square.stack.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-            }
-            .shadow(color: Color.black.opacity(0.20), radius: 3, y: 1)
-
-            VStack(alignment: .leading, spacing: 1.5) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text("Album Metadata Editor")
                     .font(WalkmanFont.title3)
                     .foregroundStyle(.white)
@@ -584,9 +532,9 @@ public struct AlbumMetadataEditorSheet: View {
 
             SheetCloseButton(action: onDismiss)
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 22)
         .padding(.top, 14)
-        .padding(.bottom, 10)
+        .padding(.bottom, 12)
     }
 
     // MARK: - Artwork Column
@@ -681,21 +629,15 @@ public struct AlbumMetadataEditorSheet: View {
                 Button(action: selectArtworkFile) {
                     HStack(spacing: 5) {
                         Image(systemName: "folder")
-                            .font(.system(size: 11))
+                            .font(.system(size: 11, weight: .semibold))
                         Text("Choose...")
-                            .font(WalkmanFont.subheadlineMedium)
+                            .font(WalkmanFont.calloutBold)
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background(Color.white.opacity(0.08))
                     .foregroundStyle(WalkmanTheme.silverLight)
-                    .clipShape(Capsule())
-                    .overlay(
-                        Capsule()
-                            .stroke(Color.white.opacity(0.12), lineWidth: 0.8)
-                    )
+                    .padding(.horizontal, 12)
+                    .frame(height: 28)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
 
                 AlbumIconSquareButton(
                     icon: isFetchingOnlineArt ? "arrow.triangle.2.circlepath" : "arrow.down.circle",
@@ -753,28 +695,23 @@ public struct AlbumMetadataEditorSheet: View {
                     HStack(spacing: 5) {
                         if isFetchingOnlineInfo {
                             ProgressView()
-                                .scaleEffect(0.55)
+                                .controlSize(.small)
+                                .scaleEffect(0.65)
                                 .frame(width: 12, height: 12)
                             Text("Matching...")
-                                .font(WalkmanFont.subheadlineMedium)
+                                .font(WalkmanFont.calloutBold)
                         } else {
                             Image(systemName: "sparkles")
-                                .font(.system(size: 11.5))
+                                .font(.system(size: 11, weight: .semibold))
                             Text("Auto-Fill Album Info")
-                                .font(WalkmanFont.subheadlineMedium)
+                                .font(WalkmanFont.calloutBold)
                         }
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background(Color.white.opacity(0.08))
                     .foregroundStyle(WalkmanTheme.silverLight)
-                    .clipShape(Capsule())
-                    .overlay(
-                        Capsule()
-                            .stroke(Color.white.opacity(0.12), lineWidth: 0.8)
-                    )
+                    .padding(.horizontal, 12)
+                    .frame(height: 28)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
                 .disabled(isFetchingOnlineInfo)
                 .help("Query iTunes and Deezer databases to match album title, artist, year, and genre")
             }
@@ -820,71 +757,47 @@ public struct AlbumMetadataEditorSheet: View {
                     Button(action: autoNumberTracks) {
                         HStack(spacing: 5) {
                             Image(systemName: "list.number")
-                                .font(.system(size: 11))
+                                .font(.system(size: 11, weight: .semibold))
                             Text("Auto-Number (1..N)")
-                                .font(WalkmanFont.calloutMedium)
+                                .font(WalkmanFont.calloutBold)
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.white.opacity(0.07))
                         .foregroundStyle(WalkmanTheme.silverLight)
-                        .clipShape(Capsule())
-                        .overlay(
-                            Capsule()
-                                .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
-                        )
+                        .padding(.horizontal, 12)
+                        .frame(height: 28)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
                     .help("Automatically renumbers all tracks from 1 to \(trackRows.count)")
 
                     Button(action: padTrackNumbers) {
                         HStack(spacing: 5) {
                             Image(systemName: "number")
-                                .font(.system(size: 11))
+                                .font(.system(size: 11, weight: .semibold))
                             Text("Pad (01..N)")
-                                .font(WalkmanFont.calloutMedium)
+                                .font(WalkmanFont.calloutBold)
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.white.opacity(0.07))
                         .foregroundStyle(WalkmanTheme.silverLight)
-                        .clipShape(Capsule())
-                        .overlay(
-                            Capsule()
-                                .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
-                        )
+                        .padding(.horizontal, 12)
+                        .frame(height: 28)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
                     .help("Formats track numbers with leading zero (01, 02...) for optimal Walkman alphabetical folder sorting")
 
                     Button(action: sortTracksByTrackNum) {
                         Image(systemName: "arrow.up.arrow.down")
-                            .font(.system(size: 11.5))
-                            .frame(width: 28, height: 28)
-                            .background(Color.white.opacity(0.07))
+                            .font(.system(size: 11.5, weight: .semibold))
                             .foregroundStyle(WalkmanTheme.silverLight)
-                            .clipShape(Circle())
-                            .overlay(
-                                Circle()
-                                    .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
-                            )
+                            .frame(width: 28, height: 28)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
                     .help("Sort list by track number")
 
                     Button(action: sortTracksByTitle) {
                         Image(systemName: "textformat.abc")
-                            .font(.system(size: 11.5))
-                            .frame(width: 28, height: 28)
-                            .background(Color.white.opacity(0.07))
+                            .font(.system(size: 11.5, weight: .semibold))
                             .foregroundStyle(WalkmanTheme.silverLight)
-                            .clipShape(Circle())
-                            .overlay(
-                                Circle()
-                                    .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
-                            )
+                            .frame(width: 28, height: 28)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
                     .help("Sort list by track title")
 
                     Button(action: analyzeAlbumSenseMe) {
@@ -899,22 +812,14 @@ public struct AlbumMetadataEditorSheet: View {
                                 Image(systemName: "waveform.path.ecg")
                                     .font(.system(size: 11, weight: .semibold))
                                 Text("Analyze SenseMe\(unanalyzedTracksCount > 0 ? " (\(unanalyzedTracksCount))" : "")")
-                                    .font(WalkmanFont.calloutMedium)
+                                    .font(WalkmanFont.calloutBold)
                             }
                         }
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule()
-                                .fill(Color(red: 255/255, green: 145/255, blue: 0/255).opacity(0.18))
-                        )
-                        .overlay(
-                            Capsule()
-                                .stroke(Color(red: 255/255, green: 165/255, blue: 30/255).opacity(0.55), lineWidth: 0.8)
-                        )
-                        .foregroundStyle(Color(red: 255/255, green: 195/255, blue: 80/255))
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .padding(.horizontal, 12)
+                        .frame(height: 28)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
                     .disabled(isAnalyzingSenseMe || trackRows.isEmpty)
                     .help("Analyze album tracks for Sony 12 Tone / SenseMe and embed hardware-compatible metadata")
                 }
@@ -989,11 +894,7 @@ public struct AlbumMetadataEditorSheet: View {
                     }
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .stroke(Color.white.opacity(0.08), lineWidth: 0.8)
-            )
+            .studioGlassCard(cornerRadius: 12)
         }
     }
 
@@ -1067,32 +968,22 @@ public struct AlbumMetadataEditorSheet: View {
 
                 Spacer()
 
-                Button("Cancel") {
-                    onDismiss()
+                Button(action: onDismiss) {
+                    Text("Cancel")
+                        .font(WalkmanFont.calloutBold)
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .padding(.horizontal, 22)
+                        .frame(height: 38)
                 }
-                .font(WalkmanFont.calloutMedium)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 8.5)
-                .background(Color.white.opacity(isCancelHovered ? 0.12 : 0.06))
-                .clipShape(Capsule())
-                .overlay(
-                    Capsule()
-                        .stroke(Color.white.opacity(isCancelHovered ? 0.22 : 0.10), lineWidth: 0.8)
-                )
-                .foregroundStyle(isCancelHovered ? .white : WalkmanTheme.silverLight)
-                .buttonStyle(.plain)
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
                 .disabled(isSaving)
-                .onHover { h in
-                    withAnimation(.spring(response: 0.22, dampingFraction: 0.72)) {
-                        isCancelHovered = h
-                    }
-                    if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                }
+                .keyboardShortcut(.cancelAction)
 
                 Button(action: saveAlbumChanges) {
                     HStack(spacing: 7) {
                         if isSaving {
                             ProgressView()
+                                .controlSize(.small)
                                 .scaleEffect(0.65)
                                 .frame(width: 14, height: 14)
                             Text("Saving Album...")
@@ -1103,44 +994,13 @@ public struct AlbumMetadataEditorSheet: View {
                         }
                     }
                     .font(WalkmanFont.headline)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 9.5)
-                    .background(
-                        ZStack {
-                            WalkmanTheme.silverGradient
-                            VStack(spacing: 0) {
-                                LinearGradient(
-                                    stops: [
-                                        .init(color: .white.opacity(0.40), location: 0.0),
-                                        .init(color: .clear, location: 1.0)
-                                    ],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                                .frame(height: 5.5)
-                                Spacer(minLength: 0)
-                            }
-                            .clipShape(Capsule())
-                        }
-                    )
                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                    .clipShape(Capsule())
-                    .overlay(
-                        Capsule()
-                            .stroke(Color.white.opacity(0.4), lineWidth: 0.8)
-                    )
-                    .shadow(color: Color.black.opacity(isSaveHovered ? 0.35 : 0.20), radius: isSaveHovered ? 4 : 2, y: 1.5)
-                    .scaleEffect(isSaveHovered && !isSaving ? 1.03 : 1.0)
+                    .padding(.horizontal, 24)
+                    .frame(height: 38)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 19))
                 .disabled(isSaving)
                 .keyboardShortcut(.defaultAction)
-                .onHover { h in
-                    withAnimation(.spring(response: 0.20, dampingFraction: 0.70)) {
-                        isSaveHovered = h
-                    }
-                    if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                }
             }
             .padding(.horizontal, 22)
             .padding(.vertical, 14)
@@ -1181,22 +1041,20 @@ private struct TrackRowView: View {
             HStack(spacing: 3) {
                 Button(action: onMoveUp) {
                     Image(systemName: "chevron.up")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(WalkmanTheme.silverLight)
                         .frame(width: 22, height: 22)
-                        .background(Color.white.opacity(0.06))
-                        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 5))
                 .disabled(index == 0)
 
                 Button(action: onMoveDown) {
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(WalkmanTheme.silverLight)
                         .frame(width: 22, height: 22)
-                        .background(Color.white.opacity(0.06))
-                        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 5))
                 .disabled(index == totalCount - 1)
             }
             .frame(width: 48)
@@ -1245,11 +1103,11 @@ private struct TrackRowView: View {
                     Text("12 TONE")
                         .font(WalkmanFont.badge)
                 }
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
-                .background(Capsule().fill(Color(red: 255/255, green: 145/255, blue: 0/255).opacity(0.18)))
-                .overlay(Capsule().stroke(Color(red: 255/255, green: 165/255, blue: 30/255).opacity(0.5), lineWidth: 0.8))
-                .foregroundStyle(Color(red: 255/255, green: 195/255, blue: 80/255))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(Color.white.opacity(0.08)))
+                .overlay(Capsule().stroke(Color.white.opacity(0.20), lineWidth: 0.8))
+                .foregroundStyle(WalkmanTheme.silverLight)
                 .frame(width: 65, alignment: .center)
             } else {
                 Text("—")
@@ -1352,75 +1210,31 @@ private struct AlbumIconSquareButton: View {
     var helpText: String = ""
     let action: () -> Void
 
-    @State private var isHovered: Bool = false
-
     var body: some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 12))
-                .foregroundStyle(
-                    isDestructive ?
-                        Color(red: 255/255, green: 120/255, blue: 110/255) :
-                        (isHovered ? .white : WalkmanTheme.silverLight)
-                )
-                .frame(width: 30, height: 30)
-                .background(
-                    isDestructive ?
-                        Color.red.opacity(isHovered ? 0.20 : 0.10) :
-                        Color.white.opacity(isHovered ? 0.12 : 0.06)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .stroke(
-                            isDestructive ? Color.red.opacity(0.25) : Color.white.opacity(isHovered ? 0.22 : 0.10),
-                            lineWidth: 0.8
-                        )
-                )
-                .scaleEffect(isHovered && !isDisabled ? 1.06 : 1.0)
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(isDestructive ? Color(red: 255/255, green: 120/255, blue: 110/255) : WalkmanTheme.silverLight)
+                .frame(width: 28, height: 28)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LiquidGlassButtonStyle(variant: isDestructive ? .destructive : .glass, cornerRadius: 8))
         .disabled(isDisabled)
         .help(helpText)
-        .onHover { h in
-            guard !isDisabled else { return }
-            withAnimation(.spring(response: 0.20, dampingFraction: 0.70)) {
-                isHovered = h
-            }
-            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-        }
     }
 }
 
 private struct SheetCloseButton: View {
     let action: () -> Void
-    @State private var isHovered: Bool = false
 
     var body: some View {
         Button(action: action) {
-            ZStack {
-                Circle()
-                    .fill(Color.white.opacity(isHovered ? 0.14 : 0.07))
-                    .frame(width: 28, height: 28)
-
-                Circle()
-                    .stroke(Color.white.opacity(isHovered ? 0.25 : 0.12), lineWidth: 0.8)
-                    .frame(width: 28, height: 28)
-
-                Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(isHovered ? Color.white : Color.white.opacity(0.65))
-            }
-            .scaleEffect(isHovered ? 1.08 : 1.0)
+            Image(systemName: "xmark")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(WalkmanTheme.silverLight)
+                .frame(width: 28, height: 28)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 14))
         .keyboardShortcut(.cancelAction)
         .help("Close")
-        .onHover { h in
-            withAnimation(.spring(response: 0.20, dampingFraction: 0.70)) {
-                isHovered = h
-            }
-            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-        }
     }
 }

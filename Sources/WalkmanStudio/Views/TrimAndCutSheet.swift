@@ -214,6 +214,7 @@ public struct TrimAndCutSheet: View {
     @State private var windowStartTime: Double = 0.0 // Active viewport start time in seconds
 
     // Marker & Mode state
+    @Namespace private var modeAnimationNamespace
     @State private var mode: AudioTrimMode = .trim
     @State private var startTime: Double = 0.0
     @State private var endTime: Double = 0.0
@@ -324,46 +325,7 @@ public struct TrimAndCutSheet: View {
         }
         // Studio Window Dimensions (Generous, High Precision macOS Layout)
         .frame(minWidth: 980, idealWidth: 1060, maxWidth: 1180, minHeight: 700, idealHeight: 780, maxHeight: 890)
-        .background(
-            ZStack {
-                WalkmanTheme.card.opacity(0.88)
-                    .background(.ultraThinMaterial)
-
-                // Top specular sheen (Apple Liquid Glass refraction)
-                VStack(spacing: 0) {
-                    LinearGradient(
-                        stops: [
-                            .init(color: .white.opacity(0.20), location: 0.0),
-                            .init(color: .white.opacity(0.04), location: 0.5),
-                            .init(color: .clear, location: 1.0)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 7)
-                    Spacer(minLength: 0)
-                }
-            }
-            .ignoresSafeArea()
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(
-                    LinearGradient(
-                        stops: [
-                            .init(color: .white.opacity(0.18), location: 0.0),
-                            .init(color: .white.opacity(0.08), location: 0.5),
-                            .init(color: .white.opacity(0.05), location: 1.0)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: 0.85
-                )
-                .allowsHitTesting(false)
-        )
-        .shadow(color: Color.black.opacity(0.45), radius: 24, x: 0, y: 10)
+        .modalGlassChassis(cornerRadius: 16)
         .onAppear {
             setupInitialState()
         }
@@ -396,35 +358,30 @@ public struct TrimAndCutSheet: View {
     // MARK: - Header Bar
     private var headerBar: some View {
         HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(WalkmanTheme.silverGradient)
-                    .frame(width: 32, height: 32)
-
-                Image(systemName: "scissors")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255))
-            }
-            .shadow(color: Color.black.opacity(0.20), radius: 3, y: 1)
+            LiquidGlassIconBadge(icon: "scissors", size: 32, cornerRadius: 9)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
                     Text("Trim & Cut Audio Studio")
-                        .font(WalkmanFont.title2)
+                        .font(WalkmanFont.title3)
                         .foregroundStyle(.white)
 
                     Text("DAW PRECISION")
                         .font(WalkmanFont.badge)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.white.opacity(0.08))
                         .foregroundStyle(WalkmanTheme.silverLight)
-                        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2.5)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule()
+                                .stroke(Color.white.opacity(0.12), lineWidth: 0.8)
+                        )
                 }
 
                 Text(track.filename)
                     .font(WalkmanFont.monoSmall)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(WalkmanTheme.silverMuted)
                     .lineLimit(1)
             }
 
@@ -440,69 +397,64 @@ public struct TrimAndCutSheet: View {
     // MARK: - Hero Track Summary
     private var heroTrackSummary: some View {
         HStack(spacing: 14) {
-            TrackCoverThumbnail(track: track, size: 56)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            TrackCoverThumbnail(track: track, size: 60)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .stroke(Color.white.opacity(0.14), lineWidth: 0.8)
                 )
-                .shadow(color: Color.black.opacity(0.35), radius: 4, y: 1.5)
+                .shadow(color: Color.black.opacity(0.35), radius: 6, x: 0, y: 2)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 3.5) {
                 HStack(spacing: 7) {
                     Text(track.title.isEmpty ? track.filename : track.title)
-                        .font(WalkmanFont.title3)
-                        .foregroundStyle(.white)
+                        .font(.system(size: 15.5, weight: .bold))
+                        .foregroundStyle(WalkmanTheme.silverLight)
                         .lineLimit(1)
 
                     if isHiRes {
-                        Text("Hi-Res")
-                            .font(WalkmanFont.badge)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(WalkmanTheme.hiResGoldGradient)
-                            .foregroundStyle(Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255))
-                            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                        HiResBadge()
+                            .fixedSize()
                     }
                 }
 
                 let dispArtist = track.artist.isEmpty ? "Unknown Artist" : track.artist
                 let dispAlbum = track.album.isEmpty ? "Unknown Album" : track.album
                 Text("\(dispArtist) — \(dispAlbum)")
-                    .font(WalkmanFont.bodyMedium)
-                    .foregroundStyle(.secondary)
+                    .font(WalkmanFont.body)
+                    .foregroundStyle(WalkmanTheme.silverMuted)
                     .lineLimit(1)
 
-                HStack(spacing: 7) {
+                HStack(spacing: 6) {
                     Text(track.format)
                         .font(WalkmanFont.badge)
-                        .padding(.horizontal, 6)
+                        .padding(.horizontal, 5)
                         .padding(.vertical, 2)
                         .background(Color.white.opacity(0.08))
-                        .foregroundStyle(.secondary)
-                        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
 
                     Text(sourceChannels == 1 ? "Mono (1 ch)" : "Stereo (2 ch)")
                         .font(WalkmanFont.monoSmall)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
 
                     Text("•")
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color.white.opacity(0.20))
 
                     Text("\(Int(sourceSampleRate / 1000.0)) kHz")
                         .font(WalkmanFont.monoSmall)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
 
                     if track.bitsPerSample > 0 {
                         Text("•")
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(Color.white.opacity(0.20))
                         Text("\(track.bitsPerSample)-bit")
                             .font(WalkmanFont.monoSmall)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(WalkmanTheme.silverMuted)
                     }
 
                     Text("•")
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color.white.opacity(0.20))
 
                     Text(formatTime(totalDuration))
                         .font(WalkmanFont.monoSmall)
@@ -512,88 +464,40 @@ public struct TrimAndCutSheet: View {
 
             Spacer()
         }
-        .padding(12)
-        .liquidGlass(cornerRadius: 12)
+        .padding(14)
+        .studioGlassCard(cornerRadius: 14)
     }
 
     // MARK: - Mode Selector Deck
     private var modeSelectorDeck: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                // Outer Track
-                HStack(spacing: 4) {
-                    // Trim Mode Option
-                    Button(action: {
-                        withAnimation(.spring(response: 0.25, dampingFraction: 0.75)) {
-                            mode = .trim
-                        }
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "scissors")
-                                .font(.system(size: 13, weight: .semibold))
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text("Trim Mode")
-                                    .font(WalkmanFont.headline)
-                                Text("Keep Selected [Start → End]")
-                                    .font(WalkmanFont.monoSmall)
-                                    .opacity(0.85)
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 14)
-                        .background(mode == .trim ? WalkmanTheme.silverGradient : LinearGradient(colors: [Color.clear], startPoint: .top, endPoint: .bottom))
-                        .foregroundStyle(mode == .trim ? Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255) : Color.white.opacity(0.75))
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(mode == .trim ? Color.clear : Color.white.opacity(0.06), lineWidth: 0.8)
-                        )
-                        .shadow(color: Color.black.opacity(mode == .trim ? 0.20 : 0), radius: 3, y: 1)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+            HStack(spacing: 4) {
+                TrimCutModeTabPill(
+                    title: "Trim Mode",
+                    subtitle: "Keep Selected [Start → End]",
+                    icon: "scissors",
+                    mode: .trim,
+                    selectedMode: $mode,
+                    namespace: modeAnimationNamespace
+                )
 
-                    // Cut Mode Option
-                    Button(action: {
-                        withAnimation(.spring(response: 0.25, dampingFraction: 0.75)) {
-                            mode = .cut
-                        }
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "scissors.badge.ellipsis")
-                                .font(.system(size: 13, weight: .semibold))
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text("Cut Mode")
-                                    .font(WalkmanFont.headline)
-                                Text("Remove Selected & Splice")
-                                    .font(WalkmanFont.monoSmall)
-                                    .opacity(0.85)
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 14)
-                        .background(mode == .cut ? WalkmanTheme.silverGradient : LinearGradient(colors: [Color.clear], startPoint: .top, endPoint: .bottom))
-                        .foregroundStyle(mode == .cut ? Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255) : Color.white.opacity(0.75))
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(mode == .cut ? Color.clear : Color.white.opacity(0.06), lineWidth: 0.8)
-                        )
-                        .shadow(color: Color.black.opacity(mode == .cut ? 0.20 : 0), radius: 3, y: 1)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(3)
-                .background(Color.white.opacity(0.04))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(Color.white.opacity(0.08), lineWidth: 0.8)
+                TrimCutModeTabPill(
+                    title: "Cut Mode",
+                    subtitle: "Remove Selected & Splice",
+                    icon: "scissors.badge.ellipsis",
+                    mode: .cut,
+                    selectedMode: $mode,
+                    namespace: modeAnimationNamespace
                 )
             }
+            .padding(3)
+            .frame(height: 38)
+            .background(Color.white.opacity(0.04))
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
+            )
 
             // Description Helper
             HStack(spacing: 6) {
@@ -601,8 +505,8 @@ public struct TrimAndCutSheet: View {
                     .font(.system(size: 11))
                     .foregroundStyle(WalkmanTheme.silverMuted)
                 Text(mode.description)
-                    .font(WalkmanFont.body)
-                    .foregroundStyle(.secondary)
+                    .font(WalkmanFont.callout)
+                    .foregroundStyle(WalkmanTheme.silverMuted)
             }
             .padding(.horizontal, 4)
         }
@@ -620,30 +524,29 @@ public struct TrimAndCutSheet: View {
                 Spacer()
 
                 if isLoadingWaveform {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 5) {
                         ProgressView()
-                            .scaleEffect(0.5)
-                            .frame(width: 10, height: 10)
+                            .scaleEffect(0.55)
+                            .frame(width: 12, height: 12)
                         Text("Rendering Waveform...")
                             .font(WalkmanFont.monoSmall)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(WalkmanTheme.silverMuted)
                     }
                     .padding(.trailing, 4)
                 }
 
                 // Smooth Zoom Toolbar (Up to 20x Magnification)
-                HStack(spacing: 5) {
+                HStack(spacing: 4) {
                     ForEach([1.0, 2.0, 4.0, 8.0, 16.0, 20.0], id: \.self) { z in
+                        let isSelected = abs(zoomScale - CGFloat(z)) < 0.1
                         Button(action: { setZoom(CGFloat(z)) }) {
                             Text(z == 1.0 ? "Fit" : "\(Int(z))x")
                                 .font(WalkmanFont.pillCounter)
+                                .foregroundStyle(isSelected ? Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255) : WalkmanTheme.silverLight)
                                 .padding(.horizontal, 7)
-                                .padding(.vertical, 3.5)
-                                .background(abs(zoomScale - CGFloat(z)) < 0.1 ? WalkmanTheme.silverGradient : LinearGradient(colors: [Color.white.opacity(0.08), Color.white.opacity(0.04)], startPoint: .top, endPoint: .bottom))
-                                .foregroundStyle(abs(zoomScale - CGFloat(z)) < 0.1 ? Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255) : .secondary)
-                                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                                .frame(height: 24)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(LiquidGlassButtonStyle(variant: isSelected ? .prominent : .glass, cornerRadius: 6))
                         .help(z == 1.0 ? "Fit waveform exactly into window (100% full view)" : "Zoom into waveform at \(Int(z))x magnification")
                     }
 
@@ -657,11 +560,11 @@ public struct TrimAndCutSheet: View {
                         setZoom(max(1.0, zoomScale - step))
                     }) {
                         Image(systemName: "minus.magnifyingglass")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(zoomScale <= 1.01 ? Color.white.opacity(0.2) : WalkmanTheme.silverLight)
-                            .frame(width: 22, height: 22)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(zoomScale <= 1.01 ? WalkmanTheme.silverMuted.opacity(0.3) : WalkmanTheme.silverLight)
+                            .frame(width: 24, height: 24)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 6))
                     .disabled(zoomScale <= 1.01)
                     .help("Zoom Out (-)")
 
@@ -673,7 +576,7 @@ public struct TrimAndCutSheet: View {
                         ),
                         in: 1.0...20.0
                     )
-                    .frame(width: 85)
+                    .frame(width: 80)
                     .help(String(format: "Zoom: %.1fx", zoomScale))
 
                     // Zoom In
@@ -682,18 +585,22 @@ public struct TrimAndCutSheet: View {
                         setZoom(min(20.0, zoomScale + step))
                     }) {
                         Image(systemName: "plus.magnifyingglass")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(zoomScale >= 19.99 ? Color.white.opacity(0.2) : WalkmanTheme.silverLight)
-                            .frame(width: 22, height: 22)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(zoomScale >= 19.99 ? WalkmanTheme.silverMuted.opacity(0.3) : WalkmanTheme.silverLight)
+                            .frame(width: 24, height: 24)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 6))
                     .disabled(zoomScale >= 19.99)
                     .help("Zoom In (+)")
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color.white.opacity(0.05))
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(Color.white.opacity(0.04))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 0.8)
+                )
             }
 
             // Overview Minimap Strip (Full-track navigation)
@@ -705,12 +612,12 @@ public struct TrimAndCutSheet: View {
                 let h = geo.size.height
 
                 ZStack(alignment: .topLeading) {
-                    // Background Canvas Box
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.black.opacity(0.45))
+                    // Background Canvas Box: Solid Obsidian
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(WalkmanTheme.obsidian)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .stroke(Color.white.opacity(0.08), lineWidth: 0.8)
                         )
 
                     // High-Performance Audio Waveform Canvas (100% boundary exact)
@@ -827,12 +734,30 @@ public struct TrimAndCutSheet: View {
                                 .foregroundStyle(WalkmanTheme.hiResGoldLight)
                         }
                         .frame(width: badgeW, height: badgeH)
-                        .background(Color.black.opacity(0.92))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .stroke(WalkmanTheme.hiResGoldLight.opacity(0.85), lineWidth: 1)
+                        .background(
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                    .fill(Color.black.opacity(0.92))
+                                VStack(spacing: 0) {
+                                    LinearGradient(
+                                        stops: [
+                                            .init(color: WalkmanTheme.hiResGoldLight.opacity(0.25), location: 0.0),
+                                            .init(color: Color.clear, location: 1.0)
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                    .frame(height: 5)
+                                    Spacer(minLength: 0)
+                                }
+                                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                            }
                         )
-                        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .stroke(WalkmanTheme.hiResGoldLight.opacity(0.85), lineWidth: 0.85)
+                        )
+                        .shadow(color: Color.black.opacity(0.4), radius: 2, y: 1)
                         .offset(x: badgeX, y: 1)
 
                         // 3. Start Marker Badge Drag Target (Top 26pt handle)
@@ -882,12 +807,30 @@ public struct TrimAndCutSheet: View {
                                 .foregroundStyle(WalkmanTheme.hiResGoldLight)
                         }
                         .frame(width: badgeW, height: badgeH)
-                        .background(Color.black.opacity(0.92))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .stroke(WalkmanTheme.hiResGoldLight.opacity(0.85), lineWidth: 1)
+                        .background(
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                    .fill(Color.black.opacity(0.92))
+                                VStack(spacing: 0) {
+                                    LinearGradient(
+                                        stops: [
+                                            .init(color: WalkmanTheme.hiResGoldLight.opacity(0.25), location: 0.0),
+                                            .init(color: Color.clear, location: 1.0)
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                    .frame(height: 5)
+                                    Spacer(minLength: 0)
+                                }
+                                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                            }
                         )
-                        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .stroke(WalkmanTheme.hiResGoldLight.opacity(0.85), lineWidth: 0.85)
+                        )
+                        .shadow(color: Color.black.opacity(0.4), radius: 2, y: 1)
                         .offset(x: badgeX, y: 1)
 
                         // 3. End Marker Badge Drag Target (Top 26pt handle)
@@ -954,8 +897,8 @@ public struct TrimAndCutSheet: View {
                 timelinePanControlsBar
             }
         }
-        .padding(12)
-        .liquidGlass(cornerRadius: 12)
+        .padding(14)
+        .studioGlassCard(cornerRadius: 14)
     }
 
     // MARK: - Overview Minimap Strip
@@ -1131,50 +1074,47 @@ public struct TrimAndCutSheet: View {
         HStack(spacing: 8) {
             // Jump to Playhead
             Button(action: centerOnPlayhead) {
-                HStack(spacing: 3) {
+                HStack(spacing: 4) {
                     Image(systemName: "scope")
                         .font(.system(size: 10))
                     Text("Playhead")
                         .font(WalkmanFont.calloutMedium)
                 }
+                .foregroundStyle(WalkmanTheme.silverLight)
                 .padding(.horizontal, 8)
-                .padding(.vertical, 3.5)
-                .background(Color.white.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .frame(height: 24)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 6))
             .help("Center viewport on playhead position")
 
             // Jump to Start Marker
             Button(action: centerOnStartMarker) {
-                HStack(spacing: 3) {
+                HStack(spacing: 4) {
                     Image(systemName: "arrow.left.to.line")
                         .font(.system(size: 10))
                     Text("Start")
                         .font(WalkmanFont.calloutMedium)
                 }
+                .foregroundStyle(WalkmanTheme.silverLight)
                 .padding(.horizontal, 8)
-                .padding(.vertical, 3.5)
-                .background(Color.white.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .frame(height: 24)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 6))
             .help("Center viewport on Start Marker")
 
             // Jump to End Marker
             Button(action: centerOnEndMarker) {
-                HStack(spacing: 3) {
+                HStack(spacing: 4) {
                     Text("End")
                         .font(WalkmanFont.calloutMedium)
                     Image(systemName: "arrow.right.to.line")
                         .font(.system(size: 10))
                 }
+                .foregroundStyle(WalkmanTheme.silverLight)
                 .padding(.horizontal, 8)
-                .padding(.vertical, 3.5)
-                .background(Color.white.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .frame(height: 24)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 6))
             .help("Center viewport on End Marker")
 
             Spacer()
@@ -1186,7 +1126,7 @@ public struct TrimAndCutSheet: View {
                     .foregroundStyle(WalkmanTheme.silverLight)
                     .frame(width: 24, height: 24)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 6))
             .help("Scroll Viewport Left")
 
             // Timeline Pan Slider
@@ -1201,7 +1141,7 @@ public struct TrimAndCutSheet: View {
                     .foregroundStyle(WalkmanTheme.silverLight)
                     .frame(width: 24, height: 24)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 6))
             .help("Scroll Viewport Right")
         }
         .padding(.top, 2)
@@ -1243,7 +1183,7 @@ public struct TrimAndCutSheet: View {
                         .foregroundStyle(.white)
                     Text("/ " + formatTime(totalDuration))
                         .font(WalkmanFont.monoSmall)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
                 }
             }
             .frame(minWidth: 145, alignment: .leading)
@@ -1255,33 +1195,21 @@ public struct TrimAndCutSheet: View {
                 // Jump to Start Marker
                 Button(action: { seekTo(time: startTime) }) {
                     Image(systemName: "backward.end.fill")
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(width: 32, height: 32)
-                        .contentShape(Rectangle())
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .frame(width: 34, height: 34)
                 }
-                .buttonStyle(StudioTactileButtonStyle(
-                    bg: Color.white.opacity(0.06),
-                    hoverBg: Color.white.opacity(0.12),
-                    pressedBg: Color.white.opacity(0.18),
-                    fgColor: WalkmanTheme.silverLight,
-                    cornerRadius: 6
-                ))
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 17))
                 .help("Jump playhead to Start Marker (\(formatTime(startTime)))")
 
                 // Step -5s
                 Button(action: { seekTo(time: max(0, currentTime - 5.0)) }) {
                     Image(systemName: "gobackward.5")
-                        .font(.system(size: 14))
-                        .frame(width: 32, height: 32)
-                        .contentShape(Rectangle())
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .frame(width: 34, height: 34)
                 }
-                .buttonStyle(StudioTactileButtonStyle(
-                    bg: Color.white.opacity(0.06),
-                    hoverBg: Color.white.opacity(0.12),
-                    pressedBg: Color.white.opacity(0.18),
-                    fgColor: WalkmanTheme.silverLight,
-                    cornerRadius: 6
-                ))
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 17))
                 .help("Rewind 5 seconds")
 
                 // Main Play / Pause Button
@@ -1299,40 +1227,28 @@ public struct TrimAndCutSheet: View {
                     }
                     .contentShape(Circle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 20))
                 .keyboardShortcut(.space, modifiers: [])
                 .help("Play / Pause from current position (Space)")
 
                 // Step +5s
                 Button(action: { seekTo(time: min(totalDuration, currentTime + 5.0)) }) {
                     Image(systemName: "goforward.5")
-                        .font(.system(size: 14))
-                        .frame(width: 32, height: 32)
-                        .contentShape(Rectangle())
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .frame(width: 34, height: 34)
                 }
-                .buttonStyle(StudioTactileButtonStyle(
-                    bg: Color.white.opacity(0.06),
-                    hoverBg: Color.white.opacity(0.12),
-                    pressedBg: Color.white.opacity(0.18),
-                    fgColor: WalkmanTheme.silverLight,
-                    cornerRadius: 6
-                ))
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 17))
                 .help("Forward 5 seconds")
 
                 // Jump to End Marker
                 Button(action: { seekTo(time: endTime) }) {
                     Image(systemName: "forward.end.fill")
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(width: 32, height: 32)
-                        .contentShape(Rectangle())
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .frame(width: 34, height: 34)
                 }
-                .buttonStyle(StudioTactileButtonStyle(
-                    bg: Color.white.opacity(0.06),
-                    hoverBg: Color.white.opacity(0.12),
-                    pressedBg: Color.white.opacity(0.18),
-                    fgColor: WalkmanTheme.silverLight,
-                    cornerRadius: 6
-                ))
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 17))
                 .help("Jump playhead to End Marker (\(formatTime(endTime)))")
             }
 
@@ -1344,46 +1260,32 @@ public struct TrimAndCutSheet: View {
                 Button(action: toggleAuditionResult) {
                     HStack(spacing: 6) {
                         Image(systemName: isAuditioningResult ? "stop.fill" : (mode == .trim ? "waveform.badge.magnifyingglass" : "scissors"))
-                            .font(.system(size: 11, weight: .bold))
+                            .font(.system(size: 11.5, weight: .bold))
                         Text(isAuditioningResult ? "Stop Audition" : (mode == .trim ? "Audition Trim" : "Audition Cut"))
-                            .font(WalkmanFont.bodyMedium)
+                            .font(WalkmanFont.calloutBold)
                     }
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 7)
-                    .background(isAuditioningResult ? WalkmanTheme.hiResGoldGradient : LinearGradient(colors: [Color.white.opacity(0.10), Color.white.opacity(0.06)], startPoint: .top, endPoint: .bottom))
-                    .foregroundStyle(isAuditioningResult ? Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255) : .white)
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(isAuditioningResult ? Color.clear : Color.white.opacity(0.10), lineWidth: 0.8)
-                    )
-                    .contentShape(Rectangle())
+                    .foregroundStyle(isAuditioningResult ? Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255) : WalkmanTheme.silverLight)
+                    .padding(.horizontal, 14)
+                    .frame(height: 34)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LiquidGlassButtonStyle(variant: isAuditioningResult ? .prominent : .glass, cornerRadius: 17))
                 .help(mode == .trim ? "Audition trimmed result with fades & effects applied" : "Audition track with the cut section skipped")
 
                 // Loop Toggle
                 Button(action: { isLoopingSelection.toggle() }) {
                     Image(systemName: isLoopingSelection ? "repeat.1" : "repeat")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(isLoopingSelection ? WalkmanTheme.hiResGoldLight : .secondary)
-                        .frame(width: 28, height: 28)
-                        .background(isLoopingSelection ? WalkmanTheme.hiResGold.opacity(0.15) : Color.white.opacity(0.04))
-                        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .stroke(isLoopingSelection ? WalkmanTheme.hiResGoldLight.opacity(0.4) : Color.white.opacity(0.08), lineWidth: 0.8)
-                        )
-                        .contentShape(Rectangle())
+                        .font(.system(size: 12.5, weight: .bold))
+                        .foregroundStyle(isLoopingSelection ? WalkmanTheme.hiResGoldLight : WalkmanTheme.silverMuted)
+                        .frame(width: 34, height: 34)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LiquidGlassButtonStyle(variant: isLoopingSelection ? .gold : .glass, cornerRadius: 17))
                 .help("Loop playback continuously between Start and End markers")
 
                 // Volume Slider
                 HStack(spacing: 5) {
                     Image(systemName: volume == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill")
                         .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
 
                     Slider(value: $volume, in: 0...1) { _ in
                         previewPlayer?.volume = volume
@@ -1394,7 +1296,7 @@ public struct TrimAndCutSheet: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .liquidGlass(cornerRadius: 12)
+        .studioGlassCard(cornerRadius: 14)
     }
 
     // MARK: - Marker Fine-Tuning Deck (2 Symmetrical Columns)
@@ -1415,23 +1317,17 @@ public struct TrimAndCutSheet: View {
                     Spacer()
 
                     Button(action: { setStartTime(0.0) }) {
-                        HStack(spacing: 3) {
+                        HStack(spacing: 4) {
                             Image(systemName: "arrow.counterclockwise")
                                 .font(.system(size: 9))
                             Text("Reset (0:00)")
                                 .font(WalkmanFont.monoSmall)
                         }
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3.5)
-                        .contentShape(Rectangle())
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .padding(.horizontal, 8)
+                        .frame(height: 24)
                     }
-                    .buttonStyle(StudioTactileButtonStyle(
-                        bg: Color.white.opacity(0.04),
-                        hoverBg: Color.white.opacity(0.12),
-                        pressedBg: Color.white.opacity(0.20),
-                        fgColor: WalkmanTheme.silverLight,
-                        cornerRadius: 4
-                    ))
+                    .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 6))
                     .help("Reset Start Marker to beginning (0:00.000)")
                 }
 
@@ -1442,26 +1338,19 @@ public struct TrimAndCutSheet: View {
 
                     Spacer()
 
-                    // Single clean button: Set to Playhead
                     Button(action: { setStartTime(currentTime) }) {
                         HStack(spacing: 5) {
                             Image(systemName: "mappin.and.ellipse")
-                                .font(.system(size: 11))
+                                .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(WalkmanTheme.hiResGoldLight)
                             Text("Set to Playhead")
-                                .font(WalkmanFont.bodyMedium)
+                                .font(WalkmanFont.calloutMedium)
                         }
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 5.5)
-                        .contentShape(Rectangle())
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .padding(.horizontal, 10)
+                        .frame(height: 28)
                     }
-                    .buttonStyle(StudioTactileButtonStyle(
-                        bg: Color.white.opacity(0.08),
-                        hoverBg: Color.white.opacity(0.16),
-                        pressedBg: Color.white.opacity(0.24),
-                        fgColor: .white,
-                        cornerRadius: 6
-                    ))
+                    .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 7))
                     .help("Set Start Marker to current Playhead cursor (\(formatTime(currentTime)))")
                 }
 
@@ -1476,7 +1365,7 @@ public struct TrimAndCutSheet: View {
                 }
             }
             .padding(12)
-            .liquidGlass(cornerRadius: 12)
+            .studioGlassCard(cornerRadius: 12)
 
             // End Marker Card
             VStack(alignment: .leading, spacing: 8) {
@@ -1493,23 +1382,17 @@ public struct TrimAndCutSheet: View {
                     Spacer()
 
                     Button(action: { setEndTime(totalDuration) }) {
-                        HStack(spacing: 3) {
+                        HStack(spacing: 4) {
                             Text("Set to End")
                                 .font(WalkmanFont.monoSmall)
                             Image(systemName: "arrow.forward.to.line")
                                 .font(.system(size: 9))
                         }
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3.5)
-                        .contentShape(Rectangle())
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .padding(.horizontal, 8)
+                        .frame(height: 24)
                     }
-                    .buttonStyle(StudioTactileButtonStyle(
-                        bg: Color.white.opacity(0.04),
-                        hoverBg: Color.white.opacity(0.12),
-                        pressedBg: Color.white.opacity(0.20),
-                        fgColor: WalkmanTheme.silverLight,
-                        cornerRadius: 4
-                    ))
+                    .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 6))
                     .help("Set End Marker to track end (\(formatTime(totalDuration)))")
                 }
 
@@ -1520,26 +1403,19 @@ public struct TrimAndCutSheet: View {
 
                     Spacer()
 
-                    // Single clean button: Set to Playhead
                     Button(action: { setEndTime(currentTime) }) {
                         HStack(spacing: 5) {
                             Image(systemName: "mappin.and.ellipse")
-                                .font(.system(size: 11))
+                                .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(WalkmanTheme.hiResGoldLight)
                             Text("Set to Playhead")
-                                .font(WalkmanFont.bodyMedium)
+                                .font(WalkmanFont.calloutMedium)
                         }
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 5.5)
-                        .contentShape(Rectangle())
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .padding(.horizontal, 10)
+                        .frame(height: 28)
                     }
-                    .buttonStyle(StudioTactileButtonStyle(
-                        bg: Color.white.opacity(0.08),
-                        hoverBg: Color.white.opacity(0.16),
-                        pressedBg: Color.white.opacity(0.24),
-                        fgColor: .white,
-                        cornerRadius: 6
-                    ))
+                    .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 7))
                     .help("Set End Marker to current Playhead cursor (\(formatTime(currentTime)))")
                 }
 
@@ -1554,7 +1430,7 @@ public struct TrimAndCutSheet: View {
                 }
             }
             .padding(12)
-            .liquidGlass(cornerRadius: 12)
+            .studioGlassCard(cornerRadius: 12)
         }
     }
 
@@ -1562,18 +1438,12 @@ public struct TrimAndCutSheet: View {
         Button(action: action) {
             Text(title)
                 .font(WalkmanFont.mono)
-                .fontWeight(.medium)
+                .fontWeight(.semibold)
+                .foregroundStyle(WalkmanTheme.silverLight)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 7)
-                .contentShape(Rectangle())
+                .frame(height: 28)
         }
-        .buttonStyle(StudioTactileButtonStyle(
-            bg: Color.white.opacity(0.06),
-            hoverBg: Color.white.opacity(0.14),
-            pressedBg: Color.white.opacity(0.24),
-            fgColor: .white,
-            cornerRadius: 5
-        ))
+        .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 6))
     }
 
 
@@ -1638,7 +1508,7 @@ public struct TrimAndCutSheet: View {
     // MARK: - Duration Metrics Strip
     private var durationMetricsStrip: some View {
         HStack(spacing: 16) {
-            metricItem(label: "ORIGINAL DURATION", value: formatTime(totalDuration), color: .secondary)
+            metricItem(label: "ORIGINAL DURATION", value: formatTime(totalDuration), color: WalkmanTheme.silverMuted)
 
             Divider()
                 .frame(height: 22)
@@ -1658,19 +1528,42 @@ public struct TrimAndCutSheet: View {
             let pct = totalDuration > 0 ? (durationDelta / totalDuration) * 100.0 : 0
             HStack(spacing: 5) {
                 Image(systemName: durationDelta <= 0 ? "arrow.down.right" : "arrow.up.right")
-                    .font(.system(size: 10.5))
+                    .font(.system(size: 10.5, weight: .bold))
                 Text(String(format: "%@ (%.1f%%)", formatTime(abs(durationDelta)), pct))
                     .font(WalkmanFont.mono)
+                    .fontWeight(.semibold)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 4.5)
-            .background(durationDelta <= 0 ? Color.green.opacity(0.15) : Color.orange.opacity(0.15))
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(durationDelta <= 0 ? Color.green.opacity(0.14) : Color.orange.opacity(0.14))
+
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: (durationDelta <= 0 ? Color.green : Color.orange).opacity(0.25), location: 0.0),
+                                .init(color: Color.clear, location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 5)
+                        Spacer(minLength: 0)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke((durationDelta <= 0 ? Color.green : Color.orange).opacity(0.35), lineWidth: 0.8)
+            )
             .foregroundStyle(durationDelta <= 0 ? Color.green : Color.orange)
-            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .liquidGlass(cornerRadius: 10)
+        .studioGlassCard(cornerRadius: 10)
     }
 
     private func metricItem(label: String, value: String, color: Color) -> some View {
@@ -1706,67 +1599,33 @@ public struct TrimAndCutSheet: View {
 
                     HStack(spacing: 12) {
                         // Channel Mode Column
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("CHANNEL CONFIGURATION")
-                                .font(WalkmanFont.badge)
-                                .foregroundStyle(WalkmanTheme.silverMuted)
-
-                            Picker("", selection: $channelMode) {
-                                ForEach(AudioChannelMode.allCases) { opt in
-                                    Text(opt.title).tag(opt)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                            Text(channelModeSubtitle)
-                                .font(WalkmanFont.monoSmall)
-                                .foregroundStyle(channelMode == .original ? Color.secondary : WalkmanTheme.hiResGoldLight)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        LiquidGlassDropdown(
+                            title: "CHANNEL CONFIGURATION",
+                            currentSelectionTitle: channelMode.title,
+                            subtitle: channelModeSubtitle,
+                            subtitleColor: channelMode == .original ? WalkmanTheme.silverMuted : WalkmanTheme.hiResGoldLight,
+                            items: AudioChannelMode.allCases,
+                            itemTitle: { $0.title },
+                            isSelected: { channelMode == $0 },
+                            onSelect: { channelMode = $0 }
+                        )
 
                         // Gain / Boost Column
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("GAIN / BOOST")
-                                .font(WalkmanFont.badge)
-                                .foregroundStyle(WalkmanTheme.silverMuted)
-
-                            Picker("", selection: $gainDb) {
-                                Text("-12 dB").tag(-12.0)
-                                Text("-6 dB").tag(-6.0)
-                                Text("-3 dB").tag(-3.0)
-                                Text("0 dB (Normal)").tag(0.0)
-                                Text("+2 dB").tag(2.0)
-                                Text("+3 dB").tag(3.0)
-                                Text("+4 dB").tag(4.0)
-                                Text("+6 dB (2x Boost)").tag(6.0)
-                                Text("+9 dB").tag(9.0)
-                                Text("+12 dB (4x Boost)").tag(12.0)
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                            Text(gainSubtitle)
-                                .font(WalkmanFont.monoSmall)
-                                .foregroundStyle(gainDb == 0 ? Color.secondary : (gainDb > 0 ? Color.green : Color.orange))
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        let gainOptions: [Double] = [-12.0, -6.0, -3.0, 0.0, 2.0, 3.0, 4.0, 6.0, 9.0, 12.0]
+                        LiquidGlassDropdown(
+                            title: "GAIN / BOOST",
+                            currentSelectionTitle: gainTitle(for: gainDb),
+                            subtitle: gainSubtitle,
+                            subtitleColor: gainDb == 0 ? WalkmanTheme.silverMuted : (gainDb > 0 ? Color.green : Color.orange),
+                            items: gainOptions,
+                            itemTitle: { gainTitle(for: $0) },
+                            isSelected: { gainDb == $0 },
+                            onSelect: { gainDb = $0 }
+                        )
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .padding(12)
-                .background(Color.white.opacity(0.04))
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                )
+                .studioGlassCard(cornerRadius: 12)
 
                 // Right Card: Smooth Transitions (Fades)
                 VStack(alignment: .leading, spacing: 9) {
@@ -1782,74 +1641,59 @@ public struct TrimAndCutSheet: View {
 
                     HStack(spacing: 12) {
                         // Fade In Column
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("FADE IN")
-                                .font(WalkmanFont.badge)
-                                .foregroundStyle(WalkmanTheme.silverMuted)
-
-                            Picker("", selection: $fadeInDuration) {
-                                Text("None (0s)").tag(0.0)
-                                Text("0.10s").tag(0.10)
-                                Text("0.25s").tag(0.25)
-                                Text("0.50s").tag(0.50)
-                                Text("1.00s").tag(1.00)
-                                Text("2.00s").tag(2.00)
-                                Text("3.00s").tag(3.00)
-                                Text("5.00s").tag(5.00)
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                            Text(fadeInSubtitle)
-                                .font(WalkmanFont.monoSmall)
-                                .foregroundStyle(fadeInDuration == 0 ? Color.secondary : WalkmanTheme.hiResGoldLight)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        let fadeOptions: [Double] = [0.0, 0.10, 0.25, 0.50, 1.00, 2.00, 3.00, 5.00]
+                        LiquidGlassDropdown(
+                            title: "FADE IN",
+                            currentSelectionTitle: fadeTitle(for: fadeInDuration),
+                            subtitle: fadeInSubtitle,
+                            subtitleColor: fadeInDuration == 0 ? WalkmanTheme.silverMuted : WalkmanTheme.hiResGoldLight,
+                            items: fadeOptions,
+                            itemTitle: { fadeTitle(for: $0) },
+                            isSelected: { fadeInDuration == $0 },
+                            onSelect: { fadeInDuration = $0 }
+                        )
 
                         // Fade Out Column
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("FADE OUT")
-                                .font(WalkmanFont.badge)
-                                .foregroundStyle(WalkmanTheme.silverMuted)
-
-                            Picker("", selection: $fadeOutDuration) {
-                                Text("None (0s)").tag(0.0)
-                                Text("0.10s").tag(0.10)
-                                Text("0.25s").tag(0.25)
-                                Text("0.50s").tag(0.50)
-                                Text("1.00s").tag(1.00)
-                                Text("2.00s").tag(2.00)
-                                Text("3.00s").tag(3.00)
-                                Text("5.00s").tag(5.00)
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                            Text(fadeOutSubtitle)
-                                .font(WalkmanFont.monoSmall)
-                                .foregroundStyle(fadeOutDuration == 0 ? Color.secondary : WalkmanTheme.hiResGoldLight)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        LiquidGlassDropdown(
+                            title: "FADE OUT",
+                            currentSelectionTitle: fadeTitle(for: fadeOutDuration),
+                            subtitle: fadeOutSubtitle,
+                            subtitleColor: fadeOutDuration == 0 ? WalkmanTheme.silverMuted : WalkmanTheme.hiResGoldLight,
+                            items: fadeOptions,
+                            itemTitle: { fadeTitle(for: $0) },
+                            isSelected: { fadeOutDuration == $0 },
+                            onSelect: { fadeOutDuration = $0 }
+                        )
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .padding(12)
-                .background(Color.white.opacity(0.04))
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                )
+                .studioGlassCard(cornerRadius: 12)
             }
         }
         .padding(14)
-        .liquidGlass(cornerRadius: 12)
+        .studioGlassCard(cornerRadius: 14)
+    }
+
+    private func gainTitle(for db: Double) -> String {
+        if db == 0 {
+            return "0 dB (Normal)"
+        } else if db == 6.0 {
+            return "+6 dB (2x Boost)"
+        } else if db == 12.0 {
+            return "+12 dB (4x Boost)"
+        } else if db > 0 {
+            return String(format: "+%.0f dB", db)
+        } else {
+            return String(format: "%.0f dB", db)
+        }
+    }
+
+    private func fadeTitle(for sec: Double) -> String {
+        if sec == 0 {
+            return "None (0s)"
+        } else {
+            return String(format: "%.2fs", sec)
+        }
     }
 
     private var channelModeSubtitle: String {
@@ -1912,25 +1756,26 @@ public struct TrimAndCutSheet: View {
 
             HStack(spacing: 10) {
                 ForEach(AudioSaveDestination.allCases) { opt in
-                    Button(action: { destination = opt }) {
+                    let isSelected = destination == opt
+                    Button(action: {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.78)) {
+                            destination = opt
+                        }
+                    }) {
                         HStack(spacing: 7) {
                             Image(systemName: opt.icon)
-                                .font(.system(size: 12))
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(isSelected ? Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255) : WalkmanTheme.silverLight)
+
                             Text(opt.title)
-                                .font(WalkmanFont.bodyMedium)
+                                .font(WalkmanFont.calloutBold)
+                                .foregroundStyle(isSelected ? Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255) : WalkmanTheme.silverLight)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 9)
+                        .frame(height: 34)
                         .padding(.horizontal, 12)
-                        .background(destination == opt ? WalkmanTheme.silverGradient : LinearGradient(colors: [Color.white.opacity(0.06), Color.white.opacity(0.03)], startPoint: .top, endPoint: .bottom))
-                        .foregroundStyle(destination == opt ? Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255) : .white)
-                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .stroke(destination == opt ? Color.clear : Color.white.opacity(0.08), lineWidth: 1)
-                        )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(LiquidGlassButtonStyle(variant: isSelected ? .prominent : .glass, cornerRadius: 8))
                 }
             }
 
@@ -1941,8 +1786,8 @@ public struct TrimAndCutSheet: View {
                         .foregroundStyle(Color.orange)
                         .font(.system(size: 11))
                     Text("Overwriting will safely replace the track file on disk and preserve all ID3v2.3 / Vorbis tags and embedded album art.")
-                        .font(WalkmanFont.body)
-                        .foregroundStyle(.secondary)
+                        .font(WalkmanFont.callout)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
                 }
                 .padding(.top, 2)
             } else if destination == .newFile {
@@ -1951,8 +1796,8 @@ public struct TrimAndCutSheet: View {
                         .foregroundStyle(WalkmanTheme.silverLight)
                         .font(.system(size: 11))
                     Text("Creates a new copy alongside the original file with '[Trimmed]' appended to the filename.")
-                        .font(WalkmanFont.body)
-                        .foregroundStyle(.secondary)
+                        .font(WalkmanFont.callout)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
                 }
                 .padding(.top, 2)
             }
@@ -1962,15 +1807,17 @@ public struct TrimAndCutSheet: View {
                 HStack(spacing: 6) {
                     Image(systemName: "tag.fill")
                         .font(.system(size: 11))
+                        .foregroundStyle(WalkmanTheme.silverLight)
                     Text("Preserve Track Metadata (Title, Artist, Album, Year) and Baseline RGB JPEG Cover Art")
                         .font(WalkmanFont.bodyMedium)
+                        .foregroundStyle(WalkmanTheme.silverLight)
                 }
             }
             .toggleStyle(.checkbox)
             .padding(.top, 4)
         }
         .padding(14)
-        .liquidGlass(cornerRadius: 12)
+        .studioGlassCard(cornerRadius: 14)
     }
 
     // MARK: - Footer Bar
@@ -1978,38 +1825,34 @@ public struct TrimAndCutSheet: View {
         HStack(spacing: 12) {
             // Status / Error message
             if let err = errorMessage {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(Color.red)
-                Text(err)
-                    .font(WalkmanFont.monoSmall)
-                    .foregroundStyle(Color.red)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Color.red)
+                    Text(err)
+                        .font(WalkmanFont.calloutMedium)
+                        .foregroundStyle(Color.red)
+                        .lineLimit(1)
+                }
             } else if showSuccessBanner {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Color.green)
-                Text("Track processed successfully!")
-                    .font(WalkmanFont.calloutBold)
-                    .foregroundStyle(Color.green)
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Color.green)
+                    Text("Track processed successfully!")
+                        .font(WalkmanFont.calloutBold)
+                        .foregroundStyle(Color.green)
+                }
             }
 
             Spacer()
 
             Button(action: onDismiss) {
                 Text("Cancel")
-                    .font(WalkmanFont.bodyMedium)
+                    .font(WalkmanFont.calloutBold)
+                    .foregroundStyle(WalkmanTheme.silverLight)
                     .padding(.horizontal, 22)
-                    .padding(.vertical, 9.5)
-                    .contentShape(Rectangle())
+                    .frame(height: 38)
             }
-            .buttonStyle(StudioTactileButtonStyle(
-                bg: Color.white.opacity(0.08),
-                hoverBg: Color.white.opacity(0.16),
-                pressedBg: Color.white.opacity(0.24),
-                fgColor: WalkmanTheme.silverLight,
-                cornerRadius: 7,
-                borderNormal: Color.white.opacity(0.12),
-                borderHover: Color.white.opacity(0.26)
-            ))
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
             .disabled(isProcessing)
             .keyboardShortcut(.cancelAction)
 
@@ -2026,18 +1869,17 @@ public struct TrimAndCutSheet: View {
                         Text(mode == .trim ? "Apply & Trim Track" : "Apply & Cut Track")
                     }
                 }
-                .font(WalkmanFont.headline)
+                .font(WalkmanFont.calloutBold)
+                .foregroundStyle(Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255))
                 .padding(.horizontal, 24)
-                .padding(.vertical, 9.5)
-                .contentShape(Rectangle())
+                .frame(height: 38)
             }
-            .buttonStyle(StudioTactileGoldButtonStyle(cornerRadius: 7))
+            .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 19))
             .disabled(isProcessing)
             .keyboardShortcut(.defaultAction)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
-        .background(WalkmanTheme.card.opacity(0.92))
     }
 
     // MARK: - Zoom & Navigation Logic
@@ -2384,30 +2226,122 @@ public struct TrimAndCutSheet: View {
 
 private struct SheetCloseButton: View {
     let action: () -> Void
-    @State private var isHovered: Bool = false
 
     var body: some View {
         Button(action: action) {
-            ZStack {
-                Circle()
-                    .fill(Color.white.opacity(isHovered ? 0.14 : 0.07))
-                    .frame(width: 28, height: 28)
-
-                Circle()
-                    .stroke(Color.white.opacity(isHovered ? 0.25 : 0.12), lineWidth: 0.8)
-                    .frame(width: 28, height: 28)
-
-                Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(isHovered ? Color.white : Color.white.opacity(0.65))
-            }
-            .scaleEffect(isHovered ? 1.08 : 1.0)
+            Image(systemName: "xmark")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(WalkmanTheme.silverLight)
+                .frame(width: 28, height: 28)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 14))
         .keyboardShortcut(.cancelAction)
         .help("Close (Esc)")
+    }
+}
+
+// MARK: - Liquid Glass Mode Tab Pill
+private struct TrimCutModeTabPill: View {
+    let title: String
+    let subtitle: String
+    let icon: String
+    let mode: AudioTrimMode
+    @Binding var selectedMode: AudioTrimMode
+    let namespace: Namespace.ID
+
+    @State private var isHovered: Bool = false
+
+    private var isSelected: Bool {
+        selectedMode == mode
+    }
+
+    var body: some View {
+        Button(action: {
+            withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+                selectedMode = mode
+            }
+        }) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(isSelected ? Color.white : WalkmanTheme.silverMuted)
+
+                HStack(spacing: 6) {
+                    Text(title)
+                        .font(WalkmanFont.headline)
+                        .foregroundStyle(isSelected ? Color.white : WalkmanTheme.silverLight)
+
+                    Text("•")
+                        .foregroundStyle(Color.white.opacity(0.25))
+
+                    Text(subtitle)
+                        .font(WalkmanFont.monoSmall)
+                        .foregroundStyle(isSelected ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 32)
+            .padding(.horizontal, 14)
+            .background(
+                ZStack {
+                    if isSelected {
+                        Capsule()
+                            .fill(Color.white.opacity(0.16))
+                            .matchedGeometryEffect(id: "activeTrimCutModeHighlight", in: namespace)
+
+                        VStack(spacing: 0) {
+                            LinearGradient(
+                                stops: [
+                                    .init(color: Color.white.opacity(isHovered ? 0.42 : 0.35), location: 0.0),
+                                    .init(color: Color.clear, location: 1.0)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .frame(height: 6)
+                            Spacer(minLength: 0)
+                        }
+                        .clipShape(Capsule())
+                        .matchedGeometryEffect(id: "activeTrimCutModeSheen", in: namespace)
+                    } else if isHovered {
+                        Capsule()
+                            .fill(Color.white.opacity(0.09))
+
+                        VStack(spacing: 0) {
+                            LinearGradient(
+                                stops: [
+                                    .init(color: Color.white.opacity(0.20), location: 0.0),
+                                    .init(color: Color.clear, location: 1.0)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .frame(height: 5.5)
+                            Spacer(minLength: 0)
+                        }
+                        .clipShape(Capsule())
+                    }
+                }
+            )
+            .overlay(
+                Group {
+                    if isSelected {
+                        Capsule()
+                            .stroke(Color.white.opacity(isHovered ? 0.45 : 0.34), lineWidth: 0.85)
+                            .matchedGeometryEffect(id: "activeTrimCutModeBorder", in: namespace)
+                    } else if isHovered {
+                        Capsule()
+                            .stroke(Color.white.opacity(0.22), lineWidth: 0.85)
+                    }
+                }
+            )
+            .shadow(color: isSelected ? Color.black.opacity(0.25) : (isHovered ? Color.black.opacity(0.15) : Color.clear), radius: isSelected ? 3 : 2, y: 1)
+            .scaleEffect(isHovered && !isSelected ? 1.03 : 1.0)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
         .onHover { h in
-            withAnimation(.spring(response: 0.20, dampingFraction: 0.70)) {
+            withAnimation(.spring(response: 0.22, dampingFraction: 0.72)) {
                 isHovered = h
             }
             if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
@@ -2415,105 +2349,94 @@ private struct SheetCloseButton: View {
     }
 }
 
-// MARK: - Studio Tactile Button Styles (Full-Frame Interactive Hit-Testing)
-private struct StudioTactileButtonStyle: ButtonStyle {
-    var bg: Color = Color.white.opacity(0.07)
-    var hoverBg: Color = Color.white.opacity(0.14)
-    var pressedBg: Color = Color.white.opacity(0.24)
-    var fgColor: Color = .white
-    var cornerRadius: CGFloat = 5
-    var borderNormal: Color = Color.white.opacity(0.09)
-    var borderHover: Color = Color.white.opacity(0.26)
+// MARK: - Liquid Glass Dropdown
+private struct LiquidGlassDropdown<T: Hashable>: View {
+    let title: String
+    let currentSelectionTitle: String
+    let subtitle: String
+    let subtitleColor: Color
+    let items: [T]
+    let itemTitle: (T) -> String
+    let isSelected: (T) -> Bool
+    let onSelect: (T) -> Void
 
-    func makeBody(configuration: Configuration) -> some View {
-        StudioTactileButtonBody(
-            configuration: configuration,
-            bg: bg,
-            hoverBg: hoverBg,
-            pressedBg: pressedBg,
-            fgColor: fgColor,
-            cornerRadius: cornerRadius,
-            borderNormal: borderNormal,
-            borderHover: borderHover
-        )
-    }
+    @State private var isHovered: Bool = false
 
-    private struct StudioTactileButtonBody: View {
-        let configuration: Configuration
-        let bg: Color
-        let hoverBg: Color
-        let pressedBg: Color
-        let fgColor: Color
-        let cornerRadius: CGFloat
-        let borderNormal: Color
-        let borderHover: Color
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(WalkmanFont.badge)
+                .foregroundStyle(WalkmanTheme.silverMuted)
 
-        @State private var isHovered: Bool = false
+            Menu {
+                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                    Button(action: { onSelect(item) }) {
+                        HStack {
+                            Text(itemTitle(item))
+                            if isSelected(item) {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(currentSelectionTitle)
+                        .font(WalkmanFont.calloutMedium)
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
 
-        var body: some View {
-            configuration.label
-                .foregroundStyle(fgColor)
+                    Spacer(minLength: 4)
+
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(WalkmanTheme.silverMuted)
+                }
+                .padding(.horizontal, 10)
+                .frame(height: 32)
                 .background(
-                    configuration.isPressed ? pressedBg : (isHovered ? hoverBg : bg)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .stroke(isHovered ? borderHover : borderNormal, lineWidth: 0.8)
-                )
-                .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
-                .contentShape(Rectangle())
-                .onHover { hovering in
-                    guard isHovered != hovering else { return }
-                    isHovered = hovering
-                    if hovering {
-                        NSCursor.pointingHand.push()
-                    } else {
-                        NSCursor.pop()
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(Color.white.opacity(isHovered ? 0.09 : 0.05))
+
+                        VStack(spacing: 0) {
+                            LinearGradient(
+                                stops: [
+                                    .init(color: Color.white.opacity(isHovered ? 0.22 : 0.14), location: 0.0),
+                                    .init(color: Color.clear, location: 1.0)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .frame(height: 6)
+                            Spacer(minLength: 0)
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                     }
-                }
-                .animation(.easeOut(duration: 0.10), value: configuration.isPressed)
-                .animation(.easeOut(duration: 0.12), value: isHovered)
-        }
-    }
-}
-
-private struct StudioTactileGoldButtonStyle: ButtonStyle {
-    var cornerRadius: CGFloat = 5
-
-    func makeBody(configuration: Configuration) -> some View {
-        StudioTactileGoldButtonBody(configuration: configuration, cornerRadius: cornerRadius)
-    }
-
-    private struct StudioTactileGoldButtonBody: View {
-        let configuration: Configuration
-        let cornerRadius: CGFloat
-        @State private var isHovered: Bool = false
-
-        var body: some View {
-            configuration.label
-                .foregroundStyle(Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255))
-                .background(WalkmanTheme.hiResGoldGradient)
-                .opacity(configuration.isPressed ? 0.85 : 1.0)
-                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .stroke(WalkmanTheme.hiResGoldLight.opacity(isHovered ? 0.85 : 0.45), lineWidth: 0.8)
                 )
-                .scaleEffect(configuration.isPressed ? 0.95 : (isHovered ? 1.02 : 1.0))
-                .shadow(color: Color.black.opacity(isHovered ? 0.35 : 0.18), radius: isHovered ? 4 : 2, y: 1)
-                .contentShape(Rectangle())
-                .onHover { hovering in
-                    guard isHovered != hovering else { return }
-                    isHovered = hovering
-                    if hovering {
-                        NSCursor.pointingHand.push()
-                    } else {
-                        NSCursor.pop()
-                    }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .stroke(Color.white.opacity(isHovered ? 0.25 : 0.12), lineWidth: 0.8)
+                )
+                .shadow(color: Color.black.opacity(isHovered ? 0.20 : 0.10), radius: isHovered ? 3 : 2, y: 1)
+                .scaleEffect(isHovered ? 1.015 : 1.0)
+                .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            }
+            .menuStyle(.borderlessButton)
+            .onHover { h in
+                withAnimation(.spring(response: 0.20, dampingFraction: 0.72)) {
+                    isHovered = h
                 }
-                .animation(.easeOut(duration: 0.10), value: configuration.isPressed)
-                .animation(.easeOut(duration: 0.12), value: isHovered)
+                if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
+
+            Text(subtitle)
+                .font(WalkmanFont.monoSmall)
+                .foregroundStyle(subtitleColor)
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

@@ -33,6 +33,15 @@ public struct TransferQueueView: View {
     @State private var pendingNonDuplicateURLs: [URL] = []
     @State private var pendingAllImportURLs: [URL] = []
 
+    // Audio Import / Folder Scanning State
+    @State private var isImporting: Bool = false
+    @State private var importStatusMessage: String = "Scanning folder for music..."
+    @State private var importCurrent: Int = 0
+    @State private var importTotal: Int = 0
+    @State private var importCurrentTitle: String = ""
+    @State private var importProgress: Double = 0.0
+    @State private var importTask: Task<Void, Never>? = nil
+
     // Hardware Optimization & Sync Toggles
     @State private var optimizeArtwork: Bool = true
     @State private var fetchLyrics: Bool = true
@@ -123,96 +132,15 @@ public struct TransferQueueView: View {
     }
 
     private var modeButtonsView: some View {
-        HStack(spacing: 3) {
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    targetMode = .music
+        TransferModeSegmentedBarView(
+            targetMode: $targetMode,
+            onSelectMode: { newMode in
+                targetMode = newMode
+                if newMode == .learning && (selectedPreset == "flac_16" || selectedPreset == "flac_24_96") {
+                    selectedPreset = "copy_optimize"
                 }
-            }) {
-                HStack(spacing: 6) {
-                    Image(systemName: "music.note")
-                        .font(.system(size: 11, weight: .semibold))
-                    Text("Music Library (/MUSIC)")
-                        .font(WalkmanFont.calloutBold)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(targetMode == .music ? Color.white.opacity(0.14) : Color.clear)
-                )
-                .foregroundStyle(targetMode == .music ? .white : .secondary)
             }
-            .buttonStyle(.plain)
-
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    targetMode = .learning
-                    if selectedPreset == "flac_16" || selectedPreset == "flac_24_96" {
-                        selectedPreset = "copy_optimize"
-                    }
-                }
-            }) {
-                HStack(spacing: 6) {
-                    Image(systemName: "character.book.closed.fill")
-                        .font(.system(size: 11, weight: .semibold))
-                    Text("Language Study & Audiobooks (/LEARNING)")
-                        .font(WalkmanFont.calloutBold)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(targetMode == .learning ? WalkmanTheme.hiResGold.opacity(0.2) : Color.clear)
-                )
-                .foregroundStyle(targetMode == .learning ? WalkmanTheme.hiResGold : .secondary)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(3)
-        .background(Color.white.opacity(0.04))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
         )
-    }
-
-    private var modeInformationalPill: some View {
-        Group {
-            if targetMode == .learning {
-                HStack(spacing: 5) {
-                    Image(systemName: "bolt.fill")
-                        .font(.system(size: 9))
-                        .foregroundStyle(WalkmanTheme.hiResGold)
-                    Text("DPC Speed (0.5x–2.0x) • A-B Repeat • Quick Replay (3s/10s)")
-                        .font(WalkmanFont.monoSmall)
-                        .foregroundStyle(WalkmanTheme.hiResGold.opacity(0.95))
-                        .lineLimit(1)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(WalkmanTheme.hiResGold.opacity(0.12))
-                .clipShape(Capsule())
-                .overlay(
-                    Capsule().stroke(WalkmanTheme.hiResGold.opacity(0.25), lineWidth: 0.8)
-                )
-            } else {
-                HStack(spacing: 5) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 9))
-                        .foregroundStyle(WalkmanTheme.silverMuted)
-                    Text("Standard Walkman Library • Playlists • Hi-Res Audio")
-                        .font(WalkmanFont.monoSmall)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Color.white.opacity(0.04))
-                .clipShape(Capsule())
-            }
-        }
     }
 
     public var body: some View {
@@ -221,16 +149,9 @@ public struct TransferQueueView: View {
                 // -------------------------------------------------------------
                 // PANEL 0: DESTINATION MODE SELECTOR (Music vs Language Study)
                 // -------------------------------------------------------------
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 10) {
-                        modeButtonsView
-                        Spacer()
-                        modeInformationalPill
-                    }
-                    VStack(alignment: .leading, spacing: 8) {
-                        modeButtonsView
-                        modeInformationalPill
-                    }
+                HStack {
+                    modeButtonsView
+                    Spacer()
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 10)
@@ -241,7 +162,7 @@ public struct TransferQueueView: View {
                 GeometryReader { geo in
                     let spacing: CGFloat = 12
                     let cardWidth = max(0, (geo.size.width - spacing * 2) / 3.0)
-                    let cardHeight: CGFloat = 100
+                    let cardHeight: CGFloat = 114
 
                     HStack(spacing: spacing) {
                         // Card 1: Target Destination Drive
@@ -255,27 +176,26 @@ public struct TransferQueueView: View {
                                     .foregroundStyle(isLocalDestination ? WalkmanTheme.silverLight.opacity(0.85) : (targetMode == .learning ? WalkmanTheme.hiResGold.opacity(0.9) : Color.white.opacity(0.4)))
                             }
 
-                            Picker("", selection: $targetDriveId) {
-                                if !drives.isEmpty {
-                                    Section("Walkman Storage") {
-                                        ForEach(drives) { d in
-                                            let dev = WalkmanDeviceDetector.shared.detectDevices(drives: drives).first(where: { $0.drives.contains(where: { $0.mountPoint == d.mountPoint }) })
-                                            let label = (drives.count > 2 && dev != nil) ? "\(dev!.specificModel) • \(d.name)" : d.name
-                                            Text(label).tag(d.mountPoint)
+                            LiquidGlassDropdownMenu(title: currentTargetDriveLabel) {
+                                Picker("", selection: $targetDriveId) {
+                                    if !drives.isEmpty {
+                                        Section("Walkman Storage") {
+                                            ForEach(drives) { d in
+                                                let dev = WalkmanDeviceDetector.shared.detectDevices(drives: drives).first(where: { $0.drives.contains(where: { $0.mountPoint == d.mountPoint }) })
+                                                let label = (drives.count > 2 && dev != nil) ? "\(dev!.specificModel) • \(d.name)" : d.name
+                                                Text(label).tag(d.mountPoint)
+                                            }
+                                        }
+                                    }
+                                    Section("Local Storage") {
+                                        Text("Local Music Library").tag("local_library")
+                                        ForEach(LocalMusicLibraryService.shared.folders) { f in
+                                            Text("Folder: \(f.displayName)").tag("local_folder_\(f.id)")
                                         }
                                     }
                                 }
-                                Section("Local Storage") {
-                                    Text("Local Music Library").tag("local_library")
-                                    ForEach(LocalMusicLibraryService.shared.folders) { f in
-                                        Text("Folder: \(f.displayName)").tag("local_folder_\(f.id)")
-                                    }
-                                }
+                                .pickerStyle(.inline)
                             }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                            .tint(WalkmanTheme.silver)
-                            .frame(maxWidth: .infinity, alignment: .leading)
 
                             Spacer(minLength: 0)
 
@@ -305,7 +225,7 @@ public struct TransferQueueView: View {
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
                         .frame(width: cardWidth, height: cardHeight, alignment: .topLeading)
-                        .liquidGlass(cornerRadius: 11)
+                        .liquidGlass(cornerRadius: 12)
 
                         // Card 2: Conversion Preset
                         VStack(alignment: .leading, spacing: 5) {
@@ -318,42 +238,41 @@ public struct TransferQueueView: View {
                                     .foregroundStyle(.tertiary)
                             }
 
-                            Picker("", selection: $selectedPreset) {
-                                Section("Pass-Through & Optimization") {
-                                    Text("Optimize Metadata Only (Direct Copy)").tag("copy_optimize")
-                                    Text("Direct Copy (Raw Passthrough)").tag("copy_raw")
-                                }
+                            LiquidGlassDropdownMenu(title: presetDisplayName(selectedPreset)) {
+                                Picker("", selection: $selectedPreset) {
+                                    Section("Pass-Through & Optimization") {
+                                        Text("Optimize Metadata Only (Direct Copy)").tag("copy_optimize")
+                                        Text("Direct Copy (Raw Passthrough)").tag("copy_raw")
+                                    }
 
-                                Section("Podcasts, Audiobooks & Voice (Speech Optimized)") {
-                                    Text("MP3 128 kbps Spoken Word (Compact Size)").tag("mp3_128")
-                                    Text("MP3 192 kbps Voice Master (High Clarity)").tag("mp3_192")
-                                    Text("AAC 128 kbps Spoken Audio (M4A)").tag("aac_128")
-                                }
+                                    Section("Podcasts, Audiobooks & Voice (Speech Optimized)") {
+                                        Text("MP3 128 kbps Spoken Word (Compact Size)").tag("mp3_128")
+                                        Text("MP3 192 kbps Voice Master (High Clarity)").tag("mp3_192")
+                                        Text("AAC 128 kbps Spoken Audio (M4A)").tag("aac_128")
+                                    }
 
-                                Section("Lossless FLAC (Sony S-Master HX)") {
-                                    Text("FLAC 16-bit / 44.1kHz (CD Quality)").tag("flac_16")
-                                    Text("FLAC 24-bit / 48kHz (Studio Lossless)").tag("flac_24_48")
-                                    Text("FLAC 24-bit / 96kHz (Hi-Res Master)").tag("flac_24_96")
-                                    Text("FLAC 24-bit / 192kHz (Ultra Hi-Res)").tag("flac_24_192")
-                                }
+                                    Section("Lossless FLAC (Sony S-Master HX)") {
+                                        Text("FLAC 16-bit / 44.1kHz (CD Quality)").tag("flac_16")
+                                        Text("FLAC 24-bit / 48kHz (Studio Lossless)").tag("flac_24_48")
+                                        Text("FLAC 24-bit / 96kHz (Hi-Res Master)").tag("flac_24_96")
+                                        Text("FLAC 24-bit / 192kHz (Ultra Hi-Res)").tag("flac_24_192")
+                                    }
 
-                                Section("MP3 (Strict ID3v2.3 UTF-16)") {
-                                    Text("MP3 320 kbps CBR (Maximum Quality)").tag("mp3_320")
-                                    Text("MP3 256 kbps CBR (High Quality)").tag("mp3_256")
-                                    Text("MP3 VBR V0 (~245 kbps Variable)").tag("mp3_v0")
-                                }
+                                    Section("MP3 (Strict ID3v2.3 UTF-16)") {
+                                        Text("MP3 320 kbps CBR (Maximum Quality)").tag("mp3_320")
+                                        Text("MP3 256 kbps CBR (High Quality)").tag("mp3_256")
+                                        Text("MP3 VBR V0 (~245 kbps Variable)").tag("mp3_v0")
+                                    }
 
-                                Section("Apple & PCM Audio") {
-                                    Text("AAC 320 kbps (High Fidelity M4A)").tag("aac_320")
-                                    Text("AAC 256 kbps (iTunes Standard M4A)").tag("aac_256")
-                                    Text("ALAC Apple Lossless (16-bit)").tag("alac_16")
-                                    Text("WAV 16-bit / 44.1kHz PCM").tag("wav_16")
+                                    Section("Apple & PCM Audio") {
+                                        Text("AAC 320 kbps (High Fidelity M4A)").tag("aac_320")
+                                        Text("AAC 256 kbps (iTunes Standard M4A)").tag("aac_256")
+                                        Text("ALAC Apple Lossless (16-bit)").tag("alac_16")
+                                        Text("WAV 16-bit / 44.1kHz PCM").tag("wav_16")
+                                    }
                                 }
+                                .pickerStyle(.inline)
                             }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                            .tint(WalkmanTheme.silver)
-                            .frame(maxWidth: .infinity, alignment: .leading)
 
                             Spacer(minLength: 0)
 
@@ -366,7 +285,7 @@ public struct TransferQueueView: View {
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
                         .frame(width: cardWidth, height: cardHeight, alignment: .topLeading)
-                        .liquidGlass(cornerRadius: 11)
+                        .liquidGlass(cornerRadius: 12)
 
                         // Card 3: Batch Queue & Transfer CTA
                         VStack(alignment: .leading, spacing: 5) {
@@ -386,48 +305,38 @@ public struct TransferQueueView: View {
                                     Spacer(minLength: 0)
                                     if isProcessing {
                                         ProgressView()
-                                            .scaleEffect(0.65)
+                                            .scaleEffect(0.70)
                                         let doneCount = queue.filter { $0.status == .success }.count
                                         Text("Transferring (\(doneCount)/\(queue.count))...")
                                             .font(WalkmanFont.calloutBold)
+                                            .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                                    } else if queue.isEmpty {
+                                        Image(systemName: "arrow.right.circle")
+                                            .font(.system(size: 13, weight: .semibold))
+                                        Text("Queue Empty")
+                                            .font(WalkmanFont.calloutMedium)
                                     } else {
-                                        Image(systemName: queue.isEmpty ? "arrow.right.circle" : "arrow.right.circle.fill")
-                                            .font(.system(size: 13, weight: .bold))
-                                        Text(queue.isEmpty ? "Queue Empty" : "Start Transfer (\(queue.count))")
+                                        Image(systemName: "arrow.right.circle.fill")
+                                            .font(.system(size: 14, weight: .bold))
+                                        Text("Start Transfer (\(queue.count))")
                                             .font(WalkmanFont.calloutBold)
                                     }
                                     Spacer(minLength: 0)
                                 }
                                 .frame(maxWidth: .infinity)
-                                .frame(height: 28)
-                                .background(
-                                    Group {
-                                        if queue.isEmpty {
-                                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                                .fill(Color.white.opacity(0.06))
-                                        } else if isProcessing {
-                                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                                .fill(Color.accentColor.opacity(0.35))
-                                        } else {
-                                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                                .fill(
-                                                    LinearGradient(
-                                                        colors: [Color(white: 0.94), Color(white: 0.80)],
-                                                        startPoint: .top,
-                                                        endPoint: .bottom
-                                                    )
-                                                )
-                                        }
-                                    }
+                                .frame(height: 38)
+                                .foregroundStyle(
+                                    queue.isEmpty ?
+                                        Color.white.opacity(0.35) :
+                                        Color(red: 20/255, green: 20/255, blue: 24/255)
                                 )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                        .stroke(queue.isEmpty ? Color.white.opacity(0.08) : Color.white.opacity(0.35), lineWidth: 0.5)
-                                )
-                                .foregroundStyle(queue.isEmpty ? Color.white.opacity(0.35) : Color(red: 18/255, green: 18/255, blue: 22/255))
-                                .shadow(color: queue.isEmpty ? Color.clear : Color.black.opacity(0.3), radius: 2.5, x: 0, y: 1)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(
+                                LiquidGlassButtonStyle(
+                                    variant: queue.isEmpty ? .glass : .prominent,
+                                    cornerRadius: 19
+                                )
+                            )
                             .frame(maxWidth: .infinity)
                             .disabled(queue.isEmpty || isProcessing || isBatchOptimizing || isBatchFetchingLyrics)
 
@@ -452,10 +361,12 @@ public struct TransferQueueView: View {
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
                         .frame(width: cardWidth, height: cardHeight, alignment: .topLeading)
-                        .liquidGlass(cornerRadius: 11)
+                        .liquidGlass(cornerRadius: 12)
                     }
                 }
-                .frame(height: 100)
+                .frame(height: 114)
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
                 .padding(.horizontal, 16)
                 .padding(.top, 10)
 
@@ -464,7 +375,7 @@ public struct TransferQueueView: View {
                 // -------------------------------------------------------------
                 HStack(spacing: 8) {
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 7) {
+                        HStack(spacing: 8) {
                             toggleChip(
                                 title: "Baseline RGB Art",
                                 icon: "photo.badge.checkmark",
@@ -505,30 +416,46 @@ public struct TransferQueueView: View {
                                 help: "Injects Sony 12 Tone Analysis (SenseMe) metadata so the Walkman illuminates the SenseMe channel indicator"
                             )
                         }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 4)
                     }
+                    .disableScrollClipIfAvailable()
 
-                    Spacer()
+                    Spacer(minLength: 8)
 
                     if !queue.isEmpty {
                         batchToolbarButtons
                     }
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .liquidGlass(cornerRadius: 9)
                 .padding(.horizontal, 16)
+                .padding(.vertical, 4)
+
+                Rectangle()
+                    .fill(Color.white.opacity(0.06))
+                    .frame(height: 0.8)
+                    .padding(.horizontal, 16)
 
                 // -------------------------------------------------------------
                 // PANEL 3: EMPTY DROPZONE vs POPULATED QUEUE CONTAINER
                 // -------------------------------------------------------------
                 if queue.isEmpty {
-                    // EMPTY STATE: Large, inviting drop zone
-                    emptyDropZone
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 88)
+                    if isImporting {
+                        importingProgressView
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 88)
+                    } else {
+                        // EMPTY STATE: Large, inviting drop zone
+                        emptyDropZone
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 88)
+                    }
                 } else {
                     // POPULATED STATE: High-end Queue View (No huge redundant drop box!)
                     VStack(spacing: 0) {
+                        if isImporting {
+                            importingBannerView
+                        }
+
                         // Queue Header Bar
                         HStack(spacing: 10) {
                             // Left summary
@@ -580,10 +507,10 @@ public struct TransferQueueView: View {
 
                             // Queue Search Filter (for large queues)
                             if queue.count > 4 {
-                                HStack(spacing: 5) {
+                                HStack(spacing: 6) {
                                     Image(systemName: "magnifyingglass")
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(.secondary)
+                                        .font(.system(size: 10.5))
+                                        .foregroundStyle(Color.white.opacity(0.55))
 
                                     TextField("Filter queue...", text: $queueSearchText)
                                         .textFieldStyle(.plain)
@@ -598,10 +525,29 @@ public struct TransferQueueView: View {
                                         .buttonStyle(.plain)
                                     }
                                 }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.white.opacity(0.06))
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .padding(.horizontal, 10)
+                                .frame(height: 32)
+                                .background(
+                                    ZStack {
+                                        Color.white.opacity(0.06)
+                                        VStack(spacing: 0) {
+                                            LinearGradient(
+                                                stops: [
+                                                    .init(color: .white.opacity(0.12), location: 0.0),
+                                                    .init(color: .clear, location: 1.0)
+                                                ],
+                                                startPoint: .top,
+                                                endPoint: .bottom
+                                            )
+                                            .frame(height: 5.5)
+                                            Spacer(minLength: 0)
+                                        }
+                                    }
+                                )
+                                .clipShape(Capsule())
+                                .overlay(
+                                    Capsule().stroke(Color.white.opacity(queueSearchText.isEmpty ? 0.10 : 0.28), lineWidth: 0.85)
+                                )
                                 .frame(maxWidth: 180)
                             }
 
@@ -623,18 +569,18 @@ public struct TransferQueueView: View {
                                     Label("Sort by Artist & Album", systemImage: "music.note.list")
                                 }
                             } label: {
-                                HStack(spacing: 4) {
+                                HStack(spacing: 4.5) {
                                     Image(systemName: "arrow.up.arrow.down")
-                                        .font(.system(size: 10, weight: .semibold))
+                                        .font(.system(size: 10.5, weight: .semibold))
                                     Text("Sort")
-                                        .font(WalkmanFont.calloutMedium)
+                                        .font(.system(size: 12, weight: .medium))
                                 }
-                                .padding(.horizontal, 9)
-                                .padding(.vertical, 5)
+                                .padding(.horizontal, 12)
+                                .frame(height: 32)
                                 .background(Color.white.opacity(0.08))
-                                .foregroundStyle(.white)
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.12), lineWidth: 1))
+                                .foregroundStyle(WalkmanTheme.silverLight)
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(Color.white.opacity(0.14), lineWidth: 0.85))
                             }
                             .menuIndicator(.hidden)
                             .buttonStyle(.plain)
@@ -642,18 +588,18 @@ public struct TransferQueueView: View {
 
                             // Add More Files Button
                             Button(action: openFilePicker) {
-                                HStack(spacing: 4) {
+                                HStack(spacing: 4.5) {
                                     Image(systemName: "plus")
-                                        .font(.system(size: 10, weight: .bold))
+                                        .font(.system(size: 10.5, weight: .bold))
                                     Text("Add Files...")
-                                        .font(WalkmanFont.calloutMedium)
+                                        .font(.system(size: 12, weight: .medium))
                                 }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
+                                .padding(.horizontal, 12)
+                                .frame(height: 32)
                                 .background(Color.white.opacity(0.08))
-                                .foregroundStyle(.white)
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.12), lineWidth: 1))
+                                .foregroundStyle(WalkmanTheme.silverLight)
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(Color.white.opacity(0.14), lineWidth: 0.85))
                             }
                             .buttonStyle(.plain)
                             .help("Add more audio files or folders to the transfer queue")
@@ -836,6 +782,206 @@ public struct TransferQueueView: View {
     }
 
     // -------------------------------------------------------------------------
+    // IMPORTING PROGRESS VIEW (Liquid Glass)
+    // -------------------------------------------------------------------------
+    private var importingProgressView: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(WalkmanTheme.card.opacity(0.85))
+                .background(.ultraThinMaterial)
+                .overlay(
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: .white.opacity(0.18), location: 0.0),
+                                .init(color: .white.opacity(0.04), location: 0.5),
+                                .init(color: .clear, location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 10)
+                        Spacer(minLength: 0)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(
+                            LinearGradient(
+                                stops: [
+                                    .init(color: Color.white.opacity(0.30), location: 0.0),
+                                    .init(color: Color.white.opacity(0.10), location: 0.5),
+                                    .init(color: Color.white.opacity(0.04), location: 1.0)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 0.85
+                        )
+                )
+                .shadow(color: Color.black.opacity(0.30), radius: 20, x: 0, y: 8)
+
+            VStack(spacing: 16) {
+                // Top Icon Badge
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.white.opacity(0.08))
+                        .frame(width: 58, height: 58)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(Color.white.opacity(0.15), lineWidth: 0.85)
+                        )
+
+                    ProgressView()
+                        .controlSize(.regular)
+                        .scaleEffect(1.1)
+                }
+                .shadow(color: Color.black.opacity(0.20), radius: 6, x: 0, y: 2)
+
+                VStack(spacing: 5) {
+                    Text("Importing Music to Walkman Studio")
+                        .font(WalkmanFont.title2)
+                        .foregroundStyle(WalkmanTheme.silverLight)
+
+                    Text(importTotal > 0
+                         ? "Analyzing audio metadata, tags, and inspecting duplicates..."
+                         : "Scanning folders for audio tracks and albums...")
+                        .font(WalkmanFont.subheadline)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
+                        .multilineTextAlignment(.center)
+                }
+
+                // Progress Bar
+                VStack(spacing: 7) {
+                    ImportProgressBar(progress: importProgress, isIndeterminate: importTotal == 0)
+                        .frame(maxWidth: 420)
+
+                    HStack {
+                        if importTotal > 0 {
+                            Text("\(importCurrent) of \(importTotal) tracks")
+                                .font(WalkmanFont.monoSmall)
+                                .foregroundStyle(WalkmanTheme.silverLight)
+
+                            Spacer()
+
+                            Text("\(Int(importProgress * 100))%")
+                                .font(WalkmanFont.monoSmall)
+                                .foregroundStyle(WalkmanTheme.silverLight)
+                        } else {
+                            Text("Discovering tracks...")
+                                .font(WalkmanFont.monoSmall)
+                                .foregroundStyle(WalkmanTheme.silverMuted)
+                            Spacer()
+                        }
+                    }
+                    .frame(maxWidth: 420)
+                }
+
+                // Current Track File Name Pill
+                if !importCurrentTitle.isEmpty {
+                    HStack(spacing: 6) {
+                        Image(systemName: "music.note")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(WalkmanTheme.silver)
+
+                        Text(importCurrentTitle)
+                            .font(WalkmanFont.monoSmall)
+                            .foregroundStyle(WalkmanTheme.silverLight)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 5.5)
+                    .background(Color.white.opacity(0.04))
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule().stroke(Color.white.opacity(0.08), lineWidth: 0.8)
+                    )
+                    .frame(maxWidth: 460)
+                }
+
+                // Cancel Button
+                Button(action: {
+                    importTask?.cancel()
+                    withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+                        isImporting = false
+                    }
+                }) {
+                    Text("Cancel Import")
+                        .font(WalkmanFont.calloutMedium)
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .padding(.horizontal, 18)
+                        .frame(height: 32)
+                }
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 16))
+                .padding(.top, 4)
+            }
+            .padding(28)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // -------------------------------------------------------------------------
+    // IMPORTING BANNER VIEW (When Queue Already Has Tracks)
+    // -------------------------------------------------------------------------
+    private var importingBannerView: some View {
+        HStack(spacing: 12) {
+            ProgressView()
+                .controlSize(.small)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(importTotal > 0 ? "Importing music to Walkman Studio (\(importCurrent)/\(importTotal))..." : "Scanning folder for music...")
+                    .font(WalkmanFont.calloutBold)
+                    .foregroundStyle(WalkmanTheme.silverLight)
+
+                if !importCurrentTitle.isEmpty {
+                    Text(importCurrentTitle)
+                        .font(WalkmanFont.caption)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+
+            Spacer()
+
+            if importTotal > 0 {
+                ImportProgressBar(progress: importProgress, isIndeterminate: false)
+                    .frame(width: 140)
+
+                Text("\(Int(importProgress * 100))%")
+                    .font(WalkmanFont.monoSmall)
+                    .foregroundStyle(WalkmanTheme.silverLight)
+            }
+
+            Button("Cancel") {
+                importTask?.cancel()
+                withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+                    isImporting = false
+                }
+            }
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 14))
+            .font(WalkmanFont.captionBold)
+            .frame(height: 28)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(
+            ZStack {
+                WalkmanTheme.card.opacity(0.92)
+                    .background(.ultraThinMaterial)
+                VStack {
+                    LinearGradient(stops: [.init(color: .white.opacity(0.15), location: 0), .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom)
+                        .frame(height: 4)
+                    Spacer()
+                }
+            }
+        )
+        .overlay(Rectangle().frame(height: 1).foregroundStyle(Color.white.opacity(0.10)), alignment: .bottom)
+    }
+
+    // -------------------------------------------------------------------------
     // EMPTY STATE VIEW
     // -------------------------------------------------------------------------
     private var emptyDropZone: some View {
@@ -886,19 +1032,17 @@ public struct TransferQueueView: View {
                 .padding(.vertical, 2)
 
                 Button(action: openFilePicker) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 7) {
                         Image(systemName: "folder.badge.plus")
-                            .font(.system(size: 12))
+                            .font(.system(size: 13, weight: .bold))
                         Text("Browse Audio Files or Folders...")
                             .font(WalkmanFont.calloutBold)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(WalkmanTheme.silverGradient)
+                    .padding(.horizontal, 20)
+                    .frame(height: 38)
                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 19))
             }
             .padding(28)
         }
@@ -909,34 +1053,13 @@ public struct TransferQueueView: View {
     // HARDWARE TOGGLE CAPSULE CHIP
     // -------------------------------------------------------------------------
     private func toggleChip(title: String, icon: String, isOn: Binding<Bool>, help: String, disabled: Bool = false) -> some View {
-        let isEffectivelyOn = !disabled && isOn.wrappedValue
-        return Button(action: { isOn.wrappedValue.toggle() }) {
-            HStack(spacing: 5) {
-                Image(systemName: isEffectivelyOn ? "\(icon).fill" : icon)
-                    .font(.system(size: 10))
-                    .foregroundStyle(isEffectivelyOn ? WalkmanTheme.silverLight : .secondary)
-                Text(title)
-                    .font(WalkmanFont.subheadlineMedium)
-                    .foregroundStyle(isEffectivelyOn ? .white : .secondary)
-                if isEffectivelyOn {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(WalkmanTheme.silverLight)
-                }
-            }
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
-            .background(isEffectivelyOn ? Color.white.opacity(0.12) : Color.white.opacity(0.04))
-            .clipShape(Capsule())
-            .overlay(
-                Capsule()
-                    .stroke(isEffectivelyOn ? WalkmanTheme.silver.opacity(0.4) : Color.white.opacity(0.08), lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .disabled(disabled)
-        .opacity(disabled ? 0.4 : 1.0)
-        .help(help)
+        HardwareOptimizationToggleChipView(
+            title: title,
+            icon: icon,
+            isOn: isOn,
+            help: help,
+            disabled: disabled
+        )
     }
 
     // -------------------------------------------------------------------------
@@ -945,75 +1068,101 @@ public struct TransferQueueView: View {
     private var batchToolbarButtons: some View {
         HStack(spacing: 6) {
             if targetMode != .learning {
-                Button(action: batchOptimizeAll) {
-                    HStack(spacing: 4) {
-                        if isBatchOptimizing {
-                            ProgressView().scaleEffect(0.55).frame(width: 12, height: 12)
-                        } else {
-                            Image(systemName: "sparkles")
-                                .font(.system(size: 10))
-                        }
-                        Text(isBatchOptimizing ? "Optimizing..." : "Optimize All")
-                            .font(WalkmanFont.subheadlineMedium)
-                    }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
-                    .background(Color.white.opacity(0.07))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.12), lineWidth: 1))
-                }
-                .buttonStyle(.plain)
-                .disabled(isBatchOptimizing || isProcessing)
-                .help("Fetches missing metadata and optimizes cover artwork to Baseline RGB JPEG for all tracks")
+                TransferBatchActionButton(
+                    title: isBatchOptimizing ? "Optimizing..." : "Optimize All",
+                    icon: "sparkles",
+                    isLoading: isBatchOptimizing,
+                    isDisabled: isBatchOptimizing || isProcessing,
+                    help: "Fetches missing metadata and optimizes cover artwork to Baseline RGB JPEG for all tracks",
+                    action: batchOptimizeAll
+                )
 
-                Button(action: batchFetchAllLyrics) {
-                    HStack(spacing: 4) {
-                        if isBatchFetchingLyrics {
-                            ProgressView().scaleEffect(0.55).frame(width: 12, height: 12)
-                        } else {
-                            Image(systemName: "quote.bubble.fill")
-                                .font(.system(size: 10))
-                        }
-                        Text(isBatchFetchingLyrics ? "Fetching..." : "Fetch Lyrics")
-                            .font(WalkmanFont.subheadlineMedium)
-                    }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
-                    .background(Color.white.opacity(0.07))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.12), lineWidth: 1))
-                }
-                .buttonStyle(.plain)
-                .disabled(isBatchFetchingLyrics || isProcessing)
-                .help("Fetches synchronized .LRC lyrics for all tracks in the queue")
+                TransferBatchActionButton(
+                    title: isBatchFetchingLyrics ? "Fetching..." : "Fetch Lyrics",
+                    icon: "quote.bubble.fill",
+                    isLoading: isBatchFetchingLyrics,
+                    isDisabled: isBatchFetchingLyrics || isProcessing,
+                    help: "Fetches synchronized .LRC lyrics for all tracks in the queue",
+                    action: batchFetchAllLyrics
+                )
             }
 
-            Button(action: {
-                if !queue.isEmpty {
-                    showClearConfirmation = true
+            TransferBatchActionButton(
+                title: "Clear",
+                icon: "trash",
+                isDestructive: true,
+                isDisabled: isProcessing,
+                help: "Clear all tracks from the queue",
+                action: {
+                    if !queue.isEmpty {
+                        showClearConfirmation = true
+                    }
                 }
-            }) {
-                HStack(spacing: 4) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 10))
-                    Text("Clear")
-                        .font(WalkmanFont.subheadlineMedium)
-                }
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
-                .background(Color.red.opacity(0.12))
-                .foregroundStyle(Color(red: 255/255, green: 110/255, blue: 100/255))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-            }
-            .buttonStyle(.plain)
-            .disabled(isProcessing)
-            .help("Clear all tracks from the queue")
+            )
         }
     }
 
     // -------------------------------------------------------------------------
     // HELPERS & INGESTION
     // -------------------------------------------------------------------------
+    private var currentTargetDriveLabel: String {
+        if targetDriveId == "local_library" {
+            return "Local Music Library"
+        } else if targetDriveId.hasPrefix("local_folder_") {
+            let folderId = String(targetDriveId.dropFirst("local_folder_".count))
+            if let folder = LocalMusicLibraryService.shared.folders.first(where: { $0.id == folderId }) {
+                return "Folder: \(folder.displayName)"
+            }
+            return "Local Folder"
+        } else if let drive = drives.first(where: { $0.mountPoint == targetDriveId }) {
+            let dev = WalkmanDeviceDetector.shared.detectDevices(drives: drives).first(where: { $0.drives.contains(where: { $0.mountPoint == drive.mountPoint }) })
+            return (drives.count > 2 && dev != nil) ? "\(dev!.specificModel) • \(drive.name)" : drive.name
+        } else if let first = drives.first {
+            return first.name
+        } else {
+            return "Local Music Library"
+        }
+    }
+
+    private func presetDisplayName(_ preset: String) -> String {
+        switch preset {
+        case "copy_optimize":
+            return "Optimize Metadata Only (Direct Copy)"
+        case "copy_raw":
+            return "Direct Copy (Raw Passthrough)"
+        case "mp3_128":
+            return "MP3 128 kbps Spoken Word"
+        case "mp3_192":
+            return "MP3 192 kbps Voice Master"
+        case "aac_128":
+            return "AAC 128 kbps Spoken Audio"
+        case "flac_16":
+            return "FLAC 16-bit / 44.1kHz (CD Quality)"
+        case "flac_24_48":
+            return "FLAC 24-bit / 48kHz (Studio Lossless)"
+        case "flac_24_96", "flac_24":
+            return "FLAC 24-bit / 96kHz (Hi-Res Master)"
+        case "flac_24_192":
+            return "Ultra Hi-Res FLAC 24-bit / 192kHz"
+        case "mp3_320":
+            return "MP3 320 kbps CBR (Maximum Quality)"
+        case "mp3_256":
+            return "MP3 256 kbps CBR (High Quality)"
+        case "mp3_v0":
+            return "MP3 VBR V0 (~245 kbps Variable)"
+        case "aac_320":
+            return "AAC 320 kbps (High Fidelity M4A)"
+        case "aac_256":
+            return "iTunes Standard AAC 256 kbps"
+        case "alac_16":
+            return "ALAC Apple Lossless (16-bit)"
+        case "wav_16":
+            return "Uncompressed PCM 16-bit / 44.1kHz"
+        default:
+            return preset
+        }
+    }
+
     private func presetDescription(_ preset: String) -> String {
         switch preset {
         case "copy_optimize":
@@ -1073,6 +1222,15 @@ public struct TransferQueueView: View {
     }
 
     private func handleDrop(providers: [NSItemProvider]) {
+        withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+            isImporting = true
+            importStatusMessage = "Accessing dropped files..."
+            importCurrent = 0
+            importTotal = 0
+            importProgress = 0.0
+            importCurrentTitle = ""
+        }
+
         let group = DispatchGroup()
         let lock = NSLock()
         var droppedURLs: [URL] = []
@@ -1090,6 +1248,12 @@ public struct TransferQueueView: View {
         }
 
         group.notify(queue: .main) {
+            if droppedURLs.isEmpty {
+                withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+                    self.isImporting = false
+                }
+                return
+            }
             self.addURLsToQueue(droppedURLs)
         }
     }
@@ -1105,6 +1269,14 @@ public struct TransferQueueView: View {
         panel.allowedContentTypes = types
 
         if panel.runModal() == .OK {
+            withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+                isImporting = true
+                importStatusMessage = "Preparing selected files..."
+                importCurrent = 0
+                importTotal = 0
+                importProgress = 0.0
+                importCurrentTitle = ""
+            }
             addURLsToQueue(panel.urls)
         }
     }
@@ -1114,98 +1286,151 @@ public struct TransferQueueView: View {
     }
 
     private func addURLsToQueue(_ urls: [URL]) {
-        let supportedExtensions: Set<String> = [
-            "flac", "mp3", "m4a", "m4b", "wav", "aac", "alac", "aiff", "dsf", "dff", "wma", "ogg", "opus"
-        ]
-        var collectedURLs: [URL] = []
+        importTask?.cancel()
 
-        for url in urls {
-            var isDir: ObjCBool = false
-            if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) {
-                if isDir.boolValue {
-                    if let enumerator = FileManager.default.enumerator(
-                        at: url,
-                        includingPropertiesForKeys: [.isDirectoryKey],
-                        options: [.skipsHiddenFiles]
-                    ) {
-                        for case let fileURL as URL in enumerator {
-                            let ext = fileURL.pathExtension.lowercased()
-                            if supportedExtensions.contains(ext) {
-                                collectedURLs.append(fileURL)
-                            }
-                        }
-                    }
-                } else if supportedExtensions.contains(url.pathExtension.lowercased()) {
-                    collectedURLs.append(url)
-                }
-            }
+        withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+            isImporting = true
+            importStatusMessage = "Scanning folders & discovering music..."
+            importCurrent = 0
+            importTotal = 0
+            importProgress = 0.0
+            importCurrentTitle = ""
         }
-
-        // Natural Finder-style sorting ensures 01 - Song, 02 - Song, ... are perfectly ordered
-        collectedURLs.sort { urlA, urlB in
-            urlA.path.localizedStandardCompare(urlB.path) == .orderedAscending
-        }
-
-        guard !collectedURLs.isEmpty else { return }
-
-        // Duplicate Guardrail: Check incoming tracks against Walkman library
-        var duplicates: [DuplicateImportCandidate] = []
-        var nonDuplicates: [URL] = []
 
         let target = selectedTarget
         let mode = targetMode
         let libTracks = libraryTracks
 
-        for fileURL in collectedURLs {
-            let pathFallback = AudioTagger.extractFromPath(url: fileURL)
-            var title = pathFallback.title
-            var artist = pathFallback.artist
-            var album = pathFallback.album
-            var duration: Double = 0
+        importTask = Task.detached(priority: .userInitiated) {
+            let supportedExtensions: Set<String> = [
+                "flac", "mp3", "m4a", "m4b", "wav", "aac", "alac", "aiff", "dsf", "dff", "wma", "ogg", "opus"
+            ]
+            var collectedURLs: [URL] = []
 
-            if let meta = AudioTagger.shared.readMetadata(fileURL: fileURL) {
-                if !meta.title.isEmpty && meta.title.lowercased() != "unknown" { title = meta.title }
-                if !meta.artist.isEmpty && meta.artist.lowercased() != "unknown artist" { artist = meta.artist }
-                if !meta.album.isEmpty && meta.album.lowercased() != "unknown album" { album = meta.album }
-                duration = meta.durationSeconds
+            for url in urls {
+                if Task.isCancelled { return }
+                var isDir: ObjCBool = false
+                if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) {
+                    if isDir.boolValue {
+                        if let enumerator = FileManager.default.enumerator(
+                            at: url,
+                            includingPropertiesForKeys: [.isDirectoryKey],
+                            options: [.skipsHiddenFiles]
+                        ) {
+                            while let fileURL = enumerator.nextObject() as? URL {
+                                if Task.isCancelled { return }
+                                let ext = fileURL.pathExtension.lowercased()
+                                if supportedExtensions.contains(ext) {
+                                    collectedURLs.append(fileURL)
+                                }
+                            }
+                        }
+                    } else if supportedExtensions.contains(url.pathExtension.lowercased()) {
+                        collectedURLs.append(url)
+                    }
+                }
             }
 
-            let check = WalkmanDuplicateGuard.shared.checkTrack(
-                title: title,
-                artist: artist,
-                album: album,
-                durationSeconds: duration,
-                sourceURL: fileURL,
-                targetDrive: target,
-                targetMode: mode,
-                existingTracks: libTracks
-            )
+            if Task.isCancelled { return }
 
-            if check.isDuplicate {
-                duplicates.append(
-                    DuplicateImportCandidate(
-                        url: fileURL,
-                        title: title.isEmpty ? fileURL.deletingPathExtension().lastPathComponent : title,
-                        artist: artist.isEmpty ? "Unknown Artist" : artist,
-                        album: album,
-                        durationSeconds: duration,
-                        matchingWalkmanTrack: check.matchingTrack,
-                        matchReason: check.reason ?? "Already present on Walkman library"
-                    )
+            // Natural Finder-style sorting ensures 01 - Song, 02 - Song, ... are perfectly ordered
+            collectedURLs.sort { urlA, urlB in
+                urlA.path.localizedStandardCompare(urlB.path) == .orderedAscending
+            }
+
+            guard !collectedURLs.isEmpty else {
+                await MainActor.run {
+                    withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+                        self.isImporting = false
+                    }
+                }
+                return
+            }
+
+            let total = collectedURLs.count
+            await MainActor.run {
+                self.importTotal = total
+                self.importStatusMessage = "Importing \(total) tracks to Walkman Studio..."
+            }
+
+            // Duplicate Guardrail: Check incoming tracks against Walkman library
+            var duplicates: [DuplicateImportCandidate] = []
+            var nonDuplicates: [URL] = []
+
+            for (index, fileURL) in collectedURLs.enumerated() {
+                if Task.isCancelled { return }
+
+                let fileName = fileURL.lastPathComponent
+                let progress = Double(index + 1) / Double(total)
+
+                await MainActor.run {
+                    self.importCurrent = index + 1
+                    self.importProgress = progress
+                    self.importCurrentTitle = fileName
+                }
+
+                let pathFallback = AudioTagger.extractFromPath(url: fileURL)
+                var title = pathFallback.title
+                var artist = pathFallback.artist
+                var album = pathFallback.album
+                var duration: Double = 0
+
+                if let meta = AudioTagger.shared.readMetadata(fileURL: fileURL) {
+                    if !meta.title.isEmpty && meta.title.lowercased() != "unknown" { title = meta.title }
+                    if !meta.artist.isEmpty && meta.artist.lowercased() != "unknown artist" { artist = meta.artist }
+                    if !meta.album.isEmpty && meta.album.lowercased() != "unknown album" { album = meta.album }
+                    duration = meta.durationSeconds
+                }
+
+                let check = WalkmanDuplicateGuard.shared.checkTrack(
+                    title: title,
+                    artist: artist,
+                    album: album,
+                    durationSeconds: duration,
+                    sourceURL: fileURL,
+                    targetDrive: target,
+                    targetMode: mode,
+                    existingTracks: libTracks
                 )
-            } else {
-                nonDuplicates.append(fileURL)
-            }
-        }
 
-        if !duplicates.isEmpty {
-            self.duplicateImportCandidates = duplicates
-            self.pendingNonDuplicateURLs = nonDuplicates
-            self.pendingAllImportURLs = collectedURLs
-            self.showDuplicateImportSheet = true
-        } else {
-            for fileURL in collectedURLs {
-                enqueueSingleFile(fileURL)
+                if check.isDuplicate {
+                    duplicates.append(
+                        DuplicateImportCandidate(
+                            url: fileURL,
+                            title: title.isEmpty ? fileURL.deletingPathExtension().lastPathComponent : title,
+                            artist: artist.isEmpty ? "Unknown Artist" : artist,
+                            album: album,
+                            durationSeconds: duration,
+                            matchingWalkmanTrack: check.matchingTrack,
+                            matchReason: check.reason ?? "Already present on Walkman library"
+                        )
+                    )
+                } else {
+                    nonDuplicates.append(fileURL)
+                }
+            }
+
+            if Task.isCancelled { return }
+
+            let finalDuplicates = duplicates
+            let finalNonDuplicates = nonDuplicates
+            let finalCollected = collectedURLs
+
+            await MainActor.run {
+                withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+                    self.isImporting = false
+                }
+
+                if !finalDuplicates.isEmpty {
+                    self.duplicateImportCandidates = finalDuplicates
+                    self.pendingNonDuplicateURLs = finalNonDuplicates
+                    self.pendingAllImportURLs = finalCollected
+                    self.showDuplicateImportSheet = true
+                } else {
+                    for fileURL in finalCollected {
+                        self.enqueueSingleFile(fileURL)
+                    }
+                }
             }
         }
     }
@@ -2261,6 +2486,590 @@ private struct QueueItemRow: View {
             Button(role: .destructive, action: onRemove) {
                 Label("Remove from Queue", systemImage: "trash")
             }
+        }
+    }
+}
+
+// MARK: - Transfer Mode Segmented Bar View (Liquid Glass Matched Geometry)
+private struct TransferModeSegmentedBarView: View {
+    @Binding var targetMode: TransferTargetMode
+    let onSelectMode: (TransferTargetMode) -> Void
+
+    @Namespace private var modeNamespace
+    @State private var activeModeId: String = TransferTargetMode.music.id
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(TransferTargetMode.allCases) { mode in
+                TransferModeTabPillView(
+                    mode: mode,
+                    isSelected: activeModeId == mode.id,
+                    namespace: modeNamespace,
+                    onSelect: {
+                        guard targetMode != mode else { return }
+                        withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+                            activeModeId = mode.id
+                        }
+                        onSelectMode(mode)
+                    }
+                )
+            }
+        }
+        .padding(3)
+        .frame(height: 38)
+        .background(Color.white.opacity(0.04))
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
+        )
+        .fixedSize(horizontal: true, vertical: false)
+        .onAppear {
+            activeModeId = targetMode.id
+        }
+        .onChange(of: targetMode) { _, newMode in
+            if activeModeId != newMode.id {
+                withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+                    activeModeId = newMode.id
+                }
+            }
+        }
+    }
+}
+
+private struct TransferModeTabPillView: View {
+    let mode: TransferTargetMode
+    let isSelected: Bool
+    let namespace: Namespace.ID
+    let onSelect: () -> Void
+
+    @State private var isHovered = false
+
+    private var labelTitle: String {
+        switch mode {
+        case .music:
+            return "Music Library"
+        case .learning:
+            return "Language Study"
+        }
+    }
+
+    private var isGold: Bool {
+        mode == .learning
+    }
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 6) {
+                Image(systemName: mode.icon)
+                    .font(.system(size: 11, weight: isSelected ? .bold : .semibold))
+                Text(labelTitle)
+                    .font(.system(size: 12.5, weight: isSelected ? .bold : .medium))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .frame(height: 32)
+            .fixedSize(horizontal: true, vertical: false)
+            .foregroundStyle(
+                isSelected ?
+                    (isGold ? WalkmanTheme.hiResGoldLight : Color.white) :
+                    (isHovered ? (isGold ? WalkmanTheme.hiResGoldLight : Color.white) : Color.white.opacity(0.70))
+            )
+            .background(
+                ZStack {
+                    if isSelected {
+                        ActiveModePillBackground(isGold: isGold, isHovered: isHovered)
+                            .matchedGeometryEffect(id: "activeTransferModeHighlight", in: namespace)
+                    } else if isHovered {
+                        HoverModePillBackground()
+                    } else {
+                        Color.white.opacity(0.001)
+                    }
+                }
+            )
+            .scaleEffect(isHovered ? 1.03 : 1.0)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .contentShape(Capsule())
+        .onHover { hovering in
+            guard isHovered != hovering else { return }
+            isHovered = hovering
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.pop()
+            }
+        }
+        .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+    }
+}
+
+// MARK: - Active & Hover Mode Pill Backgrounds (Liquid Glass Sliding Lens)
+private struct ActiveModePillBackground: View {
+    let isGold: Bool
+    var isHovered: Bool = false
+
+    var body: some View {
+        ZStack {
+            // Translucent Body Fill
+            if isGold {
+                WalkmanTheme.hiResGold.opacity(isHovered ? 0.24 : 0.18)
+            } else {
+                Color.white.opacity(isHovered ? 0.20 : 0.16)
+            }
+
+            // Top specular refraction sheen
+            VStack(spacing: 0) {
+                LinearGradient(
+                    stops: [
+                        .init(color: .white.opacity(isHovered ? 0.42 : 0.35), location: 0.0),
+                        .init(color: .clear, location: 1.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 6)
+                Spacer(minLength: 0)
+            }
+        }
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(
+                    isGold ?
+                        WalkmanTheme.hiResGold.opacity(isHovered ? 0.70 : 0.55) :
+                        Color.white.opacity(isHovered ? 0.45 : 0.34),
+                    lineWidth: 0.85
+                )
+        )
+        .shadow(
+            color: Color.black.opacity(isHovered ? 0.30 : 0.22),
+            radius: isHovered ? 4 : 2.5,
+            x: 0,
+            y: 1
+        )
+    }
+}
+
+private struct HoverModePillBackground: View {
+    var body: some View {
+        ZStack {
+            Color.white.opacity(0.09)
+            VStack(spacing: 0) {
+                LinearGradient(
+                    stops: [
+                        .init(color: .white.opacity(0.20), location: 0.0),
+                        .init(color: .clear, location: 1.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 5.5)
+                Spacer(minLength: 0)
+            }
+        }
+        .clipShape(Capsule())
+        .overlay(
+            Capsule().stroke(Color.white.opacity(0.22), lineWidth: 0.85)
+        )
+        .shadow(color: Color.black.opacity(0.15), radius: 2, x: 0, y: 1)
+    }
+}
+
+// MARK: - Hardware Optimization Toggle Chip View (32pt Liquid Glass Capsule)
+private struct HardwareOptimizationToggleChipView: View {
+    let title: String
+    let icon: String
+    @Binding var isOn: Bool
+    let help: String
+    var disabled: Bool = false
+
+    @State private var isHovered = false
+
+    private var isEffectivelyOn: Bool {
+        !disabled && isOn
+    }
+
+    var body: some View {
+        Button(action: {
+            isOn.toggle()
+        }) {
+            HStack(spacing: 5.5) {
+                Image(systemName: isEffectivelyOn ? "\(icon).fill" : icon)
+                    .font(.system(size: 10.5, weight: isEffectivelyOn ? .semibold : .regular))
+                    .foregroundStyle(
+                        isEffectivelyOn ?
+                            WalkmanTheme.silverLight :
+                            (isHovered ? Color.white : WalkmanTheme.silverMuted)
+                    )
+
+                Text(title)
+                    .font(.system(size: 12, weight: isEffectivelyOn ? .semibold : .medium))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .foregroundStyle(
+                        isEffectivelyOn ?
+                            Color.white :
+                            (isHovered ? Color.white : WalkmanTheme.silverMuted)
+                    )
+
+                if isEffectivelyOn {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 8.5, weight: .bold))
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                }
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 6)
+            .frame(height: 32)
+            .fixedSize(horizontal: true, vertical: false)
+            .background(
+                ZStack {
+                    if isEffectivelyOn {
+                        Color.white.opacity(isHovered ? 0.18 : 0.14)
+                        VStack(spacing: 0) {
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .white.opacity(isHovered ? 0.38 : 0.28), location: 0.0),
+                                    .init(color: .clear, location: 1.0)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .frame(height: 5.5)
+                            Spacer(minLength: 0)
+                        }
+                    } else if isHovered {
+                        Color.white.opacity(0.09)
+                        VStack(spacing: 0) {
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .white.opacity(0.18), location: 0.0),
+                                    .init(color: .clear, location: 1.0)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .frame(height: 5)
+                            Spacer(minLength: 0)
+                        }
+                    } else {
+                        Color.white.opacity(0.04)
+                    }
+                }
+            )
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(
+                        isEffectivelyOn ?
+                            Color.white.opacity(isHovered ? 0.48 : 0.38) :
+                            (isHovered ? Color.white.opacity(0.20) : Color.white.opacity(0.08)),
+                        lineWidth: 0.85
+                    )
+            )
+            .shadow(
+                color: Color.black.opacity(isEffectivelyOn ? (isHovered ? 0.25 : 0.16) : (isHovered ? 0.12 : 0)),
+                radius: isHovered ? 3 : 2,
+                x: 0,
+                y: 1
+            )
+            .scaleEffect(isHovered ? 1.02 : 1.0)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .contentShape(Capsule())
+        .zIndex(isHovered ? 2 : 1)
+        .disabled(disabled)
+        .opacity(disabled ? 0.38 : 1.0)
+        .help(help)
+        .onHover { hovering in
+            guard !disabled else { return }
+            guard isHovered != hovering else { return }
+            isHovered = hovering
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.pop()
+            }
+        }
+        .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+    }
+}
+
+// MARK: - Transfer Batch Action Button (32pt Liquid Glass Capsule)
+private struct TransferBatchActionButton: View {
+    let title: String
+    let icon: String
+    var isLoading: Bool = false
+    var isDestructive: Bool = false
+    var isDisabled: Bool = false
+    let help: String
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4.5) {
+                if isLoading {
+                    ProgressView().scaleEffect(0.55).frame(width: 12, height: 12)
+                } else {
+                    Image(systemName: icon)
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                Text(title)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .frame(height: 32)
+            .foregroundStyle(
+                isDestructive ?
+                    (isHovered ? Color(red: 255/255, green: 130/255, blue: 120/255) : Color(red: 255/255, green: 105/255, blue: 95/255)) :
+                    (isHovered ? Color.white : WalkmanTheme.silverLight)
+            )
+            .background(
+                ZStack {
+                    if isDestructive {
+                        Color.red.opacity(isHovered ? 0.18 : 0.10)
+                    } else {
+                        Color.white.opacity(isHovered ? 0.12 : 0.06)
+                    }
+
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: .white.opacity(isHovered ? 0.20 : 0.10), location: 0.0),
+                                .init(color: .clear, location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 5)
+                        Spacer(minLength: 0)
+                    }
+                }
+            )
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(
+                        isDestructive ?
+                            Color.red.opacity(isHovered ? 0.40 : 0.22) :
+                            Color.white.opacity(isHovered ? 0.22 : 0.10),
+                        lineWidth: 0.85
+                    )
+            )
+            .shadow(color: Color.black.opacity(isHovered ? 0.15 : 0), radius: 2, y: 1)
+            .scaleEffect(isHovered ? 1.02 : 1.0)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .contentShape(Capsule())
+        .zIndex(isHovered ? 2 : 1)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.4 : 1.0)
+        .help(help)
+        .onHover { hovering in
+            guard !isDisabled else { return }
+            guard isHovered != hovering else { return }
+            isHovered = hovering
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.pop()
+            }
+        }
+        .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+    }
+}
+
+// MARK: - Liquid Glass Dropdown Menu (38pt Standard Dropdown)
+private struct LiquidGlassDropdownMenu<Content: View>: View {
+    let title: String
+    @ViewBuilder let menuContent: () -> Content
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Menu {
+            menuContent()
+        } label: {
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Color.white)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                Spacer(minLength: 4)
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(isHovered ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
+            }
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity)
+            .frame(height: 38)
+            .background(
+                ZStack {
+                    Color.white.opacity(isHovered ? 0.12 : 0.07)
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: .white.opacity(isHovered ? 0.24 : 0.14), location: 0.0),
+                                .init(color: .clear, location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 7)
+                        Spacer(minLength: 0)
+                    }
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.white.opacity(isHovered ? 0.32 : 0.14), lineWidth: 0.85)
+            )
+            .shadow(color: Color.black.opacity(isHovered ? 0.20 : 0.10), radius: 2, y: 1)
+            .scaleEffect(isHovered ? 1.015 : 1.0)
+        }
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            guard isHovered != hovering else { return }
+            isHovered = hovering
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.pop()
+            }
+        }
+        .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+    }
+}
+
+// MARK: - Safe Scroll Clip Disabler (macOS 14+ with fallback)
+private extension View {
+    @ViewBuilder
+    func disableScrollClipIfAvailable() -> some View {
+        if #available(macOS 14.0, *) {
+            self.scrollClipDisabled()
+        } else {
+            self
+        }
+    }
+}
+
+// MARK: - Import Progress Bar (Liquid Glass)
+private struct ImportProgressBar: View {
+    let progress: Double
+    let isIndeterminate: Bool
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                // Capsule Track
+                Capsule()
+                    .fill(Color.white.opacity(0.08))
+                    .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 0.85))
+
+                // Fill Bar
+                if !isIndeterminate {
+                    let fillWidth = max(8, geo.size.width * CGFloat(min(max(progress, 0.0), 1.0)))
+                    Capsule()
+                        .fill(
+                            LinearGradient(
+                                stops: [
+                                    .init(color: WalkmanTheme.silverLight, location: 0.0),
+                                    .init(color: WalkmanTheme.silver, location: 1.0)
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: fillWidth)
+                        .overlay(
+                            VStack(spacing: 0) {
+                                LinearGradient(
+                                    stops: [
+                                        .init(color: Color.white.opacity(0.60), location: 0.0),
+                                        .init(color: Color.clear, location: 1.0)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                                .frame(height: 3)
+                                Spacer(minLength: 0)
+                            }
+                            .clipShape(Capsule())
+                        )
+                        .shadow(color: Color.black.opacity(0.25), radius: 3, x: 0, y: 1)
+                } else {
+                    IndeterminateLiquidGlassBar()
+                }
+            }
+        }
+        .frame(height: 8)
+        .animation(.interactiveSpring(response: 0.32, dampingFraction: 0.82), value: progress)
+    }
+}
+
+// MARK: - Indeterminate Liquid Glass Bar
+private struct IndeterminateLiquidGlassBar: View {
+    @State private var phase: CGFloat = -0.3
+
+    var body: some View {
+        GeometryReader { _ in
+            Capsule()
+                .fill(
+                    LinearGradient(
+                        stops: [
+                            .init(color: Color.white.opacity(0.0), location: max(0.0, phase - 0.2)),
+                            .init(color: Color.white.opacity(0.55), location: min(max(0.0, phase), 1.0)),
+                            .init(color: Color.white.opacity(0.0), location: min(1.0, phase + 0.2))
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .clipShape(Capsule())
+                .onAppear {
+                    withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) {
+                        phase = 1.3
+                    }
+                }
         }
     }
 }

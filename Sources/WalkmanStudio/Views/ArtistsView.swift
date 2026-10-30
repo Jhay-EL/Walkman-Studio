@@ -14,6 +14,7 @@ public struct ArtistsView: View {
     let showToolbar: Bool
     let onSelectTrack: (Track) -> Void
     var onEditTrack: ((Track) -> Void)? = nil
+    var onEditTrackWithList: ((Track, [Track]) -> Void)? = nil
     var onTrimCutTrack: ((Track) -> Void)? = nil
     var onTransferArtist: ((ArtistItem) -> Void)? = nil
     var onTransferTracks: (([Track]) -> Void)? = nil
@@ -41,6 +42,7 @@ public struct ArtistsView: View {
         showToolbar: Bool = true,
         onSelectTrack: @escaping (Track) -> Void,
         onEditTrack: ((Track) -> Void)? = nil,
+        onEditTrackWithList: ((Track, [Track]) -> Void)? = nil,
         onTrimCutTrack: ((Track) -> Void)? = nil,
         onTransferArtist: ((ArtistItem) -> Void)? = nil,
         onTransferTracks: (([Track]) -> Void)? = nil,
@@ -51,6 +53,7 @@ public struct ArtistsView: View {
         self.showToolbar = showToolbar
         self.onSelectTrack = onSelectTrack
         self.onEditTrack = onEditTrack
+        self.onEditTrackWithList = onEditTrackWithList
         self.onTrimCutTrack = onTrimCutTrack
         self.onTransferArtist = onTransferArtist
         self.onTransferTracks = onTransferTracks
@@ -1221,7 +1224,11 @@ public struct ArtistsView: View {
                             player.playOrToggle(track: track, in: album.tracks)
                         },
                         onEdit: {
-                            onEditTrack?(track)
+                            if let onEditTrackWithList = onEditTrackWithList {
+                                onEditTrackWithList(track, album.tracks)
+                            } else {
+                                onEditTrack?(track)
+                            }
                         },
                         onTrimCut: {
                             onTrimCutTrack?(track)

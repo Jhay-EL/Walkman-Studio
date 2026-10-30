@@ -42,6 +42,7 @@ public struct HiResAudioView: View {
     let onSelectTrack: (Track) -> Void
     var onEditAlbum: ((AlbumItem) -> Void)? = nil
     var onEditTrack: ((Track) -> Void)? = nil
+    var onEditTrackWithList: ((Track, [Track]) -> Void)? = nil
     var onTrimCutTrack: ((Track) -> Void)? = nil
     var onDeleteAlbum: ((AlbumItem) -> Void)? = nil
     var onDeleteTrack: ((Track) -> Void)? = nil
@@ -75,6 +76,7 @@ public struct HiResAudioView: View {
         onSelectTrack: @escaping (Track) -> Void,
         onEditAlbum: ((AlbumItem) -> Void)? = nil,
         onEditTrack: ((Track) -> Void)? = nil,
+        onEditTrackWithList: ((Track, [Track]) -> Void)? = nil,
         onTrimCutTrack: ((Track) -> Void)? = nil,
         onDeleteAlbum: ((AlbumItem) -> Void)? = nil,
         onDeleteTrack: ((Track) -> Void)? = nil
@@ -85,6 +87,7 @@ public struct HiResAudioView: View {
         self.onSelectTrack = onSelectTrack
         self.onEditAlbum = onEditAlbum
         self.onEditTrack = onEditTrack
+        self.onEditTrackWithList = onEditTrackWithList
         self.onTrimCutTrack = onTrimCutTrack
         self.onDeleteAlbum = onDeleteAlbum
         self.onDeleteTrack = onDeleteTrack
@@ -434,6 +437,7 @@ public struct HiResAudioView: View {
             onSelectTrack: onSelectTrack,
             onEditAlbum: onEditAlbum,
             onEditTrack: onEditTrack,
+            onEditTrackWithList: onEditTrackWithList,
             onTrimCutTrack: onTrimCutTrack,
             onDeleteAlbum: onDeleteAlbum,
             onDeleteTrack: onDeleteTrack
@@ -447,6 +451,7 @@ public struct HiResAudioView: View {
             showToolbar: false,
             onSelectTrack: onSelectTrack,
             onEditTrack: onEditTrack,
+            onEditTrackWithList: onEditTrackWithList,
             onTrimCutTrack: onTrimCutTrack
         )
     }
