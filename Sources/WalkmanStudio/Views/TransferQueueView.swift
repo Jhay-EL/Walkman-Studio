@@ -55,6 +55,20 @@ public struct TransferQueueView: View {
     @State private var isBatchFetchingLyrics: Bool = false
     @State private var batchStatusText: String? = nil
 
+    // Transfer Progress Modal State
+    @State private var showTransferProgressModal: Bool = false
+    @State private var transferCurrentIndex: Int = 0
+    @State private var transferTotalCount: Int = 0
+    @State private var transferCurrentTitle: String = ""
+    @State private var transferCurrentArtist: String = ""
+    @State private var transferCurrentStage: String = ""
+    @State private var transferProgress: Double = 0.0
+    @State private var transferSuccessCount: Int = 0
+    @State private var transferSkippedCount: Int = 0
+    @State private var transferFailedCount: Int = 0
+    @State private var transferIsComplete: Bool = false
+    @State private var transferTask: Task<Void, Never>? = nil
+
     // Audio Player Observation
     @ObservedObject private var player = AudioPlayerService.shared
 
@@ -299,7 +313,13 @@ public struct TransferQueueView: View {
                             }
 
                             Button(action: {
-                                showTransferConfirmation = true
+                                if isProcessing {
+                                    withAnimation(.easeInOut(duration: 0.20)) {
+                                        showTransferProgressModal = true
+                                    }
+                                } else {
+                                    showTransferConfirmation = true
+                                }
                             }) {
                                 HStack(spacing: 8) {
                                     Spacer(minLength: 0)
@@ -338,7 +358,7 @@ public struct TransferQueueView: View {
                                 )
                             )
                             .frame(maxWidth: .infinity)
-                            .disabled(queue.isEmpty || isProcessing || isBatchOptimizing || isBatchFetchingLyrics)
+                            .disabled((queue.isEmpty && !isProcessing) || isBatchOptimizing || isBatchFetchingLyrics)
 
                             Spacer(minLength: 0)
 
@@ -607,6 +627,13 @@ public struct TransferQueueView: View {
                 .allowsHitTesting(false)
                 .transition(.opacity)
             }
+
+            // Transferring to Walkman Progress Modal Popup Window
+            if showTransferProgressModal {
+                transferProgressModalView
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    .zIndex(50)
+            }
         }
         .onDrop(of: ["public.file-url"], isTargeted: $isTargeted) { providers in
             handleDrop(providers: providers)
@@ -837,6 +864,296 @@ public struct TransferQueueView: View {
             .padding(28)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // -------------------------------------------------------------------------
+    // TRANSFERRING PROGRESS MODAL (Liquid Glass Popup Window)
+    // -------------------------------------------------------------------------
+    private var transferProgressModalView: some View {
+        ZStack {
+            // Dimmed Ambient Backdrop
+            Color.black.opacity(0.60)
+                .background(.ultraThinMaterial)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    if transferIsComplete {
+                        withAnimation(.easeInOut(duration: 0.20)) {
+                            showTransferProgressModal = false
+                        }
+                    }
+                }
+
+            // Modal Card Window
+            VStack(spacing: 0) {
+                // Top Close Button (Visible when completed)
+                HStack {
+                    Spacer()
+                    if transferIsComplete {
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.20)) {
+                                showTransferProgressModal = false
+                            }
+                        }) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(WalkmanTheme.silverMuted)
+                                .frame(width: 24, height: 24)
+                                .background(Color.white.opacity(0.08))
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.top, 14)
+                .padding(.trailing, 14)
+                .frame(height: 28)
+
+                VStack(spacing: 16) {
+                    // Top Icon Badge
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(transferIsComplete ? Color.green.opacity(0.12) : Color.white.opacity(0.08))
+                            .frame(width: 58, height: 58)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .stroke(transferIsComplete ? Color.green.opacity(0.35) : Color.white.opacity(0.15), lineWidth: 0.85)
+                            )
+
+                        if transferIsComplete {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 28, weight: .bold))
+                                .foregroundStyle(.green)
+                        } else {
+                            ProgressView()
+                                .controlSize(.regular)
+                                .scaleEffect(1.1)
+                        }
+                    }
+                    .shadow(color: Color.black.opacity(0.20), radius: 6, x: 0, y: 2)
+
+                    // Title & Dynamic Subtitle
+                    VStack(spacing: 5) {
+                        Text(transferIsComplete ? "Transfer Complete" : "Syncing to \(targetDriveName)")
+                            .font(WalkmanFont.title2)
+                            .foregroundStyle(WalkmanTheme.silverLight)
+
+                        Text(transferModalSubtitle)
+                            .font(WalkmanFont.subheadline)
+                            .foregroundStyle(WalkmanTheme.silverMuted)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 16)
+                    }
+
+                    // Progress Bar
+                    VStack(spacing: 7) {
+                        ImportProgressBar(progress: transferProgress, isIndeterminate: false)
+                            .frame(maxWidth: 420)
+
+                        HStack {
+                            Text("\(transferCurrentIndex) of \(transferTotalCount) tracks")
+                                .font(WalkmanFont.monoSmall)
+                                .foregroundStyle(WalkmanTheme.silverLight)
+
+                            Spacer()
+
+                            Text("\(Int(min(1.0, max(0.0, transferProgress)) * 100))%")
+                                .font(WalkmanFont.monoSmall)
+                                .foregroundStyle(WalkmanTheme.silverLight)
+                        }
+                        .frame(maxWidth: 420)
+                    }
+
+                    // Current Track File Name & Stage Pill (while active)
+                    if !transferIsComplete && !transferCurrentTitle.isEmpty {
+                        VStack(spacing: 6) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "music.note")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(WalkmanTheme.silver)
+
+                                Text(transferCurrentTitle + (transferCurrentArtist.isEmpty ? "" : " • \(transferCurrentArtist)"))
+                                    .font(WalkmanFont.monoSmall)
+                                    .foregroundStyle(WalkmanTheme.silverLight)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5.5)
+                            .background(Color.white.opacity(0.04))
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule().stroke(Color.white.opacity(0.08), lineWidth: 0.8)
+                            )
+                            .frame(maxWidth: 440)
+
+                            if !transferCurrentStage.isEmpty {
+                                HStack(spacing: 5) {
+                                    Image(systemName: "gearshape.arrow.triangle.2.circlepath")
+                                        .font(.system(size: 9.5))
+                                        .foregroundStyle(WalkmanTheme.silverMuted)
+
+                                    Text(transferCurrentStage)
+                                        .font(WalkmanFont.caption)
+                                        .foregroundStyle(WalkmanTheme.silverMuted)
+                                        .lineLimit(1)
+                                }
+                            }
+                        }
+                    }
+
+                    // Completion Summary Badges (when complete)
+                    if transferIsComplete {
+                        HStack(spacing: 8) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.green)
+                                Text("\(transferSuccessCount) transferred")
+                                    .font(WalkmanFont.monoSmall)
+                                    .foregroundStyle(.green)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.green.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 5))
+
+                            if transferSkippedCount > 0 {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(.orange)
+                                    Text("\(transferSkippedCount) skipped")
+                                        .font(WalkmanFont.monoSmall)
+                                        .foregroundStyle(.orange)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.orange.opacity(0.12))
+                                .clipShape(RoundedRectangle(cornerRadius: 5))
+                            }
+
+                            if transferFailedCount > 0 {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(.red)
+                                    Text("\(transferFailedCount) failed")
+                                        .font(WalkmanFont.monoSmall)
+                                        .foregroundStyle(.red)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.red.opacity(0.12))
+                                .clipShape(RoundedRectangle(cornerRadius: 5))
+                            }
+                        }
+                        .padding(.top, 2)
+                    }
+
+                    // Action Button (Cancel Transfer or Done)
+                    HStack(spacing: 12) {
+                        if transferIsComplete {
+                            Button(action: {
+                                withAnimation(.easeInOut(duration: 0.20)) {
+                                    showTransferProgressModal = false
+                                }
+                            }) {
+                                Text("Done")
+                                    .font(WalkmanFont.calloutBold)
+                                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                                    .padding(.horizontal, 28)
+                                    .frame(height: 34)
+                            }
+                            .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 17))
+                        } else {
+                            Button(action: {
+                                cancelTransfer()
+                            }) {
+                                Text("Cancel Transfer")
+                                    .font(WalkmanFont.calloutMedium)
+                                    .foregroundStyle(WalkmanTheme.silverLight)
+                                    .padding(.horizontal, 18)
+                                    .frame(height: 32)
+                            }
+                            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 16))
+                        }
+                    }
+                    .padding(.top, 4)
+                }
+                .padding(.horizontal, 28)
+                .padding(.bottom, 28)
+            }
+            .frame(maxWidth: 480)
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(WalkmanTheme.card.opacity(0.92))
+                        .background(.ultraThinMaterial)
+
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: .white.opacity(0.20), location: 0.0),
+                                .init(color: .white.opacity(0.04), location: 0.5),
+                                .init(color: .clear, location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 12)
+                        Spacer(minLength: 0)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color.white.opacity(0.32), location: 0.0),
+                                .init(color: Color.white.opacity(0.10), location: 0.5),
+                                .init(color: Color.white.opacity(0.04), location: 1.0)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.85
+                    )
+            )
+            .shadow(color: Color.black.opacity(0.40), radius: 24, x: 0, y: 10)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var targetDriveName: String {
+        selectedTarget?.name ?? "Walkman"
+    }
+
+    private var transferModalSubtitle: String {
+        if transferIsComplete {
+            if transferSuccessCount == transferTotalCount {
+                return "All \(transferSuccessCount) track(s) successfully transferred to \(targetDriveName)."
+            } else {
+                return "\(transferSuccessCount) of \(transferTotalCount) tracks transferred. See summary below."
+            }
+        } else {
+            return "Transcoding audio, embedding hardware tags & Baseline RGB art..."
+        }
+    }
+
+    private func cancelTransfer() {
+        transferTask?.cancel()
+        withAnimation(.easeInOut(duration: 0.20)) {
+            isProcessing = false
+            showTransferProgressModal = false
+            for i in 0..<queue.count {
+                if queue[i].status == .converting {
+                    queue[i].status = .pending
+                }
+            }
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -1886,16 +2203,50 @@ public struct TransferQueueView: View {
 
     private func startBatchTransfer(skipExistingDuplicates: Bool = true) {
         guard let target = selectedTarget else { return }
-        isProcessing = true
+        let pendingIndices = queue.indices.filter { queue[$0].status == .pending }
+        guard !pendingIndices.isEmpty else { return }
 
-        Task {
+        transferTask?.cancel()
+
+        isProcessing = true
+        withAnimation(.easeInOut(duration: 0.20)) {
+            showTransferProgressModal = true
+        }
+        transferIsComplete = false
+        transferCurrentIndex = 0
+        transferTotalCount = pendingIndices.count
+        transferCurrentTitle = ""
+        transferCurrentArtist = ""
+        transferCurrentStage = "Initializing transfer..."
+        transferProgress = 0.0
+        transferSuccessCount = 0
+        transferSkippedCount = 0
+        transferFailedCount = 0
+
+        transferTask = Task {
             let targetRootDir = targetMode == .learning
                 ? URL(fileURLWithPath: target.learningDir)
                 : URL(fileURLWithPath: target.musicDir)
 
+            var processedIndex = 0
+
             for i in 0..<queue.count {
+                if Task.isCancelled { break }
                 guard queue[i].status == .pending else { continue }
-                queue[i].status = .converting
+
+                processedIndex += 1
+                let currentIndex = processedIndex
+                let rawSrcTitle = queue[i].title.isEmpty ? queue[i].sourceURL.deletingPathExtension().lastPathComponent : queue[i].title
+                let rawSrcArtist = queue[i].artist
+
+                await MainActor.run {
+                    self.transferCurrentIndex = currentIndex
+                    self.transferCurrentTitle = rawSrcTitle
+                    self.transferCurrentArtist = rawSrcArtist
+                    self.transferCurrentStage = "Checking destination..."
+                    self.transferProgress = Double(currentIndex - 1) / Double(max(1, self.transferTotalCount))
+                    self.queue[i].status = .converting
+                }
 
                 let src = queue[i].sourceURL
 
@@ -1980,6 +2331,11 @@ public struct TransferQueueView: View {
                     }
                 }
 
+                await MainActor.run {
+                    self.transferCurrentTitle = curTitle
+                    self.transferCurrentArtist = curArtist
+                }
+
                 let ext = destinationExtension(for: src)
 
                 let dest = WalkmanEngine.shared.targetTrackURL(
@@ -2013,6 +2369,8 @@ public struct TransferQueueView: View {
                                 self.queue[i].isDuplicateOnWalkman = true
                                 self.queue[i].duplicateMatchInfo = reason
                                 self.queue[i].duplicateMatchedTrack = dupCheck.matchingTrack
+                                self.transferSkippedCount += 1
+                                self.transferProgress = Double(currentIndex) / Double(max(1, self.transferTotalCount))
                             }
                         }
                         continue
@@ -2023,6 +2381,12 @@ public struct TransferQueueView: View {
                     try FileManager.default.createDirectory(at: albumDir, withIntermediateDirectories: true)
 
                     // 1. Audio Transfer / Transcode
+                    await MainActor.run {
+                        self.transferCurrentStage = (self.selectedPreset == "copy_optimize" || self.selectedPreset == "copy_raw")
+                            ? "Copying audio file to \(target.name)..."
+                            : "Transcoding audio (\(self.presetDisplayName(self.selectedPreset)))..."
+                    }
+
                     if selectedPreset == "copy_optimize" || selectedPreset == "copy_raw" {
                         if src.pathExtension.lowercased() == ext.lowercased() {
                             try? FileManager.default.removeItem(at: dest)
@@ -2046,6 +2410,9 @@ public struct TransferQueueView: View {
 
                     // 2. Hardware Metadata & Baseline JPEG Embedding
                     if selectedPreset != "copy_raw" {
+                        await MainActor.run {
+                            self.transferCurrentStage = "Embedding metadata & Baseline RGB artwork..."
+                        }
                         var finalArtData = queue[i].artworkData
                         if optimizeArtwork, let art = finalArtData {
                             finalArtData = WalkmanEngine.shared.encodeBaselineRGBJPEG(data: art, maxDimension: 800) ?? art
@@ -2183,9 +2550,21 @@ public struct TransferQueueView: View {
                     
                     sync()
 
-                    queue[i].status = .success
+                    await MainActor.run {
+                        if i < self.queue.count {
+                            self.queue[i].status = .success
+                            self.transferSuccessCount += 1
+                            self.transferProgress = Double(currentIndex) / Double(max(1, self.transferTotalCount))
+                        }
+                    }
                 } catch {
-                    queue[i].status = .failed(error.localizedDescription)
+                    await MainActor.run {
+                        if i < self.queue.count {
+                            self.queue[i].status = .failed(error.localizedDescription)
+                            self.transferFailedCount += 1
+                            self.transferProgress = Double(currentIndex) / Double(max(1, self.transferTotalCount))
+                        }
+                    }
                 }
             }
 
@@ -2220,8 +2599,18 @@ public struct TransferQueueView: View {
                 LocalMusicLibraryService.shared.rescanFolder(url: targetRootDir)
             }
 
-            isProcessing = false
-            onTransferComplete()
+            await MainActor.run {
+                if Task.isCancelled {
+                    self.isProcessing = false
+                    self.showTransferProgressModal = false
+                } else {
+                    self.transferIsComplete = true
+                    self.transferProgress = 1.0
+                    self.transferCurrentStage = "Transfer Complete"
+                    self.isProcessing = false
+                    self.onTransferComplete()
+                }
+            }
         }
     }
 }
