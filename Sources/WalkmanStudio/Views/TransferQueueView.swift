@@ -367,68 +367,55 @@ public struct TransferQueueView: View {
                 .frame(height: 114)
                 .padding(.horizontal, 16)
                 .padding(.top, 10)
-                .padding(.horizontal, 16)
-                .padding(.top, 10)
 
                 // -------------------------------------------------------------
-                // PANEL 2: HARDWARE OPTIMIZATION CAPSULES & BATCH ACTIONS
+                // PANEL 2: HARDWARE OPTIMIZATION CAPSULES
                 // -------------------------------------------------------------
-                HStack(spacing: 8) {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            toggleChip(
-                                title: "Baseline RGB Art",
-                                icon: "photo.badge.checkmark",
-                                isOn: $optimizeArtwork,
-                                help: "Converts artwork to strict Baseline RGB JPEG (max 800x800) for Sony Walkman display engine"
-                            )
-                            toggleChip(
-                                title: ".LRC Lyrics",
-                                icon: "quote.bubble",
-                                isOn: $fetchLyrics,
-                                help: targetMode == .learning ? "Disabled in Language Study mode (lyrics are not needed for audiobooks or podcasts)" : "Auto-downloads synchronized .lrc lyrics alongside music on Walkman",
-                                disabled: targetMode == .learning
-                            )
-                            toggleChip(
-                                title: "Auto-Tags",
-                                icon: "sparkles",
-                                isOn: $autoFetchMetadata,
-                                help: targetMode == .learning ? "Disabled in Language Study mode (preserves original chapter titles & author info)" : "Auto-queries iTunes & Deezer for missing tags & high-res artwork",
-                                disabled: targetMode == .learning
-                            )
-                            toggleChip(
-                                title: "folder.jpg",
-                                icon: "folder",
-                                isOn: $saveFolderJpg,
-                                help: "Writes folder.jpg and cover.jpg into destination album directory"
-                            )
-                            toggleChip(
-                                title: "EBU R128 Leveling",
-                                icon: "speaker.wave.2",
-                                isOn: $normalizeVolume,
-                                help: "Normalizes track loudness using EBU R128 standard during transcoding",
-                                disabled: selectedPreset == "copy_optimize" || selectedPreset == "copy_raw"
-                            )
-                            toggleChip(
-                                title: "12 Tone / SenseMe",
-                                icon: "waveform.path.badge.plus",
-                                isOn: $autoSenseMe,
-                                help: "Injects Sony 12 Tone Analysis (SenseMe) metadata so the Walkman illuminates the SenseMe channel indicator"
-                            )
-                        }
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 4)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        toggleChip(
+                            title: "Baseline RGB Art",
+                            icon: "photo.badge.checkmark",
+                            isOn: $optimizeArtwork,
+                            help: "Converts artwork to strict Baseline RGB JPEG (max 800x800) for Sony Walkman display engine"
+                        )
+                        toggleChip(
+                            title: ".LRC Lyrics",
+                            icon: "quote.bubble",
+                            isOn: $fetchLyrics,
+                            help: targetMode == .learning ? "Disabled in Language Study mode (lyrics are not needed for audiobooks or podcasts)" : "Auto-downloads synchronized .lrc lyrics alongside music on Walkman",
+                            disabled: targetMode == .learning
+                        )
+                        toggleChip(
+                            title: "Auto-Tags",
+                            icon: "sparkles",
+                            isOn: $autoFetchMetadata,
+                            help: targetMode == .learning ? "Disabled in Language Study mode (preserves original chapter titles & author info)" : "Auto-queries iTunes & Deezer for missing tags & high-res artwork",
+                            disabled: targetMode == .learning
+                        )
+                        toggleChip(
+                            title: "folder.jpg",
+                            icon: "folder",
+                            isOn: $saveFolderJpg,
+                            help: "Writes folder.jpg and cover.jpg into destination album directory"
+                        )
+                        toggleChip(
+                            title: "EBU R128 Leveling",
+                            icon: "speaker.wave.2",
+                            isOn: $normalizeVolume,
+                            help: "Normalizes track loudness using EBU R128 standard during transcoding",
+                            disabled: selectedPreset == "copy_optimize" || selectedPreset == "copy_raw"
+                        )
+                        toggleChip(
+                            title: "12 Tone / SenseMe",
+                            icon: "waveform.path.badge.plus",
+                            isOn: $autoSenseMe,
+                            help: "Injects Sony 12 Tone Analysis (SenseMe) metadata so the Walkman illuminates the SenseMe channel indicator"
+                        )
                     }
-                    .disableScrollClipIfAvailable()
-
-                    Spacer(minLength: 8)
-
-                    if !queue.isEmpty {
-                        batchToolbarButtons
-                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 4)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 4)
 
                 Rectangle()
                     .fill(Color.white.opacity(0.06))
@@ -457,152 +444,38 @@ public struct TransferQueueView: View {
                         }
 
                         // Queue Header Bar
-                        HStack(spacing: 10) {
-                            // Left summary
-                            HStack(spacing: 6) {
-                                Text("Queue")
-                                    .font(WalkmanFont.headline)
-                                    .foregroundStyle(.white)
+                        ViewThatFits(in: .horizontal) {
+                            // Wide layout: summary on left, all actions aligned on right
+                            HStack(spacing: 8) {
+                                queueSummaryView
 
-                                Text("\(queue.count)")
-                                    .font(WalkmanFont.badge)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Color.white.opacity(0.12))
-                                    .foregroundStyle(WalkmanTheme.silverLight)
-                                    .clipShape(Capsule())
+                                Spacer(minLength: 8)
 
-                                Text("•")
-                                    .foregroundStyle(.tertiary)
-
-                                Text(WalkmanEngine.formatBytes(queueTotalBytes))
-                                    .font(WalkmanFont.monoSmall)
-                                    .foregroundStyle(.secondary)
-
-                                if queueTotalDuration > 0 {
-                                    Text("•")
-                                        .foregroundStyle(.tertiary)
-                                    Text(WalkmanEngine.formatDuration(queueTotalDuration))
-                                        .font(WalkmanFont.monoSmall)
-                                        .foregroundStyle(.secondary)
+                                if queue.count > 4 {
+                                    queueSearchFilterView
                                 }
+
+                                batchToolbarButtons
+                                sortQueueButtonView
+                                addFilesButtonView
                             }
 
-                            let missingCount = queue.filter { $0.isMissingMetadata }.count
-                            if missingCount > 0 {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                        .font(.system(size: 10))
-                                    Text("\(missingCount) missing tags / art")
-                                        .font(WalkmanFont.monoSmall)
+                            // Compact layout: responsive multi-row for narrower windows
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(spacing: 8) {
+                                    queueSummaryView
+                                    Spacer(minLength: 8)
+                                    sortQueueButtonView
+                                    addFilesButtonView
                                 }
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3)
-                                .background(Color.orange.opacity(0.15))
-                                .foregroundStyle(Color.orange)
-                                .clipShape(Capsule())
-                            }
-
-                            Spacer()
-
-                            // Queue Search Filter (for large queues)
-                            if queue.count > 4 {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "magnifyingglass")
-                                        .font(.system(size: 10.5))
-                                        .foregroundStyle(Color.white.opacity(0.55))
-
-                                    TextField("Filter queue...", text: $queueSearchText)
-                                        .textFieldStyle(.plain)
-                                        .font(WalkmanFont.callout)
-
-                                    if !queueSearchText.isEmpty {
-                                        Button(action: { queueSearchText = "" }) {
-                                            Image(systemName: "xmark.circle.fill")
-                                                .font(.system(size: 11))
-                                                .foregroundStyle(.secondary)
-                                        }
-                                        .buttonStyle(.plain)
+                                HStack(spacing: 8) {
+                                    if queue.count > 4 {
+                                        queueSearchFilterView
                                     }
+                                    Spacer(minLength: 8)
+                                    batchToolbarButtons
                                 }
-                                .padding(.horizontal, 10)
-                                .frame(height: 32)
-                                .background(
-                                    ZStack {
-                                        Color.white.opacity(0.06)
-                                        VStack(spacing: 0) {
-                                            LinearGradient(
-                                                stops: [
-                                                    .init(color: .white.opacity(0.12), location: 0.0),
-                                                    .init(color: .clear, location: 1.0)
-                                                ],
-                                                startPoint: .top,
-                                                endPoint: .bottom
-                                            )
-                                            .frame(height: 5.5)
-                                            Spacer(minLength: 0)
-                                        }
-                                    }
-                                )
-                                .clipShape(Capsule())
-                                .overlay(
-                                    Capsule().stroke(Color.white.opacity(queueSearchText.isEmpty ? 0.10 : 0.28), lineWidth: 0.85)
-                                )
-                                .frame(maxWidth: 180)
                             }
-
-                            // Sort Queue Menu
-                            Menu {
-                                Button {
-                                    sortQueueByTrackNumber()
-                                } label: {
-                                    Label("Sort by Track Number", systemImage: "number")
-                                }
-                                Button {
-                                    sortQueueByFilename()
-                                } label: {
-                                    Label("Sort by Filename (A-Z)", systemImage: "doc.plaintext")
-                                }
-                                Button {
-                                    sortQueueByArtistAlbum()
-                                } label: {
-                                    Label("Sort by Artist & Album", systemImage: "music.note.list")
-                                }
-                            } label: {
-                                HStack(spacing: 4.5) {
-                                    Image(systemName: "arrow.up.arrow.down")
-                                        .font(.system(size: 10.5, weight: .semibold))
-                                    Text("Sort")
-                                        .font(.system(size: 12, weight: .medium))
-                                }
-                                .padding(.horizontal, 12)
-                                .frame(height: 32)
-                                .background(Color.white.opacity(0.08))
-                                .foregroundStyle(WalkmanTheme.silverLight)
-                                .clipShape(Capsule())
-                                .overlay(Capsule().stroke(Color.white.opacity(0.14), lineWidth: 0.85))
-                            }
-                            .menuIndicator(.hidden)
-                            .buttonStyle(.plain)
-                            .help("Sort queue items by track number, filename, or album")
-
-                            // Add More Files Button
-                            Button(action: openFilePicker) {
-                                HStack(spacing: 4.5) {
-                                    Image(systemName: "plus")
-                                        .font(.system(size: 10.5, weight: .bold))
-                                    Text("Add Files...")
-                                        .font(.system(size: 12, weight: .medium))
-                                }
-                                .padding(.horizontal, 12)
-                                .frame(height: 32)
-                                .background(Color.white.opacity(0.08))
-                                .foregroundStyle(WalkmanTheme.silverLight)
-                                .clipShape(Capsule())
-                                .overlay(Capsule().stroke(Color.white.opacity(0.14), lineWidth: 0.85))
-                            }
-                            .buttonStyle(.plain)
-                            .help("Add more audio files or folders to the transfer queue")
                         }
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
@@ -672,7 +545,31 @@ public struct TransferQueueView: View {
                             .padding(.bottom, 88)
                         }
                     }
-                    .liquidGlass(cornerRadius: 12)
+                    .background(
+                        ZStack {
+                            WalkmanTheme.card.opacity(0.65)
+                            VStack(spacing: 0) {
+                                LinearGradient(
+                                    stops: [
+                                        .init(color: Color.white.opacity(0.12), location: 0.0),
+                                        .init(color: Color.white.opacity(0.02), location: 0.5),
+                                        .init(color: Color.clear, location: 1.0)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                                .frame(height: 8)
+                                Spacer(minLength: 0)
+                            }
+                        }
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color.white.opacity(0.12), lineWidth: 0.8)
+                            .allowsHitTesting(false)
+                    )
+                    .compositingGroup()
                     .padding(.horizontal, 16)
                     .padding(.bottom, 88)
                 }
@@ -713,6 +610,7 @@ public struct TransferQueueView: View {
         .sheet(item: $itemToEdit) { item in
             QueueItemEditorSheet(
                 item: item,
+                queue: queue,
                 destinationExtension: destinationExtension(for: item.sourceURL),
                 rootFolderName: targetMode.rootFolderName,
                 onSave: { updated in
@@ -720,6 +618,11 @@ public struct TransferQueueView: View {
                         queue[idx] = updated
                     }
                     itemToEdit = nil
+                },
+                onSaveItem: { updated in
+                    if let idx = queue.firstIndex(where: { $0.id == updated.id }) {
+                        queue[idx] = updated
+                    }
                 },
                 onDismiss: {
                     itemToEdit = nil
@@ -1059,6 +962,135 @@ public struct TransferQueueView: View {
             isOn: isOn,
             help: help,
             disabled: disabled
+        )
+    }
+
+    // -------------------------------------------------------------------------
+    // QUEUE HEADER COMPONENTS
+    // -------------------------------------------------------------------------
+    private var queueSummaryView: some View {
+        HStack(spacing: 6) {
+            Text("Queue")
+                .font(WalkmanFont.headline)
+                .foregroundStyle(.white)
+
+            Text("\(queue.count)")
+                .font(WalkmanFont.badge)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.white.opacity(0.12))
+                .foregroundStyle(WalkmanTheme.silverLight)
+                .clipShape(Capsule())
+
+            Text("•")
+                .foregroundStyle(.tertiary)
+
+            Text(WalkmanEngine.formatBytes(queueTotalBytes))
+                .font(WalkmanFont.monoSmall)
+                .foregroundStyle(.secondary)
+
+            if queueTotalDuration > 0 {
+                Text("•")
+                    .foregroundStyle(.tertiary)
+                Text(WalkmanEngine.formatDuration(queueTotalDuration))
+                    .font(WalkmanFont.monoSmall)
+                    .foregroundStyle(.secondary)
+            }
+
+            let missingCount = queue.filter { $0.isMissingMetadata }.count
+            if missingCount > 0 {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 10))
+                    Text("\(missingCount) missing tags / art")
+                        .font(WalkmanFont.monoSmall)
+                }
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(Color.orange.opacity(0.15))
+                .foregroundStyle(Color.orange)
+                .clipShape(Capsule())
+            }
+        }
+    }
+
+    private var queueSearchFilterView: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 10.5))
+                .foregroundStyle(Color.white.opacity(0.55))
+
+            TextField("Filter queue...", text: $queueSearchText)
+                .textFieldStyle(.plain)
+                .font(WalkmanFont.callout)
+
+            if !queueSearchText.isEmpty {
+                Button(action: { queueSearchText = "" }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 32)
+        .background(
+            ZStack {
+                Color.white.opacity(0.06)
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(0.12), location: 0.0),
+                            .init(color: .clear, location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 5.5)
+                    Spacer(minLength: 0)
+                }
+            }
+        )
+        .clipShape(Capsule())
+        .overlay(
+            Capsule().stroke(Color.white.opacity(queueSearchText.isEmpty ? 0.10 : 0.28), lineWidth: 0.85)
+        )
+        .frame(maxWidth: 180)
+    }
+
+    private var sortQueueButtonView: some View {
+        Menu {
+            Button {
+                sortQueueByTrackNumber()
+            } label: {
+                Label("Sort by Track Number", systemImage: "number")
+            }
+            Button {
+                sortQueueByFilename()
+            } label: {
+                Label("Sort by Filename (A-Z)", systemImage: "doc.plaintext")
+            }
+            Button {
+                sortQueueByArtistAlbum()
+            } label: {
+                Label("Sort by Artist & Album", systemImage: "music.note.list")
+            }
+        } label: {
+            SortMenuPillLabel()
+        }
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .help("Sort queue items by track number, filename, or album")
+    }
+
+    private var addFilesButtonView: some View {
+        TransferBatchActionButton(
+            title: "Add Files...",
+            icon: "plus",
+            isDisabled: isProcessing,
+            help: "Add more audio files or folders to the transfer queue",
+            action: openFilePicker
         )
     }
 
@@ -2907,6 +2939,66 @@ private struct TransferBatchActionButton: View {
     }
 }
 
+// MARK: - Sort Menu Pill Label (32pt Liquid Glass Capsule)
+private struct SortMenuPillLabel: View {
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 4.5) {
+            Image(systemName: "arrow.up.arrow.down")
+                .font(.system(size: 10, weight: .semibold))
+            Text("Sort")
+                .font(.system(size: 11.5, weight: .medium))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .frame(height: 32)
+        .foregroundStyle(isHovered ? Color.white : WalkmanTheme.silverLight)
+        .background(
+            ZStack {
+                Color.white.opacity(isHovered ? 0.12 : 0.06)
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(isHovered ? 0.20 : 0.10), location: 0.0),
+                            .init(color: .clear, location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 5)
+                    Spacer(minLength: 0)
+                }
+            }
+        )
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(Color.white.opacity(isHovered ? 0.22 : 0.10), lineWidth: 0.85)
+        )
+        .shadow(color: Color.black.opacity(isHovered ? 0.15 : 0), radius: 2, y: 1)
+        .scaleEffect(isHovered ? 1.02 : 1.0)
+        .contentShape(Capsule())
+        .onHover { hovering in
+            guard isHovered != hovering else { return }
+            isHovered = hovering
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.pop()
+            }
+        }
+        .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+    }
+}
+
 // MARK: - Liquid Glass Dropdown Menu (38pt Standard Dropdown)
 private struct LiquidGlassDropdownMenu<Content: View>: View {
     let title: String
@@ -2977,18 +3069,6 @@ private struct LiquidGlassDropdownMenu<Content: View>: View {
             }
         }
         .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
-    }
-}
-
-// MARK: - Safe Scroll Clip Disabler (macOS 14+ with fallback)
-private extension View {
-    @ViewBuilder
-    func disableScrollClipIfAvailable() -> some View {
-        if #available(macOS 14.0, *) {
-            self.scrollClipDisabled()
-        } else {
-            self
-        }
     }
 }
 
