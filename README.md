@@ -43,17 +43,6 @@ Sony Walkman digital audio players deliver exceptional audio fidelity via their 
 
 ---
 
-## What's New in v3.0.0
-
-* **Pure Optical Liquid Glass Design Language:** Complete visual overhaul adhering strictly to [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md), featuring matte obsidian chassis, specular refraction lenses, standardized **38pt baseline controls**, and responsive `ViewThatFits` toolbars.
-* **CoreAudio Trim & Cut Audio Studio:** Integrated waveform audio editor with non-destructive preview auditioning, millisecond boundary steppers, stereo channel routing (L/R swap, mono downmix, channel isolation), 180° phase inversion, and smooth click-free fade envelopes.
-* **Partition-Isolated Duplicates Studio:** Prevents accidental deletion of tracks across distinct drives by scoping duplicate detection strictly within the same physical volume (Internal Flash, MicroSD, or Local Library) with smart lossless-first auto-resolution.
-* **Rapid Sequential Metadata Navigation:** Edit metadata across entire albums or playlists continuously with direct previous/next track stepper buttons inside the Song Metadata Editor without closing the modal sheet.
-* **Refined Playlist Management (`AddTracksModal`):** Standardized 28pt in-row action capsules, live "In Playlist" indicators, and high-visibility liquid glass selection controls.
-* **Transfer Queue Compliance Bar:** Clean separation of the 6 Sony Walkman hardware compliance toggle chips and batch transfer queue operations with responsive layout adaptation.
-
----
-
 ## Core Features
 
 ### 1. Sony 12 Tone Analysis & 13 SenseMe™ Channels
