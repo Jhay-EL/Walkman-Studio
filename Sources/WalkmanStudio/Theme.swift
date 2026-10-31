@@ -117,10 +117,9 @@ public struct LiquidGlassModifier: ViewModifier {
 
     public func body(content: Content) -> some View {
         content
-            .background(.ultraThinMaterial)
             .background(
                 ZStack {
-                    WalkmanTheme.card.opacity(0.68)
+                    WalkmanTheme.card.opacity(0.78)
                     if let tint = tint {
                         tint.opacity(0.12)
                     }
@@ -139,18 +138,13 @@ public struct LiquidGlassModifier: ViewModifier {
                     )
                     .allowsHitTesting(false)
             )
+            .compositingGroup()
             // Multi-depth soft spatial shadow (Neutral tactile depth only - NO GLOW)
             .shadow(
                 color: Color.black.opacity(0.24),
                 radius: isHovered ? 10 : 6,
                 x: 0,
                 y: isHovered ? 4 : 2
-            )
-            .shadow(
-                color: Color.black.opacity(0.12),
-                radius: 2,
-                x: 0,
-                y: 1
             )
     }
 }
@@ -195,8 +189,7 @@ public struct StudioGlassCardModifier: ViewModifier {
         content
             .background(
                 ZStack {
-                    WalkmanTheme.card.opacity(0.85)
-                        .background(.ultraThinMaterial)
+                    WalkmanTheme.card.opacity(0.88)
 
                     VStack(spacing: 0) {
                         LinearGradient(
@@ -229,6 +222,7 @@ public struct StudioGlassCardModifier: ViewModifier {
                         lineWidth: 0.85
                     )
             )
+            .compositingGroup()
             .shadow(color: Color.black.opacity(0.22), radius: 8, x: 0, y: 3)
     }
 }
@@ -281,6 +275,7 @@ public struct ModalGlassChassisModifier: ViewModifier {
                     )
                     .allowsHitTesting(false)
             )
+            .compositingGroup()
             .shadow(color: Color.black.opacity(0.45), radius: 28, x: 0, y: 12)
     }
 }
@@ -319,7 +314,6 @@ public struct LiquidGlassButtonStyle: ButtonStyle {
         
         var body: some View {
             configuration.label
-                .scaleEffect(configuration.isPressed ? 0.955 : (isHovered ? 1.02 : 1.0))
                 .opacity(configuration.isPressed ? 0.85 : 1.0)
                 .background(
                     ZStack {
@@ -384,6 +378,7 @@ public struct LiquidGlassButtonStyle: ButtonStyle {
                         )
                         .allowsHitTesting(false)
                 )
+                .compositingGroup()
                 .shadow(
                     color: Color.black.opacity(isHovered ? 0.25 : 0.14),
                     radius: isHovered ? 6 : 3,
@@ -398,15 +393,15 @@ public struct LiquidGlassButtonStyle: ButtonStyle {
                     guard isHovered != hovering else { return }
                     isHovered = hovering
                     if hovering {
-                        NSCursor.pointingHand.push()
+                        NSCursor.pointingHand.set()
                     } else {
-                        NSCursor.pop()
+                        NSCursor.arrow.set()
                     }
                 }
                 .onDisappear {
                     if isHovered {
                         isHovered = false
-                        NSCursor.pop()
+                        NSCursor.arrow.set()
                     }
                 }
         }
@@ -472,15 +467,15 @@ public struct WalkmanSideActionButtonStyle: ButtonStyle {
                     guard isHovered != hovering else { return }
                     isHovered = hovering
                     if hovering {
-                        NSCursor.pointingHand.push()
+                        NSCursor.pointingHand.set()
                     } else {
-                        NSCursor.pop()
+                        NSCursor.arrow.set()
                     }
                 }
                 .onDisappear {
                     if isHovered {
                         isHovered = false
-                        NSCursor.pop()
+                        NSCursor.arrow.set()
                     }
                 }
         }

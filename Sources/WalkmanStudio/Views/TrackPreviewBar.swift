@@ -3,32 +3,17 @@ import AppKit
 
 public struct TrackPreviewBar: View {
     @ObservedObject var player = AudioPlayerService.shared
-    @ObservedObject var progress = AudioPlayerService.shared.progress
     var libraryTracks: [Track] = []
     var isInspectorPresented: Bool = false
     let onOpenInspector: () -> Void
     var onOpenFullScreen: () -> Void = {}
 
-    @State private var dragTime: Double? = nil
     @State private var isArtworkHovered: Bool = false
     @State private var lastNonZeroVolume: Float = 0.8
     @State private var isVolumeExpanded: Bool = false
     @State private var isVolumeHovered: Bool = false
     @State private var isVolumeSpeakerHovered: Bool = false
     @State private var isEnlargeHovered: Bool = false
-
-    private func formatTime(_ seconds: Double) -> String {
-        if seconds.isNaN || seconds.isInfinite || seconds < 0 { return "0:00" }
-        let totalSecs = Int(seconds)
-        let hours = totalSecs / 3600
-        let mins = (totalSecs % 3600) / 60
-        let secs = totalSecs % 60
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, mins, secs)
-        } else {
-            return String(format: "%d:%02d", mins, secs)
-        }
-    }
 
     public var body: some View {
         HStack(spacing: 12) {
@@ -90,6 +75,7 @@ public struct TrackPreviewBar: View {
                     lineWidth: 0.85
                 )
         )
+        .compositingGroup()
         .shadow(color: Color.black.opacity(0.45), radius: 22, x: 0, y: 8)
         .shadow(color: Color.black.opacity(0.20), radius: 4, x: 0, y: 1.5)
         .onExitCommand {
@@ -202,9 +188,6 @@ public struct TrackPreviewBar: View {
     @ViewBuilder
     private func activeTrackDisplay(for track: Track) -> some View {
         let isHiRes = track.bitsPerSample > 16 || track.sampleRate > 48000
-        let curTime = dragTime ?? progress.currentTime
-        let durTime = progress.duration
-        let timeWidth: CGFloat = durTime >= 3600 ? 54 : (durTime >= 600 ? 40 : 34)
 
         HStack(spacing: 8) {
             // Artwork thumbnail (clickable to open inspector)
@@ -234,7 +217,13 @@ public struct TrackPreviewBar: View {
             .help("Click to view full metadata details & artwork")
             .onHover { h in
                 isArtworkHovered = h
-                if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                if h { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+            }
+            .onDisappear {
+                if isArtworkHovered {
+                    isArtworkHovered = false
+                    NSCursor.arrow.set()
+                }
             }
 
             // Metadata & Scrubber
@@ -275,40 +264,12 @@ public struct TrackPreviewBar: View {
                     }
                 }
 
-                // Bottom row: Timeline scrubber with unclipped responsive monospaced counters
-                HStack(spacing: 6) {
-                    Text(formatTime(curTime))
-                        .font(WalkmanFont.monoSmall)
-                        .foregroundStyle(.secondary)
-                        .frame(width: timeWidth, alignment: .trailing)
-                        .fixedSize(horizontal: true, vertical: false)
-
-                    Slider(
-                        value: Binding(
-                            get: { dragTime ?? progress.currentTime },
-                            set: { newTime in dragTime = newTime }
-                        ),
-                        in: 0...max(1.0, progress.duration),
-                        onEditingChanged: { editing in
-                            if editing {
-                                player.isSeeking = true
-                            } else {
-                                if let target = dragTime {
-                                    player.seek(to: target)
-                                }
-                                dragTime = nil
-                            }
-                        }
-                    )
-                    .controlSize(.mini)
-                    .tint(isHiRes ? WalkmanTheme.hiResGold : WalkmanTheme.silver)
-
-                    Text(formatTime(durTime))
-                        .font(WalkmanFont.monoSmall)
-                        .foregroundStyle(.secondary)
-                        .frame(width: timeWidth, alignment: .leading)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
+                // Bottom row: Isolated high-frequency timeline scrubber
+                TrackScrubberRow(
+                    isHiRes: isHiRes,
+                    onSeek: { target in player.seek(to: target) },
+                    onSeekingChanged: { editing in player.isSeeking = editing }
+                )
             }
         }
     }
@@ -381,7 +342,13 @@ public struct TrackPreviewBar: View {
         .help("Full Screen Player (Artwork & Live Lyrics)")
         .onHover { h in
             isEnlargeHovered = h
-            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            if h { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+        }
+        .onDisappear {
+            if isEnlargeHovered {
+                isEnlargeHovered = false
+                NSCursor.arrow.set()
+            }
         }
     }
 
@@ -453,7 +420,13 @@ public struct TrackPreviewBar: View {
             )
             .onHover { h in
                 isVolumeSpeakerHovered = h
-                if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                if h { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+            }
+            .onDisappear {
+                if isVolumeSpeakerHovered {
+                    isVolumeSpeakerHovered = false
+                    NSCursor.arrow.set()
+                }
             }
         }
         .padding(.leading, isVolumeExpanded ? 10 : 3)
@@ -557,7 +530,10 @@ private struct VolumeCapsuleSlider: View {
         }
         .frame(width: totalWidth, height: 22)
         .onHover { h in
-            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            if h { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+        }
+        .onDisappear {
+            NSCursor.arrow.set()
         }
     }
 }
@@ -616,7 +592,13 @@ private struct LiquidGlassPlayerButton: View {
         .onHover { h in
             guard !isDisabled else { return }
             isHovered = h
-            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            if h { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.arrow.set()
+            }
         }
     }
 }
@@ -678,7 +660,75 @@ private struct PlayPauseCircleButton: View {
         .onHover { h in
             guard isEnabled else { return }
             isHovered = h
-            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            if h { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.arrow.set()
+            }
+        }
+    }
+}
+
+// MARK: - Isolated High-Frequency Scrubber Row
+private struct TrackScrubberRow: View {
+    @ObservedObject var progress = AudioPlayerService.shared.progress
+    let isHiRes: Bool
+    let onSeek: (Double) -> Void
+    let onSeekingChanged: (Bool) -> Void
+
+    @State private var dragTime: Double? = nil
+
+    private func formatTime(_ seconds: Double) -> String {
+        if seconds.isNaN || seconds.isInfinite || seconds < 0 { return "0:00" }
+        let totalSecs = Int(seconds)
+        let hours = totalSecs / 3600
+        let mins = (totalSecs % 3600) / 60
+        let secs = totalSecs % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, mins, secs)
+        } else {
+            return String(format: "%d:%02d", mins, secs)
+        }
+    }
+
+    var body: some View {
+        let curTime = dragTime ?? progress.currentTime
+        let durTime = progress.duration
+        let timeWidth: CGFloat = durTime >= 3600 ? 54 : (durTime >= 600 ? 40 : 34)
+
+        HStack(spacing: 6) {
+            Text(formatTime(curTime))
+                .font(WalkmanFont.monoSmall)
+                .foregroundStyle(.secondary)
+                .frame(width: timeWidth, alignment: .trailing)
+                .fixedSize(horizontal: true, vertical: false)
+
+            Slider(
+                value: Binding(
+                    get: { dragTime ?? progress.currentTime },
+                    set: { newTime in dragTime = newTime }
+                ),
+                in: 0...max(1.0, progress.duration),
+                onEditingChanged: { editing in
+                    onSeekingChanged(editing)
+                    if !editing {
+                        if let target = dragTime {
+                            onSeek(target)
+                        }
+                        dragTime = nil
+                    }
+                }
+            )
+            .controlSize(.mini)
+            .tint(isHiRes ? WalkmanTheme.hiResGold : WalkmanTheme.silver)
+
+            Text(formatTime(durTime))
+                .font(WalkmanFont.monoSmall)
+                .foregroundStyle(.secondary)
+                .frame(width: timeWidth, alignment: .leading)
+                .fixedSize(horizontal: true, vertical: false)
         }
     }
 }

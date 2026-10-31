@@ -285,7 +285,13 @@ public struct TransferSyncSheet: View {
                 .keyboardShortcut(.cancelAction)
                 .onHover { h in
                     withAnimation(.spring(response: 0.20, dampingFraction: 0.72)) { isCancelHovered = h }
-                    if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                    if h { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+                }
+                .onDisappear {
+                    if isCancelHovered {
+                        isCancelHovered = false
+                        NSCursor.arrow.set()
+                    }
                 }
 
                 // Start Transfer Button
@@ -314,7 +320,13 @@ public struct TransferSyncSheet: View {
                 .keyboardShortcut(.defaultAction)
                 .onHover { h in
                     withAnimation(.spring(response: 0.20, dampingFraction: 0.72)) { isConfirmHovered = h }
-                    if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                    if h { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+                }
+                .onDisappear {
+                    if isConfirmHovered {
+                        isConfirmHovered = false
+                        NSCursor.arrow.set()
+                    }
                 }
             }
             .padding(.horizontal, 24)
@@ -446,7 +458,13 @@ public struct ClearQueueConfirmSheet: View {
                 .keyboardShortcut(.cancelAction)
                 .onHover { h in
                     withAnimation(.spring(response: 0.20, dampingFraction: 0.72)) { isCancelHovered = h }
-                    if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                    if h { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+                }
+                .onDisappear {
+                    if isCancelHovered {
+                        isCancelHovered = false
+                        NSCursor.arrow.set()
+                    }
                 }
 
                 Button(action: onConfirm) {
@@ -467,7 +485,13 @@ public struct ClearQueueConfirmSheet: View {
                 .keyboardShortcut(.defaultAction)
                 .onHover { h in
                     withAnimation(.spring(response: 0.20, dampingFraction: 0.72)) { isConfirmHovered = h }
-                    if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                    if h { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+                }
+                .onDisappear {
+                    if isConfirmHovered {
+                        isConfirmHovered = false
+                        NSCursor.arrow.set()
+                    }
                 }
             }
             .padding(.horizontal, 24)
@@ -588,7 +612,13 @@ private struct SheetCloseButton: View {
             withAnimation(.spring(response: 0.20, dampingFraction: 0.70)) {
                 isHovered = h
             }
-            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            if h { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.arrow.set()
+            }
         }
     }
 }

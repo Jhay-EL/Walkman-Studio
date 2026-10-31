@@ -251,19 +251,24 @@ public struct TrackCoverThumbnail: View {
             loadImage(forceReload: true)
         }
         .onReceive(NotificationCenter.default.publisher(for: .trackMetadataDidUpdate)) { notif in
-            if let tracks = notif.userInfo?["tracks"] as? [Track] {
+            guard let userInfo = notif.userInfo else { return }
+            if let tracks = userInfo["tracks"] as? [Track] {
                 if tracks.contains(where: { $0.fullPath == track.fullPath }) {
                     loadImage(forceReload: true)
                 }
-            } else if let trackId = notif.userInfo?["trackId"] as? String {
+            } else if let trackId = userInfo["trackId"] as? String {
                 if trackId == track.id {
                     loadImage(forceReload: true)
                 }
-            } else if let albumName = notif.userInfo?["albumName"] as? String {
+            } else if let trackObj = userInfo["track"] as? Track {
+                if trackObj.id == track.id || trackObj.fullPath == track.fullPath {
+                    loadImage(forceReload: true)
+                }
+            } else if let albumName = userInfo["albumName"] as? String {
                 if track.album.localizedCaseInsensitiveCompare(albumName) == .orderedSame {
                     loadImage(forceReload: true)
                 }
-            } else {
+            } else if userInfo["reloadAll"] as? Bool == true {
                 loadImage(forceReload: true)
             }
         }

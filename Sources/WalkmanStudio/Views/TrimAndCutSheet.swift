@@ -2344,7 +2344,13 @@ private struct TrimCutModeTabPill: View {
             withAnimation(.spring(response: 0.22, dampingFraction: 0.72)) {
                 isHovered = h
             }
-            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            if h { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.arrow.set()
+            }
         }
     }
 }
@@ -2428,7 +2434,13 @@ private struct LiquidGlassDropdown<T: Hashable>: View {
                 withAnimation(.spring(response: 0.20, dampingFraction: 0.72)) {
                     isHovered = h
                 }
-                if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                if h { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+            }
+            .onDisappear {
+                if isHovered {
+                    isHovered = false
+                    NSCursor.arrow.set()
+                }
             }
 
             Text(subtitle)

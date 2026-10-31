@@ -410,7 +410,13 @@ private struct SheetCloseButton: View {
             withAnimation(.spring(response: 0.20, dampingFraction: 0.70)) {
                 isHovered = h
             }
-            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            if h { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.arrow.set()
+            }
         }
     }
 }
