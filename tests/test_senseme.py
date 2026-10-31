@@ -41,8 +41,13 @@ def test_ground_truth_analyzed_file_detection():
     assert info["highlightSec"] == 11.572
     assert len(info["moodScores"]) == 10
     assert info["moodScores"] == [57, 50, 75, 57, 18, 60, 0, 45, 66, 52]
-    assert "Acoustic" in info["channels"]
+    assert info["moodScores"][8] >= 55  # s8 Acoustic timbre descriptor
     assert "Relax" in info["channels"] or "Lounge" in info["channels"]
+    walkman_14 = {
+        "Energetic", "Relax", "Upbeat", "Mellow", "Emotional", "Lounge", "Dance", "Extreme",
+        "Morning", "Daytime", "Evening", "Night", "Midnight", "Shuffle All Songs"
+    }
+    assert set(info["channels"]).issubset(walkman_14)
 
 
 @pytest.mark.skipif(ANALYZED_FLAC is None and ORIG_FLAC is None, reason="Test hardware FLAC not mounted or present")
@@ -108,21 +113,53 @@ def test_dsp_analysis_and_injection(tmp_path):
 
 
 def test_walkman_14_channels():
-    walkman_channels = [
-        "Energetic", "Emotional", "Lounge", "Dance",
-        "Extreme", "Upbeat", "Relax", "Mellow",
+    walkman_channels = {
+        "Energetic", "Relax", "Upbeat", "Mellow",
+        "Emotional", "Lounge", "Dance", "Extreme",
         "Morning", "Daytime", "Evening", "Night", "Midnight",
         "Shuffle All Songs"
-    ]
-    # Check night condition
+    }
+    # 1. Night & Evening condition
     night_payload = senseme_engine.build_smfm_payload(
         bpm=90.0,
         mood_scores=[40, 50, 40, 60, 40, 50, 30, 20, 50, 40],
         highlight_ms=5000,
         raw_bpm=90.0,
     )
-    # Parse payload
     info = senseme_engine.parse_smfm_payload(night_payload)
     assert info is not None
     assert "Night" in info["channels"]
     assert "Shuffle All Songs" in info["channels"]
+    assert set(info["channels"]).issubset(walkman_channels)
+
+    # 1b. Evening condition (s5 = 48 >= 45 matching Lounge)
+    evening_payload = senseme_engine.build_smfm_payload(
+        bpm=100.0,
+        mood_scores=[30, 40, 35, 45, 30, 48, 20, 15, 40, 30],
+        highlight_ms=4000,
+        raw_bpm=100.0,
+    )
+    ev_info = senseme_engine.parse_smfm_payload(evening_payload)
+    assert ev_info is not None
+    assert "Evening" in ev_info["channels"]
+    assert "Shuffle All Songs" in ev_info["channels"]
+    assert set(ev_info["channels"]).issubset(walkman_channels)
+
+    # 2. Mood Fallback Test: track with all scores < 45 qualifies for highest STMO slot
+    low_scores = [10, 20, 15, 35, 12, 18, 14, 16, 20, 20] # slot 3 Mellow is highest (35)
+    fallback_payload = senseme_engine.build_smfm_payload(
+        bpm=95.0,
+        mood_scores=low_scores,
+        highlight_ms=3000,
+        raw_bpm=95.0,
+    )
+    fb_info = senseme_engine.parse_smfm_payload(fallback_payload)
+    assert fb_info is not None
+    assert "Mellow" in fb_info["channels"]  # Top mood slot among 0..7
+    assert set(fb_info["channels"]).issubset(walkman_channels)
+    # Guaranteed at least 1 mood, at least 1 time-of-day, and Shuffle All Songs
+    mood_channels = {"Energetic", "Relax", "Upbeat", "Mellow", "Emotional", "Lounge", "Dance", "Extreme"}
+    time_channels = {"Morning", "Daytime", "Evening", "Night", "Midnight"}
+    assert any(c in mood_channels for c in fb_info["channels"])
+    assert any(c in time_channels for c in fb_info["channels"])
+    assert "Shuffle All Songs" in fb_info["channels"]

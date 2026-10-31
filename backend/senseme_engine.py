@@ -61,10 +61,11 @@ def build_smfm_payload(
     highlight_ms: int,
     template_bytes: Optional[bytes] = None,
     raw_bpm: Optional[float] = None,
+    quartile_mood_scores: Optional[List[List[int]]] = None,
 ) -> bytes:
     """
     Constructs a 100% hardware-compatible Sony 12 Tone / SenseMe SMFM binary block.
-    Total size is exactly 3270 bytes.
+    Total size is exactly 3270 bytes. Supports per-quartile dynamic STMO values.
     """
     if len(mood_scores) != 10:
         raise ValueError(f"STMO requires exactly 10 mood scores, got {len(mood_scores)}")
@@ -87,8 +88,11 @@ def build_smfm_payload(
     # 4. STMO (160 bytes: 10 moods x 4 quartiles)
     stmo_bytes = bytearray()
     for m in range(10):
-        val = int(max(0, min(100, mood_scores[m])))
         for q in range(4):
+            if quartile_mood_scores and len(quartile_mood_scores) > m and len(quartile_mood_scores[m]) > q:
+                val = int(max(0, min(100, quartile_mood_scores[m][q])))
+            else:
+                val = int(max(0, min(100, mood_scores[m])))
             stmo_bytes.extend([0x01, m, q, val])
     stmo_data = bytes(stmo_bytes)
     stmo_chunk = make_chunk_header(b"STMO", len(stmo_data)) + stmo_data
@@ -147,12 +151,13 @@ def parse_smfm_payload(data: bytes) -> Optional[Dict[str, Any]]:
         ms = struct.unpack(">I", chunks["STSA"][:4])[0]
         highlight_sec = round(ms / 1000.0, 3)
 
-    # Mood Scores (STMO)
+    # Mood Scores (STMO: mean across 4 quartiles for each mood)
     stmo = chunks["STMO"]
     mood_scores = []
     for m in range(10):
         if (m + 1) * 16 <= len(stmo):
-            score = stmo[m * 16 + 3]
+            q_scores = [stmo[m * 16 + q * 4 + 3] for q in range(4)]
+            score = int(round(sum(q_scores) / 4.0))
             mood_scores.append(score)
         else:
             mood_scores.append(50)
@@ -166,41 +171,77 @@ def parse_smfm_payload(data: bytes) -> Optional[Dict[str, Any]]:
     neg_valence = (mood_scores[4] * 1.5 + mood_scores[7] * 0.5) / 200.0
     valence = round(float(min(max((pos_valence - neg_valence) * 1.8, -1.0), 1.0)), 2)
 
-    # Channels
+    # 7. Strict 14 Official Sony Walkman Channels & Time-of-Day Guardrails
+    effective_bpm = bpm * 2.0 if bpm < 62.0 else (bpm * 0.5 if bpm > 180.0 else bpm)
+    s0, s1, s2, s3, s4, s5, s6, s7, s8, s9 = mood_scores
+
     channels: List[str] = []
-    if arousal >= 0.35 and valence >= 0.15 and bpm >= 115:
-        channels.append("Energetic")
-    if arousal <= -0.15 and valence >= -0.30 and bpm <= 105:
-        channels.append("Relax")
-    if valence >= 0.20 and -0.10 <= arousal <= 0.65:
-        channels.append("Upbeat")
-    if -0.75 <= arousal <= 0.0 and -0.35 <= valence <= 0.45:
-        channels.append("Mellow")
-    if mood_scores[4] >= 45 or (valence <= -0.10 and -0.55 <= arousal <= 0.40):
-        channels.append("Emotional")
-    if arousal >= 0.65 or mood_scores[7] >= 65:
-        channels.append("Extreme")
-    if mood_scores[6] >= 50 or (108 <= bpm <= 138 and arousal >= 0.25):
-        channels.append("Dance")
-    if mood_scores[5] >= 50 or (80 <= bpm <= 118 and -0.40 <= arousal <= 0.30):
-        channels.append("Lounge")
-    if mood_scores[8] >= 55:
-        channels.append("Acoustic")
-    if mood_scores[9] >= 60:
-        channels.append("Electronic")
 
-    if "Upbeat" in channels or "Acoustic" in channels or "Relax" in channels or valence >= 0.15:
-        channels.append("Morning")
-    if "Energetic" in channels or "Upbeat" in channels or "Dance" in channels or valence >= 0.10:
-        channels.append("Daytime")
-    if "Mellow" in channels or "Relax" in channels or "Lounge" in channels or (-0.30 <= arousal <= 0.20 and valence >= -0.20):
-        channels.append("Evening")
-    if "Lounge" in channels or "Mellow" in channels or "Emotional" in channels or (arousal <= 0.10 and valence <= 0.25):
-        channels.append("Night")
-    if "Relax" in channels or "Mellow" in channels or arousal <= -0.10 or bpm <= 88:
-        channels.append("Midnight")
+    # A) 8 Mood Channels
+    mood_candidates: List[str] = []
+    if s0 >= 55 or (arousal >= 0.35 and valence >= 0.15 and effective_bpm >= 115):
+        mood_candidates.append("Energetic")
+    if s1 >= 55 or (arousal <= -0.15 and valence >= -0.30 and effective_bpm <= 105):
+        mood_candidates.append("Relax")
+    if s2 >= 55 or (valence >= 0.20 and -0.10 <= arousal <= 0.65):
+        mood_candidates.append("Upbeat")
+    if s3 >= 55 or (-0.75 <= arousal <= 0.05 and -0.35 <= valence <= 0.45):
+        mood_candidates.append("Mellow")
+    if s4 >= 50 or (valence <= -0.10 and -0.55 <= arousal <= 0.40):
+        mood_candidates.append("Emotional")
+    if s7 >= 60 or arousal >= 0.65 or effective_bpm >= 145:
+        mood_candidates.append("Extreme")
+    if s6 >= 45 or (105 <= effective_bpm <= 140 and arousal >= 0.20):
+        mood_candidates.append("Dance")
+    if s5 >= 45 or (80 <= effective_bpm <= 120 and -0.40 <= arousal <= 0.30):
+        mood_candidates.append("Lounge")
 
-    # Global Device Channel (14th channel: includes all 12-Tone analyzed tracks)
+    # Fallback: if 0 mood channels qualified, assign top STMO score from slots 0..7
+    if not mood_candidates:
+        mood_names_8 = ["Energetic", "Relax", "Upbeat", "Mellow", "Emotional", "Lounge", "Dance", "Extreme"]
+        best_mood_idx = int(max(range(8), key=lambda i: mood_scores[i]))
+        mood_candidates.append(mood_names_8[best_mood_idx])
+
+    channels.extend(mood_candidates)
+
+    # B) 5 Time-of-Day Channels with Bounding Guards
+    time_candidates: List[str] = []
+    # Morning (05:00 - 10:00)
+    if (s2 >= 55 or s8 >= 60 or s1 >= 55 or valence >= 0.15) and (-0.25 <= arousal <= 0.40) and (80 <= effective_bpm <= 130):
+        time_candidates.append("Morning")
+
+    # Daytime (10:00 - 17:00)
+    if (s0 >= 55 or s2 >= 55 or s6 >= 55 or valence >= 0.10) and (arousal >= 0.05) and (effective_bpm >= 95):
+        time_candidates.append("Daytime")
+
+    # Evening (17:00 - 21:00)
+    if (s3 >= 55 or s1 >= 55 or s5 >= 45) and (-0.45 <= arousal <= 0.20) and (effective_bpm <= 120):
+        time_candidates.append("Evening")
+
+    # Night (21:00 - 00:00)
+    if (s5 >= 45 or s4 >= 50 or s3 >= 55) and (arousal <= 0.15 and valence <= 0.25) and (effective_bpm <= 115):
+        time_candidates.append("Night")
+
+    # Midnight (00:00 - 05:00)
+    if (s1 >= 55 or s3 >= 55) and (arousal <= 0.0) and (effective_bpm <= 90):
+        time_candidates.append("Midnight")
+
+    # Circadian Fallback
+    if not time_candidates:
+        if arousal >= 0.20 or effective_bpm >= 120:
+            time_candidates.append("Daytime")
+        elif arousal <= -0.20 or effective_bpm <= 85:
+            time_candidates.append("Midnight")
+        elif valence >= 0.15:
+            time_candidates.append("Morning")
+        elif arousal <= 0.05:
+            time_candidates.append("Night")
+        else:
+            time_candidates.append("Evening")
+
+    channels.extend(time_candidates)
+
+    # C) Global 14th Channel
     channels.append("Shuffle All Songs")
 
     return {
@@ -209,6 +250,8 @@ def parse_smfm_payload(data: bytes) -> Optional[Dict[str, Any]]:
         "bpm": bpm,
         "rawBpm": raw_bpm,
         "raw_bpm": raw_bpm,
+        "effectiveBpm": effective_bpm,
+        "effective_bpm": effective_bpm,
         "valence": valence,
         "arousal": arousal,
         "moodScores": mood_scores,
@@ -486,6 +529,7 @@ def analyze_and_inject(file_path: str | Path) -> Dict[str, Any]:
         mood_scores=dsp_result.mood_scores,
         highlight_ms=dsp_result.highlight_ms,
         raw_bpm=dsp_result.raw_bpm,
+        quartile_mood_scores=dsp_result.quartile_mood_scores,
     )
 
     # 3. Inject into file format

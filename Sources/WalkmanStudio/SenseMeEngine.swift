@@ -284,15 +284,19 @@ public final class SenseMeEngine: @unchecked Sendable {
             highlightSec = Double(msBits) / 1000.0
         }
 
-        // STMO: 10 moods x 4 quartiles
+        // STMO: 10 moods x 4 quartiles (average across quartiles)
         var moodScores: [Int] = []
         for m in 0..<10 {
-            let entryOffset = m * 16 + 3
-            if entryOffset < stmoData.count {
-                moodScores.append(Int(stmoData[entryOffset]))
-            } else {
-                moodScores.append(50)
+            var qSum = 0
+            for q in 0..<4 {
+                let entryOffset = m * 16 + q * 4 + 3
+                if entryOffset < stmoData.count {
+                    qSum += Int(stmoData[entryOffset])
+                } else {
+                    qSum += 50
+                }
             }
+            moodScores.append(Int((Double(qSum) / 4.0).rounded()))
         }
 
         // Derived Valence & Arousal
@@ -304,51 +308,98 @@ public final class SenseMeEngine: @unchecked Sendable {
         let negValence = (Double(moodScores[4]) * 1.5 + Double(moodScores[7]) * 0.5) / 200.0
         let valence = max(-1.0, min(1.0, (posValence - negValence) * 1.8)).rounded(toPlaces: 2)
 
-        // Channels
+        // Channels (Strict 14 Official Sony Walkman Channels & Time-of-Day Guardrails)
+        let effectiveBpm = bpm < 62.0 ? (bpm * 2.0) : (bpm > 180.0 ? bpm * 0.5 : bpm)
+        let s0 = moodScores[0], s1 = moodScores[1], s2 = moodScores[2], s3 = moodScores[3]
+        let s4 = moodScores[4], s5 = moodScores[5], s6 = moodScores[6], s7 = moodScores[7]
+        let s8 = moodScores[8], s9 = moodScores[9]
+
         var channels: [String] = []
-        if arousal >= 0.35 && valence >= 0.15 && bpm >= 115 {
-            channels.append("Energetic")
+
+        // A) 8 Mood Channels
+        var moodCandidates: [String] = []
+        if s0 >= 55 || (arousal >= 0.35 && valence >= 0.15 && effectiveBpm >= 115) {
+            moodCandidates.append("Energetic")
         }
-        if arousal <= -0.15 && valence >= -0.30 && bpm <= 105 {
-            channels.append("Relax")
+        if s1 >= 55 || (arousal <= -0.15 && valence >= -0.30 && effectiveBpm <= 105) {
+            moodCandidates.append("Relax")
         }
-        if valence >= 0.20 && arousal >= -0.10 && arousal <= 0.65 {
-            channels.append("Upbeat")
+        if s2 >= 55 || (valence >= 0.20 && arousal >= -0.10 && arousal <= 0.65) {
+            moodCandidates.append("Upbeat")
         }
-        if arousal >= -0.75 && arousal <= 0.0 && valence >= -0.35 && valence <= 0.45 {
-            channels.append("Mellow")
+        if s3 >= 55 || (arousal >= -0.75 && arousal <= 0.05 && valence >= -0.35 && valence <= 0.45) {
+            moodCandidates.append("Mellow")
         }
-        if moodScores[4] >= 45 || (valence <= -0.10 && arousal >= -0.55 && arousal <= 0.40) {
-            channels.append("Emotional")
+        if s4 >= 50 || (valence <= -0.10 && arousal >= -0.55 && arousal <= 0.40) {
+            moodCandidates.append("Emotional")
         }
-        if arousal >= 0.65 || moodScores[7] >= 65 {
-            channels.append("Extreme")
+        if s7 >= 60 || arousal >= 0.65 || effectiveBpm >= 145 {
+            moodCandidates.append("Extreme")
         }
-        if moodScores[6] >= 50 || (bpm >= 108 && bpm <= 138 && arousal >= 0.25) {
-            channels.append("Dance")
+        if s6 >= 45 || (effectiveBpm >= 105 && effectiveBpm <= 140 && arousal >= 0.20) {
+            moodCandidates.append("Dance")
         }
-        if moodScores[5] >= 50 || (bpm >= 80 && bpm <= 118 && arousal >= -0.40 && arousal <= 0.30) {
-            channels.append("Lounge")
+        if s5 >= 45 || (effectiveBpm >= 80 && effectiveBpm <= 120 && arousal >= -0.40 && arousal <= 0.30) {
+            moodCandidates.append("Lounge")
         }
 
-        // Time of Day (5 channels)
-        if channels.contains("Upbeat") || channels.contains("Relax") || valence >= 0.15 {
-            channels.append("Morning")
-        }
-        if channels.contains("Energetic") || channels.contains("Upbeat") || channels.contains("Dance") || valence >= 0.10 {
-            channels.append("Daytime")
-        }
-        if channels.contains("Mellow") || channels.contains("Relax") || channels.contains("Lounge") || (arousal >= -0.30 && arousal <= 0.20 && valence >= -0.20) {
-            channels.append("Evening")
-        }
-        if channels.contains("Lounge") || channels.contains("Mellow") || channels.contains("Emotional") || (arousal <= 0.10 && valence <= 0.25) {
-            channels.append("Night")
-        }
-        if channels.contains("Relax") || channels.contains("Mellow") || arousal <= -0.10 || bpm <= 88 {
-            channels.append("Midnight")
+        // Fallback: if 0 mood channels qualified, assign top STMO score from slots 0..7
+        if moodCandidates.isEmpty {
+            let moodNames8 = ["Energetic", "Relax", "Upbeat", "Mellow", "Emotional", "Lounge", "Dance", "Extreme"]
+            var bestIdx = 0
+            var bestScore = moodScores[0]
+            for i in 1..<8 {
+                if moodScores[i] > bestScore {
+                    bestScore = moodScores[i]
+                    bestIdx = i
+                }
+            }
+            moodCandidates.append(moodNames8[bestIdx])
         }
 
-        // Global Device Channel (14th channel: includes all 12-Tone analyzed tracks)
+        channels.append(contentsOf: moodCandidates)
+
+        // B) 5 Time of Day Channels with Bounding Guards
+        var timeCandidates: [String] = []
+        // Morning (05:00 - 10:00)
+        if (s2 >= 55 || s8 >= 60 || s1 >= 55 || valence >= 0.15) && (arousal >= -0.25 && arousal <= 0.40) && (effectiveBpm >= 80 && effectiveBpm <= 130) {
+            timeCandidates.append("Morning")
+        }
+        // Daytime (10:00 - 17:00)
+        if (s0 >= 55 || s2 >= 55 || s6 >= 55 || valence >= 0.10) && (arousal >= 0.05) && (effectiveBpm >= 95) {
+            timeCandidates.append("Daytime")
+        }
+        // Evening (17:00 - 21:00)
+        if (s3 >= 55 || s1 >= 55 || s5 >= 45) && (arousal >= -0.45 && arousal <= 0.20) && (effectiveBpm <= 120) {
+            timeCandidates.append("Evening")
+        }
+        // Night (21:00 - 00:00)
+        if (s5 >= 45 || s4 >= 50 || s3 >= 55) && (arousal <= 0.15 && valence <= 0.25) && (effectiveBpm <= 115) {
+            timeCandidates.append("Night")
+        }
+        // Midnight (00:00 - 05:00)
+        if (s1 >= 55 || s3 >= 55) && (arousal <= 0.0) && (effectiveBpm <= 90) {
+            timeCandidates.append("Midnight")
+        }
+
+        // Circadian Fallback
+        if timeCandidates.isEmpty {
+            if arousal >= 0.20 || effectiveBpm >= 120 {
+                timeCandidates.append("Daytime")
+            } else if arousal <= -0.20 || effectiveBpm <= 85 {
+                timeCandidates.append("Midnight")
+            } else if valence >= 0.15 {
+                timeCandidates.append("Morning")
+            } else if arousal <= 0.05 {
+                timeCandidates.append("Night")
+            } else {
+                timeCandidates.append("Evening")
+            }
+        }
+
+        channels.append(contentsOf: timeCandidates)
+
+        // C) Global Device Channel (14th channel: includes all 12-Tone analyzed tracks)
         channels.append("Shuffle All Songs")
 
         var uniqueChannels: [String] = []
@@ -868,9 +919,10 @@ public final class SenseMeEngine: @unchecked Sendable {
         }
         bpm = (bpm * 10.0).rounded() / 10.0
         let rawBpm = bpm
+        let effectiveBpm = bpm < 62.0 ? (bpm * 2.0) : (bpm > 180.0 ? bpm * 0.5 : bpm)
 
         // 5. Valence & Arousal Coordinates (-1.0 to +1.0)
-        let normBpm = max(-1.0, min(1.0, (bpm - 110.0) / 45.0))
+        let normBpm = max(-1.0, min(1.0, (effectiveBpm - 110.0) / 50.0))
         let normRms = max(-1.0, min(1.0, (rmsEnergy - 0.12) / 0.10))
         let normZcr = max(-1.0, min(1.0, (zeroCrossingRate - 0.16) / 0.12))
         let dynamicRange = max(0.0, min(1.0, peakAmplitude - rmsEnergy))
@@ -891,17 +943,17 @@ public final class SenseMeEngine: @unchecked Sendable {
         let highlightSec = max(15.0, min(duration * 0.35, 95.0)).rounded(toPlaces: 1)
         let highlightMs = Int(highlightSec * 1000)
 
-        // 6. 10-Slot Sony STMO Mood Vector (0..9)
+        // 6. 10-Slot Sony STMO Mood Vector (0..9) with Refined Formulas
         let s0 = Int(max(0, min(100, 50.0 + 38.0 * arousal + 15.0 * normBpm))) // Energetic
         let s1 = Int(max(0, min(100, 50.0 - 38.0 * arousal - 15.0 * normBpm + 10.0 * valence))) // Relax
         let s2 = Int(max(0, min(100, 50.0 + 40.0 * valence + 15.0 * normBpm))) // Upbeat
         let s3 = Int(max(0, min(100, 50.0 - 25.0 * arousal + 20.0 * dynamicRange))) // Mellow
         let s4 = Int(max(0, min(100, 40.0 + 35.0 * dynamicRange - 25.0 * valence))) // Emotional
         let s5 = Int(max(0, min(100, 50.0 + 25.0 * (1.0 - abs(normBpm)) - 15.0 * abs(arousal)))) // Lounge
-        var s6 = Int(max(0, min(100, 35.0 + 35.0 * normRms + 30.0 * max(0.0, 1.0 - abs(bpm - 124.0) / 40.0)))) // Dance
+        var s6 = Int(max(0, min(100, 35.0 * min(pulseRate / 130.0, 1.0) + 30.0 * min(rmsEnergy / 0.20, 1.0) + 15.0 * ((normRms + 1.0) / 2.0) + 20.0 * max(0.0, 1.0 - abs(effectiveBpm - 122.0) / 35.0)))) // Dance
         var s7 = Int(max(0, min(100, 30.0 + 45.0 * arousal + 25.0 * normZcr))) // Extreme
-        var s8 = Int(max(0, min(100, 45.0 + 35.0 * (1.0 - normZcr) + 20.0 * dynamicRange))) // Acoustic
-        var s9 = Int(max(0, min(100, 45.0 + 30.0 * normZcr + 25.0 * normRms))) // Electronic
+        var s8 = Int(max(0, min(100, 35.0 + 25.0 * (1.0 - normZcr) + 25.0 * dynamicRange - 30.0 * min(rmsEnergy / 0.18, 1.0) - 15.0 * max(0.0, normRms)))) // Acoustic
+        var s9 = Int(max(0, min(100, 20.0 + 30.0 * min(pulseRate / 120.0, 1.0) + 30.0 * min(rmsEnergy / 0.22, 1.0) + 20.0 * (1.0 - dynamicRange)))) // Electronic
 
         if g.contains("acoustic") || g.contains("folk") || g.contains("unplugged") { s8 = max(s8, 85) }
         if g.contains("electronic") || g.contains("synth") || g.contains("techno") || g.contains("edm") { s9 = max(s9, 85) }
@@ -910,53 +962,93 @@ public final class SenseMeEngine: @unchecked Sendable {
 
         let moodScores = [s0, s1, s2, s3, s4, s5, s6, s7, s8, s9]
 
-        // 7. Authentic Sony Walkman Channel Assignment
+        // 7. Strict 14 Official Sony Walkman Channels & Time-of-Day Guardrails
         var assignedChannels: [String] = []
 
-        // A) Dominant Mood Channels (Rank-based & Thresholded)
-        let moodNames = ["Energetic", "Relax", "Upbeat", "Mellow", "Emotional", "Lounge", "Dance", "Extreme"]
-        let moodPairs = (0..<8).map { (name: moodNames[$0], score: moodScores[$0]) }.sorted { $0.score > $1.score }
+        // A) 8 Mood Channels
+        var moodCandidates: [String] = []
+        if s0 >= 55 || (arousal >= 0.35 && valence >= 0.15 && effectiveBpm >= 115) {
+            moodCandidates.append("Energetic")
+        }
+        if s1 >= 55 || (arousal <= -0.15 && valence >= -0.30 && effectiveBpm <= 105) {
+            moodCandidates.append("Relax")
+        }
+        if s2 >= 55 || (valence >= 0.20 && arousal >= -0.10 && arousal <= 0.65) {
+            moodCandidates.append("Upbeat")
+        }
+        if s3 >= 55 || (arousal >= -0.75 && arousal <= 0.05 && valence >= -0.35 && valence <= 0.45) {
+            moodCandidates.append("Mellow")
+        }
+        if s4 >= 50 || (valence <= -0.10 && arousal >= -0.55 && arousal <= 0.40) {
+            moodCandidates.append("Emotional")
+        }
+        if s7 >= 60 || arousal >= 0.65 || effectiveBpm >= 145 {
+            moodCandidates.append("Extreme")
+        }
+        if s6 >= 45 || (effectiveBpm >= 105 && effectiveBpm <= 140 && arousal >= 0.20) {
+            moodCandidates.append("Dance")
+        }
+        if s5 >= 45 || (effectiveBpm >= 80 && effectiveBpm <= 120 && arousal >= -0.40 && arousal <= 0.30) {
+            moodCandidates.append("Lounge")
+        }
 
-        if let top = moodPairs.first, top.score >= 50 {
-            assignedChannels.append(top.name)
-            if moodPairs.count > 1 && moodPairs[1].score >= 60 && moodPairs[1].score >= top.score - 10 {
-                assignedChannels.append(moodPairs[1].name)
+        // Fallback: if 0 mood channels qualified, assign top STMO score from slots 0..7
+        if moodCandidates.isEmpty {
+            let moodNames8 = ["Energetic", "Relax", "Upbeat", "Mellow", "Emotional", "Lounge", "Dance", "Extreme"]
+            var bestIdx = 0
+            var bestScore = moodScores[0]
+            for i in 1..<8 {
+                if moodScores[i] > bestScore {
+                    bestScore = moodScores[i]
+                    bestIdx = i
+                }
             }
+            moodCandidates.append(moodNames8[bestIdx])
         }
 
-        // B) Time-of-Day Channels (Exclusive circadian matching - no dumping into all 5!)
-        if (s2 >= 55 || s8 >= 60 || valence >= 0.10) && bpm >= 85 && bpm <= 130 && arousal >= -0.20 && arousal <= 0.40 {
-            assignedChannels.append("Morning")
+        assignedChannels.append(contentsOf: moodCandidates)
+
+        // B) 5 Time-of-Day Channels with Bounding Guards
+        var timeCandidates: [String] = []
+        // Morning (05:00 - 10:00)
+        if (s2 >= 55 || s8 >= 60 || s1 >= 55 || valence >= 0.15) && (arousal >= -0.25 && arousal <= 0.40) && (effectiveBpm >= 80 && effectiveBpm <= 130) {
+            timeCandidates.append("Morning")
         }
-        if (s0 >= 55 || s6 >= 55 || s2 >= 55 || bpm >= 105) && arousal >= 0.05 && bpm >= 95 {
-            assignedChannels.append("Daytime")
+        // Daytime (10:00 - 17:00)
+        if (s0 >= 55 || s2 >= 55 || s6 >= 55 || valence >= 0.10) && (arousal >= 0.05) && (effectiveBpm >= 95) {
+            timeCandidates.append("Daytime")
         }
-        if (s3 >= 55 || s1 >= 55 || s5 >= 55 || s8 >= 55) && bpm <= 118 && arousal >= -0.45 && arousal <= 0.20 {
-            assignedChannels.append("Evening")
+        // Evening (17:00 - 21:00)
+        if (s3 >= 55 || s1 >= 55 || s5 >= 45) && (arousal >= -0.45 && arousal <= 0.20) && (effectiveBpm <= 120) {
+            timeCandidates.append("Evening")
         }
-        if (s5 >= 55 || s4 >= 55 || s3 >= 55) && arousal <= 0.15 && valence <= 0.25 && bpm <= 115 {
-            assignedChannels.append("Night")
+        // Night (21:00 - 00:00)
+        if (s5 >= 45 || s4 >= 50 || s3 >= 55) && (arousal <= 0.15 && valence <= 0.25) && (effectiveBpm <= 115) {
+            timeCandidates.append("Night")
         }
-        if (s1 >= 55 || s3 >= 55 || arousal <= -0.15 || bpm <= 88) && arousal <= 0.05 {
-            assignedChannels.append("Midnight")
+        // Midnight (00:00 - 05:00)
+        if (s1 >= 55 || s3 >= 55) && (arousal <= 0.0) && (effectiveBpm <= 90) {
+            timeCandidates.append("Midnight")
         }
 
-        let hasTimeChannel = assignedChannels.contains { ["Morning", "Daytime", "Evening", "Night", "Midnight"].contains($0) }
-        if !hasTimeChannel {
-            if arousal >= 0.25 || bpm >= 120 {
-                assignedChannels.append("Daytime")
-            } else if arousal <= -0.20 || bpm <= 85 {
-                assignedChannels.append("Midnight")
+        // Circadian Fallback
+        if timeCandidates.isEmpty {
+            if arousal >= 0.20 || effectiveBpm >= 120 {
+                timeCandidates.append("Daytime")
+            } else if arousal <= -0.20 || effectiveBpm <= 85 {
+                timeCandidates.append("Midnight")
             } else if valence >= 0.15 {
-                assignedChannels.append("Morning")
+                timeCandidates.append("Morning")
             } else if arousal <= 0.05 {
-                assignedChannels.append("Night")
+                timeCandidates.append("Night")
             } else {
-                assignedChannels.append("Evening")
+                timeCandidates.append("Evening")
             }
         }
 
-        // Global Playback Channel
+        assignedChannels.append(contentsOf: timeCandidates)
+
+        // C) Global Device Channel (14th channel: includes all 12-Tone analyzed tracks)
         assignedChannels.append("Shuffle All Songs")
 
         let uniqueChannels = Array(NSOrderedSet(array: assignedChannels)) as? [String] ?? assignedChannels
