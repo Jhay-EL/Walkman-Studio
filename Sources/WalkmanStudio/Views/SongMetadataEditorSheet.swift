@@ -1392,7 +1392,13 @@ private struct EditorTabButton: View {
             withAnimation(.spring(response: 0.22, dampingFraction: 0.72)) {
                 isHovered = h
             }
-            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            if h { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.arrow.set()
+            }
         }
     }
 }
@@ -1547,7 +1553,13 @@ private struct CopySpecButton: View {
         .help("Copy to clipboard")
         .onHover { h in
             isHovered = h
-            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            if h { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.arrow.set()
+            }
         }
     }
 }
