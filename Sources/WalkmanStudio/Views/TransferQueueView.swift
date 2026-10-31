@@ -426,21 +426,24 @@ public struct TransferQueueView: View {
                 // PANEL 3: EMPTY DROPZONE vs POPULATED QUEUE CONTAINER
                 // -------------------------------------------------------------
                 if queue.isEmpty {
-                    if isImporting {
-                        importingProgressView
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 88)
-                    } else {
-                        // EMPTY STATE: Large, inviting drop zone
-                        emptyDropZone
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 88)
+                    ZStack {
+                        if isImporting {
+                            importingProgressView
+                                .transition(.opacity)
+                        } else {
+                            emptyDropZone
+                                .transition(.opacity)
+                        }
                     }
+                    .id("queue_empty_container")
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 88)
                 } else {
                     // POPULATED STATE: High-end Queue View (No huge redundant drop box!)
                     VStack(spacing: 0) {
                         if isImporting {
                             importingBannerView
+                                .transition(.move(edge: .top).combined(with: .opacity))
                         }
 
                         // Queue Header Bar
@@ -528,6 +531,7 @@ public struct TransferQueueView: View {
                                         destinationExtension: destinationExtension(for: queue[idx].sourceURL),
                                         rootFolderName: targetMode.rootFolderName,
                                         isLearningMode: targetMode == .learning,
+                                        destinationDriveName: selectedTarget?.name ?? "Walkman",
                                         onTogglePlay: { togglePreviewPlayback(for: queue[idx]) },
                                         onPickArtwork: { pickCustomArtwork(for: queue[idx].id) },
                                         onOptimize: { optimizeSingleTrack(queue[idx]) },
@@ -570,6 +574,7 @@ public struct TransferQueueView: View {
                             .allowsHitTesting(false)
                     )
                     .compositingGroup()
+                    .id("queue_populated_container")
                     .padding(.horizontal, 16)
                     .padding(.bottom, 88)
                 }
@@ -661,8 +666,10 @@ public struct TransferQueueView: View {
                     showDuplicateImportSheet = false
                     for url in pendingAllImportURLs {
                         let isDup = duplicateImportCandidates.contains(where: { $0.url == url })
-                        let info = duplicateImportCandidates.first(where: { $0.url == url })?.matchReason
-                        enqueueSingleFile(url, isDuplicate: isDup, duplicateInfo: info)
+                        let cand = duplicateImportCandidates.first(where: { $0.url == url })
+                        let info = cand?.matchReason
+                        let matchedTr = cand?.matchingWalkmanTrack
+                        enqueueSingleFile(url, isDuplicate: isDup, duplicateInfo: info, matchedTrack: matchedTr)
                     }
                 },
                 onCancel: {
@@ -681,6 +688,9 @@ public struct TransferQueueView: View {
                     showClearConfirmation = false
                 }
             )
+        }
+        .onChange(of: targetDriveId) { _, _ in
+            recheckQueueDuplicates()
         }
     }
 
@@ -807,8 +817,12 @@ public struct TransferQueueView: View {
                 // Cancel Button
                 Button(action: {
                     importTask?.cancel()
-                    withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+                    withAnimation(.easeInOut(duration: 0.20)) {
                         isImporting = false
+                        importProgress = 0.0
+                        importCurrent = 0
+                        importTotal = 0
+                        importCurrentTitle = ""
                     }
                 }) {
                     Text("Cancel Import")
@@ -860,8 +874,12 @@ public struct TransferQueueView: View {
 
             Button("Cancel") {
                 importTask?.cancel()
-                withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+                withAnimation(.easeInOut(duration: 0.20)) {
                     isImporting = false
+                    importProgress = 0.0
+                    importCurrent = 0
+                    importTotal = 0
+                    importCurrentTitle = ""
                 }
             }
             .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 14))
@@ -1253,8 +1271,46 @@ public struct TransferQueueView: View {
         }
     }
 
+    private func destinationTracks(for drive: WalkmanDrive?) -> [Track] {
+        guard let drive = drive else { return [] }
+        let mountPrefix = drive.mountPoint.hasSuffix("/") ? drive.mountPoint : "\(drive.mountPoint)/"
+        let matched = libraryTracks.filter { $0.fullPath.hasPrefix(mountPrefix) }
+        if !matched.isEmpty {
+            return matched
+        }
+        if drive.type != .local {
+            return LibraryScanner.shared.loadCachedTracks(forMount: drive.mountPoint)
+        } else {
+            return LocalMusicLibraryService.shared.tracks.filter { $0.fullPath.hasPrefix(mountPrefix) }
+        }
+    }
+
+    private func recheckQueueDuplicates() {
+        guard !queue.isEmpty else { return }
+        let target = selectedTarget
+        let mode = targetMode
+        let destTracks = destinationTracks(for: target)
+
+        for i in 0..<queue.count {
+            guard queue[i].status == .pending else { continue }
+            let check = WalkmanDuplicateGuard.shared.checkTrack(
+                title: queue[i].title,
+                artist: queue[i].artist,
+                album: queue[i].album,
+                durationSeconds: queue[i].durationSeconds,
+                sourceURL: queue[i].sourceURL,
+                targetDrive: target,
+                targetMode: mode,
+                existingTracks: destTracks
+            )
+            queue[i].isDuplicateOnWalkman = check.isDuplicate
+            queue[i].duplicateMatchInfo = check.reason
+            queue[i].duplicateMatchedTrack = check.matchingTrack
+        }
+    }
+
     private func handleDrop(providers: [NSItemProvider]) {
-        withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+        withAnimation(.easeInOut(duration: 0.20)) {
             isImporting = true
             importStatusMessage = "Accessing dropped files..."
             importCurrent = 0
@@ -1281,8 +1337,12 @@ public struct TransferQueueView: View {
 
         group.notify(queue: .main) {
             if droppedURLs.isEmpty {
-                withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+                withAnimation(.easeInOut(duration: 0.20)) {
                     self.isImporting = false
+                    self.importProgress = 0.0
+                    self.importCurrent = 0
+                    self.importTotal = 0
+                    self.importCurrentTitle = ""
                 }
                 return
             }
@@ -1301,7 +1361,7 @@ public struct TransferQueueView: View {
         panel.allowedContentTypes = types
 
         if panel.runModal() == .OK {
-            withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+            withAnimation(.easeInOut(duration: 0.20)) {
                 isImporting = true
                 importStatusMessage = "Preparing selected files..."
                 importCurrent = 0
@@ -1320,7 +1380,7 @@ public struct TransferQueueView: View {
     private func addURLsToQueue(_ urls: [URL]) {
         importTask?.cancel()
 
-        withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+        withAnimation(.easeInOut(duration: 0.20)) {
             isImporting = true
             importStatusMessage = "Scanning folders & discovering music..."
             importCurrent = 0
@@ -1331,7 +1391,7 @@ public struct TransferQueueView: View {
 
         let target = selectedTarget
         let mode = targetMode
-        let libTracks = libraryTracks
+        let libTracks = destinationTracks(for: target)
 
         importTask = Task.detached(priority: .userInitiated) {
             let supportedExtensions: Set<String> = [
@@ -1372,8 +1432,12 @@ public struct TransferQueueView: View {
 
             guard !collectedURLs.isEmpty else {
                 await MainActor.run {
-                    withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+                    withAnimation(.easeInOut(duration: 0.20)) {
                         self.isImporting = false
+                        self.importProgress = 0.0
+                        self.importCurrent = 0
+                        self.importTotal = 0
+                        self.importCurrentTitle = ""
                     }
                 }
                 return
@@ -1434,7 +1498,8 @@ public struct TransferQueueView: View {
                             album: album,
                             durationSeconds: duration,
                             matchingWalkmanTrack: check.matchingTrack,
-                            matchReason: check.reason ?? "Already present on Walkman library"
+                            matchReason: check.reason ?? "Already present on \(target?.name ?? "destination")",
+                            destinationDriveName: target?.name ?? "Walkman"
                         )
                     )
                 } else {
@@ -1449,9 +1514,11 @@ public struct TransferQueueView: View {
             let finalCollected = collectedURLs
 
             await MainActor.run {
-                withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
-                    self.isImporting = false
-                }
+                self.isImporting = false
+                self.importProgress = 0.0
+                self.importCurrent = 0
+                self.importTotal = 0
+                self.importCurrentTitle = ""
 
                 if !finalDuplicates.isEmpty {
                     self.duplicateImportCandidates = finalDuplicates
@@ -1516,7 +1583,7 @@ public struct TransferQueueView: View {
         }
     }
 
-    private func enqueueSingleFile(_ url: URL, isDuplicate: Bool = false, duplicateInfo: String? = nil) {
+    private func enqueueSingleFile(_ url: URL, isDuplicate: Bool = false, duplicateInfo: String? = nil, matchedTrack: Track? = nil) {
         if queue.contains(where: { $0.sourceURL == url }) { return }
 
         var item = TransferItem(sourceURL: url)
@@ -1524,6 +1591,7 @@ public struct TransferQueueView: View {
         item.format = url.pathExtension.uppercased()
         item.isDuplicateOnWalkman = isDuplicate
         item.duplicateMatchInfo = duplicateInfo
+        item.duplicateMatchedTrack = matchedTrack
 
         if let attr = try? FileManager.default.attributesOfItem(atPath: url.path) {
             item.sizeBytes = attr[.size] as? Int64 ?? 0
@@ -1543,11 +1611,12 @@ public struct TransferQueueView: View {
                 sourceURL: url,
                 targetDrive: selectedTarget,
                 targetMode: targetMode,
-                existingTracks: libraryTracks
+                existingTracks: destinationTracks(for: selectedTarget)
             )
             if dupCheck.isDuplicate {
                 item.isDuplicateOnWalkman = true
                 item.duplicateMatchInfo = dupCheck.reason
+                item.duplicateMatchedTrack = dupCheck.matchingTrack
             }
         }
 
@@ -1606,11 +1675,12 @@ public struct TransferQueueView: View {
                             sourceURL: url,
                             targetDrive: self.selectedTarget,
                             targetMode: self.targetMode,
-                            existingTracks: self.libraryTracks
+                            existingTracks: self.destinationTracks(for: self.selectedTarget)
                         )
                         if dupCheck.isDuplicate {
                             self.queue[idx].isDuplicateOnWalkman = true
                             self.queue[idx].duplicateMatchInfo = dupCheck.reason
+                            self.queue[idx].duplicateMatchedTrack = dupCheck.matchingTrack
                         }
                     }
 
@@ -1933,7 +2003,7 @@ public struct TransferQueueView: View {
                         sourceURL: src,
                         targetDrive: target,
                         targetMode: targetMode,
-                        existingTracks: libraryTracks
+                        existingTracks: destinationTracks(for: target)
                     )
                     if dupCheck.isDuplicate || FileManager.default.fileExists(atPath: dest.path) {
                         let reason = dupCheck.reason ?? "Already exists on \(target.name)"
@@ -1942,6 +2012,7 @@ public struct TransferQueueView: View {
                                 self.queue[i].status = .skipped(reason)
                                 self.queue[i].isDuplicateOnWalkman = true
                                 self.queue[i].duplicateMatchInfo = reason
+                                self.queue[i].duplicateMatchedTrack = dupCheck.matchingTrack
                             }
                         }
                         continue
@@ -2164,6 +2235,7 @@ private struct QueueItemRow: View {
     let destinationExtension: String
     var rootFolderName: String = "MUSIC"
     var isLearningMode: Bool = false
+    var destinationDriveName: String = "Walkman"
     let onTogglePlay: () -> Void
     let onPickArtwork: () -> Void
     let onOptimize: () -> Void
@@ -2269,7 +2341,7 @@ private struct QueueItemRow: View {
                             HStack(spacing: 3) {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .font(.system(size: 8))
-                                Text("On Walkman")
+                                Text("On \(destinationDriveName)")
                                     .font(WalkmanFont.badge)
                             }
                             .padding(.horizontal, 4.5)
@@ -2278,7 +2350,7 @@ private struct QueueItemRow: View {
                             .foregroundStyle(.orange)
                             .clipShape(RoundedRectangle(cornerRadius: 2.5))
                             .overlay(RoundedRectangle(cornerRadius: 2.5).stroke(Color.orange.opacity(0.4), lineWidth: 0.6))
-                            .help(item.duplicateMatchInfo ?? "Already present on Walkman library")
+                            .help(item.duplicateMatchInfo ?? "Already present on \(destinationDriveName)")
                         }
                     }
 
@@ -2296,6 +2368,28 @@ private struct QueueItemRow: View {
                                 .font(WalkmanFont.monoSmall)
                                 .foregroundStyle(.tertiary)
                         }
+                    }
+
+                    // Duplicate Match Detail Callout
+                    if item.isDuplicateOnWalkman, let matchInfo = item.duplicateMatchInfo {
+                        HStack(spacing: 5) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 8.5))
+                                .foregroundStyle(.orange)
+                            Text("Duplicate: \(matchInfo)")
+                                .font(WalkmanFont.monoSmall)
+                                .foregroundStyle(.orange.opacity(0.95))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2.5)
+                        .background(Color.orange.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+                                .stroke(Color.orange.opacity(0.28), lineWidth: 0.65)
+                        )
                     }
 
                     // Line 3: Tech Specs & Route Preview

@@ -225,6 +225,26 @@ public struct TransferSyncSheet: View {
                                             .font(WalkmanFont.subheadline)
                                             .foregroundStyle(.secondary)
                                             .lineLimit(1)
+
+                                        if itm.isDuplicateOnWalkman, let dupInfo = itm.duplicateMatchInfo {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "exclamationmark.triangle.fill")
+                                                    .font(.system(size: 8))
+                                                Text(dupInfo)
+                                                    .font(WalkmanFont.monoSmall)
+                                                    .lineLimit(1)
+                                                    .truncationMode(.middle)
+                                            }
+                                            .foregroundStyle(.orange.opacity(0.95))
+                                            .padding(.horizontal, 5)
+                                            .padding(.vertical, 2)
+                                            .background(Color.orange.opacity(0.12))
+                                            .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+                                                    .stroke(Color.orange.opacity(0.25), lineWidth: 0.6)
+                                            )
+                                        }
                                     }
 
                                     Spacer()

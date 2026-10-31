@@ -658,6 +658,7 @@ public struct TransferItem: Identifiable, Sendable {
     public var isExpanded: Bool
     public var isDuplicateOnWalkman: Bool
     public var duplicateMatchInfo: String?
+    public var duplicateMatchedTrack: Track?
 
     public init(
         sourceURL: URL,
@@ -682,7 +683,8 @@ public struct TransferItem: Identifiable, Sendable {
         isOptimizing: Bool = false,
         isExpanded: Bool = false,
         isDuplicateOnWalkman: Bool = false,
-        duplicateMatchInfo: String? = nil
+        duplicateMatchInfo: String? = nil,
+        duplicateMatchedTrack: Track? = nil
     ) {
         self.id = UUID()
         self.sourceURL = sourceURL
@@ -708,6 +710,7 @@ public struct TransferItem: Identifiable, Sendable {
         self.isExpanded = isExpanded
         self.isDuplicateOnWalkman = isDuplicateOnWalkman
         self.duplicateMatchInfo = duplicateMatchInfo
+        self.duplicateMatchedTrack = duplicateMatchedTrack
     }
 
     /// Converts this item into a preview Track compatible with the audio player

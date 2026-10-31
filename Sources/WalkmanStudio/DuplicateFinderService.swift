@@ -1094,6 +1094,10 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
         if s.isEmpty || s.lowercased() == "unknown album" || s.lowercased() == "unknown" {
             return ""
         }
+        // Strip leading year brackets like "[2023] Lihim" or "(2021) Album"
+        if let match = s.range(of: #"^[\[\(]\s*\d{4}\s*[\]\)]\s*"#, options: .regularExpression) {
+            s.removeSubrange(match)
+        }
         let noisePatterns = [
             #"\s*[\(\[]\s*deluxe(?:\s+edition|\s+version)?\s*[\)\]]"#,
             #"\s*[\(\[]\s*remaster(?:ed)?(?:\s+\d{4})?\s*[\)\]]"#,

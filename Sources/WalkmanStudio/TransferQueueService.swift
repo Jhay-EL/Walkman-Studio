@@ -69,7 +69,8 @@ public final class TransferQueueService: ObservableObject {
                 format: url.pathExtension.uppercased(),
                 sizeBytes: track.sizeBytes,
                 isDuplicateOnWalkman: dupCheck.isDuplicate,
-                duplicateMatchInfo: dupCheck.reason
+                duplicateMatchInfo: dupCheck.reason,
+                duplicateMatchedTrack: dupCheck.matchingTrack
             )
 
             let targetUrl = url
@@ -132,6 +133,7 @@ public final class TransferQueueService: ObservableObject {
             )
             item.isDuplicateOnWalkman = dupCheck.isDuplicate
             item.duplicateMatchInfo = dupCheck.reason
+            item.duplicateMatchedTrack = dupCheck.matchingTrack
 
             let targetUrl = url
             Task.detached(priority: .userInitiated) {

@@ -55,7 +55,7 @@ public struct DuplicateImportGuardSheet: View {
 
             footerActions
         }
-        .frame(width: 540)
+        .frame(width: 580)
         .background(sheetBackground)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(sheetBorder)
@@ -200,80 +200,126 @@ public struct DuplicateImportGuardSheet: View {
             }
 
             ScrollView(.vertical, showsIndicators: true) {
-                VStack(spacing: 6) {
+                VStack(spacing: 8) {
                     ForEach(candidates) { candidate in
                         candidateRow(candidate)
                     }
                 }
             }
-            .frame(maxHeight: 220)
+            .frame(maxHeight: 280)
         }
     }
 
     // MARK: - Candidate Row
     private func candidateRow(_ candidate: DuplicateImportCandidate) -> some View {
-        HStack(spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.white.opacity(0.06))
-                    .frame(width: 32, height: 32)
+        VStack(alignment: .leading, spacing: 7) {
+            // Source / Incoming File Row
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.white.opacity(0.06))
+                        .frame(width: 32, height: 32)
+                        .overlay(
+                            Image(systemName: "music.note")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(WalkmanTheme.silver)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
+                        )
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(candidate.title)
+                        .font(WalkmanFont.bodyMedium)
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .lineLimit(1)
+
+                    HStack(spacing: 4) {
+                        Text(candidate.artist.isEmpty ? "Unknown Artist" : candidate.artist)
+                            .font(WalkmanFont.subheadline)
+                            .foregroundStyle(WalkmanTheme.silverMuted)
+                            .lineLimit(1)
+
+                        if !candidate.album.isEmpty {
+                            Text("•")
+                                .font(WalkmanFont.caption)
+                                .foregroundStyle(Color.white.opacity(0.25))
+
+                            Text(candidate.album)
+                                .font(WalkmanFont.subheadline)
+                                .foregroundStyle(WalkmanTheme.silverMuted.opacity(0.8))
+                                .lineLimit(1)
+                        }
+                    }
+                }
+
+                Spacer()
+
+                Text(candidate.url.pathExtension.uppercased())
+                    .font(WalkmanFont.badge)
+                    .foregroundStyle(WalkmanTheme.silverLight)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                     .overlay(
-                        Image(systemName: "music.note")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(WalkmanTheme.silver)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .stroke(Color.white.opacity(0.12), lineWidth: 0.8)
                     )
             }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(candidate.title)
-                    .font(WalkmanFont.bodyMedium)
-                    .foregroundStyle(WalkmanTheme.silverLight)
-                    .lineLimit(1)
+            // Destination Duplicate Conflict Callout
+            HStack(alignment: .center, spacing: 7) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .foregroundStyle(Color.orange)
 
-                HStack(spacing: 4) {
-                    Text(candidate.artist.isEmpty ? "Unknown Artist" : candidate.artist)
-                        .font(WalkmanFont.subheadline)
-                        .foregroundStyle(WalkmanTheme.silverMuted)
-                        .lineLimit(1)
-
-                    Text("•")
-                        .font(WalkmanFont.caption)
-                        .foregroundStyle(Color.white.opacity(0.25))
+                HStack(spacing: 5) {
+                    let driveLabel = candidate.destinationDriveName.isEmpty ? targetDriveName : candidate.destinationDriveName
+                    Text(driveLabel)
+                        .font(WalkmanFont.badge)
+                        .foregroundStyle(Color.orange)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
+                        .background(Color.orange.opacity(0.16))
+                        .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+                                .stroke(Color.orange.opacity(0.35), lineWidth: 0.7)
+                        )
 
                     Text(candidate.matchReason)
                         .font(WalkmanFont.caption)
                         .foregroundStyle(WalkmanTheme.silverLight)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1.5)
-                        .background(Color.white.opacity(0.05))
-                        .clipShape(Capsule())
-                        .overlay(
-                            Capsule().stroke(Color.white.opacity(0.08), lineWidth: 0.7)
-                        )
                         .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                Spacer(minLength: 4)
+
+                if let quality = candidate.destinationQualityDescription {
+                    Text(quality)
+                        .font(WalkmanFont.monoSmall)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
+                        .padding(.horizontal, 4.5)
+                        .padding(.vertical, 1)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
                 }
             }
-
-            Spacer()
-
-            Text(candidate.url.pathExtension.uppercased())
-                .font(WalkmanFont.badge)
-                .foregroundStyle(WalkmanTheme.silverLight)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(Color.white.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .stroke(Color.white.opacity(0.12), lineWidth: 0.8)
-                )
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(Color.orange.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(Color.orange.opacity(0.20), lineWidth: 0.75)
+            )
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.vertical, 8)
         .background(Color.white.opacity(0.03))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
