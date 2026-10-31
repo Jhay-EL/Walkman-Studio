@@ -2407,6 +2407,22 @@ private struct ModalArtistItem: Identifiable {
     var representativeTrack: Track? { tracks.first }
 }
 
+private struct SheetCloseButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(WalkmanTheme.silverLight)
+                .frame(width: 28, height: 28)
+        }
+        .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 14))
+        .keyboardShortcut(.cancelAction)
+        .help("Close (Esc)")
+    }
+}
+
 private struct AddTracksModal: View {
     let playlistName: String
     let tracks: [Track]
@@ -2636,19 +2652,7 @@ private struct AddTracksModal: View {
         VStack(spacing: 0) {
             // Header Bar
             HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(WalkmanTheme.card)
-                        .frame(width: 44, height: 44)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                        )
-                    
-                    Image(systemName: "plus.rectangle.on.rectangle")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(WalkmanTheme.silverLight)
-                }
+                LiquidGlassIconBadge(icon: "plus.rectangle.on.rectangle", size: 40, cornerRadius: 10)
                 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Add Tracks to Playlist")
@@ -2671,13 +2675,7 @@ private struct AddTracksModal: View {
                 
                 Spacer()
                 
-                Button(action: onDismiss) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 19))
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Cancel & Close (Esc)")
+                SheetCloseButton(action: onDismiss)
             }
             .padding(.horizontal, 20)
             .padding(.top, 18)
@@ -2937,8 +2935,9 @@ private struct AddTracksModal: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             
             // Bottom Action Footer Bar
-            Divider()
-                .overlay(Color.white.opacity(0.08))
+            Rectangle()
+                .fill(Color.white.opacity(0.08))
+                .frame(height: 0.85)
             
             HStack(spacing: 14) {
                 // Left: Selection Counter & Bulk Controls
@@ -2948,46 +2947,57 @@ private struct AddTracksModal: View {
                             .font(WalkmanFont.callout)
                             .foregroundStyle(addedInSessionPaths.isEmpty ? .secondary : WalkmanTheme.silverLight)
                     } else {
-                        HStack(spacing: 5) {
+                        HStack(spacing: 6) {
                             Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: 12))
+                                .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(WalkmanTheme.silverLight)
                             Text("\(selectedTrackPaths.count) \(selectedTrackPaths.count == 1 ? "track" : "tracks") selected")
                                 .font(WalkmanFont.calloutBold)
                                 .foregroundStyle(.white)
                         }
                         
-                        Button("Clear") {
-                            selectedTrackPaths.removeAll()
+                        Button(action: { selectedTrackPaths.removeAll() }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 10, weight: .semibold))
+                                Text("Clear")
+                                    .font(WalkmanFont.calloutMedium)
+                            }
+                            .padding(.horizontal, 12)
+                            .frame(height: 32)
+                            .foregroundStyle(WalkmanTheme.silverLight)
                         }
-                        .font(WalkmanFont.subheadline)
-                        .foregroundStyle(.secondary)
-                        .buttonStyle(.plain)
+                        .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 16))
+                        .help("Deselect all selected tracks")
                     }
                     
                     if visibleUnselectedCount > 0 {
-                        Button("Select All Visible (\(visibleUnselectedCount))") {
-                            selectAllVisible()
+                        Button(action: selectAllVisible) {
+                            HStack(spacing: 5) {
+                                Image(systemName: "checkmark.circle")
+                                    .font(.system(size: 11, weight: .semibold))
+                                Text("Select All Visible (\(visibleUnselectedCount))")
+                                    .font(WalkmanFont.calloutMedium)
+                            }
+                            .padding(.horizontal, 14)
+                            .frame(height: 32)
+                            .foregroundStyle(WalkmanTheme.silverLight)
                         }
-                        .font(WalkmanFont.subheadline)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .foregroundStyle(WalkmanTheme.silverLight)
-                        .buttonStyle(LiquidGlassButtonStyle(variant: .subtle, cornerRadius: 8))
+                        .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 16))
+                        .help("Select all tracks matching current search & format filter")
                     }
                 }
                 
                 Spacer()
                 
                 // Right: Close / Add / Done Button
-                Button("Close") {
-                    onDismiss()
+                Button(action: onDismiss) {
+                    Text("Close")
+                        .font(WalkmanFont.calloutMedium)
+                        .padding(.horizontal, 22)
+                        .frame(height: 38)
+                        .foregroundStyle(WalkmanTheme.silverLight)
                 }
-                .font(WalkmanFont.calloutMedium)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .frame(height: 38)
-                .foregroundStyle(WalkmanTheme.silverLight)
                 .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
                 .keyboardShortcut(.cancelAction)
                 
@@ -3006,8 +3016,7 @@ private struct AddTracksModal: View {
                             Text("Add \(selectedTrackPaths.count) \(selectedTrackPaths.count == 1 ? "Track" : "Tracks")")
                                 .font(WalkmanFont.calloutBold)
                         }
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 7)
+                        .padding(.horizontal, 22)
                         .frame(height: 38)
                         .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                     }
@@ -3023,8 +3032,7 @@ private struct AddTracksModal: View {
                             Text("Done")
                                 .font(WalkmanFont.calloutBold)
                         }
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 7)
+                        .padding(.horizontal, 24)
                         .frame(height: 38)
                         .foregroundStyle(addedInSessionPaths.isEmpty ? WalkmanTheme.silverLight : Color(red: 20/255, green: 20/255, blue: 24/255))
                     }
@@ -3037,7 +3045,7 @@ private struct AddTracksModal: View {
             .background(WalkmanTheme.card)
         }
         .frame(minWidth: 720, idealWidth: 920, maxWidth: 1180, minHeight: 560, idealHeight: 700, maxHeight: 900)
-        .background(WalkmanTheme.background)
+        .modalGlassChassis(cornerRadius: 16)
         .onAppear {
             cachedExistingSet = Set(existingPlaylistPaths.map { PlaylistsView.normalizeKey($0) })
             cachedRecentTracks = tracks.sorted { $0.dateAdded > $1.dateAdded }
@@ -3072,8 +3080,10 @@ private struct ModalTrackRow: View {
         HStack(spacing: 12) {
             Button(action: onToggleSelect) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 16, weight: isSelected ? .semibold : .regular))
+                    .font(.system(size: 17, weight: isSelected ? .semibold : .regular))
                     .foregroundStyle(isSelected ? WalkmanTheme.silverLight : Color.white.opacity(0.3))
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             
@@ -3138,31 +3148,32 @@ private struct ModalTrackRow: View {
                 .frame(width: 44, alignment: .trailing)
             
             if isInPlaylist {
-                HStack(spacing: 4) {
+                HStack(spacing: 5) {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: 9.5, weight: .bold))
                     Text("In Playlist")
-                        .font(WalkmanFont.badge)
+                        .font(WalkmanFont.calloutMedium)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+                .padding(.horizontal, 10)
+                .frame(height: 28)
                 .background(Color.white.opacity(0.08))
                 .foregroundStyle(WalkmanTheme.silverLight)
                 .clipShape(Capsule())
+                .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 0.8))
                 .fixedSize(horizontal: true, vertical: false)
             } else {
                 Button(action: onInstantAdd) {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 5) {
                         Image(systemName: "plus")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.system(size: 11, weight: .bold))
                         Text("Add")
                             .font(WalkmanFont.calloutBold)
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4.5)
+                    .padding(.horizontal, 14)
+                    .frame(height: 28)
                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                 }
-                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 6))
+                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 14))
                 .fixedSize(horizontal: true, vertical: false)
                 .help("Add track instantly to playlist on Walkman")
             }
@@ -3282,32 +3293,35 @@ private struct ModalAlbumRow: View {
             Spacer()
             
             if isAllInPlaylist {
-                HStack(spacing: 4) {
+                HStack(spacing: 5) {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.system(size: 9.5, weight: .bold))
                     Text("In Playlist")
                         .font(WalkmanFont.calloutMedium)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
+                .padding(.horizontal, 12)
+                .frame(height: 28)
                 .background(Color.white.opacity(0.08))
                 .foregroundStyle(WalkmanTheme.silverLight)
                 .clipShape(Capsule())
+                .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 0.8))
+                .fixedSize(horizontal: true, vertical: false)
             } else {
                 Button(action: onInstantAdd) {
                     HStack(spacing: 5) {
                         Image(systemName: "plus")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: 11, weight: .bold))
                         Text(unaddedCount < album.trackCount
                              ? "Add Remaining (\(unaddedCount))"
                              : "Add Album (\(album.trackCount))")
-                            .font(WalkmanFont.calloutMedium)
+                            .font(WalkmanFont.calloutBold)
                     }
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 6)
+                    .padding(.horizontal, 14)
+                    .frame(height: 28)
                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                 }
-                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 6))
+                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 14))
+                .fixedSize(horizontal: true, vertical: false)
                 .help("Add all unadded tracks of this album directly to playlist")
             }
         }
@@ -3398,32 +3412,35 @@ private struct ModalArtistRow: View {
             Spacer()
             
             if isAllInPlaylist {
-                HStack(spacing: 4) {
+                HStack(spacing: 5) {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.system(size: 9.5, weight: .bold))
                     Text("In Playlist")
                         .font(WalkmanFont.calloutMedium)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
+                .padding(.horizontal, 12)
+                .frame(height: 28)
                 .background(Color.white.opacity(0.08))
                 .foregroundStyle(WalkmanTheme.silverLight)
                 .clipShape(Capsule())
+                .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 0.8))
+                .fixedSize(horizontal: true, vertical: false)
             } else {
                 Button(action: onInstantAdd) {
                     HStack(spacing: 5) {
                         Image(systemName: "plus")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: 11, weight: .bold))
                         Text(unaddedCount < artist.trackCount
                              ? "Add Remaining (\(unaddedCount))"
                              : "Add All Songs (\(artist.trackCount))")
-                            .font(WalkmanFont.calloutMedium)
+                            .font(WalkmanFont.calloutBold)
                     }
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 6)
+                    .padding(.horizontal, 14)
+                    .frame(height: 28)
                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                 }
-                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 6))
+                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 14))
+                .fixedSize(horizontal: true, vertical: false)
                 .help("Add all unadded songs by this artist directly to playlist")
             }
         }
