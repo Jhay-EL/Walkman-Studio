@@ -169,7 +169,7 @@ public final class OnlineMetadataService: @unchecked Sendable {
         }
 
         var request = URLRequest(url: url)
-        request.setValue("WalkmanStudio/2.0", forHTTPHeaderField: "User-Agent")
+        request.setValue("WalkmanStudio/3.0.0", forHTTPHeaderField: "User-Agent")
         request.timeoutInterval = 6.0
 
         guard let (data, response) = try? await session.data(for: request),
@@ -247,7 +247,7 @@ public final class OnlineMetadataService: @unchecked Sendable {
         }
 
         var request = URLRequest(url: url)
-        request.setValue("WalkmanStudio/2.0", forHTTPHeaderField: "User-Agent")
+        request.setValue("WalkmanStudio/3.0.0", forHTTPHeaderField: "User-Agent")
         request.timeoutInterval = 6.0
 
         guard let (data, response) = try? await session.data(for: request),

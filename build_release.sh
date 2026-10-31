@@ -4,7 +4,7 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
-VERSION="2.1.1"
+VERSION="3.0.0"
 DIST_DIR="$DIR/dist"
 APP_NAME="Walkman Studio"
 APP_BUNDLE="$DIR/$APP_NAME.app"
@@ -59,29 +59,48 @@ shasum -a 256 *.zip *.dmg > SHA256SUMS.txt
 
 # 5. Generate Release Notes (Markdown & HTML)
 cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.md"
-# Walkman Studio v2.1.1
+# Walkman Studio v3.0.0
 
-Walkman Studio v2.1.1 resolves reported playback, metadata, and synchronization issues for Sony Walkman DAPs, introducing pure Swift SensMe 12-Tone acoustic analysis, automated companion `.lrc` timestamp synthesis, and conversion preset hardening across both Apple Silicon (`arm64`) and Intel-based Macs (`x86_64`).
+Walkman Studio v3.0.0 is a major milestone release introducing the complete Optical Liquid Glass Design System, the CoreAudio-powered Trim & Cut Audio Studio, partition-isolated same-storage duplicate music deduplication, rapid sequential metadata navigation, and resilient transfer queue architecture across both Apple Silicon (`arm64`) and Intel-based Macs (`x86_64`).
 
 ---
 
-## What's New in v2.1.1
+## What's New in v3.0.0
 
-### Walkman Companion Lyrics Display Fix
-* **Automated Chronological Timestamping:** Plain-text and unsynced lyrics are now synthesized with sequential `[mm:ss.xx]` timestamps, enabling the Walkman firmware "Lyrics" display button instead of leaving it greyed out.
-* **Universal Audio Format Support:** Companion `.lrc` files are generated for all supported audio formats (`FLAC`, `MP3`, `M4A`, `AAC`, `ALAC`, `WAV`, `AIFF`, `DSD`).
-* **DOS CRLF Line Endings:** Enforced strict `\r\n` line endings and stripped macOS metadata shadow files (`._*`) and `com.apple.TextEncoding` extended attributes for clean Walkman FAT32/exFAT indexing.
-* **Embedded Lyrics Tagging:** Preserved and written into MP3 (`USLT` UTF-16 with BOM), FLAC (Vorbis `LYRICS`), and M4A (`lyrics` atom).
+### Optical Liquid Glass Design System Language
+* **Sony Signature Series Obsidian Chassis:** Complete UI visual overhaul embracing solid obsidian surfaces (`#101114`), refraction glass lenses, specular edge highlights, and tactile spring physics (`.spring(response: 0.38, dampingFraction: 0.75)`).
+* **Standardized 38pt Baseline Height:** All primary interactive controls, search bars, sort menus, and action buttons now share a uniform 38pt height baseline.
+* **Standardized 28pt Capsule Pills:** Compact in-row actions and status indicators are consistently sized with tactile feedback and 0.8pt hairline borders.
+* **Responsive Toolbars & Layout Protection:** Responsive layout adaptation using `ViewThatFits` with zero element clipping or wrapping, backed by an enforced $1366\times 768$ minimum window dimension constraint.
 
-### Native SensMe 12-Tone Analysis (No External Engine Required)
-* **Pure Swift Acoustic Fallback:** Constructs Sony-compliant 3,270-byte `SMFM` payloads natively without needing external Python, NumPy, or SciPy installations.
-* **Direct Hardware Tag Injection:** Injects SensMe 12-Tone metadata blocks directly into MP3 ID3v2.3 `GEOB` & `PRIV` frames and FLAC `APPLICATION` block type 2.
+### Interactive Trim & Cut Audio Studio
+* **Native CoreAudio DSP Waveform Engine:** Built-in precision audio editor supporting non-destructive preview auditioning and gapless looping across local and Walkman tracks.
+* **Multi-Zoom Waveform Canvas:** Zoom scale from `1x` to `20x` with millisecond-precision boundary steppers (`±0.1s`, `±1s`, `±5s`) and playhead snapping.
+* **Stereo Channel Routing & Phase Inversion:** Invert Left/Right stereo channels, downmix to Mono, isolate single channel to dual ears, or invert audio phase 180°.
+* **Smooth Envelopes & Gain Trim:** Configurable fade-in and fade-out curves to prevent clicks, with -6dB to +6dB gain adjustment while strictly preserving ID3v2.3/Vorbis metadata and Baseline RGB JPEG cover art.
 
-### Playlist & Metadata Fixes
-* **Playlist Addition Fix:** Resolved an issue where adding music tracks to playlists did not persist properly to the connected Walkman storage.
-* **Explicit Tag Sanitation:** Fixed title parsing bug where tracks with explicit markers or bracketed suffixes were incorrectly renamed to "Unknown".
-* **Preset Hardening:** Constrained the `alac_16` preset strictly to 16-bit PCM frames (`-sample_fmt s16p`).
-* **UI Modularity & Stability:** Modularized queue sheets from `TransferQueueView` to improve SwiftUI rendering performance and responsiveness.
+### Partition-Isolated Duplicate Music Detection (Duplicates Studio)
+* **Strict Same-Storage Scoping:** Prevents accidental deletion of tracks across distinct drives by scoping duplicate comparisons strictly within the same storage partition (Internal Flash, MicroSD Expansion, or Local Library).
+* **Dual Matching Scopes:**
+  * **Exact Same Album (Safe):** Matches identical audio files and duplicate tracks within the same album without breaking complete releases.
+  * **Include Cross-Album (Loose):** Identifies duplicate songs across Studio Albums, Singles, Greatest Hits, and Compilations.
+* **High-Precision Acoustic & Metadata Clustering:** Matches tracks via normalized titles/artists and $\pm 4.0$s duration clustering, ISRC identifiers, and bit-exact MD5 checksums.
+* **Smart Quality Auto-Resolution:** Automatically preserves higher-resolution lossless files (e.g. 24-bit Hi-Res FLAC) over lossy copies while safely cleaning orphan companion `.lrc` lyrics and AppleDouble `._*` shadow files.
+
+### Rapid Sequential Metadata & Playlist Navigation
+* **Previous & Next Track Steppers:** Edit metadata for an entire album or playlist continuously with previous/next navigation buttons embedded directly within the Song Metadata Editor without closing the sheet.
+* **Smart Scoped Track Sequencing:** Navigation strictly respects the active album or playlist ordering.
+* **Overhauled Playlists Modal (`AddTracksModal`):** Modernized playlist track selection dialog with 28pt action pills, "In Playlist" status indicators, and 38pt Liquid Glass chassis actions.
+
+### Transfer & Convert Queue Optimization
+* **Dedicated Hardware Compliance Bar:** Dedicated 6-chip compliance bar (`Baseline RGB Art`, `.LRC Lyrics`, `Auto-Tags`, `folder.jpg`, `EBU R128 Leveling`, `12 Tone / SenseMe`).
+* **Optimized Queue Header:** Relocated batch operations (`✦ Optimize All`, `💬 Fetch Lyrics`, `🗑 Clear`) into a responsive header bar with zero visual overlap.
+* **Hardware Compliance Enforcement:** Enforces strict ID3v2.3 UTF-16, Baseline JPEG ($\le 800\times 800$), and FLAC `SMFM` Block 2 hardware compliance.
+
+### Performance & Engine Upgrades
+* **Non-Blocking Asynchronous Imports:** Background folder import engine with real-time `ImportProgressBar` and cancellation support.
+* **macOS Dotfile Purging:** Automatic `dot_clean -m` AppleDouble shadow file cleanup on drive unmount.
+* **Universal macOS Support:** Native binaries for Apple Silicon (`arm64`) and Intel (`x86_64`) on macOS 13.0+ (Ventura, Sonoma, Sequoia).
 
 ---
 
@@ -89,12 +108,12 @@ Walkman Studio v2.1.1 resolves reported playback, metadata, and synchronization 
 
 | Installer | Architecture | Target System |
 | :--- | :--- | :--- |
-| **`Walkman-Studio-2.1.1-arm64.dmg`** | Apple Silicon (`arm64`) | MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4) |
-| **`Walkman-Studio-2.1.1-intel.dmg`** | Intel (`x86_64`) | Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac Pro |
-| **`Walkman-Studio-2.1.1-universal.dmg`** | Universal 2 (`arm64` + `x86_64`) | Universal package running natively on all Macs (macOS 13.0+) |
+| **`Walkman-Studio-3.0.0-arm64.dmg`** | Apple Silicon (`arm64`) | MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4) |
+| **`Walkman-Studio-3.0.0-intel.dmg`** | Intel (`x86_64`) | Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac Pro |
+| **`Walkman-Studio-3.0.0-universal.dmg`** | Universal 2 (`arm64` + `x86_64`) | Universal package running natively on all Macs (macOS 13.0+) |
 
 ### Alternative Mirror
-* **Google Drive:** [Download v2.1.1 Release Files on Google Drive](https://drive.google.com/drive/folders/1sPALywphDMWHfE7RzliWKuW4y1fcMdSt?usp=share_link)
+* **Google Drive:** [Download v3.0.0 Release Files on Google Drive](https://drive.google.com/drive/folders/1sPALywphDMWHfE7RzliWKuW4y1fcMdSt?usp=share_link)
 
 ---
 
@@ -106,34 +125,57 @@ Walkman Studio v2.1.1 resolves reported playback, metadata, and synchronization 
 EOF
 
 cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
-<h1>Walkman Studio v2.1.1</h1>
+<h1>Walkman Studio v3.0.0</h1>
 
-<p>Walkman Studio v2.1.1 resolves reported playback, metadata, and synchronization issues for Sony Walkman DAPs, introducing pure Swift SensMe 12-Tone acoustic analysis, automated companion <code>.lrc</code> timestamp synthesis, and conversion preset hardening across both Apple Silicon (<code>arm64</code>) and Intel-based Macs (<code>x86_64</code>).</p>
+<p>Walkman Studio v3.0.0 is a major milestone release introducing the complete Optical Liquid Glass Design System, the CoreAudio-powered Trim &amp; Cut Audio Studio, partition-isolated same-storage duplicate music deduplication, rapid sequential metadata navigation, and resilient transfer queue architecture across both Apple Silicon (<code>arm64</code>) and Intel-based Macs (<code>x86_64</code>).</p>
 
 <hr>
 
-<h2>What's New in v2.1.1</h2>
+<h2>What's New in v3.0.0</h2>
 
-<h3>Walkman Companion Lyrics Display Fix</h3>
+<h3>Optical Liquid Glass Design System Language</h3>
 <ul>
-  <li><strong>Automated Chronological Timestamping:</strong> Plain-text and unsynced lyrics are now synthesized with sequential <code>[mm:ss.xx]</code> timestamps, enabling the Walkman firmware "Lyrics" display button instead of leaving it greyed out.</li>
-  <li><strong>Universal Audio Format Support:</strong> Companion <code>.lrc</code> files are generated for all supported audio formats (<code>FLAC</code>, <code>MP3</code>, <code>M4A</code>, <code>AAC</code>, <code>ALAC</code>, <code>WAV</code>, <code>AIFF</code>, <code>DSD</code>).</li>
-  <li><strong>DOS CRLF Line Endings:</strong> Enforced strict <code>\r\n</code> line endings and stripped macOS metadata shadow files (<code>._*</code>) and <code>com.apple.TextEncoding</code> extended attributes for clean Walkman FAT32/exFAT indexing.</li>
-  <li><strong>Embedded Lyrics Tagging:</strong> Preserved and written into MP3 (<code>USLT</code> UTF-16 with BOM), FLAC (Vorbis <code>LYRICS</code>), and M4A (<code>lyrics</code> atom).</li>
+  <li><strong>Sony Signature Series Obsidian Chassis:</strong> Complete UI visual overhaul embracing solid obsidian surfaces (<code>#101114</code>), refraction glass lenses, specular edge highlights, and tactile spring physics.</li>
+  <li><strong>Standardized 38pt Baseline Height:</strong> All primary interactive controls, search bars, sort menus, and action buttons now share a uniform 38pt height baseline.</li>
+  <li><strong>Standardized 28pt Capsule Pills:</strong> Compact in-row actions and status indicators are consistently sized with tactile feedback and 0.8pt hairline borders.</li>
+  <li><strong>Responsive Toolbars &amp; Layout Protection:</strong> Responsive layout adaptation using <code>ViewThatFits</code> with zero element clipping or wrapping, backed by an enforced 1366&times;768 minimum window dimension constraint.</li>
 </ul>
 
-<h3>Native SensMe 12-Tone Analysis (No External Engine Required)</h3>
+<h3>Interactive Trim &amp; Cut Audio Studio</h3>
 <ul>
-  <li><strong>Pure Swift Acoustic Fallback:</strong> Constructs Sony-compliant 3,270-byte <code>SMFM</code> payloads natively without needing external Python, NumPy, or SciPy installations.</li>
-  <li><strong>Direct Hardware Tag Injection:</strong> Injects SensMe 12-Tone metadata blocks directly into MP3 ID3v2.3 <code>GEOB</code> &amp; <code>PRIV</code> frames and FLAC <code>APPLICATION</code> block type 2.</li>
+  <li><strong>Native CoreAudio DSP Waveform Engine:</strong> Built-in precision audio editor supporting non-destructive preview auditioning and gapless looping across local and Walkman tracks.</li>
+  <li><strong>Multi-Zoom Waveform Canvas:</strong> Zoom scale from <code>1x</code> to <code>20x</code> with millisecond-precision boundary steppers (<code>&plusmn;0.1s</code>, <code>&plusmn;1s</code>, <code>&plusmn;5s</code>) and playhead snapping.</li>
+  <li><strong>Stereo Channel Routing &amp; Phase Inversion:</strong> Invert Left/Right stereo channels, downmix to Mono, isolate single channel to dual ears, or invert audio phase 180&deg;.</li>
+  <li><strong>Smooth Envelopes &amp; Gain Trim:</strong> Configurable fade-in and fade-out curves to prevent clicks, with -6dB to +6dB gain adjustment while strictly preserving ID3v2.3/Vorbis metadata and Baseline RGB JPEG cover art.</li>
 </ul>
 
-<h3>Playlist &amp; Metadata Fixes</h3>
+<h3>Partition-Isolated Duplicate Music Detection (Duplicates Studio)</h3>
 <ul>
-  <li><strong>Playlist Addition Fix:</strong> Resolved an issue where adding music tracks to playlists did not persist properly to the connected Walkman storage.</li>
-  <li><strong>Explicit Tag Sanitation:</strong> Fixed title parsing bug where tracks with explicit markers or bracketed suffixes were incorrectly renamed to "Unknown".</li>
-  <li><strong>Preset Hardening:</strong> Constrained the <code>alac_16</code> preset strictly to 16-bit PCM frames (<code>-sample_fmt s16p</code>).</li>
-  <li><strong>UI Modularity &amp; Stability:</strong> Modularized queue sheets from <code>TransferQueueView</code> to improve SwiftUI rendering performance and responsiveness.</li>
+  <li><strong>Strict Same-Storage Scoping:</strong> Prevents accidental deletion of tracks across distinct drives by scoping duplicate comparisons strictly within the same storage partition (Internal Flash, MicroSD Expansion, or Local Library).</li>
+  <li><strong>Dual Matching Scopes:</strong> Exact Same Album (Safe) and Include Cross-Album (Loose) matching.</li>
+  <li><strong>High-Precision Acoustic &amp; Metadata Clustering:</strong> Matches tracks via normalized titles/artists and &plusmn;4.0s duration clustering, ISRC identifiers, and bit-exact MD5 checksums.</li>
+  <li><strong>Smart Quality Auto-Resolution:</strong> Automatically preserves higher-resolution lossless files (e.g. 24-bit Hi-Res FLAC) over lossy copies while safely cleaning orphan companion <code>.lrc</code> lyrics and AppleDouble <code>._*</code> shadow files.</li>
+</ul>
+
+<h3>Rapid Sequential Metadata &amp; Playlist Navigation</h3>
+<ul>
+  <li><strong>Previous &amp; Next Track Steppers:</strong> Edit metadata for an entire album or playlist continuously with previous/next navigation buttons embedded directly within the Song Metadata Editor without closing the sheet.</li>
+  <li><strong>Smart Scoped Track Sequencing:</strong> Navigation strictly respects the active album or playlist ordering.</li>
+  <li><strong>Overhauled Playlists Modal (<code>AddTracksModal</code>):</strong> Modernized playlist track selection dialog with 28pt action pills, "In Playlist" status indicators, and 38pt Liquid Glass chassis actions.</li>
+</ul>
+
+<h3>Transfer &amp; Convert Queue Optimization</h3>
+<ul>
+  <li><strong>Dedicated Hardware Compliance Bar:</strong> Dedicated 6-chip compliance bar (<code>Baseline RGB Art</code>, <code>.LRC Lyrics</code>, <code>Auto-Tags</code>, <code>folder.jpg</code>, <code>EBU R128 Leveling</code>, <code>12 Tone / SenseMe</code>).</li>
+  <li><strong>Optimized Queue Header:</strong> Relocated batch operations (<code>✦ Optimize All</code>, <code>💬 Fetch Lyrics</code>, <code>🗑 Clear</code>) into a responsive header bar with zero visual overlap.</li>
+  <li><strong>Hardware Compliance Enforcement:</strong> Enforces strict ID3v2.3 UTF-16, Baseline JPEG (&le; 800&times;800), and FLAC <code>SMFM</code> Block 2 hardware compliance.</li>
+</ul>
+
+<h3>Performance &amp; Engine Upgrades</h3>
+<ul>
+  <li><strong>Non-Blocking Asynchronous Imports:</strong> Background folder import engine with real-time <code>ImportProgressBar</code> and cancellation support.</li>
+  <li><strong>macOS Dotfile Purging:</strong> Automatic <code>dot_clean -m</code> AppleDouble shadow file cleanup on drive unmount.</li>
+  <li><strong>Universal macOS Support:</strong> Native binaries for Apple Silicon (<code>arm64</code>) and Intel (<code>x86_64</code>) on macOS 13.0+ (Ventura, Sonoma, Sequoia).</li>
 </ul>
 
 <hr>
@@ -150,17 +192,17 @@ cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
   </thead>
   <tbody>
     <tr>
-      <td><strong><code>Walkman-Studio-2.1.1-arm64.dmg</code></strong></td>
+      <td><strong><code>Walkman-Studio-3.0.0-arm64.dmg</code></strong></td>
       <td>Apple Silicon (<code>arm64</code>)</td>
       <td>MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4)</td>
     </tr>
     <tr>
-      <td><strong><code>Walkman-Studio-2.1.1-intel.dmg</code></strong></td>
+      <td><strong><code>Walkman-Studio-3.0.0-intel.dmg</code></strong></td>
       <td>Intel (<code>x86_64</code>)</td>
       <td>Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac Pro</td>
     </tr>
     <tr>
-      <td><strong><code>Walkman-Studio-2.1.1-universal.dmg</code></strong></td>
+      <td><strong><code>Walkman-Studio-3.0.0-universal.dmg</code></strong></td>
       <td>Universal 2 (<code>arm64</code> + <code>x86_64</code>)</td>
       <td>Universal package running natively on all Macs (macOS 13.0+)</td>
     </tr>
@@ -168,7 +210,7 @@ cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
 </table>
 
 <h3>Alternative Mirror</h3>
-<p><strong>Google Drive:</strong> <a href="https://drive.google.com/drive/folders/1sPALywphDMWHfE7RzliWKuW4y1fcMdSt?usp=share_link" target="_blank" rel="noopener noreferrer">Download v2.1.1 Release Files on Google Drive</a></p>
+<p><strong>Google Drive:</strong> <a href="https://drive.google.com/drive/folders/1sPALywphDMWHfE7RzliWKuW4y1fcMdSt?usp=share_link" target="_blank" rel="noopener noreferrer">Download v3.0.0 Release Files on Google Drive</a></p>
 
 <hr>
 
