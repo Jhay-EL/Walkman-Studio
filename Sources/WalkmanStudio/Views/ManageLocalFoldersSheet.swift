@@ -172,15 +172,17 @@ public struct ManageLocalFoldersSheet: View {
 
     // MARK: - Folder Row View
     private func folderRowView(_ folder: LocalMusicFolder) -> some View {
-        HStack(spacing: 14) {
+        let isMissing = folder.isMissing || !folder.existsOnDisk
+
+        return HStack(spacing: 14) {
             // Folder Icon Badge
             ZStack {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.white.opacity(0.06))
+                    .fill(isMissing ? Color.orange.opacity(0.15) : Color.white.opacity(0.06))
                     .frame(width: 40, height: 40)
-                Image(systemName: "folder.fill")
+                Image(systemName: isMissing ? "folder.badge.questionmark" : "folder.fill")
                     .font(.system(size: 18))
-                    .foregroundStyle(WalkmanTheme.silver)
+                    .foregroundStyle(isMissing ? Color.orange : WalkmanTheme.silver)
             }
 
             // Info
@@ -190,59 +192,87 @@ public struct ManageLocalFoldersSheet: View {
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(.white)
 
-                    Text("\(folder.trackCount) tracks")
-                        .font(.system(size: 10.5, weight: .bold, design: .monospaced))
-                        .foregroundStyle(WalkmanTheme.silverLight)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.white.opacity(0.06))
-                        .clipShape(Capsule())
+                    if isMissing {
+                        Text("MISSING OR RENAMED")
+                            .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Color.orange)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.orange.opacity(0.20))
+                            .clipShape(Capsule())
+                    } else {
+                        Text("\(folder.trackCount) tracks")
+                            .font(.system(size: 10.5, weight: .bold, design: .monospaced))
+                            .foregroundStyle(WalkmanTheme.silverLight)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(Capsule())
+                    }
 
                     Text(ByteCountFormatter.string(fromByteCount: folder.totalBytes, countStyle: .file))
                         .font(.system(size: 10.5, design: .monospaced))
                         .foregroundStyle(WalkmanTheme.silverMuted)
                 }
 
-                Text(folder.path)
+                Text(isMissing ? "\(folder.path) (Location not found on disk)" : folder.path)
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(WalkmanTheme.silverMuted)
+                    .foregroundStyle(isMissing ? Color.orange.opacity(0.85) : WalkmanTheme.silverMuted)
                     .lineLimit(1)
                     .truncationMode(.middle)
 
-                Text("Last scanned: \(folder.lastScanned.formatted(date: .abbreviated, time: .shortened))")
+                Text(isMissing ? "Status: Folder moved, renamed, or deleted in Finder" : "Last scanned: \(folder.lastScanned.formatted(date: .abbreviated, time: .shortened))")
                     .font(.system(size: 10))
-                    .foregroundStyle(Color.white.opacity(0.40))
+                    .foregroundStyle(isMissing ? Color.orange.opacity(0.70) : Color.white.opacity(0.40))
             }
 
             Spacer(minLength: 8)
 
             // Actions
             HStack(spacing: 6) {
-                // Rescan
-                Button(action: { localService.rescanFolder(url: folder.url) }) {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(WalkmanTheme.silverLight)
-                        .frame(width: 28, height: 28)
-                        .background(Color.white.opacity(0.06))
+                if isMissing {
+                    // Relocate
+                    Button(action: { openRelocatePicker(for: folder) }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "folder.badge.gearshape")
+                            Text("Relocate...")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .foregroundStyle(Color.orange)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.orange.opacity(0.15))
                         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .help("Rescan this folder")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Select new location for renamed or moved folder")
+                } else {
+                    // Rescan
+                    Button(action: { localService.rescanFolder(url: folder.url) }) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(WalkmanTheme.silverLight)
+                            .frame(width: 28, height: 28)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Rescan this folder")
 
-                // Reveal in Finder
-                Button(action: {
-                    NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folder.path)
-                }) {
-                    Image(systemName: "arrow.up.right.square")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(WalkmanTheme.silverLight)
-                        .frame(width: 28, height: 28)
-                        .background(Color.white.opacity(0.06))
-                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    // Reveal in Finder
+                    Button(action: {
+                        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folder.path)
+                    }) {
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(WalkmanTheme.silverLight)
+                            .frame(width: 28, height: 28)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Show in Finder")
                 }
-                .buttonStyle(.plain)
-                .help("Show in Finder")
 
                 // Remove
                 Button(action: {
@@ -265,7 +295,7 @@ public struct ManageLocalFoldersSheet: View {
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 0.8)
+                .stroke(isMissing ? Color.orange.opacity(0.40) : Color.white.opacity(0.08), lineWidth: isMissing ? 1.0 : 0.8)
         )
     }
 
@@ -356,6 +386,20 @@ public struct ManageLocalFoldersSheet: View {
             if !urls.isEmpty {
                 localService.addFolders(urls: urls)
             }
+        }
+    }
+
+    private func openRelocatePicker(for folder: LocalMusicFolder) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = false
+        panel.prompt = "Relocate Folder"
+        panel.title = "Choose New Location for \"\(folder.displayName)\""
+
+        if panel.runModal() == .OK, let url = panel.url {
+            _ = localService.relocateFolder(id: folder.id, toURL: url)
         }
     }
 }

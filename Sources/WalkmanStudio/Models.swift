@@ -8,14 +8,16 @@ public enum DriveType: String, Codable, Sendable {
 
 public struct LocalMusicFolder: Identifiable, Hashable, Codable, Sendable {
     public let id: String
-    public let path: String
-    public let displayName: String
+    public var path: String
+    public var displayName: String
     public let dateAdded: Date
     public var lastScanned: Date
     public var trackCount: Int
     public var totalBytes: Int64
+    public var isMissing: Bool
 
     public var url: URL { URL(fileURLWithPath: path) }
+    public var existsOnDisk: Bool { FileManager.default.fileExists(atPath: path) }
 
     public init(
         id: String = UUID().uuidString,
@@ -24,7 +26,8 @@ public struct LocalMusicFolder: Identifiable, Hashable, Codable, Sendable {
         dateAdded: Date = Date(),
         lastScanned: Date = Date(),
         trackCount: Int = 0,
-        totalBytes: Int64 = 0
+        totalBytes: Int64 = 0,
+        isMissing: Bool = false
     ) {
         self.id = id
         self.path = path
@@ -33,6 +36,7 @@ public struct LocalMusicFolder: Identifiable, Hashable, Codable, Sendable {
         self.lastScanned = lastScanned
         self.trackCount = trackCount
         self.totalBytes = totalBytes
+        self.isMissing = isMissing
     }
 }
 
@@ -115,8 +119,8 @@ public enum TransferTargetMode: String, CaseIterable, Identifiable, Sendable {
 public struct Track: Identifiable, Hashable, Sendable {
     public var id: String { fullPath }
     public let filename: String
-    public let relativePath: String
-    public let fullPath: String
+    public var relativePath: String
+    public var fullPath: String
     public let format: String // "FLAC", "MP3", "M4A", etc.
     public var title: String
     public var artist: String
@@ -190,6 +194,11 @@ public struct Track: Identifiable, Hashable, Sendable {
 }
 
 extension Track {
+    /// Whether this file currently exists on disk (useful for detecting renamed or missing folders/files)
+    public var existsOnDisk: Bool {
+        FileManager.default.fileExists(atPath: fullPath)
+    }
+
     /// Whether this track qualifies as Hi-Res Audio (exceeds standard 16-bit / 44.1/48kHz CD quality)
     public var isHiRes: Bool {
         bitsPerSample > 16 || sampleRate > 48000

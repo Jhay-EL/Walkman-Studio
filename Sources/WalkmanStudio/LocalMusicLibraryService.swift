@@ -71,6 +71,7 @@ public final class LocalMusicLibraryService: ObservableObject, @unchecked Sendab
 
     @Published public private(set) var tracks: [Track] = []
     @Published public private(set) var folders: [LocalMusicFolder] = []
+    @Published public private(set) var missingFolders: [LocalMusicFolder] = []
     @Published public private(set) var isScanning: Bool = false
     @Published public private(set) var scanStatusText: String? = nil
     @Published public private(set) var precomputedAlbums: [AlbumItem] = []
@@ -227,6 +228,7 @@ public final class LocalMusicLibraryService: ObservableObject, @unchecked Sendab
                 let trackCount = Int(sqlite3_column_int(fStmt, 5))
                 let totalBytes = sqlite3_column_int64(fStmt, 6)
 
+                let exists = FileManager.default.fileExists(atPath: path)
                 let folder = LocalMusicFolder(
                     id: id,
                     path: path,
@@ -234,7 +236,8 @@ public final class LocalMusicLibraryService: ObservableObject, @unchecked Sendab
                     dateAdded: Date(timeIntervalSince1970: dateAddedSec > 0 ? dateAddedSec : Date().timeIntervalSince1970),
                     lastScanned: Date(timeIntervalSince1970: lastScannedSec > 0 ? lastScannedSec : Date().timeIntervalSince1970),
                     trackCount: trackCount,
-                    totalBytes: totalBytes
+                    totalBytes: totalBytes,
+                    isMissing: !exists
                 )
                 loadedFolders.append(folder)
             }
@@ -316,6 +319,7 @@ public final class LocalMusicLibraryService: ObservableObject, @unchecked Sendab
         }
 
         self.folders = loadedFolders
+        self.missingFolders = loadedFolders.filter { $0.isMissing }
         self.tracks = loadedTracks
         recomputeStats(with: loadedTracks)
         reInspectAllSenseMe()
@@ -418,9 +422,118 @@ public final class LocalMusicLibraryService: ObservableObject, @unchecked Sendab
         }
 
         self.folders.removeAll(where: { $0.id == id })
-        self.tracks.removeAll(where: { $0.fullPath.hasPrefix(folderPath) })
+        self.missingFolders.removeAll(where: { $0.id == id })
+        self.tracks.removeAll(where: { $0.fullPath.hasPrefix(folderPath + "/") || $0.fullPath == folderPath || $0.fullPath.hasPrefix(folderPath) })
         recomputeStats(with: self.tracks)
         self.updateWatcherPaths()
+    }
+
+    // -------------------------------------------------------------------------
+    // Folder Relocation & Resilience
+    // -------------------------------------------------------------------------
+    @discardableResult
+    public func relocateFolder(id: String, toURL: URL) -> Bool {
+        let newPath = toURL.standardizedFileURL.path
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: newPath, isDirectory: &isDir), isDir.boolValue else {
+            return false
+        }
+        guard let oldFolder = folders.first(where: { $0.id == id }) else {
+            return false
+        }
+        let oldPath = oldFolder.path
+
+        guard let db = getDB() else { return false }
+        defer { sqlite3_close(db) }
+
+        sqlite3_exec(db, "BEGIN TRANSACTION;", nil, nil, nil)
+
+        // 1. Update folder record
+        let newName = toURL.lastPathComponent.isEmpty ? "Music Folder" : toURL.lastPathComponent
+        let updateFolderSql = "UPDATE local_library_folders SET path = ?, display_name = ? WHERE id = ?;"
+        var fStmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, updateFolderSql, -1, &fStmt, nil) == SQLITE_OK {
+            sqlite3_bind_text(fStmt, 1, (newPath as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(fStmt, 2, (newName as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(fStmt, 3, (id as NSString).utf8String, -1, nil)
+            sqlite3_step(fStmt)
+            sqlite3_finalize(fStmt)
+        }
+
+        // 2. Update track paths in SQLite (replace oldPath prefix with newPath)
+        let trackQuery = "SELECT full_path, relative_path FROM local_library_tracks WHERE folder_id = ?;"
+        var tSelectStmt: OpaquePointer?
+        var trackReplacements: [(oldFull: String, newFull: String, relPath: String)] = []
+        if sqlite3_prepare_v2(db, trackQuery, -1, &tSelectStmt, nil) == SQLITE_OK {
+            sqlite3_bind_text(tSelectStmt, 1, (id as NSString).utf8String, -1, nil)
+            while sqlite3_step(tSelectStmt) == SQLITE_ROW {
+                let oldFullPath = String(cString: sqlite3_column_text(tSelectStmt, 0))
+                let relPath = sqlite3_column_text(tSelectStmt, 1).map { String(cString: $0) } ?? URL(fileURLWithPath: oldFullPath).lastPathComponent
+
+                var newFullPath = oldFullPath
+                if oldFullPath.hasPrefix(oldPath) {
+                    let suffix = oldFullPath.dropFirst(oldPath.count)
+                    newFullPath = newPath + suffix
+                } else {
+                    newFullPath = (newPath as NSString).appendingPathComponent(relPath)
+                }
+                trackReplacements.append((oldFullPath, newFullPath, relPath))
+            }
+            sqlite3_finalize(tSelectStmt)
+        }
+
+        let updateTrackSql = "UPDATE local_library_tracks SET full_path = ? WHERE full_path = ? AND folder_id = ?;"
+        var tUpdateStmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, updateTrackSql, -1, &tUpdateStmt, nil) == SQLITE_OK {
+            for item in trackReplacements {
+                sqlite3_bind_text(tUpdateStmt, 1, (item.newFull as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(tUpdateStmt, 2, (item.oldFull as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(tUpdateStmt, 3, (id as NSString).utf8String, -1, nil)
+                sqlite3_step(tUpdateStmt)
+                sqlite3_reset(tUpdateStmt)
+            }
+            sqlite3_finalize(tUpdateStmt)
+        }
+
+        sqlite3_exec(db, "COMMIT;", nil, nil, nil)
+
+        // Update in-memory state
+        if let idx = self.folders.firstIndex(where: { $0.id == id }) {
+            var updated = self.folders[idx]
+            updated.path = newPath
+            updated.displayName = newName
+            updated.isMissing = false
+            self.folders[idx] = updated
+        }
+        self.missingFolders.removeAll(where: { $0.id == id })
+
+        // Update in-memory tracks
+        let replacementMap = Dictionary(uniqueKeysWithValues: trackReplacements.map { ($0.oldFull, ($0.newFull, $0.relPath)) })
+        self.tracks = self.tracks.map { tr in
+            if let rep = replacementMap[tr.fullPath] {
+                var updated = tr
+                updated.fullPath = rep.0
+                updated.relativePath = rep.1
+                return updated
+            }
+            return tr
+        }
+
+        recomputeStats(with: self.tracks)
+        updateWatcherPaths()
+
+        // Trigger rescan of this relocated folder to pick up any changes
+        rescanFolder(url: toURL)
+        return true
+    }
+
+    public func purgeMissingFolders() {
+        let targets = self.missingFolders
+        guard !targets.isEmpty else { return }
+        for folder in targets {
+            removeFolder(id: folder.id)
+        }
+        self.missingFolders.removeAll()
     }
 
     // -------------------------------------------------------------------------
@@ -463,9 +576,20 @@ public final class LocalMusicLibraryService: ObservableObject, @unchecked Sendab
             updatedTracksMap[t.fullPath] = t
         }
 
+        var missingFolderIds = Set<String>()
+        for f in self.folders {
+            if !fileManager.fileExists(atPath: f.path) {
+                missingFolderIds.insert(f.id)
+            }
+        }
+
         for folder in targets {
             let scanURL = folder.url
-            guard fileManager.fileExists(atPath: scanURL.path) else { continue }
+            guard fileManager.fileExists(atPath: scanURL.path) else {
+                missingFolderIds.insert(folder.id)
+                continue
+            }
+            missingFolderIds.remove(folder.id)
 
             await MainActor.run {
                 self.scanStatusText = "Indexing \(folder.displayName)..."
@@ -693,12 +817,18 @@ public final class LocalMusicLibraryService: ObservableObject, @unchecked Sendab
                 f.lastScanned = Date()
                 f.trackCount = totalFolderTracks
                 f.totalBytes = totalFolderBytes
+                f.isMissing = false
                 self.folders[idx] = f
             }
         }
 
         let allFinalTracks = Array(updatedTracksMap.values)
+        let finalMissingIds = missingFolderIds
         await MainActor.run {
+            for idx in self.folders.indices {
+                self.folders[idx].isMissing = finalMissingIds.contains(self.folders[idx].id)
+            }
+            self.missingFolders = self.folders.filter { $0.isMissing }
             self.tracks = allFinalTracks
             self.recomputeStats(with: allFinalTracks)
             self.isScanning = false

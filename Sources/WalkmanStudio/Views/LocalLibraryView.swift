@@ -119,6 +119,11 @@ public struct LocalLibraryView: View {
     @State private var directTransferComplete: Bool = false
     @State private var directTransferTargetName: String = "Sony Walkman"
 
+    // Missing Folders and Unreachable Files Resilience State
+    @State private var showPurgeConfirmation: Bool = false
+    @State private var showPlaybackMissingAlert: Bool = false
+    @State private var missingTrackForAlert: Track? = nil
+
     // Unsupported Format & Device Warning Alert State
     @State private var showTransferWarningAlert: Bool = false
     @State private var transferWarningTitle: String = ""
@@ -388,24 +393,61 @@ public struct LocalLibraryView: View {
         }
     }
 
+    private func openRelocatePicker(for folder: LocalMusicFolder) {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Relocate Folder"
+        panel.message = "Choose the new location for \"\(folder.displayName)\""
+        panel.canCreateDirectories = false
+
+        if panel.runModal() == .OK, let selectedURL = panel.url {
+            _ = localService.relocateFolder(id: folder.id, toURL: selectedURL)
+        }
+    }
+
+    private func playTrackSafe(_ track: Track, in queue: [Track]) {
+        guard track.existsOnDisk else {
+            missingTrackForAlert = track
+            showPlaybackMissingAlert = true
+            return
+        }
+        self.selectedTrackId = track.id
+        if player.currentTrack?.id == track.id && player.isPlaying {
+            player.pause()
+        } else {
+            player.play(track: track, in: queue)
+        }
+    }
+
     private func togglePlaybackAll() {
         let tracksToPlay = currentTabTracks
-        guard let first = tracksToPlay.first else { return }
+        guard let first = tracksToPlay.first(where: { $0.existsOnDisk }) else {
+            if let dead = tracksToPlay.first {
+                playTrackSafe(dead, in: tracksToPlay)
+            }
+            return
+        }
         if player.isPlaying && tracksToPlay.contains(where: { $0.id == player.currentTrack?.id }) {
             player.pause()
         } else {
-            selectedTrackId = first.id
-            player.play(track: first, in: tracksToPlay)
+            playTrackSafe(first, in: tracksToPlay)
         }
     }
 
     private func shufflePlaybackAll() {
         let tracksToPlay = currentTabTracks
-        guard !tracksToPlay.isEmpty else { return }
-        let shuffled = tracksToPlay.shuffled()
+        let available = tracksToPlay.filter { $0.existsOnDisk }
+        guard !available.isEmpty else {
+            if let dead = tracksToPlay.first {
+                playTrackSafe(dead, in: tracksToPlay)
+            }
+            return
+        }
+        let shuffled = available.shuffled()
         if let first = shuffled.first {
-            selectedTrackId = first.id
-            player.play(track: first, in: shuffled)
+            playTrackSafe(first, in: shuffled)
         }
     }
 
@@ -430,6 +472,13 @@ public struct LocalLibraryView: View {
                         .frame(height: 0.8)
                 }
             )
+
+            // -----------------------------------------------------------------
+            // MISSING OR RENAMED FOLDERS RESILIENCE BANNER
+            // -----------------------------------------------------------------
+            if !localService.missingFolders.isEmpty {
+                missingFoldersBanner
+            }
 
             // -----------------------------------------------------------------
             // MAIN VIEWPORT
@@ -541,6 +590,20 @@ public struct LocalLibraryView: View {
         } message: {
             Text(transferWarningMessage)
         }
+        .alert(
+            "Audio File Not Found",
+            isPresented: $showPlaybackMissingAlert,
+            presenting: missingTrackForAlert
+        ) { track in
+            if let folder = effectiveFolders.first(where: { track.fullPath.hasPrefix($0.path) || $0.isMissing }) {
+                Button("Relocate Folder...") {
+                    openRelocatePicker(for: folder)
+                }
+            }
+            Button("Dismiss", role: .cancel) {}
+        } message: { track in
+            Text("\"\(track.title.isEmpty ? track.filename : track.title)\" could not be found on disk at:\n\n\(track.fullPath)\n\nThe folder may have been moved, renamed, or deleted in Finder.")
+        }
     }
 
     private func handleDrop(providers: [NSItemProvider]) {
@@ -569,6 +632,123 @@ public struct LocalLibraryView: View {
             if !folderURLs.isEmpty {
                 self.localService.addFolders(urls: folderURLs)
             }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // MISSING OR RENAMED FOLDERS RESILIENCE BANNER
+    // -------------------------------------------------------------------------
+    private var missingFoldersBanner: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(Color.orange.opacity(0.18))
+                    .frame(width: 30, height: 30)
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Color.orange)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                if localService.missingFolders.count == 1, let single = localService.missingFolders.first {
+                    Text("Music Folder Missing or Renamed")
+                        .font(.system(size: 12.5, weight: .bold))
+                        .foregroundStyle(.white)
+                    Text("\"\(single.displayName)\" could not be found at \(single.path). Relocate it to restore your tracks or remove it from the library.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.white.opacity(0.70))
+                        .lineLimit(1)
+                } else {
+                    Text("\(localService.missingFolders.count) Music Folders Missing")
+                        .font(.system(size: 12.5, weight: .bold))
+                        .foregroundStyle(.white)
+                    Text("One or more monitored folders cannot be found on disk. Relocate them to restore your tracks or remove missing tracks.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.white.opacity(0.70))
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            HStack(spacing: 8) {
+                if localService.missingFolders.count == 1, let single = localService.missingFolders.first {
+                    Button(action: {
+                        openRelocatePicker(for: single)
+                    }) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "folder.badge.gearshape")
+                            Text("Relocate Folder...")
+                        }
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.orange)
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Button(action: {
+                        displayMode = .folders
+                    }) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "folder.badge.gearshape")
+                            Text("Manage Folders...")
+                        }
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.orange)
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Button(action: {
+                    showPurgeConfirmation = true
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "trash")
+                        Text("Remove Missing")
+                    }
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.85))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(Color.white.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(
+            LinearGradient(
+                colors: [
+                    Color(red: 70/255, green: 38/255, blue: 10/255).opacity(0.85),
+                    Color(red: 45/255, green: 24/255, blue: 8/255).opacity(0.85)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        )
+        .overlay(
+            Rectangle()
+                .stroke(Color.orange.opacity(0.35), lineWidth: 0.8)
+        )
+        .confirmationDialog(
+            "Remove Missing Folders and Tracks?",
+            isPresented: $showPurgeConfirmation
+        ) {
+            Button("Remove Missing Tracks", role: .destructive) {
+                localService.purgeMissingFolders()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will remove all missing folders and their orphaned tracks from Walkman Studio's local database. No files on disk will be deleted.")
         }
     }
 
@@ -789,12 +969,7 @@ public struct LocalLibraryView: View {
 
                 HStack(spacing: 8) {
                     Button(action: {
-                        self.selectedTrackId = track.id
-                        if isPlayingThis {
-                            player.pause()
-                        } else {
-                            player.play(track: track, in: filteredTracks)
-                        }
+                        playTrackSafe(track, in: filteredTracks)
                     }) {
                         TrackCoverThumbnail(track: track, size: 30, isPlaying: isPlayingThis)
                     }
@@ -803,9 +978,16 @@ public struct LocalLibraryView: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 5) {
+                            if !track.existsOnDisk {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(Color.orange)
+                                    .help("File not found on disk. The folder may have been moved, renamed, or deleted.")
+                            }
+
                             Text(track.title)
                                 .font(isPlayingThis ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
-                                .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : .white)
+                                .foregroundStyle(track.existsOnDisk ? (isPlayingThis ? WalkmanTheme.silverLight : .white) : Color.white.opacity(0.45))
                                 .lineLimit(1)
 
                             if isPlayingThis {
@@ -939,12 +1121,7 @@ public struct LocalLibraryView: View {
             trackContextMenu(for: selection, in: filteredTracks)
         } primaryAction: { selection in
             if let firstId = selection.first, let track = filteredTracks.first(where: { $0.id == firstId }) {
-                self.selectedTrackId = track.id
-                if player.currentTrack?.id == track.id && player.isPlaying {
-                    player.pause()
-                } else {
-                    player.play(track: track, in: filteredTracks)
-                }
+                playTrackSafe(track, in: filteredTracks)
             }
         }
         .tableScrollBottomInset(88)
@@ -969,12 +1146,7 @@ public struct LocalLibraryView: View {
 
                 HStack(spacing: 8) {
                     Button(action: {
-                        self.selectedTrackId = track.id
-                        if isPlayingThis {
-                            player.pause()
-                        } else {
-                            player.play(track: track, in: recentlyAddedTracks)
-                        }
+                        playTrackSafe(track, in: recentlyAddedTracks)
                     }) {
                         TrackCoverThumbnail(track: track, size: 30, isPlaying: isPlayingThis)
                     }
@@ -983,9 +1155,16 @@ public struct LocalLibraryView: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 5) {
+                            if !track.existsOnDisk {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(Color.orange)
+                                    .help("File not found on disk. The folder may have been moved, renamed, or deleted.")
+                            }
+
                             Text(track.title)
                                 .font(isPlayingThis ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
-                                .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : .white)
+                                .foregroundStyle(track.existsOnDisk ? (isPlayingThis ? WalkmanTheme.silverLight : .white) : Color.white.opacity(0.45))
                                 .lineLimit(1)
 
                             if isPlayingThis {
@@ -1120,12 +1299,7 @@ public struct LocalLibraryView: View {
             trackContextMenu(for: selection, in: recentlyAddedTracks)
         } primaryAction: { selection in
             if let firstId = selection.first, let track = recentlyAddedTracks.first(where: { $0.id == firstId }) {
-                self.selectedTrackId = track.id
-                if player.currentTrack?.id == track.id && player.isPlaying {
-                    player.pause()
-                } else {
-                    player.play(track: track, in: recentlyAddedTracks)
-                }
+                playTrackSafe(track, in: recentlyAddedTracks)
             }
         }
         .tableScrollBottomInset(88)
@@ -1137,12 +1311,7 @@ public struct LocalLibraryView: View {
             let isThisPlaying = player.currentTrack?.id == track.id && player.isPlaying
 
             Button(isThisPlaying ? "Pause Playback" : "Play Preview") {
-                self.selectedTrackId = track.id
-                if isThisPlaying {
-                    player.pause()
-                } else {
-                    player.play(track: track, in: sourceTracks)
-                }
+                playTrackSafe(track, in: sourceTracks)
             }
 
             Divider()
@@ -1359,6 +1528,12 @@ public struct LocalLibraryView: View {
                         onSelect: {
                             searchQuery = folder.displayName
                             displayMode = .songs
+                        },
+                        onRescan: {
+                            localService.rescanFolder(url: folder.url)
+                        },
+                        onRelocate: {
+                            openRelocatePicker(for: folder)
                         },
                         onReveal: {
                             NSWorkspace.shared.activateFileViewerSelecting([folder.url])
@@ -1641,11 +1816,16 @@ private struct LocalFolderRowCard: View {
     let folder: LocalMusicFolder
     var onSelect: (() -> Void)? = nil
     var onRescan: (() -> Void)? = nil
+    var onRelocate: (() -> Void)? = nil
     let onReveal: () -> Void
     let onRemove: () -> Void
     var onTransfer: (() -> Void)? = nil
 
     @State private var isHovered = false
+
+    private var isMissing: Bool {
+        folder.isMissing || !folder.existsOnDisk
+    }
 
     private func formatBytes(_ bytes: Int64) -> String {
         if bytes <= 0 { return "0 GB" }
@@ -1663,11 +1843,11 @@ private struct LocalFolderRowCard: View {
                 HStack(spacing: 12) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.white.opacity(0.08))
+                            .fill(isMissing ? Color.orange.opacity(0.15) : Color.white.opacity(0.08))
                             .frame(width: 40, height: 40)
-                        Image(systemName: "folder.fill")
+                        Image(systemName: isMissing ? "folder.badge.questionmark" : "folder.fill")
                             .font(.system(size: 18))
-                            .foregroundStyle(WalkmanTheme.silverLight)
+                            .foregroundStyle(isMissing ? Color.orange : WalkmanTheme.silverLight)
                     }
 
                     VStack(alignment: .leading, spacing: 3) {
@@ -1676,22 +1856,32 @@ private struct LocalFolderRowCard: View {
                                 .font(.system(size: 13.5, weight: .semibold))
                                 .foregroundStyle(.white)
 
-                            Text("\(folder.trackCount) tracks")
-                                .font(.system(size: 10.5, weight: .bold, design: .monospaced))
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.white.opacity(0.10))
-                                .foregroundStyle(WalkmanTheme.silverLight)
-                                .clipShape(Capsule())
+                            if isMissing {
+                                Text("MISSING OR RENAMED")
+                                    .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.orange.opacity(0.20))
+                                    .foregroundStyle(Color.orange)
+                                    .clipShape(Capsule())
+                            } else {
+                                Text("\(folder.trackCount) tracks")
+                                    .font(.system(size: 10.5, weight: .bold, design: .monospaced))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.white.opacity(0.10))
+                                    .foregroundStyle(WalkmanTheme.silverLight)
+                                    .clipShape(Capsule())
+                            }
 
                             Text(formatBytes(folder.totalBytes))
                                 .font(.system(size: 10.5, design: .monospaced))
                                 .foregroundStyle(WalkmanTheme.silverMuted)
                         }
 
-                        Text(folder.path)
+                        Text(isMissing ? "\(folder.path) (Not found on disk)" : folder.path)
                             .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(isMissing ? Color.orange.opacity(0.85) : .secondary)
                             .lineLimit(1)
                     }
                 }
@@ -1702,7 +1892,24 @@ private struct LocalFolderRowCard: View {
             Spacer()
 
             HStack(spacing: 6) {
-                if let onRescan = onRescan {
+                if isMissing, let onRelocate = onRelocate {
+                    Button(action: onRelocate) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "folder.badge.gearshape")
+                            Text("Relocate...")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .foregroundStyle(Color.orange)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.orange.opacity(0.15))
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Choose new directory for renamed or moved folder")
+                }
+
+                if !isMissing, let onRescan = onRescan {
                     Button(action: onRescan) {
                         Image(systemName: "arrow.clockwise")
                             .font(.system(size: 12, weight: .semibold))
@@ -1743,10 +1950,14 @@ private struct LocalFolderRowCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.white.opacity(isHovered ? 0.16 : 0.06), lineWidth: 0.8)
+                .stroke(isMissing ? Color.orange.opacity(0.40) : Color.white.opacity(isHovered ? 0.16 : 0.06), lineWidth: isMissing ? 1.0 : 0.8)
         )
         .onHover { isHovered = $0 }
         .contextMenu {
+            if isMissing, let onRelocate = onRelocate {
+                Button("Relocate Folder...", action: onRelocate)
+                Divider()
+            }
             if let onTransfer = onTransfer {
                 Button {
                     onTransfer()
