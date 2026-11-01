@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import AppKit
 
 private enum RenameLocation {
     case row
@@ -28,6 +29,10 @@ public struct PlaylistsView: View {
     @State private var draggedTrackIndex: Int? = nil
     @State private var draggedTrackPath: String? = nil
     @State private var dropTargetIndex: Int? = nil
+    
+    // Batch Track Selection State
+    @State private var selectedPlaylistIndices: Set<Int> = []
+    @State private var lastSelectedPlaylistIndex: Int? = nil
     
     // Resizable Splitter State
     @AppStorage("playlists_sidebar_width") private var storedSidebarWidth: Double = 270.0
@@ -226,6 +231,8 @@ public struct PlaylistsView: View {
             let cmp = $0.title.localizedStandardCompare($1.title)
             return ascending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
         }.map(\.path)
+        selectedPlaylistIndices.removeAll()
+        lastSelectedPlaylistIndex = nil
         persistPlaylistChanges(newTracks: sorted)
     }
     
@@ -243,6 +250,8 @@ public struct PlaylistsView: View {
             }
             return ascending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
         }.map(\.path)
+        selectedPlaylistIndices.removeAll()
+        lastSelectedPlaylistIndex = nil
         persistPlaylistChanges(newTracks: sorted)
     }
     
@@ -264,6 +273,8 @@ public struct PlaylistsView: View {
             }
             return $0.title.localizedStandardCompare($1.title) == .orderedAscending
         }.map(\.path)
+        selectedPlaylistIndices.removeAll()
+        lastSelectedPlaylistIndex = nil
         persistPlaylistChanges(newTracks: sorted)
     }
     
@@ -274,15 +285,173 @@ public struct PlaylistsView: View {
             let cmp = f1.localizedStandardCompare(f2)
             return ascending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
         }
+        selectedPlaylistIndices.removeAll()
+        lastSelectedPlaylistIndex = nil
         persistPlaylistChanges(newTracks: sorted)
     }
     
     private func reverseTrackOrder() {
+        selectedPlaylistIndices.removeAll()
+        lastSelectedPlaylistIndex = nil
         persistPlaylistChanges(newTracks: Array(playlistTracks.reversed()))
     }
     
     private func shuffleTracks() {
+        selectedPlaylistIndices.removeAll()
+        lastSelectedPlaylistIndex = nil
         persistPlaylistChanges(newTracks: playlistTracks.shuffled())
+    }
+    
+    // MARK: - Batch Track Organization & Movement
+    
+    private func handleRowSelection(at index: Int, shiftPressed: Bool, cmdPressed: Bool) {
+        guard index >= 0 && index < playlistTracks.count else { return }
+        withAnimation(.spring(response: 0.20, dampingFraction: 0.75)) {
+            if shiftPressed {
+                if let last = lastSelectedPlaylistIndex {
+                    let range = min(last, index)...max(last, index)
+                    selectedPlaylistIndices.formUnion(range)
+                } else {
+                    selectedPlaylistIndices.insert(index)
+                    lastSelectedPlaylistIndex = index
+                }
+            } else if cmdPressed {
+                if selectedPlaylistIndices.contains(index) {
+                    selectedPlaylistIndices.remove(index)
+                    if lastSelectedPlaylistIndex == index {
+                        lastSelectedPlaylistIndex = selectedPlaylistIndices.first
+                    }
+                } else {
+                    selectedPlaylistIndices.insert(index)
+                    lastSelectedPlaylistIndex = index
+                }
+            } else {
+                if selectedPlaylistIndices.contains(index) && selectedPlaylistIndices.count == 1 {
+                    selectedPlaylistIndices.remove(index)
+                    lastSelectedPlaylistIndex = nil
+                } else {
+                    selectedPlaylistIndices = [index]
+                    lastSelectedPlaylistIndex = index
+                }
+            }
+        }
+    }
+    
+    private func toggleRowSelection(at index: Int) {
+        guard index >= 0 && index < playlistTracks.count else { return }
+        withAnimation(.spring(response: 0.20, dampingFraction: 0.75)) {
+            if selectedPlaylistIndices.contains(index) {
+                selectedPlaylistIndices.remove(index)
+                if lastSelectedPlaylistIndex == index {
+                    lastSelectedPlaylistIndex = selectedPlaylistIndices.first
+                }
+            } else {
+                selectedPlaylistIndices.insert(index)
+                lastSelectedPlaylistIndex = index
+            }
+        }
+    }
+    
+    private func selectAllTracks() {
+        withAnimation(.spring(response: 0.20, dampingFraction: 0.75)) {
+            if selectedPlaylistIndices.count == playlistTracks.count {
+                selectedPlaylistIndices.removeAll()
+                lastSelectedPlaylistIndex = nil
+            } else {
+                selectedPlaylistIndices = Set(0..<playlistTracks.count)
+                lastSelectedPlaylistIndex = 0
+            }
+        }
+    }
+    
+    private func moveSelectedTracksToTop() {
+        guard !selectedPlaylistIndices.isEmpty else { return }
+        let sortedSelected = playlistTracks.indices.filter { selectedPlaylistIndices.contains($0) }
+        guard !sortedSelected.isEmpty else { return }
+        
+        let selectedItems = sortedSelected.map { playlistTracks[$0] }
+        let remainingItems = playlistTracks.indices.filter { !selectedPlaylistIndices.contains($0) }.map { playlistTracks[$0] }
+        let updated = selectedItems + remainingItems
+        
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.80)) {
+            selectedPlaylistIndices = Set(0..<selectedItems.count)
+            lastSelectedPlaylistIndex = 0
+            persistPlaylistChanges(newTracks: updated)
+        }
+    }
+    
+    private func moveSelectedTracksToBottom() {
+        guard !selectedPlaylistIndices.isEmpty else { return }
+        let sortedSelected = playlistTracks.indices.filter { selectedPlaylistIndices.contains($0) }
+        guard !sortedSelected.isEmpty else { return }
+        
+        let selectedItems = sortedSelected.map { playlistTracks[$0] }
+        let remainingItems = playlistTracks.indices.filter { !selectedPlaylistIndices.contains($0) }.map { playlistTracks[$0] }
+        let updated = remainingItems + selectedItems
+        
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.80)) {
+            selectedPlaylistIndices = Set((remainingItems.count)..<updated.count)
+            lastSelectedPlaylistIndex = remainingItems.count
+            persistPlaylistChanges(newTracks: updated)
+        }
+    }
+    
+    private func moveSelectedTracksUp() {
+        guard !selectedPlaylistIndices.isEmpty else { return }
+        guard let minIdx = selectedPlaylistIndices.min(), minIdx > 0 else { return }
+        
+        var updated = playlistTracks
+        for i in 1..<updated.count {
+            if selectedPlaylistIndices.contains(i) && !selectedPlaylistIndices.contains(i - 1) {
+                var k = i
+                while k < updated.count && selectedPlaylistIndices.contains(k) {
+                    updated.swapAt(k, k - 1)
+                    k += 1
+                }
+            }
+        }
+        let newIndices = Set(selectedPlaylistIndices.map { $0 - 1 })
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.80)) {
+            selectedPlaylistIndices = newIndices
+            if let last = lastSelectedPlaylistIndex, last > 0 {
+                lastSelectedPlaylistIndex = last - 1
+            }
+            persistPlaylistChanges(newTracks: updated)
+        }
+    }
+    
+    private func moveSelectedTracksDown() {
+        guard !selectedPlaylistIndices.isEmpty else { return }
+        guard let maxIdx = selectedPlaylistIndices.max(), maxIdx < playlistTracks.count - 1 else { return }
+        
+        var updated = playlistTracks
+        for i in (0..<(updated.count - 1)).reversed() {
+            if selectedPlaylistIndices.contains(i) && !selectedPlaylistIndices.contains(i + 1) {
+                var k = i
+                while k >= 0 && selectedPlaylistIndices.contains(k) {
+                    updated.swapAt(k, k + 1)
+                    k -= 1
+                }
+            }
+        }
+        let newIndices = Set(selectedPlaylistIndices.map { $0 + 1 })
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.80)) {
+            selectedPlaylistIndices = newIndices
+            if let last = lastSelectedPlaylistIndex, last < playlistTracks.count - 1 {
+                lastSelectedPlaylistIndex = last + 1
+            }
+            persistPlaylistChanges(newTracks: updated)
+        }
+    }
+    
+    private func removeSelectedTracks() {
+        guard !selectedPlaylistIndices.isEmpty else { return }
+        let updated = playlistTracks.indices.filter { !selectedPlaylistIndices.contains($0) }.map { playlistTracks[$0] }
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.80)) {
+            selectedPlaylistIndices.removeAll()
+            lastSelectedPlaylistIndex = nil
+            persistPlaylistChanges(newTracks: updated)
+        }
     }
     
     // MARK: - Drag & Drop Organization & Transfer
@@ -296,6 +465,8 @@ public struct PlaylistsView: View {
             var updated = playlistTracks
             let item = updated.remove(at: fromIndex)
             updated.insert(item, at: toIndex)
+            selectedPlaylistIndices.removeAll()
+            lastSelectedPlaylistIndex = nil
             persistPlaylistChanges(newTracks: updated)
         }
     }
@@ -681,6 +852,8 @@ public struct PlaylistsView: View {
                                                 selectedPlaylist = pl
                                                 playlistTracks = pl.tracks
                                                 updateResolvedTracks()
+                                                selectedPlaylistIndices.removeAll()
+                                                lastSelectedPlaylistIndex = nil
                                             },
                                             onStartRename: {
                                                 startRenaming(pl, location: .row)
@@ -735,6 +908,16 @@ public struct PlaylistsView: View {
                             playlistDetailHeader(pl: pl)
                                 .padding(.horizontal, 4)
                                 .padding(.bottom, 2)
+                            
+                            // Batch Action Bar when tracks are selected
+                            if !selectedPlaylistIndices.isEmpty {
+                                batchSelectionActionBar
+                                    .padding(.horizontal, 4)
+                                    .transition(.asymmetric(
+                                        insertion: .opacity.combined(with: .scale(scale: 0.98, anchor: .top)),
+                                        removal: .opacity
+                                    ))
+                            }
                             
                             // Tracks List
                             if playlistTracks.isEmpty {
@@ -793,6 +976,8 @@ public struct PlaylistsView: View {
                                                     matchedTrack: matchedTrack,
                                                     isPlayingThis: isPlayingThis,
                                                     isDragSource: isDragSource,
+                                                    isSelected: selectedPlaylistIndices.contains(index),
+                                                    selectedCount: selectedPlaylistIndices.count,
                                                     otherPlaylists: otherPlaylists,
                                                     onPlay: {
                                                         if let tr = matchedTrack {
@@ -806,6 +991,12 @@ public struct PlaylistsView: View {
                                                     onStartDrag: {
                                                         draggedTrackIndex = index
                                                         draggedTrackPath = trackPath
+                                                    },
+                                                    onToggleSelect: {
+                                                        toggleRowSelection(at: index)
+                                                    },
+                                                    onSelectRange: {
+                                                        handleRowSelection(at: index, shiftPressed: true, cmdPressed: false)
                                                     },
                                                     onMoveUp: {
                                                         if index > 0 {
@@ -842,6 +1033,11 @@ public struct PlaylistsView: View {
                                                         updated.remove(at: index)
                                                         persistPlaylistChanges(newTracks: updated)
                                                     },
+                                                    onMoveSelectedToTop: moveSelectedTracksToTop,
+                                                    onMoveSelectedUp: moveSelectedTracksUp,
+                                                    onMoveSelectedDown: moveSelectedTracksDown,
+                                                    onMoveSelectedToBottom: moveSelectedTracksToBottom,
+                                                    onRemoveSelected: removeSelectedTracks,
                                                     onAddToPlaylist: { targetPl in
                                                         addTrackToPlaylist(trackPath, playlist: targetPl)
                                                     }
@@ -924,6 +1120,10 @@ public struct PlaylistsView: View {
         .onChange(of: activeDrive?.mountPoint) {
             cachedTrackLookup = PlaylistsView.buildLookupTable(tracks: libraryTracks)
             loadPlaylists()
+        }
+        .onChange(of: selectedPlaylist?.id) {
+            selectedPlaylistIndices.removeAll()
+            lastSelectedPlaylistIndex = nil
         }
         .sheet(isPresented: $showAddTrackSheet) {
             AddTracksModal(
@@ -1207,6 +1407,7 @@ public struct PlaylistsView: View {
                 Spacer(minLength: 8)
                 
                 playlistTrackCountPill
+                selectModeButton
                 sortMenuButton
                 addFromLibraryButton(compact: false)
             }
@@ -1223,6 +1424,7 @@ public struct PlaylistsView: View {
                 Spacer(minLength: 6)
                 
                 playlistTrackCountPill
+                selectModeButton
                 sortMenuButton
                 addFromLibraryButton(compact: true)
             }
@@ -1259,6 +1461,7 @@ public struct PlaylistsView: View {
                     
                     Spacer(minLength: 8)
                     
+                    selectModeButton
                     sortMenuButton
                     addFromLibraryButton(compact: false)
                 }
@@ -1295,6 +1498,7 @@ public struct PlaylistsView: View {
                     
                     Spacer(minLength: 6)
                     
+                    selectModeButton
                     sortMenuButton
                     addFromLibraryButton(compact: true)
                 }
@@ -1413,6 +1617,177 @@ public struct PlaylistsView: View {
         }
         .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 19))
         .fixedSize(horizontal: true, vertical: false)
+    }
+    
+    @ViewBuilder
+    private var selectModeButton: some View {
+        if !playlistTracks.isEmpty {
+            Button(action: selectAllTracks) {
+                HStack(spacing: 4.5) {
+                    Image(systemName: selectedPlaylistIndices.isEmpty ? "checklist" : (selectedPlaylistIndices.count == playlistTracks.count ? "checkmark.circle.fill" : "minus.circle.fill"))
+                        .font(.system(size: 11.5, weight: .semibold))
+                    Text(selectedPlaylistIndices.isEmpty ? "Select" : "\(selectedPlaylistIndices.count)")
+                        .font(.system(size: 12, weight: .medium))
+                }
+                .padding(.horizontal, 10)
+                .frame(height: 38)
+                .foregroundStyle(selectedPlaylistIndices.isEmpty ? WalkmanTheme.silverLight : WalkmanTheme.gold)
+            }
+            .buttonStyle(LiquidGlassButtonStyle(variant: selectedPlaylistIndices.isEmpty ? .glass : .prominent, cornerRadius: 19))
+            .help(selectedPlaylistIndices.isEmpty ? "Select All Tracks for Batch Reorganization" : "Toggle Track Selection")
+        }
+    }
+    
+    @ViewBuilder
+    private var batchSelectionActionBar: some View {
+        HStack(spacing: 8) {
+            // Count badge
+            HStack(spacing: 5) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(WalkmanTheme.gold)
+                Text("\(selectedPlaylistIndices.count) Selected")
+                    .font(WalkmanFont.calloutBold)
+                    .foregroundStyle(.white)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(WalkmanTheme.gold.opacity(0.18))
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(WalkmanTheme.gold.opacity(0.40), lineWidth: 0.85)
+            )
+            
+            Button(action: selectAllTracks) {
+                Text(selectedPlaylistIndices.count == playlistTracks.count ? "Deselect All" : "Select All")
+                    .font(WalkmanFont.caption)
+                    .foregroundStyle(WalkmanTheme.silverLight)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 4)
+            
+            Spacer(minLength: 6)
+            
+            let canMoveUp = selectedPlaylistIndices.min().map { $0 > 0 } ?? false
+            let canMoveDown = selectedPlaylistIndices.max().map { $0 < playlistTracks.count - 1 } ?? false
+            
+            // Move to Top Button (Prominent)
+            Button(action: moveSelectedTracksToTop) {
+                HStack(spacing: 5) {
+                    Image(systemName: "arrow.up.to.line")
+                        .font(.system(size: 11, weight: .bold))
+                    Text("Move to Top")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .padding(.horizontal, 12)
+                .frame(height: 32)
+                .foregroundStyle(canMoveUp ? Color(red: 20/255, green: 20/255, blue: 24/255) : WalkmanTheme.silverMuted.opacity(0.4))
+            }
+            .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 16))
+            .disabled(!canMoveUp)
+            .help("Move selected tracks to the very top of the playlist")
+            
+            // Up Button
+            Button(action: moveSelectedTracksUp) {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: 10, weight: .bold))
+                    Text("Up")
+                        .font(.system(size: 11.5, weight: .medium))
+                }
+                .padding(.horizontal, 9)
+                .frame(height: 32)
+                .foregroundStyle(canMoveUp ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted.opacity(0.4))
+            }
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 16))
+            .disabled(!canMoveUp)
+            .help("Shift selected tracks up by 1 position")
+            
+            // Down Button
+            Button(action: moveSelectedTracksDown) {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .bold))
+                    Text("Down")
+                        .font(.system(size: 11.5, weight: .medium))
+                }
+                .padding(.horizontal, 9)
+                .frame(height: 32)
+                .foregroundStyle(canMoveDown ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted.opacity(0.4))
+            }
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 16))
+            .disabled(!canMoveDown)
+            .help("Shift selected tracks down by 1 position")
+            
+            // To Bottom Button
+            Button(action: moveSelectedTracksToBottom) {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.down.to.line")
+                        .font(.system(size: 10, weight: .bold))
+                    Text("To Bottom")
+                        .font(.system(size: 11.5, weight: .medium))
+                }
+                .padding(.horizontal, 9)
+                .frame(height: 32)
+                .foregroundStyle(canMoveDown ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted.opacity(0.4))
+            }
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 16))
+            .disabled(!canMoveDown)
+            .help("Move selected tracks to the bottom of the playlist")
+            
+            Rectangle()
+                .fill(Color.white.opacity(0.12))
+                .frame(width: 1, height: 18)
+                .padding(.horizontal, 2)
+            
+            // Remove Button
+            Button(action: removeSelectedTracks) {
+                Image(systemName: "trash")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(Color.red.opacity(0.85))
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+            .help("Remove selected tracks from this playlist")
+            
+            // Dismiss Selection Button
+            Button(action: {
+                withAnimation(.spring(response: 0.20, dampingFraction: 0.75)) {
+                    selectedPlaylistIndices.removeAll()
+                    lastSelectedPlaylistIndex = nil
+                }
+            }) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(WalkmanTheme.silverMuted)
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+            .help("Dismiss selection")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            ZStack {
+                WalkmanTheme.card
+                Color.black.opacity(0.45)
+                LinearGradient(
+                    stops: [
+                        .init(color: .white.opacity(0.08), location: 0.0),
+                        .init(color: .clear, location: 1.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(WalkmanTheme.gold.opacity(0.35), lineWidth: 0.85)
+        )
+        .shadow(color: Color.black.opacity(0.35), radius: 6, x: 0, y: 3)
     }
 }
 
@@ -1625,24 +2000,52 @@ private struct PlaylistTrackRow: View {
     let matchedTrack: Track?
     let isPlayingThis: Bool
     var isDragSource: Bool = false
+    let isSelected: Bool
+    let selectedCount: Int
     let otherPlaylists: [Playlist]
     let onPlay: () -> Void
     let onStartDrag: () -> Void
+    let onToggleSelect: () -> Void
+    let onSelectRange: () -> Void
     let onMoveUp: () -> Void
     let onMoveDown: () -> Void
     let onMoveToTop: () -> Void
     let onMoveToBottom: () -> Void
     let onRemove: () -> Void
+    let onMoveSelectedToTop: () -> Void
+    let onMoveSelectedUp: () -> Void
+    let onMoveSelectedDown: () -> Void
+    let onMoveSelectedToBottom: () -> Void
+    let onRemoveSelected: () -> Void
     var onAddToPlaylist: ((Playlist) -> Void)? = nil
     
     @State private var isHovered = false
 
     var body: some View {
-        HStack(spacing: 14) {
-            Text(String(format: "%02d", index + 1))
-                .font(WalkmanFont.mono)
-                .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
-                .frame(width: 28, alignment: .trailing)
+        HStack(spacing: 11) {
+            // Checkbox button for batch selection (integrated circle & track number hit target)
+            Button(action: {
+                if NSEvent.modifierFlags.contains(.shift) {
+                    onSelectRange()
+                } else {
+                    onToggleSelect()
+                }
+            }) {
+                HStack(spacing: 7) {
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 14, weight: isSelected ? .bold : .medium))
+                        .foregroundStyle(isSelected ? WalkmanTheme.gold : (isHovered ? WalkmanTheme.silverLight.opacity(0.85) : WalkmanTheme.silverMuted.opacity(0.40)))
+                        .frame(width: 20, height: 20)
+                    
+                    Text(String(format: "%02d", index + 1))
+                        .font(WalkmanFont.mono)
+                        .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : (isSelected ? WalkmanTheme.gold : WalkmanTheme.silverMuted))
+                        .frame(width: 24, alignment: .trailing)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(isSelected ? "Deselect Track (Shift-click to select range)" : "Select Track for Batch Reorganization (Shift-click to select range)")
             
             // Play / Note button
             Button(action: onPlay) {
@@ -1698,6 +2101,14 @@ private struct PlaylistTrackRow: View {
                         .truncationMode(.tail)
                 }
             }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if NSEvent.modifierFlags.contains(.shift) {
+                    onSelectRange()
+                } else if NSEvent.modifierFlags.contains(.command) {
+                    onToggleSelect()
+                }
+            }
             
             Spacer()
             
@@ -1727,7 +2138,21 @@ private struct PlaylistTrackRow: View {
         .padding(.vertical, 8.5)
         .background(
             ZStack {
-                if isPlayingThis {
+                if isSelected {
+                    WalkmanTheme.gold.opacity(0.12)
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: WalkmanTheme.gold.opacity(0.18), location: 0.0),
+                                .init(color: .clear, location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 5.5)
+                        Spacer(minLength: 0)
+                    }
+                } else if isPlayingThis {
                     WalkmanTheme.cardHover
                     VStack(spacing: 0) {
                         LinearGradient(
@@ -1764,10 +2189,12 @@ private struct PlaylistTrackRow: View {
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(
-                    isPlayingThis ?
-                        Color.white.opacity(0.20) :
-                        (isHovered ? Color.white.opacity(0.09) : Color.white.opacity(0.03)),
-                    lineWidth: 0.85
+                    isSelected ?
+                        WalkmanTheme.gold.opacity(0.40) :
+                        (isPlayingThis ?
+                            Color.white.opacity(0.20) :
+                            (isHovered ? Color.white.opacity(0.09) : Color.white.opacity(0.03))),
+                    lineWidth: isSelected ? 1.0 : 0.85
                 )
         )
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -1787,54 +2214,86 @@ private struct PlaylistTrackRow: View {
             }
         }
         .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+        .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isSelected)
         .onTapGesture(count: 2) {
             onPlay()
         }
         .contextMenu {
-            if matchedTrack != nil {
-                Button(action: onPlay) {
-                    Label("Play Now", systemImage: "play.fill")
-                }
-                Divider()
-            }
-            
-            if !otherPlaylists.isEmpty {
-                Menu {
-                    ForEach(otherPlaylists) { pl in
-                        Button(pl.name) {
-                            onAddToPlaylist?(pl)
-                        }
+            if isSelected && selectedCount > 1 {
+                Section("Batch Actions (\(selectedCount) Selected)") {
+                    Button(action: onMoveSelectedToTop) {
+                        Label("Move \(selectedCount) Tracks to Top", systemImage: "arrow.up.to.line")
                     }
-                } label: {
-                    Label("Add to Another Playlist", systemImage: "text.badge.plus")
+                    Button(action: onMoveSelectedUp) {
+                        Label("Move \(selectedCount) Tracks Up", systemImage: "chevron.up")
+                    }
+                    Button(action: onMoveSelectedDown) {
+                        Label("Move \(selectedCount) Tracks Down", systemImage: "chevron.down")
+                    }
+                    Button(action: onMoveSelectedToBottom) {
+                        Label("Move \(selectedCount) Tracks to Bottom", systemImage: "arrow.down.to.line")
+                    }
                 }
+                
                 Divider()
-            }
-            
-            Button(action: onMoveToTop) {
-                Label("Move to Top", systemImage: "arrow.up.to.line")
-            }
-            .disabled(index == 0)
-            
-            Button(action: onMoveUp) {
-                Label("Move Up", systemImage: "chevron.up")
-            }
-            .disabled(index == 0)
-            
-            Button(action: onMoveDown) {
-                Label("Move Down", systemImage: "chevron.down")
-            }
-            .disabled(index == totalCount - 1)
-            
-            Button(action: onMoveToBottom) {
-                Label("Move to Bottom", systemImage: "arrow.down.to.line")
-            }
-            .disabled(index == totalCount - 1)
-            
-            Divider()
-            
-            Button(role: .destructive, action: onRemove) {
-                Label("Remove from Playlist", systemImage: "trash")
+                
+                Button(action: onToggleSelect) {
+                    Label("Deselect This Track", systemImage: "circle")
+                }
+                
+                Button(role: .destructive, action: onRemoveSelected) {
+                    Label("Remove \(selectedCount) Tracks from Playlist", systemImage: "trash")
+                }
+            } else {
+                if matchedTrack != nil {
+                    Button(action: onPlay) {
+                        Label("Play Now", systemImage: "play.fill")
+                    }
+                    Divider()
+                }
+                
+                if !otherPlaylists.isEmpty {
+                    Menu {
+                        ForEach(otherPlaylists) { pl in
+                            Button(pl.name) {
+                                onAddToPlaylist?(pl)
+                            }
+                        }
+                    } label: {
+                        Label("Add to Another Playlist", systemImage: "text.badge.plus")
+                    }
+                    Divider()
+                }
+                
+                Button(action: onMoveToTop) {
+                    Label("Move to Top", systemImage: "arrow.up.to.line")
+                }
+                .disabled(index == 0)
+                
+                Button(action: onMoveUp) {
+                    Label("Move Up", systemImage: "chevron.up")
+                }
+                .disabled(index == 0)
+                
+                Button(action: onMoveDown) {
+                    Label("Move Down", systemImage: "chevron.down")
+                }
+                .disabled(index == totalCount - 1)
+                
+                Button(action: onMoveToBottom) {
+                    Label("Move to Bottom", systemImage: "arrow.down.to.line")
+                }
+                .disabled(index == totalCount - 1)
+                
+                Divider()
+                
+                Button(action: onToggleSelect) {
+                    Label("Select Track", systemImage: "checkmark.circle")
+                }
+                
+                Button(role: .destructive, action: onRemove) {
+                    Label("Remove from Playlist", systemImage: "trash")
+                }
             }
         }
     }
