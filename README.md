@@ -23,7 +23,7 @@ Walkman Studio automates multi-device dual-drive management, Sony 12 Tone / Sens
 Walkman Studio focuses strictly on safe, non-destructive music library management, pristine audio preservation, and seamless hardware compatibility.
 
 <p align="center">
-  <img src="assets/sc/01_device_overview.png" alt="Walkman Studio Interface" width="100%" />
+  <img src="assets/sc/01_device_overview_dashboard.png" alt="Walkman Studio Interface" width="100%" />
 </p>
 
 ---
@@ -167,7 +167,7 @@ Sony Walkman digital audio players deliver exceptional audio fidelity via their 
 ## Application Screenshots
 
 <p align="center">
-  <img src="assets/sc/01_device_overview.png" alt="Device Overview Dashboard" width="100%" />
+  <img src="assets/sc/01_device_overview_dashboard.png" alt="Device Overview Dashboard" width="100%" />
 </p>
 <p align="center"><em><strong>01. Device Overview Dashboard:</strong> Real-time dual-drive gauges (Internal Flash & MicroSD), storage partition metrics, device model identity, Sony OS & Android Hardware Compliance status, dotfile cleaning, safe unmount, and multi-device switcher.</em></p>
 
@@ -409,7 +409,7 @@ Walkman-Studio/
 │   ├── walkman_device.png                # Sony Walkman hardware artwork
 │   ├── walkman_device_cropped.png        # Cropped device preview icon
 │   └── sc/                               # 14 High-resolution Retina application screenshots
-│       ├── 01_device_overview.png, 02_local_library.png, 03_senseme_channels.png
+│       ├── 01_device_overview_dashboard.png, 02_local_library.png, 03_senseme_channels.png
 │       ├── 04_fullscreen_now_playing.png, 05_albums_grid.png, 06_artists_browser.png
 │       ├── 07_hires_audio.png, 08_playlists.png, 09_duplicate_cleaner.png
 │       ├── 10_transfer_queue.png, 11_backup_restore.png, 12_album_metadata_editor.png
