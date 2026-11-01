@@ -402,26 +402,66 @@ public final class WalkmanEngine: @unchecked Sendable {
     // Hardware Constraint 6: macOS Ghost File Cleanup & Unmount
     // -----------------------------------------------------------------------
     public func cleanGhostFiles(mountPoint: String) async -> (deleted: [String], success: Bool) {
+        guard FileManager.default.fileExists(atPath: mountPoint) else {
+            return ([], true)
+        }
+
         var deleted: [String] = []
 
-        // 1. Run dot_clean -m
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/dot_clean")
-        process.arguments = ["-m", mountPoint]
-        try? process.run()
-        process.waitUntilExit()
+        // 1. Locate and run dot_clean -m with safety watchdog
+        let dotCleanCandidates = ["/usr/sbin/dot_clean", "/usr/bin/dot_clean"]
+        if let dotCleanPath = dotCleanCandidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: dotCleanPath)
+            process.arguments = ["-m", mountPoint]
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = pipe
 
-        // 2. Remove any remaining macOS shadow files
+            do {
+                try process.run()
+
+                // 10-second safety watchdog: terminate if dot_clean hangs so eject is never blocked
+                let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
+                timer.schedule(deadline: .now() + 10.0)
+                timer.setEventHandler { [weak process] in
+                    if process?.isRunning == true {
+                        process?.terminate()
+                    }
+                }
+                timer.resume()
+
+                process.waitUntilExit()
+                timer.cancel()
+            } catch {
+                // If dot_clean fails to launch, proceed to manual cleanup without blocking
+            }
+        }
+
+        // 2. Remove remaining macOS shadow files and ._* metadata
         let targetNames: Set<String> = [".ds_store"]
         let targetDirs: Set<String> = [".spotlight-v100", ".trashes", ".fseventsd"]
 
         let fileManager = FileManager.default
         let rootURL = URL(fileURLWithPath: mountPoint)
 
-        if let enumerator = fileManager.enumerator(at: rootURL, includingPropertiesForKeys: nil, options: []) {
+        if let enumerator = fileManager.enumerator(
+            at: rootURL,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsPackageDescendants]
+        ) {
             while let fileURL = enumerator.nextObject() as? URL {
                 let name = fileURL.lastPathComponent.lowercased()
-                if targetNames.contains(name) || fileURL.lastPathComponent.hasPrefix("._") || targetDirs.contains(name) {
+                let isDir = (try? fileURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+
+                if isDir && targetDirs.contains(name) {
+                    enumerator.skipDescendants()
+                    try? fileManager.removeItem(at: fileURL)
+                    deleted.append(fileURL.path)
+                    continue
+                }
+
+                if targetNames.contains(name) || fileURL.lastPathComponent.hasPrefix("._") {
                     try? fileManager.removeItem(at: fileURL)
                     deleted.append(fileURL.path)
                 }
@@ -432,32 +472,73 @@ public final class WalkmanEngine: @unchecked Sendable {
     }
 
     public func unmountDrive(mountPoint: String) async -> (success: Bool, message: String) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/diskutil")
-        process.arguments = ["unmount", mountPoint]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
+        guard FileManager.default.fileExists(atPath: mountPoint) else {
+            return (true, "Volume already unmounted")
+        }
+
+        let volURL = URL(fileURLWithPath: mountPoint)
+
+        // 1. Try native Cocoa NSWorkspace unmount & eject first (same as Finder Eject)
+        var cocoaSucceeded = false
+        var cocoaError: String = ""
 
         do {
-            try process.run()
-            process.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if process.terminationStatus == 0 {
-                return (true, output)
-            } else {
-                // Try diskutil unmountDisk force
-                let p2 = Process()
-                p2.executableURL = URL(fileURLWithPath: "/usr/sbin/diskutil")
-                p2.arguments = ["unmountDisk", "force", mountPoint]
-                try? p2.run()
-                p2.waitUntilExit()
-                return (p2.terminationStatus == 0, output)
-            }
+            try NSWorkspace.shared.unmountAndEjectDevice(at: volURL)
+            cocoaSucceeded = true
         } catch {
-            return (false, error.localizedDescription)
+            cocoaError = error.localizedDescription
         }
+
+        if cocoaSucceeded || !FileManager.default.fileExists(atPath: mountPoint) {
+            return (true, "Volume successfully ejected by macOS")
+        }
+
+        // 2. Fallback to /usr/sbin/diskutil unmount with timeout
+        let diskutilCandidates = ["/usr/sbin/diskutil", "/usr/bin/diskutil"]
+        guard let diskutilPath = diskutilCandidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+            return (false, cocoaError.isEmpty ? "diskutil not found" : cocoaError)
+        }
+
+        func runDiskutil(arguments: [String], timeout: Double) -> (success: Bool, output: String) {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: diskutilPath)
+            process.arguments = arguments
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = pipe
+
+            do {
+                try process.run()
+
+                let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
+                timer.schedule(deadline: .now() + timeout)
+                timer.setEventHandler { [weak process] in
+                    if process?.isRunning == true {
+                        process?.terminate()
+                    }
+                }
+                timer.resume()
+
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                process.waitUntilExit()
+                timer.cancel()
+
+                let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return (process.terminationStatus == 0, output)
+            } catch {
+                return (false, error.localizedDescription)
+            }
+        }
+
+        let res1 = runDiskutil(arguments: ["unmount", mountPoint], timeout: 5.0)
+        if res1.success || !FileManager.default.fileExists(atPath: mountPoint) {
+            return (true, res1.output)
+        }
+
+        // 3. Fallback: Force unmount if normal unmount failed
+        let res2 = runDiskutil(arguments: ["unmountDisk", "force", mountPoint], timeout: 5.0)
+        let isNowGone = !FileManager.default.fileExists(atPath: mountPoint)
+        return (res2.success || isNowGone, res2.output.isEmpty ? res1.output : res2.output)
     }
 
     public func cleanAndEject(drives: [WalkmanDrive]) async -> (deleted: [String], unmountResults: [String: Bool]) {
