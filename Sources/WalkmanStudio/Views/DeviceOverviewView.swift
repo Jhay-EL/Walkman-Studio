@@ -589,7 +589,7 @@ public struct DeviceOverviewView: View {
                         Image(systemName: "checkmark.shield.fill")
                             .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(Color.green)
-                        Text("SONY HARDWARE COMPLIANCE")
+                        Text(deviceInfo?.isNonAndroid == false ? "SONY ANDROID HARDWARE COMPLIANCE" : "SONY NON-ANDROID HARDWARE COMPLIANCE")
                             .font(WalkmanFont.sectionHeader)
                             .foregroundStyle(.secondary)
                             .tracking(0.6)
@@ -634,8 +634,10 @@ public struct DeviceOverviewView: View {
             VStack(spacing: 0) {
                 ComplianceRow(
                     title: "Baseline RGB JPEG Artwork",
-                    detail: "Non-progressive, no CMYK, max 800×800 px encoded via Apple ImageIO",
-                    badge: "800×800 px • ImageIO",
+                    detail: deviceInfo?.isNonAndroid == false ?
+                        "Non-progressive, no CMYK, max 1280×720 / 800×800 px encoded via Apple ImageIO" :
+                        "Non-progressive, no CMYK, max 800×800 px encoded via Apple ImageIO",
+                    badge: deviceInfo?.isNonAndroid == false ? "RGB • ImageIO" : "800×800 px • ImageIO",
                     isEnforced: true
                 )
                 
@@ -643,7 +645,9 @@ public struct DeviceOverviewView: View {
                 
                 ComplianceRow(
                     title: "Strict ID3v2.3 (UTF-16) Tagging",
-                    detail: "MP3s written with ID3v2.3 encoding=1 to prevent Sony player freeze bugs",
+                    detail: deviceInfo?.isNonAndroid == false ?
+                        "MP3s written with ID3v2.3 encoding=1 for standard Sony Music Player on Android" :
+                        "MP3s written with ID3v2.3 encoding=1 to prevent Sony player freeze bugs",
                     badge: "ID3v2.3 • UTF-16",
                     isEnforced: true
                 )
@@ -670,7 +674,9 @@ public struct DeviceOverviewView: View {
                 
                 ComplianceRow(
                     title: "macOS Shadow File Purging",
-                    detail: "dot_clean -m automatically merges AppleDouble forks and removes ._* / .DS_Store",
+                    detail: deviceInfo?.isNonAndroid == false ?
+                        "dot_clean -m automatically purges ._* / .DS_Store to prevent Android ghost tracks" :
+                        "dot_clean -m automatically merges AppleDouble forks and removes ._* / .DS_Store",
                     badge: "dot_clean • No ._*",
                     isEnforced: true
                 )
