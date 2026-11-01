@@ -83,6 +83,8 @@ Sony Walkman digital audio players deliver exceptional audio fidelity via their 
   * `FLAC 24-bit / 96kHz` (audiophile Studio Master lossless stream)
   * `MP3 320kbps` (maximum-bitrate CBR MP3 with UTF-16 tags)
 * **Duplicate Import Guardrails:** Automatically detects if tracks already exist on the target Walkman volume before transfer, presenting an intelligent resolution sheet (*Skip Existing*, *Overwrite*, or *Keep Both*).
+* **Single-Pass Accelerated Imports:** Multi-threaded metadata preparation executes in a single concurrent pass, eliminating redundant re-scanning and halving wait times when importing music libraries with duplicates.
+* **Streamlined 1-Click Transfers:** Immediate transfer initiation with real-time transfer progress feedback.
 * **Automated Filesystem Sanitization:** Strips illegal FAT32/exFAT characters (`< > : " / \ | ? *`), trailing periods, and spaces, organizing songs into clean `/MUSIC/Artist/Album/NN - Title.ext` hierarchies.
 
 ### 5. Fullscreen Player & Real-Time Synchronized Lyrics (.LRC)
@@ -144,9 +146,10 @@ Sony Walkman digital audio players deliver exceptional audio fidelity via their 
 * **High-Security Cryptographic Packaging (AES-256-GCM):** Optional cryptographic packaging with **PBKDF2-HMAC-SHA256** (100,000 rounds) key derivation and **AES-256-GCM** authenticated stream cipher for zero-knowledge storage.
 * **Safe Walkman Restoration:** Restores backups into any connected Walkman partition with capacity verification, directory hierarchy reconstruction, and `dot_clean -m` cleanup.
 
-### 12. CRLF Relative POSIX .M3U8 Playlist Engine
-* Creates and edits playlists stored in `/MUSIC/` or `/Music/`.
-* Enforces relative POSIX paths (`Artist/Album/Track.flac`) and strict **CRLF** (`\r\n`) line endings required by Sony Walkman firmware for playlist recognition.
+### 12. Hardware-Compliant Playlists & Batch Track Reorganization
+* **CRLF Relative POSIX `.M3U8` Standard:** Creates and edits playlists stored in `/MUSIC/` or `/Music/`, enforcing relative POSIX paths (`Artist/Album/Track.flac`) and strict **CRLF** (`\r\n`) line endings required by Sony Walkman firmware.
+* **Multi-Track Selection:** Dedicated selection checkmarks on each track row, keyboard modifier support (**Shift-click** for continuous range selection, **Cmd-click** for individual toggles), and a header "Select" button.
+* **Liquid Glass Batch Action Bar:** Floating action bar providing one-click **"Move to Top"** batch reorganization, group Up/Down shifting, "To Bottom", and batch removal with instant Walkman `.m3u8` synchronization.
 
 ### 13. macOS Dotfile Purge & Safe Eject
 * Automatically runs `/usr/bin/dot_clean -m` to merge AppleDouble resource forks before unmounting.
@@ -155,7 +158,7 @@ Sony Walkman digital audio players deliver exceptional audio fidelity via their 
 
 ### 14. Optical Liquid Glass & Obsidian Design System
 * **Sony Signature Series Aesthetic:** Solid matte obsidian surfaces (#101114) and brushed aluminum accents inspired by the Sony Walkman Signature Series aluminum chassis.
-* **Optical Liquid Glass Controls:** Elegant frosted glass materials with delicate specular reflection highlights, glass segmented sliders, and tactile pill badges (see [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)).
+* **Optical Liquid Glass Controls:** Elegant frosted glass materials with delicate specular reflection highlights, glass segmented sliders, and tactile pill badges.
 * **Unified 38pt Baseline:** All interactive toolbar controls, search bars, sort menus, and primary buttons share a consistent **38pt height baseline**.
 * **Protected Minimum Window Size:** Enforces a minimum window size constraint ($1366\times 768$ pt) so buttons, storage gauges, table columns, and sidebar labels never get squished or clipped.
 
@@ -166,84 +169,98 @@ Sony Walkman digital audio players deliver exceptional audio fidelity via their 
 <p align="center">
   <img src="assets/sc/01_device_overview.png" alt="Device Overview Dashboard" width="100%" />
 </p>
-<p align="center"><em><strong>01. Device Overview Dashboard:</strong> Real-time dual-drive gauges (Internal Flash & MicroSD), storage partition metrics, device model identity, dotfile cleaning, safe unmount, and multi-device switcher.</em></p>
+<p align="center"><em><strong>01. Device Overview Dashboard:</strong> Real-time dual-drive gauges (Internal Flash & MicroSD), storage partition metrics, device model identity, Sony OS & Android Hardware Compliance status, dotfile cleaning, safe unmount, and multi-device switcher.</em></p>
 
 <br />
 
 <p align="center">
-  <img src="assets/sc/02_library_browser.png" alt="Library Browser & SenseMe Analysis" width="100%" />
+  <img src="assets/sc/02_local_library.png" alt="Local Music Library" width="100%" />
 </p>
-<p align="center"><em><strong>02. Songs Browser & 12 Tone / SenseMe™ Analysis:</strong> Multi-column sortable song table, format filter chips (FLAC, MP3, Hi-Res), one-click 12 Tone SenseMe™ batch analysis, and view-only Track Details inspector with live synchronized lyrics.</em></p>
+<p align="center"><em><strong>02. Local Music Library:</strong> Mac-native music database managing local collections independently of connected devices, with folder import indexing and direct one-click Walkman synchronization.</em></p>
 
 <br />
 
 <p align="center">
-  <img src="assets/sc/03_albums_grid.png" alt="Albums Artwork Grid" width="100%" />
+  <img src="assets/sc/03_senseme_channels.png" alt="SensMe Mood Channels Player" width="100%" />
 </p>
-<p align="center"><em><strong>03. Albums Artwork Grid:</strong> High-performance album browser with cover art caching, year and track count badges, audio format filters, and album detail drill-down.</em></p>
+<p align="center"><em><strong>03. SensMe™ Mood Channels Player:</strong> Interactive 3D carousel cover flow browsing the 13 official Sony Walkman mood channels with atmospheric background artwork, gapless playback, and synchronized live lyrics.</em></p>
 
 <br />
 
 <p align="center">
-  <img src="assets/sc/04_artists_browser.png" alt="Artists Discography Browser" width="100%" />
+  <img src="assets/sc/04_fullscreen_now_playing.png" alt="Fullscreen Now Playing & Live Lyrics" width="100%" />
 </p>
-<p align="center"><em><strong>04. Artists Discography Browser:</strong> Master-detail discography view grouping tracks by artist and album with circular artist avatars.</em></p>
+<p align="center"><em><strong>04. Fullscreen Now Playing & Live Lyrics:</strong> Immersive fullscreen player with dynamic ambient lighting, high-contrast karaoke-style autoscrolling lyrics, and playback transport controls.</em></p>
 
 <br />
 
 <p align="center">
-  <img src="assets/sc/05_hires_audio.png" alt="Hi-Res Studio Masters" width="100%" />
+  <img src="assets/sc/05_albums_grid.png" alt="Albums Artwork Grid" width="100%" />
 </p>
-<p align="center"><em><strong>05. Hi-Res Audio Studio Masters:</strong> Dedicated audiophile view filtering exclusively for 24-bit/96kHz+ lossless streams calibrated for the Sony S-Master HX DAC.</em></p>
+<p align="center"><em><strong>05. Albums Artwork Grid:</strong> High-performance album browser with cover art caching, year and track count badges, audio format filters (FLAC, MP3, M4A, Hi-Res), and album detail drill-downs.</em></p>
 
 <br />
 
 <p align="center">
-  <img src="assets/sc/06_playlists.png" alt="Playlists Engine" width="100%" />
+  <img src="assets/sc/06_artists_browser.png" alt="Artists Discography Browser" width="100%" />
 </p>
-<p align="center"><em><strong>06. Hardware-Compliant Playlists Engine:</strong> Interactive playlist manager enforcing strict CRLF (`\r\n`) line endings and relative POSIX paths required by Sony Walkman firmware.</em></p>
+<p align="center"><em><strong>06. Artists Discography Browser:</strong> Master-detail discography view grouping releases by artist with circular avatars, complete album listings, and playback controls.</em></p>
 
 <br />
 
 <p align="center">
-  <img src="assets/sc/07_duplicate_cleaner.png" alt="Duplicate Tracks Cleaner" width="100%" />
+  <img src="assets/sc/07_hires_audio.png" alt="Hi-Res Audio Studio Masters" width="100%" />
 </p>
-<p align="center"><em><strong>07. Cross-Drive Duplicate Cleaner:</strong> Concurrently inspects Internal Flash and MicroSD expansion to detect redundant songs, display recoverable gigabytes, and perform one-click "Keep Best Quality" or "Keep on SD Card" resolution.</em></p>
+<p align="center"><em><strong>07. Hi-Res Audio Studio Masters:</strong> Dedicated audiophile view filtering exclusively for 24-bit/96kHz+ lossless streams calibrated for the Sony S-Master HX DAC and balanced outputs.</em></p>
 
 <br />
 
 <p align="center">
-  <img src="assets/sc/08_transfer_queue.png" alt="Batch Transfer Queue" width="100%" />
+  <img src="assets/sc/08_playlists.png" alt="Playlists Engine & Batch Track Reorganization" width="100%" />
 </p>
-<p align="center"><em><strong>08. Batch Audio Transcoding & Transfer Queue:</strong> Drag-and-drop batch queue with integrated FFmpeg presets (Bit-perfect copy, FLAC 16/24-bit, MP3), dual-root routing (`/MUSIC/` vs. `/LEARNING/`), and automatic FAT32 sanitization.</em></p>
+<p align="center"><em><strong>08. Playlists Engine & Batch Reorganization:</strong> Multi-track selection checkboxes, Shift/Cmd range selection, and Liquid Glass batch action bar with one-click "Move to Top" reorganization and CRLF POSIX `.m3u8` synchronization.</em></p>
 
 <br />
 
 <p align="center">
-  <img src="assets/sc/09_backup_restore.png" alt="Walkman Backup & Restore Studio" width="100%" />
+  <img src="assets/sc/09_duplicate_cleaner.png" alt="Duplicates Studio" width="100%" />
 </p>
-<p align="center"><em><strong>09. Walkman Backup & Restore Studio:</strong> Safeguard or restore your Walkman library locally to your Mac or external drive with 5 granular scopes and optional AES-256-GCM encryption.</em></p>
+<p align="center"><em><strong>09. Same-Storage Duplicates Studio:</strong> Partition-isolated duplicate track detection across Internal Flash and MicroSD, with Exact Same Album vs Cross-Album scopes, recoverable gigabytes calculation, and Auto-Resolve Quality.</em></p>
 
 <br />
 
 <p align="center">
-  <img src="assets/sc/10_song_metadata_editor.png" alt="Song Metadata & Lyrics Editor" width="100%" />
+  <img src="assets/sc/10_transfer_queue.png" alt="Batch Audio Transcoding & Transfer Queue" width="100%" />
 </p>
-<p align="center"><em><strong>10. Standalone Song Metadata & Lyrics Editor:</strong> Dedicated modal editor for Title, Artist, Album, Year, Genre, drag-and-drop Baseline JPEG cover art, and integrated online LRCLIB synchronized lyrics search.</em></p>
+<p align="center"><em><strong>10. Batch Audio Transcoding & Transfer Queue:</strong> Drag-and-drop batch queue with integrated FFmpeg presets (Bit-perfect copy, FLAC 16/24-bit, MP3), dual-root routing (`/MUSIC/` vs `/LEARNING/`), single-pass fast import, and real-time transfer progress.</em></p>
 
 <br />
 
 <p align="center">
-  <img src="assets/sc/11_album_metadata_editor.png" alt="Album Metadata Editor" width="100%" />
+  <img src="assets/sc/11_backup_restore.png" alt="Walkman Backup & Restore Studio" width="100%" />
 </p>
-<p align="center"><em><strong>11. Standalone Bulk Album Metadata Editor:</strong> Batch update album tags across all constituent songs, embed compliant artwork, and renumber tracks automatically.</em></p>
+<p align="center"><em><strong>11. Walkman Backup & Restore Studio:</strong> Safeguard or restore your Walkman library locally to your Mac or external drive with 5 granular scopes and optional PBKDF2-HMAC-SHA256 + AES-256-GCM authenticated encryption.</em></p>
 
 <br />
 
 <p align="center">
-  <img src="assets/sc/12_trim_and_cut.png" alt="Interactive Trim & Cut Audio Studio" width="100%" />
+  <img src="assets/sc/12_album_metadata_editor.png" alt="Standalone Bulk Album Metadata Editor" width="100%" />
 </p>
-<p align="center"><em><strong>12. Interactive Trim & Cut Audio Studio:</strong> High-precision waveform editor with Trim/Cut modes, millisecond steppers, L/R channel swapping, mono downmix, 180° phase inversion, and smooth fade curves.</em></p>
+<p align="center"><em><strong>12. Standalone Bulk Album Metadata Editor:</strong> Batch update album tags across all constituent songs, embed compliant Baseline JPEG artwork, and renumber tracks automatically.</em></p>
+
+<br />
+
+<p align="center">
+  <img src="assets/sc/13_song_metadata_editor.png" alt="Standalone Song Metadata & Lyrics Editor" width="100%" />
+</p>
+<p align="center"><em><strong>13. Standalone Song Metadata & Lyrics Editor:</strong> Dedicated modal editor for Title, Artist, Album, Year, Genre, drag-and-drop Baseline JPEG cover art, and integrated online LRCLIB synchronized lyrics search.</em></p>
+
+<br />
+
+<p align="center">
+  <img src="assets/sc/14_trim_and_cut.png" alt="Interactive Trim & Cut Audio Studio" width="100%" />
+</p>
+<p align="center"><em><strong>14. Interactive Trim & Cut Audio Studio:</strong> High-precision CoreAudio waveform editor with Trim/Cut modes, millisecond steppers, L/R channel routing, mono downmix, 180° phase inversion, and smooth fade curves.</em></p>
 
 ---
 
@@ -320,13 +337,13 @@ Pre-built `.dmg` disk images and `.zip` standalone archives are available for al
 
 | Package | Architecture | Supported Mac Models | Primary Download (GitHub) | Mirror Download (Google Drive) |
 | :--- | :--- | :--- | :--- | :--- |
-| **Apple Silicon DMG** | `arm64` | MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4) | [Walkman-Studio-3.0.0-arm64.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.0.0/Walkman-Studio-3.0.0-arm64.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1sPALywphDMWHfE7RzliWKuW4y1fcMdSt?usp=share_link) |
-| **Intel Mac DMG** | `x86_64` | Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac mini, Mac Pro | [Walkman-Studio-3.0.0-intel.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.0.0/Walkman-Studio-3.0.0-intel.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1sPALywphDMWHfE7RzliWKuW4y1fcMdSt?usp=share_link) |
-| **Universal 2 DMG** | `arm64` + `x86_64` | Universal package running natively on all Macs (macOS 13.0+) | [Walkman-Studio-3.0.0-universal.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.0.0/Walkman-Studio-3.0.0-universal.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1sPALywphDMWHfE7RzliWKuW4y1fcMdSt?usp=share_link) |
+| **Apple Silicon DMG** | `arm64` | MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4) | [Walkman-Studio-3.0.0-arm64.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.0.0/Walkman-Studio-3.0.0-arm64.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1kb0z4Doik4ETlugIEnmDuMV1ZSYat-df?usp=share_link) |
+| **Intel Mac DMG** | `x86_64` | Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac mini, Mac Pro | [Walkman-Studio-3.0.0-intel.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.0.0/Walkman-Studio-3.0.0-intel.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1kb0z4Doik4ETlugIEnmDuMV1ZSYat-df?usp=share_link) |
+| **Universal 2 DMG** | `arm64` + `x86_64` | Universal package running natively on all Macs (macOS 13.0+) | [Walkman-Studio-3.0.0-universal.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.0.0/Walkman-Studio-3.0.0-universal.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1kb0z4Doik4ETlugIEnmDuMV1ZSYat-df?usp=share_link) |
 
 > [!NOTE]
 > **Alternative Download Mirror:**
-> If the GitHub Releases page is inaccessible or returns an error, all release packages, `.dmg` installers, standalone `.zip` archives, and cryptographic checksums are directly available on our **[Google Drive Release Mirror](https://drive.google.com/drive/folders/1sPALywphDMWHfE7RzliWKuW4y1fcMdSt?usp=share_link)**.
+> If the GitHub Releases page is inaccessible or returns an error, all release packages, `.dmg` installers, standalone `.zip` archives, and cryptographic checksums are directly available on our **[Google Drive Release Mirror](https://drive.google.com/drive/folders/1kb0z4Doik4ETlugIEnmDuMV1ZSYat-df?usp=share_link)**.
 
 > [!TIP]
 > **Which package should I choose?**
@@ -391,11 +408,12 @@ Walkman-Studio/
 │   │   └── nw-ws410.png, nw-ws620.png, nw-e390.png, nw-s310.png, nw-b180.png
 │   ├── walkman_device.png                # Sony Walkman hardware artwork
 │   ├── walkman_device_cropped.png        # Cropped device preview icon
-│   └── sc/                               # 12 High-resolution Retina application screenshots
-│       ├── 01_device_overview.png, 02_library_browser.png, 03_albums_grid.png
-│       ├── 04_artists_browser.png, 05_hires_audio.png, 06_playlists.png
-│       ├── 07_duplicate_cleaner.png, 08_transfer_queue.png, 09_backup_restore.png
-│       └── 10_song_metadata_editor.png, 11_album_metadata_editor.png, 12_trim_and_cut.png
+│   └── sc/                               # 14 High-resolution Retina application screenshots
+│       ├── 01_device_overview.png, 02_local_library.png, 03_senseme_channels.png
+│       ├── 04_fullscreen_now_playing.png, 05_albums_grid.png, 06_artists_browser.png
+│       ├── 07_hires_audio.png, 08_playlists.png, 09_duplicate_cleaner.png
+│       ├── 10_transfer_queue.png, 11_backup_restore.png, 12_album_metadata_editor.png
+│       └── 13_song_metadata_editor.png, 14_trim_and_cut.png
 ├── Sources/
 │   └── WalkmanStudio/
 │       ├── WalkmanStudioApp.swift        # Main app entry point & minimum window constraints

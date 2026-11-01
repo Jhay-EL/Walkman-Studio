@@ -97,6 +97,18 @@ Walkman Studio v3.0.0 is a major milestone release introducing the complete Opti
 * **Optimized Queue Header:** Relocated batch operations (`✦ Optimize All`, `💬 Fetch Lyrics`, `🗑 Clear`) into a responsive header bar with zero visual overlap.
 * **Hardware Compliance Enforcement:** Enforces strict ID3v2.3 UTF-16, Baseline JPEG ($\le 800\times 800$), and FLAC `SMFM` Block 2 hardware compliance.
 
+### Android Walkman Ecosystem Support
+* **Full Modern Android DAP Detection:** Auto-detects and configures Android-based Walkmans including NW-A100 series (A105), NW-A300 series (A306/A307), NW-ZX500 series (ZX507), NW-ZX700 series (ZX707), and Signature Series NW-WM1AM2 and NW-WM1ZM2.
+* **Dynamic Android Hardware Compliance:** Dynamically adapts artwork constraints (up to 1280×720 RGB), formats ID3v2.3 tags for Sony W.Music, and purges AppleDouble `._*` files to eliminate Android MediaStore 0:00 ghost tracks.
+
+### Playlist Batch Reorganization & "Move to Top"
+* **Multi-Track Selection:** Dedicated selection checkmarks with Shift-click range selection, Command-click toggle, and "Select All" header button.
+* **Liquid Glass Batch Action Bar:** Floating action bar providing one-click "Move to Top" batch reorganization, group Up/Down shifting, "To Bottom", and batch removal with instant Walkman M3U/M3U8 file synchronization.
+
+### Single-Pass Accelerated Music Import
+* **Zero Redundant Scanning:** Single-pass concurrent metadata analysis eliminates the 2x wait time on multi-track imports with detected duplicates.
+* **Streamlined Transfer Experience:** Immediate 1-click transfer start with real-time transfer progress feedback.
+
 ### Performance & Engine Upgrades
 * **Non-Blocking Asynchronous Imports:** Background folder import engine with real-time `ImportProgressBar` and cancellation support.
 * **macOS Dotfile Purging:** Automatic `dot_clean -m` AppleDouble shadow file cleanup on drive unmount.
@@ -113,7 +125,7 @@ Walkman Studio v3.0.0 is a major milestone release introducing the complete Opti
 | **`Walkman-Studio-3.0.0-universal.dmg`** | Universal 2 (`arm64` + `x86_64`) | Universal package running natively on all Macs (macOS 13.0+) |
 
 ### Alternative Mirror
-* **Google Drive:** [Download v3.0.0 Release Files on Google Drive](https://drive.google.com/drive/folders/1sPALywphDMWHfE7RzliWKuW4y1fcMdSt?usp=share_link)
+* **Google Drive:** [Download v3.0.0 Release Files on Google Drive](https://drive.google.com/drive/folders/1kb0z4Doik4ETlugIEnmDuMV1ZSYat-df?usp=share_link)
 
 ---
 
@@ -171,6 +183,24 @@ cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
   <li><strong>Hardware Compliance Enforcement:</strong> Enforces strict ID3v2.3 UTF-16, Baseline JPEG (&le; 800&times;800), and FLAC <code>SMFM</code> Block 2 hardware compliance.</li>
 </ul>
 
+<h3>Android Walkman Ecosystem Support</h3>
+<ul>
+  <li><strong>Full Modern Android DAP Detection:</strong> Auto-detects and configures Android-based Walkmans including NW-A100 series (A105), NW-A300 series (A306/A307), NW-ZX500 series (ZX507), NW-ZX700 series (ZX707), and Signature Series NW-WM1AM2 and NW-WM1ZM2.</li>
+  <li><strong>Dynamic Android Hardware Compliance:</strong> Dynamically adapts artwork constraints (up to 1280&times;720 RGB), formats ID3v2.3 tags for Sony W.Music, and purges AppleDouble <code>._*</code> files to eliminate Android MediaStore 0:00 ghost tracks.</li>
+</ul>
+
+<h3>Playlist Batch Reorganization &amp; &ldquo;Move to Top&rdquo;</h3>
+<ul>
+  <li><strong>Multi-Track Selection:</strong> Dedicated selection checkmarks with Shift-click range selection, Command-click toggle, and &ldquo;Select All&rdquo; header button.</li>
+  <li><strong>Liquid Glass Batch Action Bar:</strong> Floating action bar providing one-click &ldquo;Move to Top&rdquo; batch reorganization, group Up/Down shifting, &ldquo;To Bottom&rdquo;, and batch removal with instant Walkman M3U/M3U8 file synchronization.</li>
+</ul>
+
+<h3>Single-Pass Accelerated Music Import</h3>
+<ul>
+  <li><strong>Zero Redundant Scanning:</strong> Single-pass concurrent metadata analysis eliminates the 2x wait time on multi-track imports with detected duplicates.</li>
+  <li><strong>Streamlined Transfer Experience:</strong> Immediate 1-click transfer start with real-time transfer progress feedback.</li>
+</ul>
+
 <h3>Performance &amp; Engine Upgrades</h3>
 <ul>
   <li><strong>Non-Blocking Asynchronous Imports:</strong> Background folder import engine with real-time <code>ImportProgressBar</code> and cancellation support.</li>
@@ -210,7 +240,7 @@ cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
 </table>
 
 <h3>Alternative Mirror</h3>
-<p><strong>Google Drive:</strong> <a href="https://drive.google.com/drive/folders/1sPALywphDMWHfE7RzliWKuW4y1fcMdSt?usp=share_link" target="_blank" rel="noopener noreferrer">Download v3.0.0 Release Files on Google Drive</a></p>
+<p><strong>Google Drive:</strong> <a href="https://drive.google.com/drive/folders/1kb0z4Doik4ETlugIEnmDuMV1ZSYat-df?usp=share_link" target="_blank" rel="noopener noreferrer">Download v3.0.0 Release Files on Google Drive</a></p>
 
 <hr>
 
