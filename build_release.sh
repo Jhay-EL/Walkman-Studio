@@ -117,7 +117,7 @@ Walkman Studio v3.0.1 delivers critical resilience fixes and model identificatio
 | **`Walkman-Studio-3.0.1-universal.dmg`** | Universal 2 (`arm64` + `x86_64`) | Universal package running natively on all Macs (macOS 13.0+) |
 
 ### Alternative Mirror
-* **Google Drive:** [Download v3.0.1 Release Files on Google Drive](https://drive.google.com/drive/folders/1kb0z4Doik4ETlugIEnmDuMV1ZSYat-df?usp=share_link)
+* **Google Drive:** [Download v3.0.1 Release Files on Google Drive](https://drive.google.com/drive/folders/1S0cuB6XqxwdlDMoI52WCVAvei9JIxqxN?usp=share_link)
 
 ---
 
@@ -195,7 +195,7 @@ cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
 </table>
 
 <h3>Alternative Mirror</h3>
-<p><strong>Google Drive:</strong> <a href="https://drive.google.com/drive/folders/1kb0z4Doik4ETlugIEnmDuMV1ZSYat-df?usp=share_link" target="_blank" rel="noopener noreferrer">Download v3.0.1 Release Files on Google Drive</a></p>
+<p><strong>Google Drive:</strong> <a href="https://drive.google.com/drive/folders/1S0cuB6XqxwdlDMoI52WCVAvei9JIxqxN?usp=share_link" target="_blank" rel="noopener noreferrer">Download v3.0.1 Release Files on Google Drive</a></p>
 
 <hr>
 
