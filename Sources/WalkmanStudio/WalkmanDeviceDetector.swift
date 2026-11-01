@@ -26,8 +26,13 @@ public struct UnsupportedWalkmanModel: Identifiable, Sendable {
     public let reason: String
 }
 
-public final class WalkmanDeviceDetector: Sendable {
+public final class WalkmanDeviceDetector: @unchecked Sendable {
     public static let shared = WalkmanDeviceDetector()
+    
+    // Persistent & Session Device Model Cache (prevents false model guessing when internal drive is ejected)
+    private let cacheLock = NSLock()
+    private var lastKnownInternalDevice: WalkmanDeviceInfo? = nil
+    private var lastKnownDeviceByModelRaw: [String: WalkmanDeviceInfo] = [:]
     
     // -------------------------------------------------------------------------
     // All Supported Non-Android Sony Walkman Hardware
@@ -540,20 +545,36 @@ public final class WalkmanDeviceDetector: Sendable {
                 info = detectFromFilesystemHeuristics(drive: intDrive, drives: pairedDrives, capacityGb: capacityGb, hasCfw: hasCfw)
             }
 
+            cacheLock.lock()
+            lastKnownInternalDevice = info
+            let cleanKey = info.modelRaw.uppercased().replacingOccurrences(of: "-", with: "")
+            lastKnownDeviceByModelRaw[cleanKey] = info
+            cacheLock.unlock()
+
             devices.append(WalkmanDevice(deviceInfo: info, drives: pairedDrives))
         }
 
-        // Any leftover MicroSD cards (e.g. plugged into a Mac USB card reader directly)
+        // Any leftover MicroSD cards (e.g. internal drive was ejected or plugged into a Mac USB card reader directly)
         for sdDrive in microsdDrives {
             let sdXml = readXml(from: sdDrive.mountPoint)
-            let capacityGb = Double(sdDrive.totalBytes) / (1024 * 1024 * 1024)
             let hasCfw = sdDrive.hasCfw
+            let sdModelRaw = sdXml.flatMap { Self.extractXmlTag(tag: "model", from: $0) }
+            let cleanSdKey = sdModelRaw?.uppercased().replacingOccurrences(of: "-", with: "")
+
+            cacheLock.lock()
+            let cached = (cleanSdKey != nil ? lastKnownDeviceByModelRaw[cleanSdKey!] : nil) ?? lastKnownInternalDevice
+            cacheLock.unlock()
 
             let info: WalkmanDeviceInfo
-            if let xml = sdXml {
-                info = parseCapabilityXml(xml: xml, internalCapacityGb: capacityGb, hasCfw: hasCfw)
+            if let cached = cached, (sdModelRaw == nil || cached.modelRaw.localizedCaseInsensitiveCompare(sdModelRaw!) == .orderedSame) {
+                // Internal storage was previously detected in this session; preserve the authentic identified model!
+                info = cached
+            } else if let xml = sdXml {
+                // NOTE: sdDrive.totalBytes is the MICROSD capacity, NOT internal capacity!
+                // Pass 0.0 for internal capacity so resolveSpecificModel does NOT guess based on SD card size!
+                info = parseCapabilityXml(xml: xml, internalCapacityGb: 0.0, hasCfw: hasCfw)
             } else {
-                info = detectFromFilesystemHeuristics(drive: sdDrive, drives: [sdDrive], capacityGb: capacityGb, hasCfw: hasCfw)
+                info = detectFromFilesystemHeuristics(drive: sdDrive, drives: [sdDrive], capacityGb: 0.0, hasCfw: hasCfw)
             }
 
             devices.append(WalkmanDevice(deviceInfo: info, drives: [sdDrive]))
@@ -620,16 +641,55 @@ public final class WalkmanDeviceDetector: Sendable {
         let upper = modelRaw.uppercased()
         
         if upper.contains("A300") || upper.contains("A306") || upper.contains("A307") {
-            let specific = capacityGb < 45 ? "NW-A306" : "NW-A307"
+            let specific: String
+            if capacityGb > 0 && capacityGb < 45 {
+                specific = "NW-A306"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_A300")
+            } else if capacityGb >= 45 && capacityGb <= 75 {
+                specific = "NW-A307"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_A300")
+            } else {
+                specific = UserDefaults.standard.string(forKey: "last_known_walkman_specific_A300") ?? "NW-A306"
+            }
             return ("NW-A300 Series", specific, "Sony Walkman \(specific)")
         } else if upper.contains("A100") || upper.contains("A105") || upper.contains("A106") || upper.contains("A107") {
-            let specific = capacityGb < 25 ? "NW-A105" : (capacityGb < 45 ? "NW-A106" : "NW-A107")
+            let specific: String
+            if capacityGb > 0 && capacityGb < 25 {
+                specific = "NW-A105"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_A100")
+            } else if capacityGb >= 25 && capacityGb < 45 {
+                specific = "NW-A106"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_A100")
+            } else if capacityGb >= 45 && capacityGb <= 75 {
+                specific = "NW-A107"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_A100")
+            } else {
+                specific = UserDefaults.standard.string(forKey: "last_known_walkman_specific_A100") ?? "NW-A105"
+            }
             return ("NW-A100 Series", specific, "Sony Walkman \(specific)")
         } else if upper.contains("ZX700") || upper.contains("ZX706") || upper.contains("ZX707") {
-            let specific = capacityGb < 45 ? "NW-ZX706" : "NW-ZX707"
+            let specific: String
+            if capacityGb > 0 && capacityGb < 45 {
+                specific = "NW-ZX706"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_ZX700")
+            } else if capacityGb >= 45 && capacityGb <= 75 {
+                specific = "NW-ZX707"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_ZX700")
+            } else {
+                specific = UserDefaults.standard.string(forKey: "last_known_walkman_specific_ZX700") ?? "NW-ZX707"
+            }
             return ("NW-ZX700 Series", specific, "Sony Walkman \(specific)")
         } else if upper.contains("ZX500") || upper.contains("ZX505") || upper.contains("ZX507") {
-            let specific = capacityGb < 25 ? "NW-ZX505" : "NW-ZX507"
+            let specific: String
+            if capacityGb > 0 && capacityGb < 25 {
+                specific = "NW-ZX505"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_ZX500")
+            } else if capacityGb >= 25 && capacityGb <= 75 {
+                specific = "NW-ZX507"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_ZX500")
+            } else {
+                specific = UserDefaults.standard.string(forKey: "last_known_walkman_specific_ZX500") ?? "NW-ZX507"
+            }
             return ("NW-ZX500 Series", specific, "Sony Walkman \(specific)")
         } else if upper.contains("WM1AM2") {
             return ("NW-WM1 Series M2", "NW-WM1AM2", "Sony Walkman NW-WM1AM2")
@@ -637,35 +697,104 @@ public final class WalkmanDeviceDetector: Sendable {
             return ("NW-WM1 Series M2", "NW-WM1ZM2", "Sony Walkman NW-WM1ZM2")
         } else if upper.contains("A50") {
             let specific: String
-            if capacityGb < 20 {
-                // 16GB model
+            if capacityGb > 0 && capacityGb < 20 {
+                // 16GB internal model
                 specific = "NW-A55 / NW-A55L"
-            } else if capacityGb < 45 {
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_A50")
+            } else if capacityGb >= 20 && capacityGb < 45 {
+                // 32GB internal model
                 specific = "NW-A56"
-            } else {
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_A50")
+            } else if capacityGb >= 45 && capacityGb <= 75 {
+                // 64GB internal model
                 specific = "NW-A57"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_A50")
+            } else {
+                // Unknown/unmounted internal drive or MicroSD capacity (>75GB): use cached or standard 16GB model
+                let cached = UserDefaults.standard.string(forKey: "last_known_walkman_specific_A50")
+                specific = cached ?? "NW-A55 / NW-A55L"
             }
             let cfwTag = hasCfw ? " (Walkman One CFW)" : ""
             return ("NW-A50 Series", specific, "Sony Walkman \(specific)\(cfwTag)")
         } else if upper.contains("A40") {
-            let specific = capacityGb < 20 ? "NW-A45" : (capacityGb < 45 ? "NW-A46" : "NW-A47")
+            let specific: String
+            if capacityGb > 0 && capacityGb < 20 {
+                specific = "NW-A45"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_A40")
+            } else if capacityGb >= 20 && capacityGb < 45 {
+                specific = "NW-A46"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_A40")
+            } else if capacityGb >= 45 && capacityGb <= 75 {
+                specific = "NW-A47"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_A40")
+            } else {
+                specific = UserDefaults.standard.string(forKey: "last_known_walkman_specific_A40") ?? "NW-A45"
+            }
             return ("NW-A40 Series", specific, "Sony Walkman \(specific)")
         } else if upper.contains("A30") {
-            let specific = capacityGb < 20 ? "NW-A35" : (capacityGb < 45 ? "NW-A36" : "NW-A37")
+            let specific: String
+            if capacityGb > 0 && capacityGb < 20 {
+                specific = "NW-A35"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_A30")
+            } else if capacityGb >= 20 && capacityGb < 45 {
+                specific = "NW-A36"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_A30")
+            } else if capacityGb >= 45 && capacityGb <= 75 {
+                specific = "NW-A37"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_A30")
+            } else {
+                specific = UserDefaults.standard.string(forKey: "last_known_walkman_specific_A30") ?? "NW-A35"
+            }
             return ("NW-A30 Series", specific, "Sony Walkman \(specific)")
         } else if upper.contains("ZX300") {
-            let specific = capacityGb < 25 ? "NW-ZX300A" : "NW-ZX300"
+            let specific: String
+            if capacityGb > 0 && capacityGb < 25 {
+                specific = "NW-ZX300A"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_ZX300")
+            } else if capacityGb >= 25 && capacityGb <= 75 {
+                specific = "NW-ZX300"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_ZX300")
+            } else {
+                specific = UserDefaults.standard.string(forKey: "last_known_walkman_specific_ZX300") ?? "NW-ZX300"
+            }
             return ("NW-ZX300 Series", specific, "Sony Walkman \(specific)")
         } else if upper.contains("WM1") {
-            let specific = capacityGb < 180 ? "NW-WM1A" : "NW-WM1Z"
+            let specific: String
+            if capacityGb > 0 && capacityGb < 180 {
+                specific = "NW-WM1A"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_WM1")
+            } else if capacityGb >= 180 && capacityGb <= 300 {
+                specific = "NW-WM1Z"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_WM1")
+            } else {
+                specific = UserDefaults.standard.string(forKey: "last_known_walkman_specific_WM1") ?? "NW-WM1A"
+            }
             return ("NW-WM1 Signature Series", specific, "Sony Walkman \(specific)")
         } else if upper.contains("ZX100") {
             return ("NW-ZX100 Series", "NW-ZX100", "Sony Walkman NW-ZX100")
         } else if upper.contains("A20") {
-            let specific = capacityGb < 25 ? "NW-A25" : "NW-A27"
+            let specific: String
+            if capacityGb > 0 && capacityGb < 25 {
+                specific = "NW-A25"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_A20")
+            } else if capacityGb >= 25 && capacityGb <= 75 {
+                specific = "NW-A27"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_A20")
+            } else {
+                specific = UserDefaults.standard.string(forKey: "last_known_walkman_specific_A20") ?? "NW-A25"
+            }
             return ("NW-A20 Series", specific, "Sony Walkman \(specific)")
         } else if upper.contains("A10") {
-            let specific = capacityGb < 25 ? "NW-A15" : "NW-A17"
+            let specific: String
+            if capacityGb > 0 && capacityGb < 25 {
+                specific = "NW-A15"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_A10")
+            } else if capacityGb >= 25 && capacityGb <= 75 {
+                specific = "NW-A17"
+                UserDefaults.standard.set(specific, forKey: "last_known_walkman_specific_A10")
+            } else {
+                specific = UserDefaults.standard.string(forKey: "last_known_walkman_specific_A10") ?? "NW-A15"
+            }
             return ("NW-A10 Series", specific, "Sony Walkman \(specific)")
         } else if upper.contains("WS620") {
             return ("NW-WS620 Series", "NW-WS623", "Sony Walkman NW-WS623")
