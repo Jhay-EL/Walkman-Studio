@@ -26,7 +26,7 @@ from backend import senseme_engine, senseme_dsp, walkman_engine
 app = FastAPI(
     title="Sony Walkman Studio API",
     description="macOS manager for Sony Walkman DAPs (Sony OS & Android Walkman OS)",
-    version="3.0.0",
+    version="3.0.1",
 )
 
 app.add_middleware(

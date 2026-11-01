@@ -4,7 +4,7 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
-VERSION="3.0.0"
+VERSION="3.0.1"
 DIST_DIR="$DIR/dist"
 APP_NAME="Walkman Studio"
 APP_BUNDLE="$DIR/$APP_NAME.app"
@@ -59,60 +59,52 @@ shasum -a 256 *.zip *.dmg > SHA256SUMS.txt
 
 # 5. Generate Release Notes (Markdown & HTML)
 cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.md"
-# Walkman Studio v3.0.0
+# Walkman Studio v3.0.1
 
-Walkman Studio v3.0.0 is a major milestone release introducing the complete Optical Liquid Glass Design System, the CoreAudio-powered Trim & Cut Audio Studio, partition-isolated same-storage duplicate music deduplication, rapid sequential metadata navigation, and resilient transfer queue architecture across both Apple Silicon (`arm64`) and Intel-based Macs (`x86_64`).
+Walkman Studio v3.0.1 delivers critical resilience fixes and model identification accuracy improvements for Sony Walkman users alongside the complete Optical Liquid Glass Design System, CoreAudio Trim & Cut Studio, and Duplicates Studio across Apple Silicon (`arm64`) and Intel-based Macs (`x86_64`).
 
 ---
 
-## What's New in v3.0.0
+## What's New in v3.0.1
+
+### Standalone MicroSD Card Model Accuracy Fix
+* **Decoupled MicroSD Capacity Heuristics:** Resolved an issue where standalone MicroSD cards (e.g. 256GB / 237GB) caused Walkman Studio to misidentify an authentic `NW-A55` as an `NW-A57` when internal storage was unmounted or ejected.
+* **Session & Persistent Device Memory:** Walkman Studio now securely caches authentically identified device models in memory and macOS preferences across volume unmounts, restarts, and ejects.
+* **Strict Heuristic Upper Bounds:** Applied hardware capacity safety bounds across all series (`A50`, `A40`, `A30`, `A100`, `A300`, `ZX300`, `ZX500`, `ZX700`, `WM1`) so SD expansion storage never forces higher internal tiers.
+
+### Local Music Library Resilience & Missing Folder Auto-Resolution
+* **Real-Time Missing & Renamed Folder Detection:** Monitored folders moved, renamed, or deleted in Finder are instantly detected instead of silently failing or leaving stale ghost tracks.
+* **Liquid Glass Amber Warning Banner:** Surfaces an ambient amber alert with one-click actions:
+  * **"Relocate Folder...":** Re-links moved or renamed folders in Finder, instantly updating all track paths, relative indices, album art, and 12-Tone SensMe mood channels without re-scanning or re-importing.
+  * **"Remove Missing":** Safely purges missing folders and orphaned ghost tracks from the SQLite library database with a single click.
+* **Missing Audio File Playback Guard:** Double-clicking or attempting to preview an audio file that was moved or deleted on disk now displays a clear *"Audio File Not Found"* alert with the missing path and a direct relocation shortcut.
+* **Manage Folders Enhancements:** `ManageLocalFoldersSheet` displays `MISSING OR RENAMED` status badges and dedicated **"Relocate..."** picker buttons.
+
+### Safe Eject Deadlock & Ejection Hang Fix
+* **Dynamic Binary Discovery:** Dynamically locates `dot_clean` across `/usr/sbin` and `/usr/bin`, eliminating launch errors on modern macOS releases.
+* **10-Second Watchdog Timeout:** Safe Eject is guarded with timeout watchdogs to prevent Foundation deadlocks when unmounting sluggish FAT32/exFAT drives.
+
+---
+
+## Core v3.0 Capabilities
 
 ### Optical Liquid Glass Design System Language
-* **Sony Signature Series Obsidian Chassis:** Complete UI visual overhaul embracing solid obsidian surfaces (`#101114`), refraction glass lenses, specular edge highlights, and tactile spring physics (`.spring(response: 0.38, dampingFraction: 0.75)`).
-* **Standardized 38pt Baseline Height:** All primary interactive controls, search bars, sort menus, and action buttons now share a uniform 38pt height baseline.
-* **Standardized 28pt Capsule Pills:** Compact in-row actions and status indicators are consistently sized with tactile feedback and 0.8pt hairline borders.
-* **Responsive Toolbars & Layout Protection:** Responsive layout adaptation using `ViewThatFits` with zero element clipping or wrapping, backed by an enforced $1366\times 768$ minimum window dimension constraint.
+* **Sony Signature Series Obsidian Chassis:** Solid obsidian surfaces (`#101114`), refraction glass lenses, specular edge highlights, and tactile spring physics.
+* **Standardized 38pt Baseline Height & 28pt Capsule Pills:** All primary interactive controls share a uniform 38pt height baseline and 28pt compact action pills.
+* **Responsive Toolbars & Layout Protection:** Dynamic `ViewThatFits` adaptations with minimum $1320\times 720$ window constraints to fit 13" Intel and Apple Silicon MacBooks seamlessly.
 
 ### Interactive Trim & Cut Audio Studio
-* **Native CoreAudio DSP Waveform Engine:** Built-in precision audio editor supporting non-destructive preview auditioning and gapless looping across local and Walkman tracks.
-* **Multi-Zoom Waveform Canvas:** Zoom scale from `1x` to `20x` with millisecond-precision boundary steppers (`±0.1s`, `±1s`, `±5s`) and playhead snapping.
-* **Stereo Channel Routing & Phase Inversion:** Invert Left/Right stereo channels, downmix to Mono, isolate single channel to dual ears, or invert audio phase 180°.
-* **Smooth Envelopes & Gain Trim:** Configurable fade-in and fade-out curves to prevent clicks, with -6dB to +6dB gain adjustment while strictly preserving ID3v2.3/Vorbis metadata and Baseline RGB JPEG cover art.
+* **Native CoreAudio DSP Waveform Engine:** Precision audio editing with gapless looping and non-destructive preview auditioning.
+* **Stereo Channel Routing:** Invert Left/Right stereo channels, downmix to Mono, isolate single channels, or invert phase 180°.
+* **Smooth Envelopes & Gain Trim:** Configurable fade-in/fade-out curves and -12dB to +12dB gain adjustment with strict ID3v2.3/Vorbis preservation.
 
 ### Partition-Isolated Duplicate Music Detection (Duplicates Studio)
-* **Strict Same-Storage Scoping:** Prevents accidental deletion of tracks across distinct drives by scoping duplicate comparisons strictly within the same storage partition (Internal Flash, MicroSD Expansion, or Local Library).
-* **Dual Matching Scopes:**
-  * **Exact Same Album (Safe):** Matches identical audio files and duplicate tracks within the same album without breaking complete releases.
-  * **Include Cross-Album (Loose):** Identifies duplicate songs across Studio Albums, Singles, Greatest Hits, and Compilations.
-* **High-Precision Acoustic & Metadata Clustering:** Matches tracks via normalized titles/artists and $\pm 4.0$s duration clustering, ISRC identifiers, and bit-exact MD5 checksums.
-* **Smart Quality Auto-Resolution:** Automatically preserves higher-resolution lossless files (e.g. 24-bit Hi-Res FLAC) over lossy copies while safely cleaning orphan companion `.lrc` lyrics and AppleDouble `._*` shadow files.
-
-### Rapid Sequential Metadata & Playlist Navigation
-* **Previous & Next Track Steppers:** Edit metadata for an entire album or playlist continuously with previous/next navigation buttons embedded directly within the Song Metadata Editor without closing the sheet.
-* **Smart Scoped Track Sequencing:** Navigation strictly respects the active album or playlist ordering.
-* **Overhauled Playlists Modal (`AddTracksModal`):** Modernized playlist track selection dialog with 28pt action pills, "In Playlist" status indicators, and 38pt Liquid Glass chassis actions.
-
-### Transfer & Convert Queue Optimization
-* **Dedicated Hardware Compliance Bar:** Dedicated 6-chip compliance bar (`Baseline RGB Art`, `.LRC Lyrics`, `Auto-Tags`, `folder.jpg`, `EBU R128 Leveling`, `12 Tone / SenseMe`).
-* **Optimized Queue Header:** Relocated batch operations (`✦ Optimize All`, `💬 Fetch Lyrics`, `🗑 Clear`) into a responsive header bar with zero visual overlap.
-* **Hardware Compliance Enforcement:** Enforces strict ID3v2.3 UTF-16, Baseline JPEG ($\le 800\times 800$), and FLAC `SMFM` Block 2 hardware compliance.
+* **Strict Same-Storage Scoping:** Partition-isolated duplicate comparison strictly within the same storage partition (Internal Flash, MicroSD, or Local Library).
+* **Smart Quality Auto-Resolution:** Automatically preserves higher-resolution lossless files (e.g. 24-bit Hi-Res FLAC) over lossy copies while purging AppleDouble `._*` shadow files.
 
 ### Android Walkman Ecosystem Support
-* **Full Modern Android DAP Detection:** Auto-detects and configures Android-based Walkmans including NW-A100 series (A105), NW-A300 series (A306/A307), NW-ZX500 series (ZX507), NW-ZX700 series (ZX707), and Signature Series NW-WM1AM2 and NW-WM1ZM2.
-* **Dynamic Android Hardware Compliance:** Dynamically adapts artwork constraints (up to 1280×720 RGB), formats ID3v2.3 tags for Sony W.Music, and purges AppleDouble `._*` files to eliminate Android MediaStore 0:00 ghost tracks.
-
-### Playlist Batch Reorganization & "Move to Top"
-* **Multi-Track Selection:** Dedicated selection checkmarks with Shift-click range selection, Command-click toggle, and "Select All" header button.
-* **Liquid Glass Batch Action Bar:** Floating action bar providing one-click "Move to Top" batch reorganization, group Up/Down shifting, "To Bottom", and batch removal with instant Walkman M3U/M3U8 file synchronization.
-
-### Single-Pass Accelerated Music Import
-* **Zero Redundant Scanning:** Single-pass concurrent metadata analysis eliminates the 2x wait time on multi-track imports with detected duplicates.
-* **Streamlined Transfer Experience:** Immediate 1-click transfer start with real-time transfer progress feedback.
-
-### Performance & Engine Upgrades
-* **Non-Blocking Asynchronous Imports:** Background folder import engine with real-time `ImportProgressBar` and cancellation support.
-* **macOS Dotfile Purging:** Automatic `dot_clean -m` AppleDouble shadow file cleanup on drive unmount.
-* **Universal macOS Support:** Native binaries for Apple Silicon (`arm64`) and Intel (`x86_64`) on macOS 13.0+ (Ventura, Sonoma, Sequoia).
+* **Full Modern Android DAP Detection:** Auto-detects Android-based Walkmans (NW-A100, NW-A300, NW-ZX500, NW-ZX700, NW-WM1AM2/ZM2).
+* **Dynamic Artwork & Tag Adaptation:** Formats tags for Sony W.Music and eliminates Android MediaStore 0:00 ghost tracks.
 
 ---
 
@@ -120,12 +112,12 @@ Walkman Studio v3.0.0 is a major milestone release introducing the complete Opti
 
 | Installer | Architecture | Target System |
 | :--- | :--- | :--- |
-| **`Walkman-Studio-3.0.0-arm64.dmg`** | Apple Silicon (`arm64`) | MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4) |
-| **`Walkman-Studio-3.0.0-intel.dmg`** | Intel (`x86_64`) | Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac Pro |
-| **`Walkman-Studio-3.0.0-universal.dmg`** | Universal 2 (`arm64` + `x86_64`) | Universal package running natively on all Macs (macOS 13.0+) |
+| **`Walkman-Studio-3.0.1-arm64.dmg`** | Apple Silicon (`arm64`) | MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4) |
+| **`Walkman-Studio-3.0.1-intel.dmg`** | Intel (`x86_64`) | Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac Pro |
+| **`Walkman-Studio-3.0.1-universal.dmg`** | Universal 2 (`arm64` + `x86_64`) | Universal package running natively on all Macs (macOS 13.0+) |
 
 ### Alternative Mirror
-* **Google Drive:** [Download v3.0.0 Release Files on Google Drive](https://drive.google.com/drive/folders/1kb0z4Doik4ETlugIEnmDuMV1ZSYat-df?usp=share_link)
+* **Google Drive:** [Download v3.0.1 Release Files on Google Drive](https://drive.google.com/drive/folders/1kb0z4Doik4ETlugIEnmDuMV1ZSYat-df?usp=share_link)
 
 ---
 
@@ -137,75 +129,38 @@ Walkman Studio v3.0.0 is a major milestone release introducing the complete Opti
 EOF
 
 cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
-<h1>Walkman Studio v3.0.0</h1>
+<h1>Walkman Studio v3.0.1</h1>
 
-<p>Walkman Studio v3.0.0 is a major milestone release introducing the complete Optical Liquid Glass Design System, the CoreAudio-powered Trim &amp; Cut Audio Studio, partition-isolated same-storage duplicate music deduplication, rapid sequential metadata navigation, and resilient transfer queue architecture across both Apple Silicon (<code>arm64</code>) and Intel-based Macs (<code>x86_64</code>).</p>
+<p>Walkman Studio v3.0.1 delivers critical resilience fixes and model identification accuracy improvements for Sony Walkman users alongside the complete Optical Liquid Glass Design System, CoreAudio Trim &amp; Cut Studio, and Duplicates Studio across Apple Silicon (<code>arm64</code>) and Intel-based Macs (<code>x86_64</code>).</p>
 
 <hr>
 
-<h2>What's New in v3.0.0</h2>
+<h2>What's New in v3.0.1</h2>
 
-<h3>Optical Liquid Glass Design System Language</h3>
+<h3>Standalone MicroSD Card Model Accuracy Fix</h3>
 <ul>
-  <li><strong>Sony Signature Series Obsidian Chassis:</strong> Complete UI visual overhaul embracing solid obsidian surfaces (<code>#101114</code>), refraction glass lenses, specular edge highlights, and tactile spring physics.</li>
-  <li><strong>Standardized 38pt Baseline Height:</strong> All primary interactive controls, search bars, sort menus, and action buttons now share a uniform 38pt height baseline.</li>
-  <li><strong>Standardized 28pt Capsule Pills:</strong> Compact in-row actions and status indicators are consistently sized with tactile feedback and 0.8pt hairline borders.</li>
-  <li><strong>Responsive Toolbars &amp; Layout Protection:</strong> Responsive layout adaptation using <code>ViewThatFits</code> with zero element clipping or wrapping, backed by an enforced 1366&times;768 minimum window dimension constraint.</li>
+  <li><strong>Decoupled MicroSD Capacity Heuristics:</strong> Resolved an issue where standalone MicroSD cards (e.g. 256GB / 237GB) caused Walkman Studio to misidentify an authentic <code>NW-A55</code> as an <code>NW-A57</code> when internal storage was unmounted or ejected.</li>
+  <li><strong>Session &amp; Persistent Device Memory:</strong> Walkman Studio now securely caches authentically identified device models in memory and macOS preferences across volume unmounts, restarts, and ejects.</li>
+  <li><strong>Strict Heuristic Upper Bounds:</strong> Applied hardware capacity safety bounds across all series (<code>A50</code>, <code>A40</code>, <code>A30</code>, <code>A100</code>, <code>A300</code>, <code>ZX300</code>, <code>ZX500</code>, <code>ZX700</code>, <code>WM1</code>) so SD expansion storage never forces higher internal tiers.</li>
 </ul>
 
-<h3>Interactive Trim &amp; Cut Audio Studio</h3>
+<h3>Local Music Library Resilience &amp; Missing Folder Auto-Resolution</h3>
 <ul>
-  <li><strong>Native CoreAudio DSP Waveform Engine:</strong> Built-in precision audio editor supporting non-destructive preview auditioning and gapless looping across local and Walkman tracks.</li>
-  <li><strong>Multi-Zoom Waveform Canvas:</strong> Zoom scale from <code>1x</code> to <code>20x</code> with millisecond-precision boundary steppers (<code>&plusmn;0.1s</code>, <code>&plusmn;1s</code>, <code>&plusmn;5s</code>) and playhead snapping.</li>
-  <li><strong>Stereo Channel Routing &amp; Phase Inversion:</strong> Invert Left/Right stereo channels, downmix to Mono, isolate single channel to dual ears, or invert audio phase 180&deg;.</li>
-  <li><strong>Smooth Envelopes &amp; Gain Trim:</strong> Configurable fade-in and fade-out curves to prevent clicks, with -6dB to +6dB gain adjustment while strictly preserving ID3v2.3/Vorbis metadata and Baseline RGB JPEG cover art.</li>
+  <li><strong>Real-Time Missing &amp; Renamed Folder Detection:</strong> Monitored folders moved, renamed, or deleted in Finder are instantly detected instead of silently failing or leaving stale ghost tracks.</li>
+  <li><strong>Liquid Glass Amber Warning Banner:</strong> Surfaces an ambient amber alert with one-click actions:
+    <ul>
+      <li><strong>&ldquo;Relocate Folder...&rdquo;:</strong> Re-links moved or renamed folders in Finder, instantly updating all track paths, relative indices, album art, and 12-Tone SensMe mood channels without re-scanning or re-importing.</li>
+      <li><strong>&ldquo;Remove Missing&rdquo;:</strong> Safely purges missing folders and orphaned ghost tracks from the SQLite library database with a single click.</li>
+    </ul>
+  </li>
+  <li><strong>Missing Audio File Playback Guard:</strong> Double-clicking or attempting to preview an audio file that was moved or deleted on disk now displays a clear <em>&ldquo;Audio File Not Found&rdquo;</em> alert with the missing path and a direct relocation shortcut.</li>
+  <li><strong>Manage Folders Enhancements:</strong> <code>ManageLocalFoldersSheet</code> displays <code>MISSING OR RENAMED</code> status badges and dedicated <strong>&ldquo;Relocate...&rdquo;</strong> picker buttons.</li>
 </ul>
 
-<h3>Partition-Isolated Duplicate Music Detection (Duplicates Studio)</h3>
+<h3>Safe Eject Deadlock &amp; Ejection Hang Fix</h3>
 <ul>
-  <li><strong>Strict Same-Storage Scoping:</strong> Prevents accidental deletion of tracks across distinct drives by scoping duplicate comparisons strictly within the same storage partition (Internal Flash, MicroSD Expansion, or Local Library).</li>
-  <li><strong>Dual Matching Scopes:</strong> Exact Same Album (Safe) and Include Cross-Album (Loose) matching.</li>
-  <li><strong>High-Precision Acoustic &amp; Metadata Clustering:</strong> Matches tracks via normalized titles/artists and &plusmn;4.0s duration clustering, ISRC identifiers, and bit-exact MD5 checksums.</li>
-  <li><strong>Smart Quality Auto-Resolution:</strong> Automatically preserves higher-resolution lossless files (e.g. 24-bit Hi-Res FLAC) over lossy copies while safely cleaning orphan companion <code>.lrc</code> lyrics and AppleDouble <code>._*</code> shadow files.</li>
-</ul>
-
-<h3>Rapid Sequential Metadata &amp; Playlist Navigation</h3>
-<ul>
-  <li><strong>Previous &amp; Next Track Steppers:</strong> Edit metadata for an entire album or playlist continuously with previous/next navigation buttons embedded directly within the Song Metadata Editor without closing the sheet.</li>
-  <li><strong>Smart Scoped Track Sequencing:</strong> Navigation strictly respects the active album or playlist ordering.</li>
-  <li><strong>Overhauled Playlists Modal (<code>AddTracksModal</code>):</strong> Modernized playlist track selection dialog with 28pt action pills, "In Playlist" status indicators, and 38pt Liquid Glass chassis actions.</li>
-</ul>
-
-<h3>Transfer &amp; Convert Queue Optimization</h3>
-<ul>
-  <li><strong>Dedicated Hardware Compliance Bar:</strong> Dedicated 6-chip compliance bar (<code>Baseline RGB Art</code>, <code>.LRC Lyrics</code>, <code>Auto-Tags</code>, <code>folder.jpg</code>, <code>EBU R128 Leveling</code>, <code>12 Tone / SenseMe</code>).</li>
-  <li><strong>Optimized Queue Header:</strong> Relocated batch operations (<code>✦ Optimize All</code>, <code>💬 Fetch Lyrics</code>, <code>🗑 Clear</code>) into a responsive header bar with zero visual overlap.</li>
-  <li><strong>Hardware Compliance Enforcement:</strong> Enforces strict ID3v2.3 UTF-16, Baseline JPEG (&le; 800&times;800), and FLAC <code>SMFM</code> Block 2 hardware compliance.</li>
-</ul>
-
-<h3>Android Walkman Ecosystem Support</h3>
-<ul>
-  <li><strong>Full Modern Android DAP Detection:</strong> Auto-detects and configures Android-based Walkmans including NW-A100 series (A105), NW-A300 series (A306/A307), NW-ZX500 series (ZX507), NW-ZX700 series (ZX707), and Signature Series NW-WM1AM2 and NW-WM1ZM2.</li>
-  <li><strong>Dynamic Android Hardware Compliance:</strong> Dynamically adapts artwork constraints (up to 1280&times;720 RGB), formats ID3v2.3 tags for Sony W.Music, and purges AppleDouble <code>._*</code> files to eliminate Android MediaStore 0:00 ghost tracks.</li>
-</ul>
-
-<h3>Playlist Batch Reorganization &amp; &ldquo;Move to Top&rdquo;</h3>
-<ul>
-  <li><strong>Multi-Track Selection:</strong> Dedicated selection checkmarks with Shift-click range selection, Command-click toggle, and &ldquo;Select All&rdquo; header button.</li>
-  <li><strong>Liquid Glass Batch Action Bar:</strong> Floating action bar providing one-click &ldquo;Move to Top&rdquo; batch reorganization, group Up/Down shifting, &ldquo;To Bottom&rdquo;, and batch removal with instant Walkman M3U/M3U8 file synchronization.</li>
-</ul>
-
-<h3>Single-Pass Accelerated Music Import</h3>
-<ul>
-  <li><strong>Zero Redundant Scanning:</strong> Single-pass concurrent metadata analysis eliminates the 2x wait time on multi-track imports with detected duplicates.</li>
-  <li><strong>Streamlined Transfer Experience:</strong> Immediate 1-click transfer start with real-time transfer progress feedback.</li>
-</ul>
-
-<h3>Performance &amp; Engine Upgrades</h3>
-<ul>
-  <li><strong>Non-Blocking Asynchronous Imports:</strong> Background folder import engine with real-time <code>ImportProgressBar</code> and cancellation support.</li>
-  <li><strong>macOS Dotfile Purging:</strong> Automatic <code>dot_clean -m</code> AppleDouble shadow file cleanup on drive unmount.</li>
-  <li><strong>Universal macOS Support:</strong> Native binaries for Apple Silicon (<code>arm64</code>) and Intel (<code>x86_64</code>) on macOS 13.0+ (Ventura, Sonoma, Sequoia).</li>
+  <li><strong>Dynamic Binary Discovery:</strong> Dynamically locates <code>dot_clean</code> across <code>/usr/sbin</code> and <code>/usr/bin</code>, eliminating launch errors on modern macOS releases.</li>
+  <li><strong>10-Second Watchdog Timeout:</strong> Safe Eject is guarded with timeout watchdogs to prevent Foundation deadlocks when unmounting sluggish FAT32/exFAT drives.</li>
 </ul>
 
 <hr>
@@ -222,17 +177,17 @@ cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
   </thead>
   <tbody>
     <tr>
-      <td><strong><code>Walkman-Studio-3.0.0-arm64.dmg</code></strong></td>
+      <td><strong><code>Walkman-Studio-3.0.1-arm64.dmg</code></strong></td>
       <td>Apple Silicon (<code>arm64</code>)</td>
       <td>MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4)</td>
     </tr>
     <tr>
-      <td><strong><code>Walkman-Studio-3.0.0-intel.dmg</code></strong></td>
+      <td><strong><code>Walkman-Studio-3.0.1-intel.dmg</code></strong></td>
       <td>Intel (<code>x86_64</code>)</td>
       <td>Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac Pro</td>
     </tr>
     <tr>
-      <td><strong><code>Walkman-Studio-3.0.0-universal.dmg</code></strong></td>
+      <td><strong><code>Walkman-Studio-3.0.1-universal.dmg</code></strong></td>
       <td>Universal 2 (<code>arm64</code> + <code>x86_64</code>)</td>
       <td>Universal package running natively on all Macs (macOS 13.0+)</td>
     </tr>
@@ -240,7 +195,7 @@ cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
 </table>
 
 <h3>Alternative Mirror</h3>
-<p><strong>Google Drive:</strong> <a href="https://drive.google.com/drive/folders/1kb0z4Doik4ETlugIEnmDuMV1ZSYat-df?usp=share_link" target="_blank" rel="noopener noreferrer">Download v3.0.0 Release Files on Google Drive</a></p>
+<p><strong>Google Drive:</strong> <a href="https://drive.google.com/drive/folders/1kb0z4Doik4ETlugIEnmDuMV1ZSYat-df?usp=share_link" target="_blank" rel="noopener noreferrer">Download v3.0.1 Release Files on Google Drive</a></p>
 
 <hr>
 
