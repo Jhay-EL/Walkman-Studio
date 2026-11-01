@@ -23,15 +23,14 @@ public struct TransferQueueView: View {
 
     // Liquid Glass Sheets
     @State private var itemToEdit: TransferItem? = nil
-    @State private var showTransferConfirmation: Bool = false
     @State private var showClearConfirmation: Bool = false
     @State private var showDuplicateImportSheet: Bool = false
 
     // Duplicate Prevention Guardrail State
     private let libraryTracks: [Track]
     @State private var duplicateImportCandidates: [DuplicateImportCandidate] = []
-    @State private var pendingNonDuplicateURLs: [URL] = []
-    @State private var pendingAllImportURLs: [URL] = []
+    @State private var pendingPreparedNonDuplicates: [TransferItem] = []
+    @State private var pendingPreparedDuplicates: [TransferItem] = []
 
     // Audio Import / Folder Scanning State
     @State private var isImporting: Bool = false
@@ -150,8 +149,13 @@ public struct TransferQueueView: View {
             targetMode: $targetMode,
             onSelectMode: { newMode in
                 targetMode = newMode
-                if newMode == .learning && (selectedPreset == "flac_16" || selectedPreset == "flac_24_96") {
-                    selectedPreset = "copy_optimize"
+                if newMode == .learning {
+                    if selectedPreset == "flac_16" || selectedPreset == "flac_24_96" {
+                        selectedPreset = "copy_optimize"
+                    }
+                    fetchLyrics = false
+                } else if newMode == .music {
+                    fetchLyrics = true
                 }
             }
         )
@@ -318,7 +322,7 @@ public struct TransferQueueView: View {
                                         showTransferProgressModal = true
                                     }
                                 } else {
-                                    showTransferConfirmation = true
+                                    startBatchTransfer(skipExistingDuplicates: true)
                                 }
                             }) {
                                 HStack(spacing: 8) {
@@ -403,8 +407,12 @@ public struct TransferQueueView: View {
                             title: ".LRC Lyrics",
                             icon: "quote.bubble",
                             isOn: $fetchLyrics,
-                            help: targetMode == .learning ? "Disabled in Language Study mode (lyrics are not needed for audiobooks or podcasts)" : "Auto-downloads synchronized .lrc lyrics alongside music on Walkman",
-                            disabled: targetMode == .learning
+                            help: targetMode == .learning ? "Off by default for Language Study, but can be enabled to sync transcripts (.lrc) alongside lessons" : "Auto-downloads synchronized .lrc lyrics alongside music on Walkman",
+                            onToggled: { isOn in
+                                if isOn {
+                                    triggerQueueLyricsFetchIfNeeded()
+                                }
+                            }
                         )
                         toggleChip(
                             title: "Auto-Tags",
@@ -661,46 +669,25 @@ public struct TransferQueueView: View {
                 }
             )
         }
-        .sheet(isPresented: $showTransferConfirmation) {
-            TransferSyncSheet(
-                queue: queue,
-                targetDrive: selectedTarget,
-                targetMode: targetMode,
-                preset: selectedPreset,
-                presetDescription: presetDescription(selectedPreset),
-                onConfirm: { skipDuplicates in
-                    showTransferConfirmation = false
-                    startBatchTransfer(skipExistingDuplicates: skipDuplicates)
-                },
-                onCancel: {
-                    showTransferConfirmation = false
-                }
-            )
-        }
         .sheet(isPresented: $showDuplicateImportSheet) {
             DuplicateImportGuardSheet(
                 candidates: duplicateImportCandidates,
-                nonDuplicateCount: pendingNonDuplicateURLs.count,
-                totalCount: pendingAllImportURLs.count,
+                nonDuplicateCount: pendingPreparedNonDuplicates.count,
+                totalCount: pendingPreparedNonDuplicates.count + pendingPreparedDuplicates.count,
                 targetDriveName: selectedTarget?.name ?? "Walkman",
                 onSkipDuplicates: {
                     showDuplicateImportSheet = false
-                    for url in pendingNonDuplicateURLs {
-                        enqueueSingleFile(url)
-                    }
+                    let items = pendingPreparedNonDuplicates
+                    commitPreparedItems(items)
                 },
                 onAddAll: {
                     showDuplicateImportSheet = false
-                    for url in pendingAllImportURLs {
-                        let isDup = duplicateImportCandidates.contains(where: { $0.url == url })
-                        let cand = duplicateImportCandidates.first(where: { $0.url == url })
-                        let info = cand?.matchReason
-                        let matchedTr = cand?.matchingWalkmanTrack
-                        enqueueSingleFile(url, isDuplicate: isDup, duplicateInfo: info, matchedTrack: matchedTr)
-                    }
+                    let items = pendingPreparedNonDuplicates + pendingPreparedDuplicates
+                    commitPreparedItems(items)
                 },
                 onCancel: {
                     showDuplicateImportSheet = false
+                    clearPendingImport()
                 }
             )
         }
@@ -718,6 +705,13 @@ public struct TransferQueueView: View {
         }
         .onChange(of: targetDriveId) { _, _ in
             recheckQueueDuplicates()
+        }
+        .onChange(of: targetMode) { _, newMode in
+            if newMode == .learning {
+                fetchLyrics = false
+            } else if newMode == .music {
+                fetchLyrics = true
+            }
         }
     }
 
@@ -784,9 +778,9 @@ public struct TransferQueueView: View {
                         .font(WalkmanFont.title2)
                         .foregroundStyle(WalkmanTheme.silverLight)
 
-                    Text(importTotal > 0
+                    Text(!importStatusMessage.isEmpty ? importStatusMessage : (importTotal > 0
                          ? "Analyzing audio metadata, tags, and inspecting duplicates..."
-                         : "Scanning folders for audio tracks and albums...")
+                         : "Scanning folders for audio tracks and albums..."))
                         .font(WalkmanFont.subheadline)
                         .foregroundStyle(WalkmanTheme.silverMuted)
                         .multilineTextAlignment(.center)
@@ -1290,13 +1284,21 @@ public struct TransferQueueView: View {
     // -------------------------------------------------------------------------
     // HARDWARE TOGGLE CAPSULE CHIP
     // -------------------------------------------------------------------------
-    private func toggleChip(title: String, icon: String, isOn: Binding<Bool>, help: String, disabled: Bool = false) -> some View {
+    private func toggleChip(
+        title: String,
+        icon: String,
+        isOn: Binding<Bool>,
+        help: String,
+        disabled: Bool = false,
+        onToggled: ((Bool) -> Void)? = nil
+    ) -> some View {
         HardwareOptimizationToggleChipView(
             title: title,
             icon: icon,
             isOn: isOn,
             help: help,
-            disabled: disabled
+            disabled: disabled,
+            onToggled: onToggled
         )
     }
 
@@ -1439,26 +1441,26 @@ public struct TransferQueueView: View {
                     title: isBatchOptimizing ? "Optimizing..." : "Optimize All",
                     icon: "sparkles",
                     isLoading: isBatchOptimizing,
-                    isDisabled: isBatchOptimizing || isProcessing,
+                    isDisabled: queue.isEmpty || isBatchOptimizing || isProcessing,
                     help: "Fetches missing metadata and optimizes cover artwork to Baseline RGB JPEG for all tracks",
                     action: batchOptimizeAll
                 )
-
-                TransferBatchActionButton(
-                    title: isBatchFetchingLyrics ? "Fetching..." : "Fetch Lyrics",
-                    icon: "quote.bubble.fill",
-                    isLoading: isBatchFetchingLyrics,
-                    isDisabled: isBatchFetchingLyrics || isProcessing,
-                    help: "Fetches synchronized .LRC lyrics for all tracks in the queue",
-                    action: batchFetchAllLyrics
-                )
             }
+
+            TransferBatchActionButton(
+                title: isBatchFetchingLyrics ? "Fetching..." : "Fetch Lyrics",
+                icon: "quote.bubble.fill",
+                isLoading: isBatchFetchingLyrics,
+                isDisabled: queue.isEmpty || isBatchFetchingLyrics || isProcessing,
+                help: "Fetches synchronized .LRC lyrics for all tracks in the queue",
+                action: batchFetchAllLyrics
+            )
 
             TransferBatchActionButton(
                 title: "Clear",
                 icon: "trash",
                 isDestructive: true,
-                isDisabled: isProcessing,
+                isDisabled: queue.isEmpty || isProcessing,
                 help: "Clear all tracks from the queue",
                 action: {
                     if !queue.isEmpty {
@@ -1766,86 +1768,104 @@ public struct TransferQueueView: View {
                 self.importStatusMessage = "Importing \(total) tracks to Walkman Studio..."
             }
 
-            // Duplicate Guardrail: Check incoming tracks against Walkman library
-            var duplicates: [DuplicateImportCandidate] = []
-            var nonDuplicates: [URL] = []
+            // Single-Pass Concurrent Worker Pipeline:
+            // Prepare complete TransferItems and Duplicate candidates in parallel
+            let concurrencyLimit = max(2, min(8, ProcessInfo.processInfo.activeProcessorCount))
+            var preparedResults: [(index: Int, item: TransferItem, candidate: DuplicateImportCandidate?)] = []
+            preparedResults.reserveCapacity(total)
 
-            for (index, fileURL) in collectedURLs.enumerated() {
-                if Task.isCancelled { return }
+            var currentIndex = 0
+            var completedCount = 0
 
-                let fileName = fileURL.lastPathComponent
-                let progress = Double(index + 1) / Double(total)
-
-                await MainActor.run {
-                    self.importCurrent = index + 1
-                    self.importProgress = progress
-                    self.importCurrentTitle = fileName
+            await withTaskGroup(of: (Int, TransferItem, DuplicateImportCandidate?).self) { group in
+                // Seed initial batch of workers
+                for _ in 0..<concurrencyLimit {
+                    if currentIndex < total {
+                        let idx = currentIndex
+                        let fileURL = collectedURLs[idx]
+                        currentIndex += 1
+                        group.addTask {
+                            let res = Self.prepareSingleTransferItem(
+                                fileURL: fileURL,
+                                target: target,
+                                mode: mode,
+                                existingTracks: libTracks
+                            )
+                            return (idx, res.item, res.duplicateCandidate)
+                        }
+                    }
                 }
 
-                let pathFallback = AudioTagger.extractFromPath(url: fileURL)
-                var title = pathFallback.title
-                var artist = pathFallback.artist
-                var album = pathFallback.album
-                var duration: Double = 0
+                // Collect results and schedule remaining
+                while let result = await group.next() {
+                    if Task.isCancelled { break }
+                    preparedResults.append(result)
+                    completedCount += 1
 
-                if let meta = AudioTagger.shared.readMetadata(fileURL: fileURL) {
-                    if !meta.title.isEmpty && meta.title.lowercased() != "unknown" { title = meta.title }
-                    if !meta.artist.isEmpty && meta.artist.lowercased() != "unknown artist" { artist = meta.artist }
-                    if !meta.album.isEmpty && meta.album.lowercased() != "unknown album" { album = meta.album }
-                    duration = meta.durationSeconds
-                }
+                    let count = completedCount
+                    let progress = Double(count) / Double(total)
+                    let currentTitle = result.1.title
 
-                let check = WalkmanDuplicateGuard.shared.checkTrack(
-                    title: title,
-                    artist: artist,
-                    album: album,
-                    durationSeconds: duration,
-                    sourceURL: fileURL,
-                    targetDrive: target,
-                    targetMode: mode,
-                    existingTracks: libTracks
-                )
+                    await MainActor.run {
+                        self.importCurrent = count
+                        self.importProgress = progress
+                        self.importCurrentTitle = currentTitle
+                        self.importStatusMessage = "Importing track \(count) of \(total)..."
+                    }
 
-                if check.isDuplicate {
-                    duplicates.append(
-                        DuplicateImportCandidate(
-                            url: fileURL,
-                            title: title.isEmpty ? fileURL.deletingPathExtension().lastPathComponent : title,
-                            artist: artist.isEmpty ? "Unknown Artist" : artist,
-                            album: album,
-                            durationSeconds: duration,
-                            matchingWalkmanTrack: check.matchingTrack,
-                            matchReason: check.reason ?? "Already present on \(target?.name ?? "destination")",
-                            destinationDriveName: target?.name ?? "Walkman"
-                        )
-                    )
-                } else {
-                    nonDuplicates.append(fileURL)
+                    if currentIndex < total {
+                        let idx = currentIndex
+                        let fileURL = collectedURLs[idx]
+                        currentIndex += 1
+                        group.addTask {
+                            let res = Self.prepareSingleTransferItem(
+                                fileURL: fileURL,
+                                target: target,
+                                mode: mode,
+                                existingTracks: libTracks
+                            )
+                            return (idx, res.item, res.duplicateCandidate)
+                        }
+                    }
                 }
             }
 
             if Task.isCancelled { return }
 
+            // Restore strict Finder sort order
+            preparedResults.sort { $0.index < $1.index }
+
+            var duplicates: [DuplicateImportCandidate] = []
+            var readyDuplicates: [TransferItem] = []
+            var readyNonDuplicates: [TransferItem] = []
+
+            for res in preparedResults {
+                if let cand = res.candidate {
+                    duplicates.append(cand)
+                    readyDuplicates.append(res.item)
+                } else {
+                    readyNonDuplicates.append(res.item)
+                }
+            }
+
             let finalDuplicates = duplicates
-            let finalNonDuplicates = nonDuplicates
-            let finalCollected = collectedURLs
+            let finalReadyDuplicates = readyDuplicates
+            let finalReadyNonDuplicates = readyNonDuplicates
 
             await MainActor.run {
-                self.isImporting = false
-                self.importProgress = 0.0
-                self.importCurrent = 0
-                self.importTotal = 0
-                self.importCurrentTitle = ""
-
                 if !finalDuplicates.isEmpty {
+                    self.isImporting = false
+                    self.importProgress = 0.0
+                    self.importCurrent = 0
+                    self.importTotal = 0
+                    self.importCurrentTitle = ""
+
                     self.duplicateImportCandidates = finalDuplicates
-                    self.pendingNonDuplicateURLs = finalNonDuplicates
-                    self.pendingAllImportURLs = finalCollected
+                    self.pendingPreparedNonDuplicates = finalReadyNonDuplicates
+                    self.pendingPreparedDuplicates = finalReadyDuplicates
                     self.showDuplicateImportSheet = true
                 } else {
-                    for fileURL in finalCollected {
-                        self.enqueueSingleFile(fileURL)
-                    }
+                    self.commitPreparedItems(finalReadyNonDuplicates)
                 }
             }
         }
@@ -1900,118 +1920,176 @@ public struct TransferQueueView: View {
         }
     }
 
-    private func enqueueSingleFile(_ url: URL, isDuplicate: Bool = false, duplicateInfo: String? = nil, matchedTrack: Track? = nil) {
-        if queue.contains(where: { $0.sourceURL == url }) { return }
+    // -------------------------------------------------------------------------
+    // PREPARED TRANSFER ITEMS PIPELINE (Zero Redundancy Single-Pass)
+    // -------------------------------------------------------------------------
+    private func clearPendingImport() {
+        duplicateImportCandidates = []
+        pendingPreparedNonDuplicates = []
+        pendingPreparedDuplicates = []
+    }
 
-        var item = TransferItem(sourceURL: url)
-        item.title = WalkmanEngine.sanitizeWalkmanText(url.deletingPathExtension().lastPathComponent)
-        item.format = url.pathExtension.uppercased()
-        item.isDuplicateOnWalkman = isDuplicate
-        item.duplicateMatchInfo = duplicateInfo
-        item.duplicateMatchedTrack = matchedTrack
+    private func commitPreparedItems(_ items: [TransferItem]) {
+        guard !items.isEmpty else {
+            clearPendingImport()
+            withAnimation(.easeInOut(duration: 0.20)) {
+                self.isImporting = false
+                self.importProgress = 0.0
+                self.importCurrent = 0
+                self.importTotal = 0
+                self.importCurrentTitle = ""
+                self.importStatusMessage = ""
+            }
+            return
+        }
 
-        if let attr = try? FileManager.default.attributesOfItem(atPath: url.path) {
+        let isLearningMode = (targetMode == .learning)
+        let autoFetch = autoFetchMetadata
+        let lyricsFetch = fetchLyrics
+
+        withAnimation(.easeInOut(duration: 0.20)) {
+            for item in items {
+                if !self.queue.contains(where: { $0.sourceURL == item.sourceURL }) {
+                    self.queue.append(item)
+                }
+            }
+            self.isImporting = false
+            self.importProgress = 0.0
+            self.importCurrent = 0
+            self.importTotal = 0
+            self.importCurrentTitle = ""
+            self.importStatusMessage = ""
+        }
+
+        clearPendingImport()
+
+        if !isLearningMode {
+            for item in items {
+                if autoFetch && item.isMissingMetadata {
+                    optimizeSingleTrack(item)
+                }
+            }
+        }
+
+        if lyricsFetch {
+            let itemsNeedingLyrics = items.filter { $0.lyrics == nil }
+            if !itemsNeedingLyrics.isEmpty {
+                enqueuePacedLyricsFetch(itemsNeedingLyrics)
+            }
+        }
+    }
+
+    nonisolated private static func prepareSingleTransferItem(
+        fileURL: URL,
+        target: WalkmanDrive?,
+        mode: TransferTargetMode,
+        existingTracks: [Track]
+    ) -> (item: TransferItem, duplicateCandidate: DuplicateImportCandidate?) {
+        var item = TransferItem(sourceURL: fileURL)
+        item.title = WalkmanEngine.sanitizeWalkmanText(fileURL.deletingPathExtension().lastPathComponent)
+        item.format = fileURL.pathExtension.uppercased()
+
+        if let attr = try? FileManager.default.attributesOfItem(atPath: fileURL.path) {
             item.sizeBytes = attr[.size] as? Int64 ?? 0
         }
 
-        let pathFallback = AudioTagger.extractFromPath(url: url)
+        let pathFallback = AudioTagger.extractFromPath(url: fileURL)
         if !pathFallback.artist.isEmpty { item.artist = WalkmanEngine.sanitizeWalkmanText(pathFallback.artist, stripExplicitMarkers: false) }
         if !pathFallback.album.isEmpty { item.album = WalkmanEngine.sanitizeWalkmanText(pathFallback.album) }
         if !pathFallback.title.isEmpty { item.title = WalkmanEngine.sanitizeWalkmanText(pathFallback.title) }
         if !pathFallback.trackNumber.isEmpty { item.trackNumber = pathFallback.trackNumber }
 
-        if !item.isDuplicateOnWalkman {
-            let dupCheck = WalkmanDuplicateGuard.shared.checkTrack(
+        let meta = AudioTagger.shared.readMetadata(fileURL: fileURL)
+        let artData = AudioTagger.shared.extractCoverArt(fileURL: fileURL)
+        let existingLyrics = AudioTagger.shared.extractLyrics(fileURL: fileURL)
+
+        var isOpt = false
+        var finalArt = artData
+        if let d = artData {
+            let check = WalkmanEngine.shared.isBaselineRGBJPEG(data: d)
+            isOpt = check.valid
+            if !isOpt {
+                if let encoded = WalkmanEngine.shared.encodeBaselineRGBJPEG(data: d, maxDimension: 800) {
+                    finalArt = encoded
+                    isOpt = true
+                }
+            }
+        }
+
+        if let m = meta {
+            if !m.title.isEmpty && m.title.lowercased() != "unknown" && m.title.lowercased() != "unknown track" && m.title.lowercased() != "unknown title" {
+                item.title = WalkmanEngine.sanitizeWalkmanText(m.title)
+            }
+            if !m.artist.isEmpty && m.artist.lowercased() != "unknown artist" && m.artist.lowercased() != "unknown" {
+                item.artist = WalkmanEngine.sanitizeWalkmanText(m.artist, stripExplicitMarkers: false)
+            }
+            if !m.album.isEmpty && m.album.lowercased() != "unknown album" && m.album.lowercased() != "unknown" {
+                item.album = WalkmanEngine.sanitizeWalkmanText(m.album)
+            }
+            if !m.trackNumber.isEmpty { item.trackNumber = m.trackNumber }
+            if !m.year.isEmpty { item.year = m.year }
+            if !m.genre.isEmpty { item.genre = m.genre }
+            item.durationSeconds = m.durationSeconds
+            item.bitrateKbps = m.bitrateKbps
+            item.sampleRate = m.sampleRate
+            item.bitsPerSample = m.bitsPerSample
+        }
+
+        item.artworkData = finalArt
+        item.isArtworkOptimized = isOpt
+        item.lyrics = existingLyrics
+        item.isLyricsSynced = existingLyrics?.contains("[0") == true
+
+        let check = WalkmanDuplicateGuard.shared.checkTrack(
+            title: item.title,
+            artist: item.artist,
+            album: item.album,
+            durationSeconds: item.durationSeconds,
+            sourceURL: fileURL,
+            targetDrive: target,
+            targetMode: mode,
+            existingTracks: existingTracks
+        )
+
+        var candidate: DuplicateImportCandidate? = nil
+        if check.isDuplicate {
+            item.isDuplicateOnWalkman = true
+            item.duplicateMatchInfo = check.reason
+            item.duplicateMatchedTrack = check.matchingTrack
+
+            candidate = DuplicateImportCandidate(
+                url: fileURL,
                 title: item.title,
-                artist: item.artist,
+                artist: item.artist.isEmpty ? "Unknown Artist" : item.artist,
                 album: item.album,
-                sourceURL: url,
-                targetDrive: selectedTarget,
-                targetMode: targetMode,
-                existingTracks: destinationTracks(for: selectedTarget)
+                durationSeconds: item.durationSeconds,
+                matchingWalkmanTrack: check.matchingTrack,
+                matchReason: check.reason ?? "Already present on \(target?.name ?? "destination")",
+                destinationDriveName: target?.name ?? "Walkman"
             )
-            if dupCheck.isDuplicate {
-                item.isDuplicateOnWalkman = true
-                item.duplicateMatchInfo = dupCheck.reason
-                item.duplicateMatchedTrack = dupCheck.matchingTrack
-            }
         }
 
-        Task.detached(priority: .userInitiated) {
-            let meta = AudioTagger.shared.readMetadata(fileURL: url)
-            let artData = AudioTagger.shared.extractCoverArt(fileURL: url)
-            let existingLyrics = AudioTagger.shared.extractLyrics(fileURL: url)
+        return (item, candidate)
+    }
 
-            var isOpt = false
-            var finalArt = artData
-            if let d = artData {
-                let check = WalkmanEngine.shared.isBaselineRGBJPEG(data: d)
-                isOpt = check.valid
-                if !isOpt {
-                    if let encoded = WalkmanEngine.shared.encodeBaselineRGBJPEG(data: d, maxDimension: 800) {
-                        finalArt = encoded
-                        isOpt = true
-                    }
-                }
-            }
-
-            let resolvedArt = finalArt
-            let resolvedOpt = isOpt
-
-            await MainActor.run {
-                if let idx = self.queue.firstIndex(where: { $0.sourceURL == url }) {
-                    if let m = meta {
-                        if !m.title.isEmpty && m.title.lowercased() != "unknown" && m.title.lowercased() != "unknown track" && m.title.lowercased() != "unknown title" {
-                            self.queue[idx].title = WalkmanEngine.sanitizeWalkmanText(m.title)
-                        }
-                        if !m.artist.isEmpty && m.artist.lowercased() != "unknown artist" && m.artist.lowercased() != "unknown" {
-                            self.queue[idx].artist = WalkmanEngine.sanitizeWalkmanText(m.artist, stripExplicitMarkers: false)
-                        }
-                        if !m.album.isEmpty && m.album.lowercased() != "unknown album" && m.album.lowercased() != "unknown" {
-                            self.queue[idx].album = WalkmanEngine.sanitizeWalkmanText(m.album)
-                        }
-                        if !m.trackNumber.isEmpty { self.queue[idx].trackNumber = m.trackNumber }
-                        if !m.year.isEmpty { self.queue[idx].year = m.year }
-                        if !m.genre.isEmpty { self.queue[idx].genre = m.genre }
-                        self.queue[idx].durationSeconds = m.durationSeconds
-                        self.queue[idx].bitrateKbps = m.bitrateKbps
-                        self.queue[idx].sampleRate = m.sampleRate
-                        self.queue[idx].bitsPerSample = m.bitsPerSample
-                    }
-                    self.queue[idx].artworkData = resolvedArt
-                    self.queue[idx].isArtworkOptimized = resolvedOpt
-                    self.queue[idx].lyrics = existingLyrics
-                    self.queue[idx].isLyricsSynced = existingLyrics?.contains("[0") == true
-
-                    if !self.queue[idx].isDuplicateOnWalkman {
-                        let dupCheck = WalkmanDuplicateGuard.shared.checkTrack(
-                            title: self.queue[idx].title,
-                            artist: self.queue[idx].artist,
-                            album: self.queue[idx].album,
-                            durationSeconds: self.queue[idx].durationSeconds,
-                            sourceURL: url,
-                            targetDrive: self.selectedTarget,
-                            targetMode: self.targetMode,
-                            existingTracks: self.destinationTracks(for: self.selectedTarget)
-                        )
-                        if dupCheck.isDuplicate {
-                            self.queue[idx].isDuplicateOnWalkman = true
-                            self.queue[idx].duplicateMatchInfo = dupCheck.reason
-                            self.queue[idx].duplicateMatchedTrack = dupCheck.matchingTrack
-                        }
-                    }
-
-                    if self.targetMode != .learning && self.autoFetchMetadata && self.queue[idx].isMissingMetadata {
-                        self.optimizeSingleTrack(self.queue[idx])
-                    }
-                    if self.targetMode != .learning && self.fetchLyrics && self.queue[idx].lyrics == nil {
-                        self.fetchLyricsForTrack(self.queue[idx])
-                    }
-                }
-            }
+    private func enqueueSingleFile(_ url: URL, isDuplicate: Bool = false, duplicateInfo: String? = nil, matchedTrack: Track? = nil) {
+        if queue.contains(where: { $0.sourceURL == url }) { return }
+        let target = selectedTarget
+        let mode = targetMode
+        let libTracks = destinationTracks(for: target)
+        let res = Self.prepareSingleTransferItem(
+            fileURL: url,
+            target: target,
+            mode: mode,
+            existingTracks: libTracks
+        )
+        var item = res.item
+        if isDuplicate {
+            item.isDuplicateOnWalkman = true
+            item.duplicateMatchInfo = duplicateInfo ?? item.duplicateMatchInfo
+            item.duplicateMatchedTrack = matchedTrack ?? item.duplicateMatchedTrack
         }
-
-        queue.append(item)
+        commitPreparedItems([item])
     }
 
     private func togglePreviewPlayback(for item: TransferItem) {
@@ -2130,30 +2208,54 @@ public struct TransferQueueView: View {
         }
     }
 
-    private func fetchLyricsForTrack(_ item: TransferItem) {
-        guard let idx = queue.firstIndex(where: { $0.id == item.id }) else { return }
-        queue[idx].isFetchingOnline = true
+    @discardableResult
+    private func fetchLyricsForTrackAsync(_ item: TransferItem) async -> Bool {
+        await MainActor.run {
+            if let idx = self.queue.firstIndex(where: { $0.id == item.id }) {
+                self.queue[idx].isFetchingOnline = true
+            }
+        }
 
-        Task {
-            let art = item.artist
-            let tit = item.title.isEmpty ? item.sourceURL.deletingPathExtension().lastPathComponent : item.title
-            let alb = item.album
+        let art = item.artist
+        let tit = item.title.isEmpty ? item.sourceURL.deletingPathExtension().lastPathComponent : item.title
+        let alb = item.album
 
-            let lyr = try? await LyricsService.shared.fetchLyrics(
-                title: tit,
-                artist: art,
-                album: alb,
-                durationSeconds: item.durationSeconds
-            )
+        let lyr = try? await LyricsService.shared.fetchLyrics(
+            title: tit,
+            artist: art,
+            album: alb,
+            durationSeconds: item.durationSeconds
+        )
 
-            await MainActor.run {
-                if let i = self.queue.firstIndex(where: { $0.id == item.id }) {
-                    if let l = lyr {
-                        self.queue[i].lyrics = l.lyrics
-                        self.queue[i].isLyricsSynced = l.synced
-                    }
-                    self.queue[i].isFetchingOnline = false
+        return await MainActor.run {
+            if let i = self.queue.firstIndex(where: { $0.id == item.id }) {
+                if let l = lyr {
+                    self.queue[i].lyrics = l.lyrics
+                    self.queue[i].isLyricsSynced = l.synced
                 }
+                self.queue[i].isFetchingOnline = false
+                return lyr != nil
+            }
+            return false
+        }
+    }
+
+    private func fetchLyricsForTrack(_ item: TransferItem) {
+        Task {
+            await fetchLyricsForTrackAsync(item)
+        }
+    }
+
+    private func enqueuePacedLyricsFetch(_ items: [TransferItem]) {
+        guard !items.isEmpty else { return }
+        Task {
+            for item in items {
+                guard let idx = await MainActor.run(body: { self.queue.firstIndex(where: { $0.id == item.id }) }),
+                      await MainActor.run(body: { self.queue[idx].lyrics == nil }) else {
+                    continue
+                }
+                await fetchLyricsForTrackAsync(item)
+                try? await Task.sleep(nanoseconds: 150_000_000)
             }
         }
     }
@@ -2164,23 +2266,33 @@ public struct TransferQueueView: View {
         batchStatusText = "Fetching lyrics from LRCLIB..."
 
         Task {
-            for i in 0..<queue.count {
+            let pendingItems = await MainActor.run {
+                self.queue.filter { $0.lyrics == nil || $0.lyrics?.isEmpty == true }
+            }
+            let total = pendingItems.count
+            var completed = 0
+
+            for it in pendingItems {
                 guard isBatchFetchingLyrics else { break }
-                let it = queue[i]
-                if it.lyrics == nil {
-                    await withCheckedContinuation { continuation in
-                        fetchLyricsForTrack(it)
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            continuation.resume()
-                        }
-                    }
+                await MainActor.run {
+                    self.batchStatusText = total > 1 ? "Fetching lyrics (\(completed + 1) of \(total))..." : "Fetching lyrics from LRCLIB..."
                 }
+                await fetchLyricsForTrackAsync(it)
+                completed += 1
+                try? await Task.sleep(nanoseconds: 150_000_000)
             }
             await MainActor.run {
                 self.isBatchFetchingLyrics = false
                 self.batchStatusText = nil
             }
         }
+    }
+
+    private func triggerQueueLyricsFetchIfNeeded() {
+        guard !queue.isEmpty else { return }
+        let itemsNeedingLyrics = queue.filter { $0.lyrics == nil || $0.lyrics?.isEmpty == true }
+        guard !itemsNeedingLyrics.isEmpty else { return }
+        batchFetchAllLyrics()
     }
 
     private func pickCustomArtwork(for itemId: UUID) {
@@ -2506,9 +2618,9 @@ public struct TransferQueueView: View {
                     }
 
                     // 3. Companion .LRC Lyrics / Transcript Writing
-                    if targetMode != .learning {
+                    if fetchLyrics {
                         var lyrToWrite = queue[i].lyrics
-                        if (lyrToWrite == nil || lyrToWrite!.isEmpty) && fetchLyrics {
+                        if (lyrToWrite == nil || lyrToWrite!.isEmpty) {
                             let tit = queue[i].title.isEmpty ? src.deletingPathExtension().lastPathComponent : queue[i].title
                             if let fetched = try? await LyricsService.shared.fetchLyrics(
                                 title: tit,
@@ -3207,6 +3319,7 @@ private struct HardwareOptimizationToggleChipView: View {
     @Binding var isOn: Bool
     let help: String
     var disabled: Bool = false
+    var onToggled: ((Bool) -> Void)? = nil
 
     @State private var isHovered = false
 
@@ -3217,6 +3330,7 @@ private struct HardwareOptimizationToggleChipView: View {
     var body: some View {
         Button(action: {
             isOn.toggle()
+            onToggled?(isOn)
         }) {
             HStack(spacing: 5.5) {
                 Image(systemName: isEffectivelyOn ? "\(icon).fill" : icon)
@@ -3224,7 +3338,7 @@ private struct HardwareOptimizationToggleChipView: View {
                     .foregroundStyle(
                         isEffectivelyOn ?
                             WalkmanTheme.silverLight :
-                            (isHovered ? Color.white : WalkmanTheme.silverMuted)
+                            (isHovered ? Color.white : WalkmanTheme.silverLight.opacity(0.85))
                     )
 
                 Text(title)
@@ -3234,7 +3348,7 @@ private struct HardwareOptimizationToggleChipView: View {
                     .foregroundStyle(
                         isEffectivelyOn ?
                             Color.white :
-                            (isHovered ? Color.white : WalkmanTheme.silverMuted)
+                            (isHovered ? Color.white : WalkmanTheme.silverLight.opacity(0.85))
                     )
 
                 if isEffectivelyOn {
@@ -3278,7 +3392,7 @@ private struct HardwareOptimizationToggleChipView: View {
                             Spacer(minLength: 0)
                         }
                     } else {
-                        Color.white.opacity(0.04)
+                        Color.white.opacity(0.06)
                     }
                 }
             )
@@ -3288,7 +3402,7 @@ private struct HardwareOptimizationToggleChipView: View {
                     .stroke(
                         isEffectivelyOn ?
                             Color.white.opacity(isHovered ? 0.48 : 0.38) :
-                            (isHovered ? Color.white.opacity(0.20) : Color.white.opacity(0.08)),
+                            (isHovered ? Color.white.opacity(0.28) : Color.white.opacity(0.14)),
                         lineWidth: 0.85
                     )
             )

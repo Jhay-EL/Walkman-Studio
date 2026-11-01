@@ -29,8 +29,8 @@ public final class LyricsService: @unchecked Sendable {
 
     private let session: URLSession = {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 2.5
-        config.timeoutIntervalForResource = 5.0
+        config.timeoutIntervalForRequest = 4.0
+        config.timeoutIntervalForResource = 8.0
         config.requestCachePolicy = .returnCacheDataElseLoad
         return URLSession(configuration: config)
     }()
@@ -42,6 +42,38 @@ public final class LyricsService: @unchecked Sendable {
     }()
 
     private init() {}
+
+    /// Checks whether an artist name is a generic placeholder like "Unknown Artist" or "Various Artists"
+    public static func isPlaceholderArtist(_ artist: String) -> Bool {
+        let trimmed = artist.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if trimmed.isEmpty { return true }
+        let placeholders: Set<String> = [
+            "unknown", "unknown artist", "various artists", "various", "va",
+            "artiest onbekend", "desconhecido", "unbekannt", "inconnu", "artista desconocido"
+        ]
+        return placeholders.contains(trimmed)
+    }
+
+    /// Infers artist and title if artist is placeholder and title is formatted like "Artist - Title"
+    public static func inferArtistAndTitle(title: String, artist: String) -> (artist: String, title: String) {
+        let cleanArt = artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !isPlaceholderArtist(cleanArt) {
+            return (cleanArt, title)
+        }
+        for sep in [" - ", " – ", " — "] {
+            if title.contains(sep) {
+                let parts = title.components(separatedBy: sep)
+                if parts.count >= 2 {
+                    let inferredArt = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
+                    let inferredTitle = parts.dropFirst().joined(separator: sep).trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !inferredArt.isEmpty && !inferredTitle.isEmpty && !isPlaceholderArtist(inferredArt) {
+                        return (inferredArt, inferredTitle)
+                    }
+                }
+            }
+        }
+        return ("", title)
+    }
 
     /// Cleans fluff from track titles such as leading track numbers ("01. "), "(feat. X)", "(Official Video)", "[Remastered]", etc.
     public static func cleanTrackTitle(_ title: String, artist: String? = nil) -> String {
@@ -120,8 +152,9 @@ public final class LyricsService: @unchecked Sendable {
         album: String = "",
         durationSeconds: Double = 0
     ) async throws -> LyricsResult {
-        let cleanTitle = Self.cleanTrackTitle(title, artist: artist)
-        let primaryArtist = Track.parsePrimaryAndFeaturedArtist(from: artist).primary
+        let (inferredArtist, rawTitle) = Self.inferArtistAndTitle(title: title, artist: artist)
+        let cleanTitle = Self.cleanTrackTitle(rawTitle, artist: inferredArtist)
+        let primaryArtist = inferredArtist.isEmpty ? "" : Track.parsePrimaryAndFeaturedArtist(from: inferredArtist).primary
         let allowed = Self.allowedQueryChars
 
         // 1. Direct indexed match via LRCLIB /api/get (ultra-fast, indexed B-tree, avoids /api/search 503 limits)
@@ -200,7 +233,7 @@ public final class LyricsService: @unchecked Sendable {
             }
         }
 
-        // 4. Fallback: try title-only query if artist was missing or mismatched
+        // 4. Fallback: try title-only query if artist was missing, placeholder, or mismatched
         if let titleOnlyRes = await queryLrclibSearch(
             title: cleanTitle,
             artist: "",
@@ -211,6 +244,22 @@ public final class LyricsService: @unchecked Sendable {
         }
 
         throw LyricsError.notFound
+    }
+
+    // MARK: - Safe Network Execution with HTTP 429 Rate-Limit Retry
+    private func executeRequest(_ request: URLRequest, retryOnRateLimit: Bool = true) async -> (Data, HTTPURLResponse)? {
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else { return nil }
+            if http.statusCode == 429 && retryOnRateLimit {
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                return await executeRequest(request, retryOnRateLimit: false)
+            }
+            guard http.statusCode == 200 else { return nil }
+            return (data, http)
+        } catch {
+            return nil
+        }
     }
 
     // MARK: - LRCLIB Direct Indexed Get Query
@@ -238,8 +287,7 @@ public final class LyricsService: @unchecked Sendable {
         var request = URLRequest(url: url)
         request.setValue("WalkmanStudio/1.0 (https://github.com/Jhay-EL/Walkman-Studio)", forHTTPHeaderField: "User-Agent")
 
-        guard let (data, response) = try? await session.data(for: request),
-              let http = response as? HTTPURLResponse, http.statusCode == 200,
+        guard let (data, _) = await executeRequest(request),
               let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
         }
@@ -261,8 +309,7 @@ public final class LyricsService: @unchecked Sendable {
         var request = URLRequest(url: url)
         request.setValue("WalkmanStudio/1.0 (https://github.com/Jhay-EL/Walkman-Studio)", forHTTPHeaderField: "User-Agent")
 
-        guard let (data, response) = try? await session.data(for: request),
-              let http = response as? HTTPURLResponse, http.statusCode == 200,
+        guard let (data, _) = await executeRequest(request),
               let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
         }
@@ -285,8 +332,7 @@ public final class LyricsService: @unchecked Sendable {
         var request = URLRequest(url: url)
         request.setValue("WalkmanStudio/1.0 (https://github.com/Jhay-EL/Walkman-Studio)", forHTTPHeaderField: "User-Agent")
 
-        guard let (data, response) = try? await session.data(for: request),
-              let http = response as? HTTPURLResponse, http.statusCode == 200,
+        guard let (data, _) = await executeRequest(request),
               let results = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
               !results.isEmpty else {
             return nil
@@ -320,6 +366,9 @@ public final class LyricsService: @unchecked Sendable {
         if let synced = dict["syncedLyrics"] as? String, !synced.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return LyricsResult(synced: true, lyrics: synced, source: "LRCLIB (Synced)")
         }
+        if let isInstrumental = dict["instrumental"] as? Bool, isInstrumental {
+            return LyricsResult(synced: true, lyrics: "[00:00.00]♪ Instrumental ♪\r\n", source: "LRCLIB (Instrumental)")
+        }
         if let plain = dict["plainLyrics"] as? String, !plain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return LyricsResult(synced: false, lyrics: plain, source: "LRCLIB (Plain)")
         }
@@ -332,8 +381,8 @@ public final class LyricsService: @unchecked Sendable {
         artist: String,
         allowedChars: CharacterSet
     ) async -> LyricsResult? {
-        guard !artist.isEmpty, !title.isEmpty,
-              let encArtist = artist.addingPercentEncoding(withAllowedCharacters: allowedChars),
+        guard !artist.isEmpty, !title.isEmpty else { return nil }
+        guard let encArtist = artist.addingPercentEncoding(withAllowedCharacters: allowedChars),
               let encTitle = title.addingPercentEncoding(withAllowedCharacters: allowedChars),
               let url = URL(string: "https://api.lyrics.ovh/v1/\(encArtist)/\(encTitle)") else {
             return nil
@@ -342,8 +391,7 @@ public final class LyricsService: @unchecked Sendable {
         var request = URLRequest(url: url)
         request.setValue("WalkmanStudio/1.0", forHTTPHeaderField: "User-Agent")
 
-        guard let (data, response) = try? await session.data(for: request),
-              let http = response as? HTTPURLResponse, http.statusCode == 200,
+        guard let (data, _) = await executeRequest(request),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let text = json["lyrics"] as? String,
               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
