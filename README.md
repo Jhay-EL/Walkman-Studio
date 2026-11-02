@@ -47,6 +47,7 @@ Sony Walkman digital audio players deliver exceptional audio fidelity via their 
 
 ### 1. Sony 12 Tone Analysis & 13 SenseMe™ Channels
 * **Native Acoustic Feature Extraction:** Emulates Sony's proprietary 12 Tone analysis algorithm directly on your Mac to extract tempo (BPM), mood (Energy, Valence/Cheerfulness), and rhythmic density without cloud dependency.
+* **SenseMe™ 12 Tone Mathematical Specification:** Complete technical documentation detailing how the 12 Tone analysis works on Walkman Studio, including acoustic feature extraction formulas, coefficient matrices, and channel classification logic: 📄 [**SenseMe™ 12 Tone Analysis Formula Specification (PDF)**](senseme_12tone_formula.pdf).
 * **13 Official SenseMe™ Mood Channels:** Automatically categorizes analyzed tracks into the official Walkman SenseMe™ channels: *Morning, Daytime, Evening, Night, Midnight, Relax, Upbeat, Energetic, Emotional, Lounge, Dance, Extreme,* and *Acoustic*.
 * **Direct Hardware Tag Encapsulation:**
   * **FLAC:** Injects compliant 12 Tone metadata directly into FLAC `APPLICATION` block code `2` with application ID `SMFM` (exact 3,270 bytes), strictly preserving lossless audio frames.
@@ -393,6 +394,7 @@ open "Walkman Studio.app"
 ```
 Walkman-Studio/
 ├── Package.swift                         # Swift Package Manager manifest (macOS 13+)
+├── senseme_12tone_formula.pdf            # Technical documentation: SenseMe™ 12 Tone analysis formula
 ├── build_app.sh                          # Universal/arm64/x86_64 release packager
 ├── build_release.sh                      # Full release distributor (.dmg, .zip, SHA256)
 ├── start.sh                              # Unified startup script
