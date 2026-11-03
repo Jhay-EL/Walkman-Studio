@@ -53,6 +53,7 @@ public struct AlbumsView: View {
     @State private var formatFilter: String = "ALL"
     @State private var cachedAlbums: [AlbumItem] = []
     @State private var displayedAlbums: [AlbumItem] = []
+    @State private var showBatchLyricsSheet: Bool = false
     
     private let formatFilterOptions: [FilterOption] = [
         FilterOption(id: "ALL", title: "All Formats", icon: nil, isHiRes: false),
@@ -397,6 +398,19 @@ public struct AlbumsView: View {
         .onChange(of: cachedAlbums) { _, _ in
             recomputeDisplayedAlbums()
         }
+        .sheet(isPresented: $showBatchLyricsSheet) {
+            BatchLyricsGeneratorSheet(
+                allTracks: tracks,
+                selectedTracks: selectedAlbum?.tracks ?? [],
+                tabContext: .albums(
+                    selectedAlbumName: selectedAlbum?.name,
+                    albumTrackCount: selectedAlbum?.tracks.count ?? 0
+                ),
+                onDismiss: {
+                    showBatchLyricsSheet = false
+                }
+            )
+        }
     }
     
     // -------------------------------------------------------------------------
@@ -422,6 +436,20 @@ public struct AlbumsView: View {
         )
     }
     
+    private var batchLyricsButton: some View {
+        Button(action: {
+            showBatchLyricsSheet = true
+        }) {
+            Image(systemName: "quote.bubble")
+                .font(.system(size: 13, weight: .semibold))
+                .frame(width: 38, height: 38)
+                .foregroundStyle(WalkmanTheme.silverLight)
+        }
+        .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
+        .disabled(displayedAlbums.isEmpty && selectedAlbum == nil)
+        .help("Batch generate and sync lyrics for albums")
+    }
+    
     private var wideToolbarLayout: some View {
         HStack(spacing: 8) {
             searchFieldView
@@ -435,6 +463,8 @@ public struct AlbumsView: View {
             
             Spacer(minLength: 4)
             
+            batchLyricsButton
+            
             albumCountPill
                 .fixedSize(horizontal: true, vertical: false)
         }
@@ -445,6 +475,8 @@ public struct AlbumsView: View {
             HStack(spacing: 8) {
                 searchFieldView
                     .frame(minWidth: 80, maxWidth: .infinity)
+                
+                batchLyricsButton
                 
                 albumCountPill
                     .fixedSize(horizontal: true, vertical: false)
@@ -468,6 +500,8 @@ public struct AlbumsView: View {
             HStack(spacing: 8) {
                 searchFieldView
                     .frame(minWidth: 80, maxWidth: .infinity)
+                
+                batchLyricsButton
                 
                 albumCountPill
                     .fixedSize(horizontal: true, vertical: false)
