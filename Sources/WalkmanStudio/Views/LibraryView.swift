@@ -33,6 +33,7 @@ public struct LibraryView: View {
     @State private var visibleTrackIds: Set<String> = []
     @State private var isBatchAnalyzing: Bool = false
     @State private var batchProgress: (current: Int, total: Int, trackTitle: String)? = nil
+    @State private var showBatchLyricsSheet: Bool = false
     
     public init(
         tracks: [Track],
@@ -223,6 +224,16 @@ public struct LibraryView: View {
         .onDisappear {
             player.activeQueueProvider = nil
         }
+        .sheet(isPresented: $showBatchLyricsSheet) {
+            BatchLyricsGeneratorSheet(
+                allTracks: visibleTracks,
+                selectedTracks: tracks.filter { selectedTrackId == $0.id },
+                tabContext: .allSongs,
+                onDismiss: {
+                    showBatchLyricsSheet = false
+                }
+            )
+        }
     }
     
     // -------------------------------------------------------------------------
@@ -382,6 +393,18 @@ public struct LibraryView: View {
             .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
             .disabled(visibleTracks.isEmpty)
             .help("Shuffle and play visible tracks")
+
+            Button(action: {
+                showBatchLyricsSheet = true
+            }) {
+                Image(systemName: "quote.bubble")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(width: 38, height: 38)
+                    .foregroundStyle(WalkmanTheme.silverLight)
+            }
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
+            .disabled(visibleTracks.isEmpty)
+            .help("Batch generate and sync lyrics for library tracks")
 
             let unanalyzedCount = visibleTracks.filter { !$0.isSenseMeAnalyzed }.count
             let hasSelection = selectedTrackId != nil
