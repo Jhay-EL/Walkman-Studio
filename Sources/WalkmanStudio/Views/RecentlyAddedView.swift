@@ -48,6 +48,7 @@ public struct RecentlyAddedView: View {
     @State private var displayedTracks: [RankedTrack] = []
     @State private var sortedBaseTracks: [Track] = []
     @State private var currentPlaybackQueue: [Track] = []
+    @State private var showBatchLyricsSheet: Bool = false
     @State private var visibleTrackIds: Set<String> = []
     
     private let formatFilterOptions: [FilterOption] = [
@@ -262,6 +263,16 @@ public struct RecentlyAddedView: View {
         .onDisappear {
             player.activeQueueProvider = nil
         }
+        .sheet(isPresented: $showBatchLyricsSheet) {
+            BatchLyricsGeneratorSheet(
+                allTracks: displayedTracks.map(\.track),
+                selectedTracks: tracks.filter { selectedTrackId == $0.id },
+                tabContext: .recentlyAdded,
+                onDismiss: {
+                    showBatchLyricsSheet = false
+                }
+            )
+        }
     }
     
     // -------------------------------------------------------------------------
@@ -420,6 +431,18 @@ public struct RecentlyAddedView: View {
             .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
             .disabled(displayedTracks.isEmpty)
             .help("Shuffle and play recent tracks")
+
+            Button(action: {
+                showBatchLyricsSheet = true
+            }) {
+                Image(systemName: "quote.bubble")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(width: 38, height: 38)
+                    .foregroundStyle(WalkmanTheme.silverLight)
+            }
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
+            .disabled(displayedTracks.isEmpty)
+            .help("Batch generate and sync lyrics for recently added tracks")
         }
     }
     
