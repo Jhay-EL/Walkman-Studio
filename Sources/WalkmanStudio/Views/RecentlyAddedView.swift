@@ -21,6 +21,33 @@ public struct RankedTrack: Identifiable, Sendable {
     }
 }
 
+public enum RecentlyAddedTimeScope: String, CaseIterable, Identifiable, Sendable {
+    case pastDay = "Past 24 Hours"
+    case pastWeek = "Past 7 Days"
+    case past30Days = "Past 30 Days"
+    case allTime = "All Time"
+
+    public var id: String { rawValue }
+
+    public var icon: String {
+        switch self {
+        case .pastDay: return "sun.max"
+        case .pastWeek: return "calendar.badge.clock"
+        case .past30Days: return "calendar"
+        case .allTime: return "clock.arrow.circlepath"
+        }
+    }
+
+    public var days: Int? {
+        switch self {
+        case .pastDay: return 1
+        case .pastWeek: return 7
+        case .past30Days: return 30
+        case .allTime: return nil
+        }
+    }
+}
+
 fileprivate struct FilterOption: Identifiable {
     let id: String
     let title: String
@@ -43,12 +70,14 @@ public struct RecentlyAddedView: View {
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var searchQuery: String = ""
     @State private var formatFilter: String = "ALL"
+    @State private var timeScope: RecentlyAddedTimeScope = .past30Days
     @State private var sortOrder = defaultSortOrder
     
     @State private var displayedTracks: [RankedTrack] = []
     @State private var sortedBaseTracks: [Track] = []
     @State private var currentPlaybackQueue: [Track] = []
     @State private var showBatchLyricsSheet: Bool = false
+    @State private var isPreparingLyricsSheet: Bool = false
     @State private var visibleTrackIds: Set<String> = []
     
     private let formatFilterOptions: [FilterOption] = [
@@ -122,8 +151,15 @@ public struct RecentlyAddedView: View {
         let activeSortOrder = newSortOrder ?? sortOrder
         let isDefaultSort = (activeSortOrder == Self.defaultSortOrder)
         let q = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let now = Date()
         
         let filtered: [Track] = baseList.filter { track in
+            // 0. Time Scope filter (Past 30 Days default, Past 7 Days, Past 24 Hours, or All Time)
+            if let days = timeScope.days {
+                let cutoffDate = now.addingTimeInterval(-Double(days) * 86400)
+                if track.dateAdded < cutoffDate { return false }
+            }
+
             // 1. Format filter
             if formatFilter == "HI-RES" {
                 if track.bitsPerSample <= 16 && track.sampleRate <= 48000 { return false }
@@ -255,6 +291,9 @@ public struct RecentlyAddedView: View {
             recomputeDisplayedTracks()
         }
         .onChange(of: formatFilter) { _, _ in
+            recomputeDisplayedTracks()
+        }
+        .onChange(of: timeScope) { _, _ in
             recomputeDisplayedTracks()
         }
         .onChange(of: sortOrder) { _, newOrder in
@@ -432,16 +471,29 @@ public struct RecentlyAddedView: View {
             .disabled(displayedTracks.isEmpty)
             .help("Shuffle and play recent tracks")
 
+            RecentlyAddedTimeScopeMenuButton(timeScope: $timeScope)
+
             Button(action: {
-                showBatchLyricsSheet = true
+                isPreparingLyricsSheet = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    showBatchLyricsSheet = true
+                    isPreparingLyricsSheet = false
+                }
             }) {
-                Image(systemName: "quote.bubble")
-                    .font(.system(size: 13, weight: .semibold))
-                    .frame(width: 38, height: 38)
-                    .foregroundStyle(WalkmanTheme.silverLight)
+                if isPreparingLyricsSheet {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.8)
+                        .frame(width: 38, height: 38)
+                } else {
+                    Image(systemName: "quote.bubble")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 38, height: 38)
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                }
             }
             .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
-            .disabled(displayedTracks.isEmpty)
+            .disabled(displayedTracks.isEmpty || isPreparingLyricsSheet)
             .help("Batch generate and sync lyrics for recently added tracks")
         }
     }
@@ -575,8 +627,10 @@ public struct RecentlyAddedView: View {
                 .foregroundStyle(.white)
             
             Text(searchQuery.isEmpty
-                 ? "No recently added tracks match the selected format."
-                 : "No recently added tracks match \"\(searchQuery)\" with the selected format.")
+                 ? (timeScope != .allTime
+                    ? "No tracks were added in the \(timeScope.rawValue.lowercased())."
+                    : "No recently added tracks match the selected format.")
+                 : "No recently added tracks match \"\(searchQuery)\" with the selected filters.")
                 .font(WalkmanFont.callout)
                 .foregroundStyle(Color.secondary)
                 .multilineTextAlignment(.center)
@@ -585,8 +639,10 @@ public struct RecentlyAddedView: View {
             Button(action: {
                 searchQuery = ""
                 formatFilter = "ALL"
+                timeScope = .allTime
+                recomputeDisplayedTracks()
             }) {
-                Text("Reset Filters")
+                Text(timeScope != .allTime ? "View All Added Tracks" : "Reset Filters")
                     .font(WalkmanFont.calloutMedium)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 6)
@@ -1027,5 +1083,101 @@ private struct HoverPillBackground: View {
             x: 0,
             y: 1
         )
+    }
+}
+
+// -----------------------------------------------------------------------------
+// RECENTLY ADDED TIME SCOPE MENU BUTTON (CIRCULAR LIQUID GLASS DESIGN)
+// -----------------------------------------------------------------------------
+private struct RecentlyAddedTimeScopeMenuButton: View {
+    @Binding var timeScope: RecentlyAddedTimeScope
+    @State private var isHovered = false
+
+    private var isNonDefault: Bool {
+        timeScope != .past30Days
+    }
+
+    var body: some View {
+        Menu {
+            Picker("Scope", selection: $timeScope) {
+                ForEach(RecentlyAddedTimeScope.allCases) { scope in
+                    Label(scope.rawValue, systemImage: scope.icon)
+                        .tag(scope)
+                }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            ZStack {
+                // Circular glass body
+                Circle()
+                    .fill(
+                        isNonDefault ?
+                            Color.white.opacity(isHovered ? 0.16 : 0.12) :
+                            Color.white.opacity(isHovered ? 0.10 : 0.05)
+                    )
+
+                // Top specular refraction sheen (Liquid Glass)
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(isHovered ? 0.32 : (isNonDefault ? 0.24 : 0.12)), location: 0.0),
+                            .init(color: .clear, location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 7)
+                    Spacer(minLength: 0)
+                }
+                .clipShape(Circle())
+
+                // Filter icon (line.3.horizontal.decrease)
+                Image(systemName: "line.3.horizontal.decrease")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(
+                        isNonDefault ?
+                            Color.white :
+                            (isHovered ? Color.white : WalkmanTheme.silverLight)
+                    )
+
+                // Active dot indicator when non-default scope is chosen
+                if isNonDefault {
+                    VStack {
+                        HStack {
+                            Spacer()
+                            Circle()
+                                .fill(Color.orange)
+                                .frame(width: 5, height: 5)
+                                .shadow(color: Color.black.opacity(0.35), radius: 1, x: 0, y: 1)
+                        }
+                        Spacer()
+                    }
+                    .padding(5)
+                }
+            }
+            .frame(width: 38, height: 38)
+            .clipShape(Circle())
+            .overlay(
+                Circle()
+                    .stroke(
+                        isNonDefault ?
+                            Color.white.opacity(0.32) :
+                            Color.white.opacity(isHovered ? 0.22 : 0.10),
+                        lineWidth: 0.85
+                    )
+            )
+            .shadow(color: Color.black.opacity(isHovered ? 0.20 : 0.10), radius: isHovered ? 3.5 : 2, x: 0, y: 1)
+            .scaleEffect(isHovered ? 1.03 : 1.0)
+        }
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .contentShape(Circle())
+        .help("Filter time scope (\(timeScope.rawValue))")
+        .onHover { hovering in
+            guard isHovered != hovering else { return }
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
     }
 }
