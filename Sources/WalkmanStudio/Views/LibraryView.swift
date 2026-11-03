@@ -34,6 +34,7 @@ public struct LibraryView: View {
     @State private var isBatchAnalyzing: Bool = false
     @State private var batchProgress: (current: Int, total: Int, trackTitle: String)? = nil
     @State private var showBatchLyricsSheet: Bool = false
+    @State private var isPreparingLyricsSheet: Bool = false
     
     public init(
         tracks: [Track],
@@ -395,15 +396,26 @@ public struct LibraryView: View {
             .help("Shuffle and play visible tracks")
 
             Button(action: {
-                showBatchLyricsSheet = true
+                isPreparingLyricsSheet = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    showBatchLyricsSheet = true
+                    isPreparingLyricsSheet = false
+                }
             }) {
-                Image(systemName: "quote.bubble")
-                    .font(.system(size: 13, weight: .semibold))
-                    .frame(width: 38, height: 38)
-                    .foregroundStyle(WalkmanTheme.silverLight)
+                if isPreparingLyricsSheet {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.8)
+                        .frame(width: 38, height: 38)
+                } else {
+                    Image(systemName: "quote.bubble")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 38, height: 38)
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                }
             }
             .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
-            .disabled(visibleTracks.isEmpty)
+            .disabled(visibleTracks.isEmpty || isPreparingLyricsSheet)
             .help("Batch generate and sync lyrics for library tracks")
 
             let unanalyzedCount = visibleTracks.filter { !$0.isSenseMeAnalyzed }.count
