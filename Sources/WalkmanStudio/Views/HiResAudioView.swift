@@ -58,6 +58,7 @@ public struct HiResAudioView: View {
     @State private var displayedTrackIds: Set<String> = []
     @State private var displayedAlbums: [AlbumItem] = []
     @State private var displayedArtists: [ArtistItem] = []
+    @State private var showBatchLyricsSheet: Bool = false
     @State private var albumCount: Int = 0
     @State private var artistCount: Int = 0
     
@@ -381,6 +382,16 @@ public struct HiResAudioView: View {
         .onChange(of: albumSortOption) { _, _ in
             recomputePipeline()
         }
+        .sheet(isPresented: $showBatchLyricsSheet) {
+            BatchLyricsGeneratorSheet(
+                allTracks: displayedTracks,
+                selectedTracks: [],
+                tabContext: .hiRes,
+                onDismiss: {
+                    showBatchLyricsSheet = false
+                }
+            )
+        }
     }
     
     private var tracksContentView: some View {
@@ -652,6 +663,18 @@ public struct HiResAudioView: View {
             .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
             .disabled(displayedTracks.isEmpty)
             .help("Shuffle Hi-Res tracks")
+
+            Button(action: {
+                showBatchLyricsSheet = true
+            }) {
+                Image(systemName: "quote.bubble")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(width: 38, height: 38)
+                    .foregroundStyle(WalkmanTheme.silverLight)
+            }
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
+            .disabled(displayedTracks.isEmpty)
+            .help("Batch generate and sync lyrics for Hi-Res audio tracks")
         }
     }
     
