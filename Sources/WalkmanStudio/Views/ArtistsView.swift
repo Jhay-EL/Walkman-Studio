@@ -26,6 +26,7 @@ public struct ArtistsView: View {
     @State private var formatFilter: String = "ALL"
     @State private var cachedArtists: [ArtistItem] = []
     @State private var displayedArtists: [ArtistItem] = []
+    @State private var showBatchLyricsSheet: Bool = false
     
     private let formatFilterOptions: [FilterOption] = [
         FilterOption(id: "ALL", title: "All Formats", icon: nil, isHiRes: false),
@@ -359,6 +360,19 @@ public struct ArtistsView: View {
         .onChange(of: cachedArtists) { _, _ in
             recomputeDisplayedArtists()
         }
+        .sheet(isPresented: $showBatchLyricsSheet) {
+            BatchLyricsGeneratorSheet(
+                allTracks: tracks,
+                selectedTracks: activeArtist?.tracks ?? [],
+                tabContext: .artists(
+                    selectedArtistName: activeArtist?.name,
+                    artistTrackCount: activeArtist?.tracks.count ?? 0
+                ),
+                onDismiss: {
+                    showBatchLyricsSheet = false
+                }
+            )
+        }
     }
     
     // -------------------------------------------------------------------------
@@ -451,6 +465,20 @@ public struct ArtistsView: View {
         .background(Color.clear)
     }
     
+    private var batchLyricsButton: some View {
+        Button(action: {
+            showBatchLyricsSheet = true
+        }) {
+            Image(systemName: "quote.bubble")
+                .font(.system(size: 13, weight: .semibold))
+                .frame(width: 38, height: 38)
+                .foregroundStyle(WalkmanTheme.silverLight)
+        }
+        .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
+        .disabled(displayedArtists.isEmpty && activeArtist == nil)
+        .help("Batch generate and sync lyrics for artists")
+    }
+    
     private var wideTopToolbarLayout: some View {
         HStack(spacing: 8) {
             searchFieldView
@@ -465,6 +493,8 @@ public struct ArtistsView: View {
                 artistActionButtons(for: artist)
                     .fixedSize(horizontal: true, vertical: false)
             }
+            
+            batchLyricsButton
             
             artistCountPill
                 .fixedSize(horizontal: true, vertical: false)
@@ -483,6 +513,8 @@ public struct ArtistsView: View {
                     artistActionButtons(for: artist)
                         .fixedSize(horizontal: true, vertical: false)
                 }
+                
+                batchLyricsButton
                 
                 artistCountPill
                     .fixedSize(horizontal: true, vertical: false)
@@ -503,6 +535,8 @@ public struct ArtistsView: View {
                     .frame(minWidth: 80, maxWidth: .infinity)
                 
                 Spacer(minLength: 4)
+                
+                batchLyricsButton
                 
                 artistCountPill
                     .fixedSize(horizontal: true, vertical: false)
