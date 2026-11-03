@@ -59,6 +59,7 @@ public struct HiResAudioView: View {
     @State private var displayedAlbums: [AlbumItem] = []
     @State private var displayedArtists: [ArtistItem] = []
     @State private var showBatchLyricsSheet: Bool = false
+    @State private var isPreparingLyricsSheet: Bool = false
     @State private var albumCount: Int = 0
     @State private var artistCount: Int = 0
     
@@ -665,15 +666,26 @@ public struct HiResAudioView: View {
             .help("Shuffle Hi-Res tracks")
 
             Button(action: {
-                showBatchLyricsSheet = true
+                isPreparingLyricsSheet = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    showBatchLyricsSheet = true
+                    isPreparingLyricsSheet = false
+                }
             }) {
-                Image(systemName: "quote.bubble")
-                    .font(.system(size: 13, weight: .semibold))
-                    .frame(width: 38, height: 38)
-                    .foregroundStyle(WalkmanTheme.silverLight)
+                if isPreparingLyricsSheet {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.8)
+                        .frame(width: 38, height: 38)
+                } else {
+                    Image(systemName: "quote.bubble")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 38, height: 38)
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                }
             }
             .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
-            .disabled(displayedTracks.isEmpty)
+            .disabled(displayedTracks.isEmpty || isPreparingLyricsSheet)
             .help("Batch generate and sync lyrics for Hi-Res audio tracks")
         }
     }
