@@ -22,6 +22,8 @@ public struct PlaylistsView: View {
     @FocusState private var isRowRenameFocused: Bool
     @FocusState private var isHeaderRenameFocused: Bool
     @State private var showAddTrackSheet: Bool = false
+    @State private var showBatchLyricsSheet: Bool = false
+    @State private var isPreparingLyricsSheet: Bool = false
     @State private var messageBanner: String?
     @State private var cachedTrackLookup: [String: Track] = [:]
     
@@ -1140,6 +1142,19 @@ public struct PlaylistsView: View {
                 onDismiss: { showAddTrackSheet = false }
             )
         }
+        .sheet(isPresented: $showBatchLyricsSheet) {
+            BatchLyricsGeneratorSheet(
+                allTracks: currentPlaylistTracks,
+                selectedTracks: currentSelectedPlaylistTracks,
+                tabContext: .playlist(
+                    playlistName: selectedPlaylist?.name ?? "Playlist",
+                    playlistTrackCount: currentPlaylistTracks.count
+                ),
+                onDismiss: {
+                    showBatchLyricsSheet = false
+                }
+            )
+        }
         .onDisappear {
             if hasPushedResizeCursor {
                 NSCursor.pop()
@@ -1391,6 +1406,42 @@ public struct PlaylistsView: View {
         .fixedSize(horizontal: true, vertical: false)
     }
     
+    private var currentPlaylistTracks: [Track] {
+        resolvedPlaylistTracks.compactMap(\.track)
+    }
+
+    private var currentSelectedPlaylistTracks: [Track] {
+        selectedPlaylistIndices.compactMap { idx in
+            resolvedPlaylistTracks.indices.contains(idx) ? resolvedPlaylistTracks[idx].track : nil
+        }
+    }
+
+    @ViewBuilder
+    private var batchLyricsButton: some View {
+        Button(action: {
+            isPreparingLyricsSheet = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                showBatchLyricsSheet = true
+                isPreparingLyricsSheet = false
+            }
+        }) {
+            if isPreparingLyricsSheet {
+                ProgressView()
+                    .controlSize(.small)
+                    .scaleEffect(0.8)
+                    .frame(width: 38, height: 38)
+            } else {
+                Image(systemName: "quote.bubble")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(WalkmanTheme.silverLight)
+                    .frame(width: 38, height: 38)
+            }
+        }
+        .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
+        .disabled(isPreparingLyricsSheet)
+        .help("Generate Walkman Lyrics for this playlist")
+    }
+
     // MARK: - Responsive Detail Header Subviews
     
     @ViewBuilder
@@ -1409,6 +1460,7 @@ public struct PlaylistsView: View {
                 playlistTrackCountPill
                 selectModeButton
                 sortMenuButton
+                batchLyricsButton
                 addFromLibraryButton(compact: false)
             }
             .padding(.horizontal, 4)
@@ -1426,6 +1478,7 @@ public struct PlaylistsView: View {
                 playlistTrackCountPill
                 selectModeButton
                 sortMenuButton
+                batchLyricsButton
                 addFromLibraryButton(compact: true)
             }
             .padding(.horizontal, 4)
@@ -1463,6 +1516,7 @@ public struct PlaylistsView: View {
                     
                     selectModeButton
                     sortMenuButton
+                    batchLyricsButton
                     addFromLibraryButton(compact: false)
                 }
             }
@@ -1500,6 +1554,7 @@ public struct PlaylistsView: View {
                     
                     selectModeButton
                     sortMenuButton
+                    batchLyricsButton
                     addFromLibraryButton(compact: true)
                 }
             }
