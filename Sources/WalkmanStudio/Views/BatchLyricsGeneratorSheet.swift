@@ -9,12 +9,14 @@ public struct BatchLyricsGeneratorSheet: View {
         case hiRes
         case albums(selectedAlbumName: String?, albumTrackCount: Int)
         case artists(selectedArtistName: String?, artistTrackCount: Int)
+        case playlist(playlistName: String, playlistTrackCount: Int)
     }
 
     public enum LyricsScope: String, CaseIterable, Identifiable {
         case allInTab = "All Tracks in View"
         case selectedOnly = "Selected Track(s)"
-        case contextOnly = "Selected Item"
+        case contextOnly = "Active Item"
+        case customSelection = "Choose Specific..."
 
         public var id: String { rawValue }
     }
@@ -29,12 +31,25 @@ public struct BatchLyricsGeneratorSheet: View {
     let allTracks: [Track]
     let selectedTracks: [Track]
     let tabContext: TabContext
+    let precomputedAlbums: [AlbumItem]?
+    let precomputedArtists: [ArtistItem]?
     let onDismiss: () -> Void
 
     // Configuration State
     @State private var selectedScope: LyricsScope = .allInTab
     @State private var onlyMissingLyrics: Bool = true
     @State private var sheetState: SheetState = .configure
+
+    // Custom Scope Selection State
+    @State private var customSearchText: String = ""
+    @State private var selectedCustomTrackIds: Set<String> = []
+    @State private var selectedCustomAlbumIds: Set<String> = []
+    @State private var selectedCustomArtistIds: Set<String> = []
+
+    // Background Lyrics Scan State
+    @State private var isScanningLyrics: Bool = true
+    @State private var tracksWithLyricsIds: Set<String> = []
+    @State private var lyricsScanTask: Task<Void, Never>? = nil
 
     // Progress State
     @State private var totalTracksToProcess: Int = 0
@@ -53,16 +68,22 @@ public struct BatchLyricsGeneratorSheet: View {
     // Hover states for buttons
     @State private var isPrimaryHovered: Bool = false
     @State private var isCancelHovered: Bool = false
+    @State private var showWarningPopover: Bool = false
+    @State private var showInfoPopover: Bool = false
 
     public init(
         allTracks: [Track],
         selectedTracks: [Track],
         tabContext: TabContext = .allSongs,
+        precomputedAlbums: [AlbumItem]? = nil,
+        precomputedArtists: [ArtistItem]? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.allTracks = allTracks
         self.selectedTracks = selectedTracks
         self.tabContext = tabContext
+        self.precomputedAlbums = precomputedAlbums
+        self.precomputedArtists = precomputedArtists
         self.onDismiss = onDismiss
 
         // Initial default scope
@@ -78,6 +99,21 @@ public struct BatchLyricsGeneratorSheet: View {
                 _selectedScope = State(initialValue: .allInTab)
             }
         }
+    }
+
+    // MARK: - Precomputed Collections
+    private var availableAlbums: [AlbumItem] {
+        if let albums = precomputedAlbums, !albums.isEmpty {
+            return albums
+        }
+        return AlbumsView.buildAlbums(from: allTracks)
+    }
+
+    private var availableArtists: [ArtistItem] {
+        if let artists = precomputedArtists, !artists.isEmpty {
+            return artists
+        }
+        return ArtistsView.buildArtists(from: allTracks)
     }
 
     // MARK: - Computed Target Tracks
@@ -102,21 +138,55 @@ public struct BatchLyricsGeneratorSheet: View {
             default:
                 return allTracks
             }
+        case .customSelection:
+            switch tabContext {
+            case .albums:
+                let matched = availableAlbums.filter { selectedCustomAlbumIds.contains($0.id) }
+                return matched.flatMap(\.tracks)
+            case .artists:
+                let matched = availableArtists.filter { selectedCustomArtistIds.contains($0.id) }
+                return matched.flatMap(\.tracks)
+            default:
+                return allTracks.filter { selectedCustomTrackIds.contains($0.id) }
+            }
         }
     }
 
     private var targetTracks: [Track] {
         if onlyMissingLyrics {
-            return candidateTracks.filter { track in
+            return candidateTracks.filter { !tracksWithLyricsIds.contains($0.id) }
+        } else {
+            return candidateTracks
+        }
+    }
+
+    private func scanExistingLyricsAsync() {
+        guard onlyMissingLyrics else {
+            isScanningLyrics = false
+            return
+        }
+        lyricsScanTask?.cancel()
+        isScanningLyrics = true
+        let snapshotTracks = candidateTracks
+        lyricsScanTask = Task.detached(priority: .userInitiated) {
+            var foundIds = Set<String>()
+            for track in snapshotTracks {
+                if Task.isCancelled { return }
                 let url = URL(fileURLWithPath: track.fullPath)
                 let lrcURL = url.deletingPathExtension().appendingPathExtension("lrc")
                 let upperLrcURL = url.deletingPathExtension().appendingPathExtension("LRC")
-                let hasLrcFile = FileManager.default.fileExists(atPath: lrcURL.path) || FileManager.default.fileExists(atPath: upperLrcURL.path)
-                if hasLrcFile { return false }
-                return AudioTagger.shared.extractLyrics(fileURL: url) == nil
+                if FileManager.default.fileExists(atPath: lrcURL.path) || FileManager.default.fileExists(atPath: upperLrcURL.path) {
+                    foundIds.insert(track.id)
+                } else if AudioTagger.shared.extractLyrics(fileURL: url) != nil {
+                    foundIds.insert(track.id)
+                }
             }
-        } else {
-            return candidateTracks
+            let completedFoundIds = foundIds
+            if Task.isCancelled { return }
+            await MainActor.run {
+                self.tracksWithLyricsIds = completedFoundIds
+                self.isScanningLyrics = false
+            }
         }
     }
 
@@ -179,7 +249,45 @@ public struct BatchLyricsGeneratorSheet: View {
                 .padding(.horizontal, 24)
                 .padding(.vertical, 14)
         }
-        .frame(width: 650, height: 580)
+        .frame(
+            minWidth: 620,
+            idealWidth: 680,
+            maxWidth: .infinity,
+            minHeight: 520,
+            idealHeight: 640,
+            maxHeight: .infinity
+        )
+        .background(
+            SheetWindowResizer(
+                minSize: NSSize(width: 620, height: 520),
+                maxSize: NSSize(width: 1400, height: 1100)
+            )
+        )
+        .onAppear {
+            initializeCustomSelectionDefaults()
+            scanExistingLyricsAsync()
+        }
+        .onChange(of: selectedScope) { _, _ in
+            scanExistingLyricsAsync()
+        }
+        .onChange(of: onlyMissingLyrics) { _, _ in
+            scanExistingLyricsAsync()
+        }
+        .onChange(of: selectedCustomTrackIds) { _, _ in
+            if selectedScope == .customSelection {
+                scanExistingLyricsAsync()
+            }
+        }
+        .onChange(of: selectedCustomAlbumIds) { _, _ in
+            if selectedScope == .customSelection {
+                scanExistingLyricsAsync()
+            }
+        }
+        .onChange(of: selectedCustomArtistIds) { _, _ in
+            if selectedScope == .customSelection {
+                scanExistingLyricsAsync()
+            }
+        }
         .background(
             ZStack {
                 WalkmanTheme.card.opacity(0.92)
@@ -219,6 +327,13 @@ public struct BatchLyricsGeneratorSheet: View {
                 )
                 .allowsHitTesting(false)
         )
+        .overlay(alignment: .bottomTrailing) {
+            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.18))
+                .padding(8)
+                .allowsHitTesting(false)
+        }
         .shadow(color: Color.black.opacity(0.45), radius: 24, x: 0, y: 10)
     }
 
@@ -256,13 +371,11 @@ public struct BatchLyricsGeneratorSheet: View {
                         .foregroundStyle(.primary)
 
                     if sheetState == .configure {
-                        Text("\(candidateTracks.count) Tracks in Scope")
-                            .font(WalkmanFont.badge)
-                            .foregroundStyle(WalkmanTheme.silverLight)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 2.5)
-                            .background(Color.white.opacity(0.08))
-                            .clipShape(Capsule())
+                        if isOver100Tracks {
+                            warningBadgeButton
+                        }
+
+                        infoIconButton
                     }
                 }
 
@@ -274,6 +387,96 @@ public struct BatchLyricsGeneratorSheet: View {
 
             Spacer()
         }
+    }
+
+    private var warningBadgeButton: some View {
+        Button(action: { showWarningPopover.toggle() }) {
+            HStack(spacing: 4) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color.orange)
+                Text("Large Library")
+                    .font(WalkmanFont.badge)
+                    .foregroundStyle(Color.orange)
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2.5)
+            .background(Color.orange.opacity(0.16))
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color.orange.opacity(0.40), lineWidth: 0.8)
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered in
+            showWarningPopover = isHovered
+        }
+        .popover(isPresented: $showWarningPopover, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(Color.orange)
+
+                    Text("Large Library Notice (\(candidateTracks.count) Tracks)")
+                        .font(WalkmanFont.calloutBold)
+                        .foregroundStyle(Color.orange)
+                }
+
+                Text("Fetching lyrics for over 100 tracks involves individual API searches and may take several minutes. Walkman Studio uses parallel multi-worker concurrent requests (5 simultaneous threads) to maximize performance while adhering to public API limits.")
+                    .font(WalkmanFont.caption)
+                    .foregroundStyle(WalkmanTheme.silverLight.opacity(0.90))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(14)
+            .frame(width: 360)
+            .background(
+                WalkmanTheme.card.opacity(0.96)
+                    .background(.ultraThinMaterial)
+            )
+        }
+        .help("Large Library Notice: Fetching lyrics for over 100 tracks involves individual API searches and may take several minutes.")
+    }
+
+    private var infoIconButton: some View {
+        Button(action: { showInfoPopover.toggle() }) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(WalkmanTheme.silverMuted)
+                .padding(4)
+                .background(Color.white.opacity(0.06))
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered in
+            showInfoPopover = isHovered
+        }
+        .popover(isPresented: $showInfoPopover, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "info.circle.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Color.blue)
+
+                    Text("How Walkman Studio Lyrics Work")
+                        .font(WalkmanFont.calloutBold)
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                }
+
+                Text("This tool queries online databases (preferring timestamped synchronized .LRC from LRCLIB, with Lyrics.ovh as fallback) and creates companion .lrc files alongside your music files. The Sony Walkman OS and Android Walkman Music Player automatically read companion .lrc files during playback.")
+                    .font(WalkmanFont.caption)
+                    .foregroundStyle(WalkmanTheme.silverLight.opacity(0.90))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(14)
+            .frame(width: 360)
+            .background(
+                WalkmanTheme.card.opacity(0.96)
+                    .background(.ultraThinMaterial)
+            )
+        }
+        .help("How Walkman Studio Lyrics Work: Queries online databases and creates companion .lrc files alongside music files.")
     }
 
     private var sheetTitle: String {
@@ -290,7 +493,12 @@ public struct BatchLyricsGeneratorSheet: View {
     private var sheetSubtitle: String {
         switch sheetState {
         case .configure:
-            return "Batch search public music databases for synchronized .LRC lyrics and sync them directly to your Sony Walkman storage."
+            switch tabContext {
+            case .playlist(let name, _):
+                return "Batch search public music databases for synchronized .LRC lyrics for playlist '\(name)' and sync them directly to your Sony Walkman storage."
+            default:
+                return "Batch search public music databases for synchronized .LRC lyrics and sync them directly to your Sony Walkman storage."
+            }
         case .running:
             return "Parallel multi-track fetching active. Searching LRCLIB and Lyrics.ovh for timestamped .LRC lyrics..."
         case .completed:
@@ -301,68 +509,6 @@ public struct BatchLyricsGeneratorSheet: View {
     // MARK: - Configure View
     private var configurationContent: some View {
         VStack(spacing: 16) {
-            // Explanation card
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "info.circle.fill")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color.blue.opacity(0.85))
-                    .padding(.top, 1)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("How Walkman Studio Lyrics Work")
-                        .font(WalkmanFont.calloutBold)
-                        .foregroundStyle(WalkmanTheme.silverLight)
-
-                    Text("This tool queries online databases (preferring timestamped synchronized .LRC from LRCLIB, with Lyrics.ovh as fallback) and creates companion .lrc files alongside your music files. The Sony Walkman OS and Android Walkman Music Player automatically read companion .lrc files during playback.")
-                        .font(WalkmanFont.caption)
-                        .foregroundStyle(WalkmanTheme.silverMuted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer()
-            }
-            .padding(14)
-            .background(Color.blue.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Color.blue.opacity(0.25), lineWidth: 0.85)
-            )
-
-            // Over 100 Tracks Advisory Notice
-            if isOver100Tracks {
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(Color.orange)
-                        .padding(.top, 1)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 6) {
-                            Text("Large Library Notice")
-                                .font(WalkmanFont.calloutBold)
-                                .foregroundStyle(Color.orange)
-
-                            Text("(\(candidateTracks.count) Tracks)")
-                                .font(WalkmanFont.monoSmall)
-                                .foregroundStyle(WalkmanTheme.silverLight)
-                        }
-
-                        Text("Fetching lyrics for over 100 tracks involves individual API searches and may take several minutes. Walkman Studio uses parallel multi-worker concurrent requests (5 simultaneous threads) to maximize performance while adhering to public API limits.")
-                            .font(WalkmanFont.caption)
-                            .foregroundStyle(WalkmanTheme.silverLight.opacity(0.85))
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer()
-                }
-                .padding(14)
-                .background(Color.orange.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(Color.orange.opacity(0.35), lineWidth: 0.85)
-                )
-            }
-
             // Scope Selection
             VStack(alignment: .leading, spacing: 8) {
                 Text("GENERATION SCOPE")
@@ -370,12 +516,14 @@ public struct BatchLyricsGeneratorSheet: View {
                     .foregroundStyle(.tertiary)
 
                 VStack(spacing: 6) {
+                    // Option 1: All in Tab
                     scopeOptionRow(
-                        title: "All Tracks in View",
-                        subtitle: "\(allTracks.count) tracks in the current library tab",
+                        title: allInTabTitle,
+                        subtitle: allInTabSubtitle,
                         scope: .allInTab
                     )
 
+                    // Option 2: Pre-selected tracks (if user had selected items)
                     if !selectedTracks.isEmpty {
                         scopeOptionRow(
                             title: "Selected Track\(selectedTracks.count > 1 ? "s" : "") Only",
@@ -384,11 +532,12 @@ public struct BatchLyricsGeneratorSheet: View {
                         )
                     }
 
+                    // Option 3: Context-specific active item (Current Album or Current Artist)
                     switch tabContext {
                     case .albums(let name, let count):
                         if let albumName = name {
                             scopeOptionRow(
-                                title: "Selected Album: \(albumName)",
+                                title: "Current Album: \(albumName)",
                                 subtitle: "\(count) tracks in this album",
                                 scope: .contextOnly
                             )
@@ -396,7 +545,7 @@ public struct BatchLyricsGeneratorSheet: View {
                     case .artists(let name, let count):
                         if let artistName = name {
                             scopeOptionRow(
-                                title: "Selected Artist: \(artistName)",
+                                title: "Current Artist: \(artistName)",
                                 subtitle: "\(count) tracks by this artist",
                                 scope: .contextOnly
                             )
@@ -404,6 +553,19 @@ public struct BatchLyricsGeneratorSheet: View {
                     default:
                         EmptyView()
                     }
+
+                    // Option 4: Custom selection
+                    scopeOptionRow(
+                        title: customSelectionTitle,
+                        subtitle: customSelectionSubtitle,
+                        scope: .customSelection
+                    )
+                }
+
+                // If Custom Selection is selected, show the interactive item picker card
+                if selectedScope == .customSelection {
+                    customPickerCard
+                        .padding(.top, 4)
                 }
             }
 
@@ -413,21 +575,40 @@ public struct BatchLyricsGeneratorSheet: View {
                     .font(WalkmanFont.sectionHeader)
                     .foregroundStyle(.tertiary)
 
-                VStack(spacing: 8) {
-                    Toggle(isOn: $onlyMissingLyrics) {
+                Button(action: {
+                    onlyMissingLyrics.toggle()
+                }) {
+                    HStack(alignment: .center, spacing: 12) {
+                        Image(systemName: onlyMissingLyrics ? "checkmark.square.fill" : "square")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(onlyMissingLyrics ? Color.white : WalkmanTheme.silverMuted)
+
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Only fetch for tracks missing lyrics (Recommended)")
                                 .font(WalkmanFont.calloutMedium)
                                 .foregroundStyle(WalkmanTheme.silverLight)
-                            Text(onlyMissingLyrics
-                                 ? "Skips \(tracksWithLyricsCount) tracks that already have .LRC files; generates for \(targetTracks.count) tracks."
-                                 : "Will re-fetch and overwrite lyrics for all \(candidateTracks.count) tracks.")
-                                .font(WalkmanFont.caption)
-                                .foregroundStyle(WalkmanTheme.silverMuted)
+                            if isScanningLyrics {
+                                HStack(spacing: 6) {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                        .scaleEffect(0.7)
+                                    Text("Analyzing library for existing lyrics...")
+                                        .font(WalkmanFont.caption)
+                                        .foregroundStyle(WalkmanTheme.silverMuted)
+                                }
+                            } else {
+                                Text(onlyMissingLyrics
+                                     ? "Skips \(tracksWithLyricsCount) tracks that already have .LRC files; generates for \(targetTracks.count) tracks."
+                                     : "Will re-fetch and overwrite lyrics for all \(candidateTracks.count) tracks.")
+                                    .font(WalkmanFont.caption)
+                                    .foregroundStyle(WalkmanTheme.silverMuted)
+                            }
                         }
+
+                        Spacer()
                     }
-                    .toggleStyle(CheckboxToggleStyle())
                     .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.white.opacity(0.04))
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay(
@@ -435,6 +616,416 @@ public struct BatchLyricsGeneratorSheet: View {
                             .stroke(Color.white.opacity(0.08), lineWidth: 0.8)
                     )
                 }
+                .buttonStyle(.plain)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    // MARK: - Dynamic Scope Labels
+    private var allInTabTitle: String {
+        switch tabContext {
+        case .allSongs:
+            return "All Songs in Library"
+        case .recentlyAdded:
+            return "All Recently Added"
+        case .hiRes:
+            return "All Hi-Res Audio Tracks"
+        case .albums:
+            return "All Albums"
+        case .artists:
+            return "All Artists"
+        case .playlist(let name, _):
+            return "All Tracks in '\(name)'"
+        }
+    }
+
+    private var allInTabSubtitle: String {
+        switch tabContext {
+        case .albums:
+            return "\(availableAlbums.count) albums (\(allTracks.count) total tracks)"
+        case .artists:
+            return "\(availableArtists.count) artists (\(allTracks.count) total tracks)"
+        case .playlist(let name, let count):
+            return "\(count) tracks in playlist '\(name)'"
+        default:
+            return "\(allTracks.count) tracks in the current library tab"
+        }
+    }
+
+    private var customSelectionTitle: String {
+        switch tabContext {
+        case .albums:
+            return "Select Specific Albums..."
+        case .artists:
+            return "Select Specific Artists..."
+        default:
+            return "Select Specific Tracks..."
+        }
+    }
+
+    private var customSelectionSubtitle: String {
+        switch tabContext {
+        case .albums:
+            let selectedCount = selectedCustomAlbumIds.count
+            return "\(selectedCount) of \(availableAlbums.count) albums selected (\(candidateTracks.count) tracks)"
+        case .artists:
+            let selectedCount = selectedCustomArtistIds.count
+            return "\(selectedCount) of \(availableArtists.count) artists selected (\(candidateTracks.count) tracks)"
+        default:
+            let selectedCount = selectedCustomTrackIds.count
+            return "\(selectedCount) of \(allTracks.count) tracks selected"
+        }
+    }
+
+    // MARK: - Custom Item Picker Card
+    private var customPickerCard: some View {
+        VStack(spacing: 8) {
+            // Search Box and Quick Actions
+            HStack(spacing: 8) {
+                // Search Field
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(WalkmanTheme.silverMuted)
+
+                    TextField(customSearchPlaceholder, text: $customSearchText)
+                        .textFieldStyle(.plain)
+                        .font(WalkmanFont.callout)
+                        .foregroundStyle(.white)
+
+                    if !customSearchText.isEmpty {
+                        Button(action: { customSearchText = "" }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 11))
+                                .foregroundStyle(WalkmanTheme.silverMuted)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(Color.white.opacity(0.05))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
+                )
+
+                // Select All Button
+                Button(action: selectAllCustomItems) {
+                    Text("Select All")
+                        .font(WalkmanFont.caption)
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
+                .buttonStyle(.plain)
+
+                // Deselect All Button
+                Button(action: deselectAllCustomItems) {
+                    Text("Deselect All")
+                        .font(WalkmanFont.caption)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Color.white.opacity(0.04))
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+
+            // Scrollable List of Items
+            ScrollView(.vertical, showsIndicators: true) {
+                LazyVStack(spacing: 3) {
+                    switch tabContext {
+                    case .albums:
+                        ForEach(filteredAlbums) { album in
+                            albumRow(album)
+                        }
+                    case .artists:
+                        ForEach(filteredArtists) { artist in
+                            artistRow(artist)
+                        }
+                    default:
+                        ForEach(filteredTracks) { track in
+                            trackRow(track)
+                        }
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .frame(minHeight: 140, idealHeight: 180, maxHeight: 380)
+        }
+        .padding(10)
+        .background(Color.white.opacity(0.03))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.white.opacity(0.10), lineWidth: 0.85)
+        )
+    }
+
+    private var customSearchPlaceholder: String {
+        switch tabContext {
+        case .albums: return "Search albums or artists..."
+        case .artists: return "Search artists..."
+        default: return "Search tracks by title, artist, or album..."
+        }
+    }
+
+    private var filteredTracks: [Track] {
+        let query = customSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if query.isEmpty { return allTracks }
+        return allTracks.filter { track in
+            track.title.localizedCaseInsensitiveContains(query) ||
+            track.artist.localizedCaseInsensitiveContains(query) ||
+            track.album.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    private var filteredAlbums: [AlbumItem] {
+        let query = customSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if query.isEmpty { return availableAlbums }
+        return availableAlbums.filter { album in
+            album.name.localizedCaseInsensitiveContains(query) ||
+            album.artist.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    private var filteredArtists: [ArtistItem] {
+        let query = customSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if query.isEmpty { return availableArtists }
+        return availableArtists.filter { artist in
+            artist.name.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    private func selectAllCustomItems() {
+        switch tabContext {
+        case .albums:
+            for album in filteredAlbums {
+                selectedCustomAlbumIds.insert(album.id)
+            }
+        case .artists:
+            for artist in filteredArtists {
+                selectedCustomArtistIds.insert(artist.id)
+            }
+        default:
+            for track in filteredTracks {
+                selectedCustomTrackIds.insert(track.id)
+            }
+        }
+    }
+
+    private func deselectAllCustomItems() {
+        switch tabContext {
+        case .albums:
+            if customSearchText.isEmpty {
+                selectedCustomAlbumIds.removeAll()
+            } else {
+                for album in filteredAlbums {
+                    selectedCustomAlbumIds.remove(album.id)
+                }
+            }
+        case .artists:
+            if customSearchText.isEmpty {
+                selectedCustomArtistIds.removeAll()
+            } else {
+                for artist in filteredArtists {
+                    selectedCustomArtistIds.remove(artist.id)
+                }
+            }
+        default:
+            if customSearchText.isEmpty {
+                selectedCustomTrackIds.removeAll()
+            } else {
+                for track in filteredTracks {
+                    selectedCustomTrackIds.remove(track.id)
+                }
+            }
+        }
+    }
+
+    private func trackRow(_ track: Track) -> some View {
+        let isSelected = selectedCustomTrackIds.contains(track.id)
+        return Button(action: {
+            if isSelected {
+                selectedCustomTrackIds.remove(track.id)
+            } else {
+                selectedCustomTrackIds.insert(track.id)
+            }
+        }) {
+            HStack(spacing: 10) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(isSelected ? Color.white : WalkmanTheme.silverMuted)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(track.title.isEmpty ? track.filename : track.title)
+                        .font(WalkmanFont.calloutMedium)
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .lineLimit(1)
+                    Text("\(track.artist.isEmpty ? "Unknown Artist" : track.artist) • \(track.album.isEmpty ? "Unknown Album" : track.album)")
+                        .font(WalkmanFont.caption)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Text(track.format.uppercased())
+                    .font(WalkmanFont.badge)
+                    .foregroundStyle(WalkmanTheme.silverMuted)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1.5)
+                    .background(Color.white.opacity(0.05))
+                    .clipShape(Capsule())
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(isSelected ? Color.white.opacity(0.06) : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func albumRow(_ album: AlbumItem) -> some View {
+        let isSelected = selectedCustomAlbumIds.contains(album.id)
+        return Button(action: {
+            if isSelected {
+                selectedCustomAlbumIds.remove(album.id)
+            } else {
+                selectedCustomAlbumIds.insert(album.id)
+            }
+        }) {
+            HStack(spacing: 10) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(isSelected ? Color.white : WalkmanTheme.silverMuted)
+
+                // Album Thumbnail Icon
+                ZStack {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(Color.white.opacity(0.08))
+                        .frame(width: 26, height: 26)
+                    Image(systemName: "opticaldisc")
+                        .font(.system(size: 12))
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                }
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(album.name)
+                        .font(WalkmanFont.calloutMedium)
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .lineLimit(1)
+                    Text(album.artist)
+                        .font(WalkmanFont.caption)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Text("\(album.trackCount) tracks")
+                    .font(WalkmanFont.badge)
+                    .foregroundStyle(WalkmanTheme.silverLight)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Capsule())
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(isSelected ? Color.white.opacity(0.06) : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func artistRow(_ artist: ArtistItem) -> some View {
+        let isSelected = selectedCustomArtistIds.contains(artist.id)
+        return Button(action: {
+            if isSelected {
+                selectedCustomArtistIds.remove(artist.id)
+            } else {
+                selectedCustomArtistIds.insert(artist.id)
+            }
+        }) {
+            HStack(spacing: 10) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(isSelected ? Color.white : WalkmanTheme.silverMuted)
+
+                // Artist Avatar Icon
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.08))
+                        .frame(width: 26, height: 26)
+                    Image(systemName: "music.mic")
+                        .font(.system(size: 11))
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                }
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(artist.name)
+                        .font(WalkmanFont.calloutMedium)
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .lineLimit(1)
+                    Text("\(artist.albumCount) albums • \(artist.trackCount) tracks")
+                        .font(WalkmanFont.caption)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Text("\(artist.trackCount) tracks")
+                    .font(WalkmanFont.badge)
+                    .foregroundStyle(WalkmanTheme.silverLight)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Capsule())
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(isSelected ? Color.white.opacity(0.06) : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func initializeCustomSelectionDefaults() {
+        if selectedCustomTrackIds.isEmpty {
+            selectedCustomTrackIds = !selectedTracks.isEmpty ? Set(selectedTracks.map(\.id)) : Set(allTracks.map(\.id))
+        }
+        if selectedCustomAlbumIds.isEmpty {
+            switch tabContext {
+            case .albums(let name, _):
+                if let albumName = name {
+                    let matches = availableAlbums.filter { $0.name.localizedCaseInsensitiveCompare(albumName) == .orderedSame }
+                    selectedCustomAlbumIds = Set(matches.map(\.id))
+                } else {
+                    selectedCustomAlbumIds = Set(availableAlbums.map(\.id))
+                }
+            default:
+                selectedCustomAlbumIds = Set(availableAlbums.map(\.id))
+            }
+        }
+        if selectedCustomArtistIds.isEmpty {
+            switch tabContext {
+            case .artists(let name, _):
+                if let artistName = name {
+                    let matches = availableArtists.filter { $0.name.localizedCaseInsensitiveCompare(artistName) == .orderedSame }
+                    selectedCustomArtistIds = Set(matches.map(\.id))
+                } else {
+                    selectedCustomArtistIds = Set(availableArtists.map(\.id))
+                }
+            default:
+                selectedCustomArtistIds = Set(availableArtists.map(\.id))
             }
         }
     }
@@ -662,17 +1253,25 @@ public struct BatchLyricsGeneratorSheet: View {
                 // Generate Button
                 Button(action: startGeneration) {
                     HStack(spacing: 6) {
-                        Image(systemName: "quote.bubble.fill")
-                            .font(.system(size: 12, weight: .bold))
-                        Text(targetTracks.isEmpty ? "No Tracks to Fetch" : "Generate Lyrics (\(targetTracks.count))")
-                            .font(WalkmanFont.calloutBold)
+                        if isScanningLyrics {
+                            ProgressView()
+                                .controlSize(.small)
+                                .scaleEffect(0.75)
+                            Text("Checking Lyrics...")
+                                .font(WalkmanFont.calloutBold)
+                        } else {
+                            Image(systemName: "quote.bubble.fill")
+                                .font(.system(size: 12, weight: .bold))
+                            Text(targetTracks.isEmpty ? "No Tracks to Fetch" : "Generate Lyrics (\(targetTracks.count))")
+                                .font(WalkmanFont.calloutBold)
+                        }
                     }
                     .foregroundStyle(Color(red: 20/255, green: 24/255, blue: 36/255))
                     .padding(.horizontal, 22)
                     .frame(height: 34)
                 }
                 .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 17))
-                .disabled(targetTracks.isEmpty)
+                .disabled(targetTracks.isEmpty || isScanningLyrics)
                 .keyboardShortcut(.defaultAction)
             } else if sheetState == .running {
                 Spacer()
@@ -895,6 +1494,53 @@ private struct SheetCloseButton: View {
         .onHover { h in
             isHovered = h
             if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+    }
+}
+
+// MARK: - Sheet Window Resizer
+private struct SheetWindowResizer: NSViewRepresentable {
+    let minSize: NSSize
+    let maxSize: NSSize
+
+    func makeNSView(context: Context) -> SheetWindowResizerNSView {
+        let view = SheetWindowResizerNSView()
+        view.minSize = minSize
+        view.maxSize = maxSize
+        return view
+    }
+
+    func updateNSView(_ nsView: SheetWindowResizerNSView, context: Context) {
+        nsView.minSize = minSize
+        nsView.maxSize = maxSize
+        nsView.applyConfiguration()
+    }
+}
+
+private final class SheetWindowResizerNSView: NSView {
+    var minSize: NSSize = .zero
+    var maxSize: NSSize = .zero
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        applyConfiguration()
+        DispatchQueue.main.async { [weak self] in
+            self?.applyConfiguration()
+        }
+    }
+
+    func applyConfiguration() {
+        guard let window = self.window else { return }
+        if !window.styleMask.contains(.resizable) {
+            window.styleMask.insert(.resizable)
+        }
+        if minSize != .zero {
+            window.minSize = minSize
+            window.contentMinSize = minSize
+        }
+        if maxSize != .zero {
+            window.maxSize = maxSize
+            window.contentMaxSize = maxSize
         }
     }
 }
