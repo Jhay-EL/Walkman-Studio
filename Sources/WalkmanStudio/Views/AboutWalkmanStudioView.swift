@@ -59,9 +59,6 @@ public struct AboutWalkmanStudioView: View {
         if let localImg = NSImage(contentsOfFile: "assets/walkman_logo_emblem.png") {
             return localImg
         }
-        if let studioImg = NSImage(contentsOfFile: "frontend/icon.icon/Assets/Studio.png") {
-            return studioImg
-        }
         return appIcon
     }
     

@@ -72,13 +72,6 @@ if [ -d "$DIR/assets/SensMe Channel cover" ]; then
     cp "$DIR/assets/SensMe Channel cover/"*.jpg "$RESOURCES_DIR/" 2>/dev/null || true
 fi
 
-# Copy Backend Python Engine & Resources for local 12 Tone SenseMe DSP
-if [ -d "$DIR/backend" ]; then
-    echo "Bundling backend engine into $RESOURCES_DIR/backend..."
-    mkdir -p "$RESOURCES_DIR/backend"
-    cp -R "$DIR/backend/"* "$RESOURCES_DIR/backend/"
-fi
-
 # Create Info.plist
 cat << EOF > "$APP_BUNDLE/Contents/Info.plist"
 <?xml version="1.0" encoding="UTF-8"?>

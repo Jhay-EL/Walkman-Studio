@@ -282,7 +282,7 @@ Walkman Studio is built using a high-performance stack of native Apple framework
 | **[Lyrics.ovh API](https://lyrics.ovh)** | Secondary fallback API for plain-text and unsynchronized lyrics retrieval. |
 | **[MusicBrainz API](https://musicbrainz.org)** | Automated online album metadata, release year, genre, and tracklist lookup. |
 | **FFmpeg & libavcodec** | High-speed audio format transcoding, sample rate up/downsampling (16-bit to 24-bit/96kHz), and audio channel routing/inversion. |
-| **Python Backend Engine (`librosa`, `scipy`, `numpy`)** | Standalone 12 Tone acoustic analyzer extracting tempo, valence, and energy, writing FLAC `APPLICATION` block code `2` (`SMFM`, 3270 bytes). |
+| **Native On-Board DSP (`AVFoundation`, `Accelerate`)** | High-speed 12 Tone acoustic analyzer (~15ms/track) extracting tempo, valence, arousal, and mood scores, directly injecting FLAC `APPLICATION` block code `2` (`SMFM`, 3,270 bytes) and ID3v2.3 tags with zero external runtime dependencies. |
 
 ---
 
@@ -470,12 +470,6 @@ Walkman-Studio/
 │           ├── ManageLocalFoldersSheet.swift # Manage local imported music folders modal
 │           ├── PlaylistsView.swift       # CRLF .M3U8 playlist generator
 │           └── CleanEjectSheet.swift     # dot_clean & safe unmount modal
-└── backend/
-    ├── main.py                           # Python FastAPI backend for SenseMe DSP
-    ├── walkman_engine.py                 # Python device detection & capability analyzer
-    ├── senseme_analyzer.py               # 12 Tone acoustic analyzer implementation
-    └── resources/
-        └── capabilities/                 # Sony capability XML profiles (A100, A300, ZX, WM1)
 ```
 
 ---
