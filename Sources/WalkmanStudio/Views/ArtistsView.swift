@@ -27,6 +27,7 @@ public struct ArtistsView: View {
     @State private var cachedArtists: [ArtistItem] = []
     @State private var displayedArtists: [ArtistItem] = []
     @State private var showBatchLyricsSheet: Bool = false
+    @State private var isPreparingLyricsSheet: Bool = false
     
     private let formatFilterOptions: [FilterOption] = [
         FilterOption(id: "ALL", title: "All Formats", icon: nil, isHiRes: false),
@@ -368,6 +369,7 @@ public struct ArtistsView: View {
                     selectedArtistName: activeArtist?.name,
                     artistTrackCount: activeArtist?.tracks.count ?? 0
                 ),
+                precomputedArtists: cachedArtists.isEmpty ? nil : cachedArtists,
                 onDismiss: {
                     showBatchLyricsSheet = false
                 }
@@ -467,15 +469,26 @@ public struct ArtistsView: View {
     
     private var batchLyricsButton: some View {
         Button(action: {
-            showBatchLyricsSheet = true
+            isPreparingLyricsSheet = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                showBatchLyricsSheet = true
+                isPreparingLyricsSheet = false
+            }
         }) {
-            Image(systemName: "quote.bubble")
-                .font(.system(size: 13, weight: .semibold))
-                .frame(width: 38, height: 38)
-                .foregroundStyle(WalkmanTheme.silverLight)
+            if isPreparingLyricsSheet {
+                ProgressView()
+                    .controlSize(.small)
+                    .scaleEffect(0.8)
+                    .frame(width: 38, height: 38)
+            } else {
+                Image(systemName: "quote.bubble")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(width: 38, height: 38)
+                    .foregroundStyle(WalkmanTheme.silverLight)
+            }
         }
         .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
-        .disabled(displayedArtists.isEmpty && activeArtist == nil)
+        .disabled((displayedArtists.isEmpty && activeArtist == nil) || isPreparingLyricsSheet)
         .help("Batch generate and sync lyrics for artists")
     }
     
