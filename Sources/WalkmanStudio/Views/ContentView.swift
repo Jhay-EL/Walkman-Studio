@@ -24,6 +24,7 @@ public struct ContentView: View {
     @State private var albumToEdit: AlbumItem? = nil
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var isFullScreenPlayerPresented: Bool = false
+    @State private var showingMtpHelpSheet: Bool = false
     
     @ObservedObject private var player = AudioPlayerService.shared
     @ObservedObject private var localLibrary = LocalMusicLibraryService.shared
@@ -141,6 +142,26 @@ public struct ContentView: View {
         }
         self.activeDrive = drive
         refreshLibrary()
+    }
+
+    private func selectCustomStorageFolder() {
+        let panel = NSOpenPanel()
+        panel.title = "Select Walkman Storage Folder"
+        panel.message = "Select the mounted storage volume or Music folder of your Sony Walkman."
+        panel.prompt = "Connect Storage"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = false
+        
+        let volumesURL = URL(fileURLWithPath: "/Volumes")
+        panel.directoryURL = volumesURL
+        
+        let response = panel.runModal()
+        if response == .OK, let selectedURL = panel.url {
+            _ = WalkmanEngine.shared.setCustomStorageFolder(url: selectedURL)
+            self.refreshDrives()
+        }
     }
 
     private func refreshDrives() {
@@ -496,23 +517,76 @@ public struct ContentView: View {
             }
             
             if let usbDev = WalkmanUSBDetector.shared.connectedDevices.first(where: { $0.isAndroid }) {
-                VStack(spacing: 6) {
-                    HStack(spacing: 8) {
-                        WalkmanDeviceIconView(size: 28, modelName: usbDev.modelName, hasBackground: false)
-                        Text("\(usbDev.modelName) Connected via USB")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(.white)
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 12) {
+                        WalkmanDeviceIconView(size: 38, modelName: usbDev.modelName, hasBackground: false)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Sony Walkman \(usbDev.modelName)")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white)
+                            
+                            HStack(spacing: 5) {
+                                Circle()
+                                    .fill(Color.green)
+                                    .frame(width: 7, height: 7)
+                                Text("Connected via USB (MTP File Transfer Mode)")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(Color.green.opacity(0.95))
+                            }
+                        }
+                        
+                        Spacer()
                     }
-                    Text("For maximum transfer speeds, insert your MicroSD card directly into your Mac, or ensure File Transfer mode is active on your Walkman.")
-                        .font(.system(size: 11))
+                    
+                    Text("macOS requires an MTP bridge (e.g. MacDroid, OpenMTP) to mount Android internal storage to Finder, or you can select your Walkman Music folder directly.")
+                        .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    HStack(spacing: 10) {
+                        Button(action: selectCustomStorageFolder) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "folder.badge.plus")
+                                Text("Select Storage Folder")
+                            }
+                            .font(.system(size: 12, weight: .semibold))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 7)
+                            .background(Color.accentColor)
+                            .foregroundStyle(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        
+                        Button(action: { showingMtpHelpSheet = true }) {
+                            HStack(spacing: 5) {
+                                Image(systemName: "questionmark.circle")
+                                Text("Mac Transfer Guide")
+                            }
+                            .font(.system(size: 12, weight: .medium))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(Color.white.opacity(0.08))
+                            .foregroundStyle(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        
+                        Spacer()
+                    }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .frame(maxWidth: 440)
+                .padding(16)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(red: 26/255, green: 26/255, blue: 32/255))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(Color.accentColor.opacity(0.3), lineWidth: 1)
+                        )
+                )
+                .frame(maxWidth: 480)
             }
             
             if let unsupported = WalkmanEngine.shared.lastUnsupportedModel {
@@ -536,19 +610,35 @@ public struct ContentView: View {
                 .frame(maxWidth: 440)
             }
             
-            Button(action: refreshDrives) {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.clockwise")
-                    Text("Detect Drives")
+            HStack(spacing: 12) {
+                Button(action: refreshDrives) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.clockwise")
+                        Text("Detect Drives")
+                    }
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 7)
+                    .background(WalkmanTheme.silverGradient)
+                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
-                .font(.system(size: 12.5, weight: .semibold))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 7)
-                .background(WalkmanTheme.silverGradient)
-                .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .buttonStyle(.plain)
+                
+                Button(action: selectCustomStorageFolder) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "folder")
+                        Text("Select Storage Folder...")
+                    }
+                    .font(.system(size: 12, weight: .medium))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(Color.white.opacity(0.08))
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
             
             Spacer()
         }
@@ -1040,6 +1130,11 @@ public struct ContentView: View {
         .sheet(isPresented: $showManageFoldersSheet) {
             ManageLocalFoldersSheet(
                 onDismiss: { showManageFoldersSheet = false }
+            )
+        }
+        .sheet(isPresented: $showingMtpHelpSheet) {
+            AndroidWalkmanMtpHelpSheet(
+                onDismiss: { showingMtpHelpSheet = false }
             )
         }
         .sheet(item: $trackToEdit) { track in
