@@ -259,8 +259,7 @@ public struct BatchLyricsGeneratorSheet: View {
         )
         .background(
             SheetWindowResizer(
-                minSize: NSSize(width: 620, height: 520),
-                maxSize: NSSize(width: 1400, height: 1100)
+                minSize: NSSize(width: 620, height: 520)
             )
         )
         .onAppear {
@@ -327,13 +326,6 @@ public struct BatchLyricsGeneratorSheet: View {
                 )
                 .allowsHitTesting(false)
         )
-        .overlay(alignment: .bottomTrailing) {
-            Image(systemName: "arrow.up.left.and.arrow.down.right")
-                .font(.system(size: 8, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.18))
-                .padding(8)
-                .allowsHitTesting(false)
-        }
         .shadow(color: Color.black.opacity(0.45), radius: 24, x: 0, y: 10)
     }
 
@@ -482,11 +474,11 @@ public struct BatchLyricsGeneratorSheet: View {
     private var sheetTitle: String {
         switch sheetState {
         case .configure:
-            return "Generate Walkman Lyrics"
+            return "LRC Fetcher"
         case .running:
-            return "Fetching Online Lyrics"
+            return "Fetching .LRC Lyrics..."
         case .completed:
-            return "Lyrics Generation Complete"
+            return "LRC Fetch Complete"
         }
     }
 
@@ -495,14 +487,14 @@ public struct BatchLyricsGeneratorSheet: View {
         case .configure:
             switch tabContext {
             case .playlist(let name, _):
-                return "Batch search public music databases for synchronized .LRC lyrics for playlist '\(name)' and sync them directly to your Sony Walkman storage."
+                return "Batch search online databases for synchronized .lrc lyrics for playlist '\(name)' and sync them to your Sony Walkman storage."
             default:
-                return "Batch search public music databases for synchronized .LRC lyrics and sync them directly to your Sony Walkman storage."
+                return "Batch search online databases for synchronized .lrc lyrics and sync them directly to your Sony Walkman storage."
             }
         case .running:
             return "Parallel multi-track fetching active. Searching LRCLIB and Lyrics.ovh for timestamped .LRC lyrics..."
         case .completed:
-            return "Finished scanning and saving lyrics companion files to your Walkman library."
+            return "Finished scanning and saving .lrc companion files to your Walkman library."
         }
     }
 
@@ -511,7 +503,7 @@ public struct BatchLyricsGeneratorSheet: View {
         VStack(spacing: 16) {
             // Scope Selection
             VStack(alignment: .leading, spacing: 8) {
-                Text("GENERATION SCOPE")
+                Text("FETCH SCOPE")
                     .font(WalkmanFont.sectionHeader)
                     .foregroundStyle(.tertiary)
 
@@ -598,8 +590,8 @@ public struct BatchLyricsGeneratorSheet: View {
                                 }
                             } else {
                                 Text(onlyMissingLyrics
-                                     ? "Skips \(tracksWithLyricsCount) tracks that already have .LRC files; generates for \(targetTracks.count) tracks."
-                                     : "Will re-fetch and overwrite lyrics for all \(candidateTracks.count) tracks.")
+                                     ? "Skips \(tracksWithLyricsCount) tracks that already have .LRC files; fetches for \(targetTracks.count) tracks."
+                                     : "Will re-fetch and overwrite .lrc files for all \(candidateTracks.count) tracks.")
                                     .font(WalkmanFont.caption)
                                     .foregroundStyle(WalkmanTheme.silverMuted)
                             }
@@ -1201,7 +1193,7 @@ public struct BatchLyricsGeneratorSheet: View {
             .padding(.top, 8)
 
             VStack(spacing: 6) {
-                Text("Lyrics Batch Complete")
+                Text("LRC Batch Fetch Complete")
                     .font(WalkmanFont.title2)
                     .foregroundStyle(WalkmanTheme.silverLight)
 
@@ -1262,7 +1254,7 @@ public struct BatchLyricsGeneratorSheet: View {
                         } else {
                             Image(systemName: "quote.bubble.fill")
                                 .font(.system(size: 12, weight: .bold))
-                            Text(targetTracks.isEmpty ? "No Tracks to Fetch" : "Generate Lyrics (\(targetTracks.count))")
+                            Text(targetTracks.isEmpty ? "No Tracks to Fetch" : "Fetch LRC Lyrics (\(targetTracks.count))")
                                 .font(WalkmanFont.calloutBold)
                         }
                     }
@@ -1501,32 +1493,84 @@ private struct SheetCloseButton: View {
 // MARK: - Sheet Window Resizer
 private struct SheetWindowResizer: NSViewRepresentable {
     let minSize: NSSize
-    let maxSize: NSSize
 
     func makeNSView(context: Context) -> SheetWindowResizerNSView {
         let view = SheetWindowResizerNSView()
         view.minSize = minSize
-        view.maxSize = maxSize
         return view
     }
 
     func updateNSView(_ nsView: SheetWindowResizerNSView, context: Context) {
         nsView.minSize = minSize
-        nsView.maxSize = maxSize
         nsView.applyConfiguration()
     }
 }
 
 private final class SheetWindowResizerNSView: NSView {
     var minSize: NSSize = .zero
-    var maxSize: NSSize = .zero
+    private let sheetDelegate = SheetWindowDelegate()
+    private var parentResizeObserver: Any?
+    private weak var observedParent: NSWindow?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        sheetDelegate.ownerView = self
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        sheetDelegate.ownerView = self
+    }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        if window == nil {
+            teardown()
+        } else {
+            setup()
+            DispatchQueue.main.async { [weak self] in
+                self?.setup()
+            }
+        }
+    }
+
+    private func setup() {
+        guard let window = self.window else { return }
+        if window.delegate == nil || window.delegate === sheetDelegate {
+            window.delegate = sheetDelegate
+        }
         applyConfiguration()
-        DispatchQueue.main.async { [weak self] in
+        setupParentObserver()
+    }
+
+    private func teardown() {
+        removeParentObserver()
+        if let window = self.window, window.delegate === sheetDelegate {
+            window.delegate = nil
+        }
+    }
+
+    func setupParentObserver() {
+        guard let window = self.window else { return }
+        let parent = window.sheetParent ?? window.parent ?? NSApp.mainWindow ?? NSApp.keyWindow
+        guard let parent = parent, parent !== observedParent else { return }
+        removeParentObserver()
+        observedParent = parent
+        parentResizeObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didResizeNotification,
+            object: parent,
+            queue: .main
+        ) { [weak self] _ in
             self?.applyConfiguration()
         }
+    }
+
+    func removeParentObserver() {
+        if let observer = parentResizeObserver {
+            NotificationCenter.default.removeObserver(observer)
+            parentResizeObserver = nil
+        }
+        observedParent = nil
     }
 
     func applyConfiguration() {
@@ -1534,13 +1578,77 @@ private final class SheetWindowResizerNSView: NSView {
         if !window.styleMask.contains(.resizable) {
             window.styleMask.insert(.resizable)
         }
-        if minSize != .zero {
-            window.minSize = minSize
-            window.contentMinSize = minSize
+
+        let parent = window.sheetParent ?? window.parent ?? NSApp.mainWindow ?? NSApp.keyWindow
+        let maxW: CGFloat
+        let maxH: CGFloat
+
+        if let parent = parent {
+            // Keep at least 24pt margin on each side (48pt total horizontal inset)
+            // Keep at least 80pt vertically (56pt sheet top titlebar offset + 24pt bottom clearance)
+            maxW = max(minSize.width, parent.frame.width - 48)
+            maxH = max(minSize.height, parent.frame.height - 80)
+        } else {
+            maxW = 1200
+            maxH = 750
         }
-        if maxSize != .zero {
-            window.maxSize = maxSize
-            window.contentMaxSize = maxSize
+
+        let effectiveMinW = min(minSize.width, maxW)
+        let effectiveMinH = min(minSize.height, maxH)
+
+        window.minSize = NSSize(width: effectiveMinW, height: effectiveMinH)
+        window.contentMinSize = NSSize(width: effectiveMinW, height: effectiveMinH)
+        window.maxSize = NSSize(width: maxW, height: maxH)
+        window.contentMaxSize = NSSize(width: maxW, height: maxH)
+
+        // Ensure current window frame stays inside maximum boundaries without overlapping the main window
+        var currentFrame = window.frame
+        var needsResize = false
+        if currentFrame.width > maxW {
+            currentFrame.size.width = maxW
+            needsResize = true
         }
+        if currentFrame.height > maxH {
+            currentFrame.size.height = maxH
+            needsResize = true
+        }
+        if needsResize {
+            window.setFrame(currentFrame, display: true, animate: true)
+        }
+    }
+
+    func clampProposedSize(_ frameSize: NSSize, for window: NSWindow) -> NSSize {
+        let parent = window.sheetParent ?? window.parent ?? NSApp.mainWindow ?? NSApp.keyWindow
+        let maxW: CGFloat
+        let maxH: CGFloat
+
+        if let parent = parent {
+            maxW = max(minSize.width, parent.frame.width - 48)
+            maxH = max(minSize.height, parent.frame.height - 80)
+        } else {
+            maxW = window.maxSize.width > 0 ? window.maxSize.width : 1200
+            maxH = window.maxSize.height > 0 ? window.maxSize.height : 750
+        }
+
+        var clamped = frameSize
+        let minW = min(minSize.width, maxW)
+        let minH = min(minSize.height, maxH)
+
+        clamped.width = min(max(clamped.width, minW), maxW)
+        clamped.height = min(max(clamped.height, minH), maxH)
+        return clamped
+    }
+
+    deinit {
+        removeParentObserver()
+    }
+}
+
+private final class SheetWindowDelegate: NSObject, NSWindowDelegate {
+    weak var ownerView: SheetWindowResizerNSView?
+
+    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        guard let owner = ownerView else { return frameSize }
+        return owner.clampProposedSize(frameSize, for: sender)
     }
 }
