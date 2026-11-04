@@ -27,6 +27,41 @@ public struct BatchLyricsGeneratorSheet: View {
         case completed
     }
 
+    public enum LyricsFetchCategory: String, CaseIterable, Identifiable, Sendable {
+        case synced = "Synced .LRC"
+        case plain = "Plain Text"
+        case skipped = "Skipped"
+        case notFound = "Not Found"
+
+        public var id: String { rawValue }
+
+        public var color: Color {
+            switch self {
+            case .synced: return .green
+            case .plain: return .blue
+            case .skipped: return WalkmanTheme.silverMuted
+            case .notFound: return .orange
+            }
+        }
+
+        public var icon: String {
+            switch self {
+            case .synced: return "quote.bubble.fill"
+            case .plain: return "doc.text.fill"
+            case .skipped: return "forward.fill"
+            case .notFound: return "exclamationmark.triangle.fill"
+            }
+        }
+    }
+
+    public struct TrackFetchResultItem: Identifiable, Sendable {
+        public let id: String
+        public let track: Track
+        public let category: LyricsFetchCategory
+        public let detail: String
+        public let timestamp: Date
+    }
+
     // Input parameters
     let allTracks: [Track]
     let selectedTracks: [Track]
@@ -58,6 +93,9 @@ public struct BatchLyricsGeneratorSheet: View {
     @State private var plainCount: Int = 0
     @State private var skippedCount: Int = 0
     @State private var notFoundCount: Int = 0
+    @State private var fetchedResultItems: [TrackFetchResultItem] = []
+    @State private var selectedMetricCategory: LyricsFetchCategory? = nil
+    @State private var breakdownSearchQuery: String = ""
     @State private var currentTrackTitle: String = ""
     @State private var currentTrackArtist: String = ""
     @State private var currentTrackStage: String = ""
@@ -1145,40 +1183,27 @@ public struct BatchLyricsGeneratorSheet: View {
                 }
             }
 
-            // Real-Time Stats Chips
+            // Real-Time Stats Chips (Liquid Glass)
             HStack(spacing: 10) {
-                metricPill(title: "Synced .LRC", count: syncedCount, color: .green)
-                metricPill(title: "Plain Text", count: plainCount, color: .blue)
-                metricPill(title: "Skipped", count: skippedCount, color: WalkmanTheme.silverMuted)
-                metricPill(title: "Not Found", count: notFoundCount, color: .orange)
+                ForEach(LyricsFetchCategory.allCases) { cat in
+                    LiquidGlassMetricButton(
+                        category: cat,
+                        count: count(for: cat),
+                        isSelected: selectedMetricCategory == cat,
+                        action: { toggleCategory(cat) }
+                    )
+                }
             }
-            .padding(.top, 8)
-        }
-    }
+            .padding(.top, 4)
 
-    private func metricPill(title: String, count: Int, color: Color) -> some View {
-        VStack(spacing: 3) {
-            Text("\(count)")
-                .font(.system(size: 15, weight: .bold, design: .monospaced))
-                .foregroundStyle(color)
-            Text(title)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(WalkmanTheme.silverMuted)
-                .lineLimit(1)
+            // Expandable Track Breakdown List
+            trackBreakdownCard
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
-        .background(Color.white.opacity(0.03))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(color.opacity(0.20), lineWidth: 0.85)
-        )
     }
 
     // MARK: - Completed View
     private var completedSummaryContent: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 18) {
             ZStack {
                 Circle()
                     .fill(Color.green.opacity(0.12))
@@ -1203,15 +1228,19 @@ public struct BatchLyricsGeneratorSheet: View {
                     .multilineTextAlignment(.center)
             }
 
-            // Results Matrix
+            // Results Matrix (Liquid Glass)
             HStack(spacing: 10) {
-                metricPill(title: "Synced .LRC", count: syncedCount, color: .green)
-                metricPill(title: "Plain Text", count: plainCount, color: .blue)
-                metricPill(title: "Skipped", count: skippedCount, color: WalkmanTheme.silverMuted)
-                metricPill(title: "Not Found", count: notFoundCount, color: .orange)
+                ForEach(LyricsFetchCategory.allCases) { cat in
+                    LiquidGlassMetricButton(
+                        category: cat,
+                        count: count(for: cat),
+                        isSelected: selectedMetricCategory == cat,
+                        action: { toggleCategory(cat) }
+                    )
+                }
             }
-            .padding(.horizontal, 10)
-            .padding(.top, 8)
+            .padding(.horizontal, 4)
+            .padding(.top, 4)
 
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.shield.fill")
@@ -1221,8 +1250,273 @@ public struct BatchLyricsGeneratorSheet: View {
                     .font(WalkmanFont.caption)
                     .foregroundStyle(WalkmanTheme.silverMuted)
             }
-            .padding(.top, 4)
+            .padding(.top, 2)
+
+            // Expandable Track Breakdown List
+            trackBreakdownCard
+                .padding(.horizontal, 4)
         }
+    }
+
+    private func count(for category: LyricsFetchCategory) -> Int {
+        switch category {
+        case .synced: return syncedCount
+        case .plain: return plainCount
+        case .skipped: return skippedCount
+        case .notFound: return notFoundCount
+        }
+    }
+
+    private func toggleCategory(_ category: LyricsFetchCategory) {
+        withAnimation(.easeInOut(duration: 0.20)) {
+            if selectedMetricCategory == category {
+                selectedMetricCategory = nil
+            } else {
+                selectedMetricCategory = category
+                breakdownSearchQuery = ""
+            }
+        }
+    }
+
+    private var currentCategoryItems: [TrackFetchResultItem] {
+        guard let cat = selectedMetricCategory else { return [] }
+        return fetchedResultItems.filter { $0.category == cat }
+    }
+
+    private var filteredCategoryItems: [TrackFetchResultItem] {
+        let q = breakdownSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if q.isEmpty {
+            return currentCategoryItems
+        }
+        return currentCategoryItems.filter { item in
+            item.track.title.lowercased().contains(q) ||
+            item.track.artist.lowercased().contains(q) ||
+            item.track.album.lowercased().contains(q)
+        }
+    }
+
+    private func breakdownHeaderTitle(for category: LyricsFetchCategory) -> String {
+        switch category {
+        case .notFound:
+            return "Tracks with No Lyrics Found"
+        case .synced:
+            return "Tracks with Synced .LRC Saved"
+        case .plain:
+            return "Tracks with Plain Lyrics Saved"
+        case .skipped:
+            return "Skipped Tracks (Already Had .LRC)"
+        }
+    }
+
+    @ViewBuilder
+    private var trackBreakdownCard: some View {
+        if let category = selectedMetricCategory {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: category.icon)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(category.color)
+
+                    Text(breakdownHeaderTitle(for: category))
+                        .font(WalkmanFont.calloutBold)
+                        .foregroundStyle(WalkmanTheme.silverLight)
+
+                    Text("\(currentCategoryItems.count)")
+                        .font(WalkmanFont.monoSmall)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(category.color.opacity(0.18))
+                        .foregroundStyle(category.color)
+                        .clipShape(Capsule())
+                        .overlay(Capsule().stroke(category.color.opacity(0.35), lineWidth: 0.8))
+
+                    Spacer()
+
+                    if currentCategoryItems.count > 3 {
+                        HStack(spacing: 5) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 10))
+                                .foregroundStyle(WalkmanTheme.silverMuted)
+                            TextField("Filter tracks...", text: $breakdownSearchQuery)
+                                .textFieldStyle(.plain)
+                                .font(WalkmanFont.caption)
+                                .foregroundStyle(WalkmanTheme.silverLight)
+                                .frame(width: 120)
+                            if !breakdownSearchQuery.isEmpty {
+                                Button(action: { breakdownSearchQuery = "" }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(WalkmanTheme.silverMuted)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.white.opacity(0.04))
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .stroke(Color.white.opacity(0.08), lineWidth: 0.8)
+                        )
+                    }
+
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.20)) {
+                            selectedMetricCategory = nil
+                            breakdownSearchQuery = ""
+                        }
+                    }) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(WalkmanTheme.silverMuted)
+                            .padding(5)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Close breakdown")
+                }
+
+                Divider()
+                    .overlay(Color.white.opacity(0.06))
+
+                if filteredCategoryItems.isEmpty {
+                    HStack {
+                        Spacer()
+                        Text(currentCategoryItems.isEmpty ? "No tracks in this category yet." : "No matching tracks found.")
+                            .font(WalkmanFont.caption)
+                            .foregroundStyle(WalkmanTheme.silverMuted)
+                            .padding(.vertical, 16)
+                        Spacer()
+                    }
+                } else {
+                    ScrollView(.vertical, showsIndicators: true) {
+                        LazyVStack(spacing: 4) {
+                            ForEach(Array(filteredCategoryItems.enumerated()), id: \.element.id) { index, item in
+                                breakdownTrackRow(item: item, index: index + 1, category: category)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                    .frame(minHeight: 110, maxHeight: 220)
+                }
+
+                if category == .notFound && !currentCategoryItems.isEmpty {
+                    HStack(spacing: 6) {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.orange.opacity(0.85))
+                        Text("Tip: Verify song title and artist tags in the Metadata Editor to help online lyric matching.")
+                            .font(WalkmanFont.caption)
+                            .foregroundStyle(WalkmanTheme.silverMuted)
+                    }
+                    .padding(.top, 4)
+                }
+            }
+            .padding(12)
+            .background(
+                ZStack {
+                    WalkmanTheme.card.opacity(0.85)
+                        .background(.ultraThinMaterial)
+
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color.white.opacity(0.18), location: 0.0),
+                                .init(color: Color.white.opacity(0.02), location: 0.5),
+                                .init(color: Color.clear, location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 7)
+                        Spacer(minLength: 0)
+                    }
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            stops: [
+                                .init(color: category.color.opacity(0.50), location: 0.0),
+                                .init(color: Color.white.opacity(0.14), location: 0.5),
+                                .init(color: Color.white.opacity(0.04), location: 1.0)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.85
+                    )
+            )
+            .shadow(color: Color.black.opacity(0.25), radius: 8, x: 0, y: 3)
+            .transition(.asymmetric(
+                insertion: .opacity.combined(with: .move(edge: .top)),
+                removal: .opacity.combined(with: .move(edge: .top))
+            ))
+        }
+    }
+
+    private func breakdownTrackRow(item: TrackFetchResultItem, index: Int, category: LyricsFetchCategory) -> some View {
+        HStack(spacing: 10) {
+            Text("\(index)")
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(WalkmanTheme.silverMuted.opacity(0.70))
+                .frame(width: 24, alignment: .trailing)
+
+            Image(systemName: "music.note")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(category.color.opacity(0.85))
+                .frame(width: 14)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.track.title)
+                    .font(WalkmanFont.calloutMedium)
+                    .foregroundStyle(WalkmanTheme.silverLight)
+                    .lineLimit(1)
+
+                HStack(spacing: 6) {
+                    if !item.track.artist.isEmpty {
+                        Text(item.track.artist)
+                            .font(WalkmanFont.caption)
+                            .foregroundStyle(WalkmanTheme.silverMuted)
+                            .lineLimit(1)
+                    }
+
+                    if !item.track.album.isEmpty {
+                        Text("•")
+                            .font(.system(size: 8))
+                            .foregroundStyle(WalkmanTheme.silverMuted.opacity(0.5))
+                        Text(item.track.album)
+                            .font(WalkmanFont.caption)
+                            .foregroundStyle(WalkmanTheme.silverMuted.opacity(0.8))
+                            .lineLimit(1)
+                    }
+                }
+            }
+
+            Spacer()
+
+            Text(item.track.format.uppercased())
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(WalkmanTheme.silverMuted)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.white.opacity(0.04))
+                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+
+            Text(item.detail)
+                .font(WalkmanFont.caption)
+                .foregroundStyle(category == .notFound ? Color.orange.opacity(0.85) : WalkmanTheme.silverMuted)
+                .lineLimit(1)
+                .frame(maxWidth: 180, alignment: .trailing)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.white.opacity(0.02))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 
     // MARK: - Footer Actions
@@ -1312,6 +1606,9 @@ public struct BatchLyricsGeneratorSheet: View {
         plainCount = 0
         skippedCount = 0
         notFoundCount = 0
+        fetchedResultItems = []
+        selectedMetricCategory = nil
+        breakdownSearchQuery = ""
         currentTrackTitle = ""
         currentTrackArtist = ""
         currentTrackStage = "Starting multi-threaded concurrent engine..."
@@ -1404,22 +1701,63 @@ public struct BatchLyricsGeneratorSheet: View {
                     if lyricsResult.synced {
                         syncedCount += 1
                         currentTrackStage = "Saved synchronized .LRC file"
+                        fetchedResultItems.append(TrackFetchResultItem(
+                            id: "\(track.id)-synced-\(processedCount)",
+                            track: track,
+                            category: .synced,
+                            detail: "Synced .LRC companion saved",
+                            timestamp: Date()
+                        ))
                     } else {
                         plainCount += 1
                         currentTrackStage = "Saved plain lyrics file"
+                        fetchedResultItems.append(TrackFetchResultItem(
+                            id: "\(track.id)-plain-\(processedCount)",
+                            track: track,
+                            category: .plain,
+                            detail: "Plain text lyrics saved",
+                            timestamp: Date()
+                        ))
                     }
                 } catch {
                     notFoundCount += 1
                     currentTrackStage = "Failed to write .LRC: \(error.localizedDescription)"
+                    fetchedResultItems.append(TrackFetchResultItem(
+                        id: "\(track.id)-diskerror-\(processedCount)",
+                        track: track,
+                        category: .notFound,
+                        detail: "Disk error: \(error.localizedDescription)",
+                        timestamp: Date()
+                    ))
                 }
-            case .failure:
+            case .failure(let error):
                 notFoundCount += 1
                 currentTrackStage = "No lyrics found online"
+                let detailMsg: String
+                if let lyricsErr = error as? LyricsError {
+                    detailMsg = lyricsErr.errorDescription ?? "No lyrics found online"
+                } else {
+                    detailMsg = "No lyrics found online"
+                }
+                fetchedResultItems.append(TrackFetchResultItem(
+                    id: "\(track.id)-notfound-\(processedCount)",
+                    track: track,
+                    category: .notFound,
+                    detail: detailMsg,
+                    timestamp: Date()
+                ))
             }
         } else {
             // Skipped (already has lyrics)
             skippedCount += 1
             currentTrackStage = "Skipped (already has .LRC)"
+            fetchedResultItems.append(TrackFetchResultItem(
+                id: "\(track.id)-skipped-\(processedCount)",
+                track: track,
+                category: .skipped,
+                detail: "Existing companion .LRC preserved",
+                timestamp: Date()
+            ))
         }
 
         // Update ETA
@@ -1650,5 +1988,113 @@ private final class SheetWindowDelegate: NSObject, NSWindowDelegate {
     func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
         guard let owner = ownerView else { return frameSize }
         return owner.clampProposedSize(frameSize, for: sender)
+    }
+}
+
+// MARK: - Liquid Glass Metric Button
+private struct LiquidGlassMetricButton: View {
+    let category: BatchLyricsGeneratorSheet.LyricsFetchCategory
+    let count: Int
+    let isSelected: Bool
+    let action: () -> Void
+    @State private var isHovered: Bool = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                HStack(spacing: 5) {
+                    Text("\(count)")
+                        .font(.system(size: 16, weight: .bold, design: .monospaced))
+                        .foregroundStyle(count > 0 ? category.color : category.color.opacity(0.50))
+
+                    if isSelected {
+                        Circle()
+                            .fill(category.color)
+                            .frame(width: 5, height: 5)
+                            .shadow(color: category.color.opacity(0.85), radius: 2)
+                    }
+                }
+
+                HStack(spacing: 4) {
+                    Text(category.rawValue)
+                        .font(.system(size: 10, weight: isSelected ? .semibold : .medium))
+                        .foregroundStyle(isSelected ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
+                        .lineLimit(1)
+
+                    if count > 0 {
+                        Image(systemName: isSelected ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 7, weight: .bold))
+                            .foregroundStyle(isSelected ? category.color : WalkmanTheme.silverMuted.opacity(0.60))
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 11)
+            .padding(.horizontal, 6)
+            .background(
+                ZStack {
+                    // Liquid Glass Translucent Chassis
+                    if isSelected {
+                        category.color.opacity(isHovered ? 0.16 : 0.12)
+                            .background(Color.white.opacity(isHovered ? 0.10 : 0.06))
+                    } else {
+                        Color.white.opacity(isHovered ? 0.08 : 0.035)
+                    }
+
+                    // Top specular optical reflection sheen (Liquid Glass)
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color.white.opacity(isSelected ? 0.40 : (isHovered ? 0.28 : 0.15)), location: 0.0),
+                                .init(color: Color.white.opacity(0.0), location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 8)
+                        Spacer(minLength: 0)
+                    }
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(
+                        isSelected ?
+                            LinearGradient(
+                                stops: [
+                                    .init(color: category.color.opacity(0.90), location: 0.0),
+                                    .init(color: category.color.opacity(0.45), location: 0.6),
+                                    .init(color: Color.white.opacity(0.25), location: 1.0)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ) :
+                            LinearGradient(
+                                stops: [
+                                    .init(color: Color.white.opacity(isHovered ? 0.35 : 0.16), location: 0.0),
+                                    .init(color: category.color.opacity(isHovered ? 0.35 : 0.14), location: 0.5),
+                                    .init(color: Color.white.opacity(0.04), location: 1.0)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                        lineWidth: isSelected ? 1.2 : 0.85
+                    )
+            )
+            .shadow(
+                color: isSelected ? category.color.opacity(0.28) : (isHovered ? Color.black.opacity(0.25) : Color.clear),
+                radius: isSelected ? 7 : 4,
+                x: 0,
+                y: isSelected ? 2 : 1
+            )
+            .scaleEffect(isHovered ? 1.02 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .onHover { h in
+            isHovered = h
+            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+        .help(count == 0 ? "No tracks in \(category.rawValue)" : "Click to view \(count) \(category.rawValue) tracks")
     }
 }
