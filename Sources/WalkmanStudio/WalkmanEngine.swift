@@ -550,8 +550,96 @@ public final class WalkmanEngine: @unchecked Sendable {
             sync()
             let unmountResult = await unmountDrive(mountPoint: drive.mountPoint)
             results[drive.name] = unmountResult.success
+            if customStorageURL?.path == drive.mountPoint {
+                clearCustomStorage()
+            }
         }
         return (allDeleted, results)
+    }
+
+    // -----------------------------------------------------------------------
+    // Custom / Manual Storage Support (MTP & Android Bridges)
+    // -----------------------------------------------------------------------
+    public private(set) var customStorageURL: URL? = nil
+
+    public func setCustomStorageFolder(url: URL) -> Bool {
+        _ = url.startAccessingSecurityScopedResource()
+        if let bookmark = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil) {
+            UserDefaults.standard.set(bookmark, forKey: "walkman_custom_storage_bookmark")
+            UserDefaults.standard.set(url.path, forKey: "walkman_custom_storage_path")
+        }
+        self.customStorageURL = url
+        return true
+    }
+
+    public func clearCustomStorage() {
+        if let url = customStorageURL {
+            url.stopAccessingSecurityScopedResource()
+        }
+        customStorageURL = nil
+        UserDefaults.standard.removeObject(forKey: "walkman_custom_storage_bookmark")
+        UserDefaults.standard.removeObject(forKey: "walkman_custom_storage_path")
+    }
+
+    public func restoreCustomStorageFromBookmarkIfNeeded() {
+        guard customStorageURL == nil else { return }
+        guard let bookmark = UserDefaults.standard.data(forKey: "walkman_custom_storage_bookmark") else { return }
+        var isStale = false
+        if let url = try? URL(resolvingBookmarkData: bookmark, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale) {
+            _ = url.startAccessingSecurityScopedResource()
+            if FileManager.default.fileExists(atPath: url.path) {
+                self.customStorageURL = url
+            }
+        }
+    }
+
+    public func makeCustomWalkmanDrive(from url: URL) -> WalkmanDrive {
+        let connectedUsb = WalkmanUSBDetector.shared.connectedDevices.first(where: { $0.isAndroid })
+        let driveName = connectedUsb != nil ? "\(connectedUsb!.modelName) Storage" : (url.lastPathComponent.isEmpty ? "Walkman Storage" : url.lastPathComponent)
+
+        let path = url.path
+        var statv = statvfs()
+        var totalBytes: Int64 = 128_000_000_000 // Default 128GB (WM1AM2 size)
+        var freeBytes: Int64 = 64_000_000_000
+
+        if statvfs(path, &statv) == 0 && statv.f_frsize > 0 && statv.f_blocks > 0 {
+            let blockSize = Int64(statv.f_frsize)
+            totalBytes = blockSize * Int64(statv.f_blocks)
+            freeBytes = blockSize * Int64(statv.f_bavail)
+        } else if let attrs = try? FileManager.default.attributesOfFileSystem(forPath: path) {
+            if let total = (attrs[.systemSize] as? NSNumber)?.int64Value, total > 0 {
+                totalBytes = total
+            }
+            if let free = (attrs[.systemFreeSize] as? NSNumber)?.int64Value {
+                freeBytes = free
+            }
+        }
+
+        let usedBytes = max(0, totalBytes - freeBytes)
+        let percentUsed = totalBytes > 0 ? (Double(usedBytes) / Double(totalBytes)) * 100.0 : 0.0
+
+        let musicDir: String
+        let titleMusic = url.appendingPathComponent("Music")
+        let upperMusic = url.appendingPathComponent("MUSIC")
+        if FileManager.default.fileExists(atPath: titleMusic.path) {
+            musicDir = titleMusic.path
+        } else if FileManager.default.fileExists(atPath: upperMusic.path) {
+            musicDir = upperMusic.path
+        } else {
+            musicDir = url.path
+        }
+
+        return WalkmanDrive(
+            name: driveName,
+            mountPoint: url.path,
+            type: .internal,
+            totalBytes: totalBytes,
+            usedBytes: usedBytes,
+            freeBytes: freeBytes,
+            percentUsed: percentUsed,
+            hasCfw: false,
+            musicDir: musicDir
+        )
     }
 
     // -----------------------------------------------------------------------
@@ -560,6 +648,8 @@ public final class WalkmanEngine: @unchecked Sendable {
     public func detectDrives() -> [WalkmanDrive] {
         var drives: [WalkmanDrive] = []
         lastUnsupportedModel = nil
+        restoreCustomStorageFromBookmarkIfNeeded()
+
         let volumesURL = URL(fileURLWithPath: "/Volumes")
 
         guard let contents = try? FileManager.default.contentsOfDirectory(
@@ -570,6 +660,9 @@ public final class WalkmanEngine: @unchecked Sendable {
             ],
             options: [.skipsHiddenFiles]
         ) else {
+            if let customURL = customStorageURL, FileManager.default.fileExists(atPath: customURL.path) {
+                return [makeCustomWalkmanDrive(from: customURL)]
+            }
             return []
         }
 
@@ -578,7 +671,7 @@ public final class WalkmanEngine: @unchecked Sendable {
 
         let systemVolumes: Set<String> = ["MACINTOSH HD", "RECOVERY", "PREBOOT", "VM", "UPDATE"]
 
-        // Phase 1: Filter out system volumes, DMGs, non-FAT32/exFAT, and read-only filesystems
+        // Phase 1: Filter out system volumes, DMGs, non-FAT32/exFAT/FUSE, and read-only filesystems
         var candidates: [(url: URL, path: String, name: String, statv: statvfs)] = []
         for volURL in contents {
             let name = volURL.lastPathComponent.uppercased()
@@ -592,13 +685,22 @@ public final class WalkmanEngine: @unchecked Sendable {
                 continue
             }
 
-            // Exclusively FAT32 (msdos) or ExFAT - Sony OS non-Android players never use HFS+/APFS/NTFS
+            // Support FAT32 (msdos), ExFAT, FUSE/MTP virtual filesystems, and Sony Walkman volumes
             var sfs = statfs()
             guard statfs(path, &sfs) == 0 else { continue }
             let fstype = withUnsafePointer(to: &sfs.f_fstypename, {
                 $0.withMemoryRebound(to: CChar.self, capacity: Int(MFSTYPENAMELEN)) { String(cString: $0).lowercased() }
             })
-            guard fstype == "msdos" || fstype == "exfat" else {
+            let isFatOrExfat = (fstype == "msdos" || fstype == "exfat")
+            let isFuseOrVirtual = fstype.contains("fuse") || fstype.contains("macdroid") || fstype.contains("virtual") || fstype == "nullfs"
+            let hasSonyWalkmanIndicator = FileManager.default.fileExists(atPath: volURL.appendingPathComponent("Android/data/com.sony.walkman").path)
+                || FileManager.default.fileExists(atPath: volURL.appendingPathComponent("Android/data/com.sony.snei.walkman").path)
+                || FileManager.default.fileExists(atPath: volURL.appendingPathComponent("Sony_Card.IND").path)
+                || FileManager.default.fileExists(atPath: volURL.appendingPathComponent("DevIcon.fil").path)
+                || FileManager.default.fileExists(atPath: volURL.appendingPathComponent("default-capability.xml").path)
+                || FileManager.default.fileExists(atPath: volURL.appendingPathComponent("DEFAULT-CAPABILITY.XML").path)
+
+            guard isFatOrExfat || isFuseOrVirtual || hasSonyWalkmanIndicator else {
                 continue
             }
 
@@ -609,9 +711,17 @@ public final class WalkmanEngine: @unchecked Sendable {
             }
 
             var statv = statvfs()
-            guard statvfs(path, &statv) == 0 else { continue }
+            _ = statvfs(path, &statv)
             let blockSize = Int64(statv.f_frsize)
-            let totalBytes = blockSize * Int64(statv.f_blocks)
+            var totalBytes = blockSize * Int64(statv.f_blocks)
+            if totalBytes <= 0 {
+                if let attrs = try? FileManager.default.attributesOfFileSystem(forPath: path),
+                   let sysSize = attrs[.systemSize] as? NSNumber, sysSize.int64Value > 0 {
+                    totalBytes = sysSize.int64Value
+                } else if isFuseOrVirtual || hasSonyWalkmanIndicator {
+                    totalBytes = 128_000_000_000 // Sensible default for MTP virtual drives
+                }
+            }
             guard totalBytes > 0 else { continue }
 
             candidates.append((volURL, path, volURL.lastPathComponent, statv))
@@ -701,6 +811,13 @@ public final class WalkmanEngine: @unchecked Sendable {
 
         for sdDrive in microsdCandidates {
             drives.append(makeDrive(cand: sdDrive, type: .microsd))
+        }
+
+        // Phase 5: Append custom/manual storage if user connected an MTP folder and it isn't already listed
+        if let customURL = customStorageURL, FileManager.default.fileExists(atPath: customURL.path) {
+            if !drives.contains(where: { $0.mountPoint == customURL.path }) {
+                drives.append(makeCustomWalkmanDrive(from: customURL))
+            }
         }
 
         return drives
