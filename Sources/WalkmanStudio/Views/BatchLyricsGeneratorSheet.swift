@@ -1397,9 +1397,9 @@ public struct BatchLyricsGeneratorSheet: View {
                                 breakdownTrackRow(item: item, index: index + 1, category: category)
                             }
                         }
-                        .padding(.vertical, 2)
+                        .padding(.vertical, 4)
                     }
-                    .frame(minHeight: 110, maxHeight: 220)
+                    .frame(minHeight: 120, idealHeight: 220, maxHeight: 360)
                 }
 
                 if category == .notFound && !currentCategoryItems.isEmpty {
@@ -1460,17 +1460,20 @@ public struct BatchLyricsGeneratorSheet: View {
     }
 
     private func breakdownTrackRow(item: TrackFetchResultItem, index: Int, category: LyricsFetchCategory) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
+            // Index number
             Text("\(index)")
                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
                 .foregroundStyle(WalkmanTheme.silverMuted.opacity(0.70))
-                .frame(width: 24, alignment: .trailing)
+                .frame(width: 22, alignment: .trailing)
 
+            // Audio note icon
             Image(systemName: "music.note")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(category.color.opacity(0.85))
                 .frame(width: 14)
 
+            // Title & Artist / Album
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.track.title)
                     .font(WalkmanFont.calloutMedium)
@@ -1496,25 +1499,31 @@ public struct BatchLyricsGeneratorSheet: View {
                     }
                 }
             }
+            .layoutPriority(0)
 
-            Spacer()
+            Spacer(minLength: 16)
 
+            // Format Badge (FLAC, MP3, etc.)
             Text(item.track.format.uppercased())
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                 .foregroundStyle(WalkmanTheme.silverMuted)
                 .padding(.horizontal, 6)
-                .padding(.vertical, 2)
+                .padding(.vertical, 2.5)
                 .background(Color.white.opacity(0.04))
                 .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                .layoutPriority(1)
 
+            // Detail badge / status reason (Fully responsive across window widths)
             Text(item.detail)
                 .font(WalkmanFont.caption)
-                .foregroundStyle(category == .notFound ? Color.orange.opacity(0.85) : WalkmanTheme.silverMuted)
+                .foregroundStyle(category == .notFound ? Color.orange.opacity(0.90) : WalkmanTheme.silverMuted)
                 .lineLimit(1)
-                .frame(maxWidth: 180, alignment: .trailing)
+                .truncationMode(.tail)
+                .help(item.detail)
+                .layoutPriority(2)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
         .background(Color.white.opacity(0.02))
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
