@@ -415,15 +415,59 @@ public final class WalkmanDeviceDetector: @unchecked Sendable {
             || FileManager.default.fileExists(atPath: volumeURL.appendingPathComponent("Android/media/com.sony.snei.walkman").path)
             || FileManager.default.fileExists(atPath: volumeURL.appendingPathComponent("Android/media/com.sony.walkman").path)
             || FileManager.default.fileExists(atPath: volumeURL.appendingPathComponent("Android/data/com.sony.walkman.soundsettings").path)
+            || FileManager.default.fileExists(atPath: volumeURL.appendingPathComponent("Android/data/com.sony.walkman.cassette").path)
+            || FileManager.default.fileExists(atPath: volumeURL.appendingPathComponent("Android/data/com.sony.walkman.musiccenter").path)
         
-        // Internal heuristic: Volume name contains "WALKMAN" or starts with "NW-" AND has DevIcon or Music
-        if (volName.contains("WALKMAN") || volName.hasPrefix("NW-")) && (hasDevIcon || hasMusicDir) {
+        let connectedUsb = WalkmanUSBDetector.shared.connectedDevices.first(where: { $0.isAndroid })
+        
+        // Android Internal Storage Heuristic:
+        let isAndroidInternalNamed = volName.contains("INTERNAL")
+            || volName.contains("SHARED")
+            || volName.contains("PRIMARY")
+            || volName.contains("WM1")
+            || volName.contains("ZX70")
+            || volName.contains("ZX50")
+            || volName.contains("A30")
+            || volName.contains("A10")
+            || volName.contains("STORAGE")
+            || (volName.contains("WALKMAN") && !volName.contains("SD") && !volName.contains("CARD"))
+            
+        let isInternalCandidate = isAndroidInternalNamed
+            || (hasSonyWalkmanPackage && !hasSonyCardInd)
+            || (connectedUsb != nil && !hasSonyCardInd && !volName.contains("SD"))
+            || (volName.hasPrefix("NW-") && !volName.contains("SD"))
+        
+        // Internal heuristic: Authentic internal storage (Sony OS or Android DAP)
+        if isInternalCandidate && (hasDevIcon || hasMusicDir || hasSonyWalkmanPackage || connectedUsb != nil) {
+            let model: String
+            if let usb = connectedUsb {
+                model = usb.modelName
+            } else if volName.hasPrefix("NW-") {
+                model = volName
+            } else if volName.contains("WM1AM2") {
+                model = "NW-WM1AM2"
+            } else if volName.contains("WM1ZM2") {
+                model = "NW-WM1ZM2"
+            } else if volName.contains("ZX707") {
+                model = "NW-ZX707"
+            } else if volName.contains("ZX507") {
+                model = "NW-ZX507"
+            } else if volName.contains("A306") || volName.contains("A307") {
+                model = "NW-A306"
+            } else if volName.contains("A105") || volName.contains("A106") {
+                model = "NW-A105"
+            } else if hasSonyWalkmanPackage {
+                model = "NW-WM1AM2"
+            } else {
+                model = volName
+            }
+            
             return VolumeInspectionResult(
                 isWalkman: true,
                 isSupported: true,
                 isInternal: true,
                 isMicroSD: false,
-                modelRaw: volName,
+                modelRaw: model,
                 vendor: "Sony Corporation",
                 rawXml: nil
             )
@@ -438,10 +482,13 @@ public final class WalkmanDeviceDetector: @unchecked Sendable {
             || (hasDevIcon && hasMusicDir)
             || (hasSonyWalkmanPackage && hasMusicDir)
             || (volName.hasPrefix("NW-") && hasMusicDir)
+            || (volName.contains("SD") && hasMusicDir && connectedUsb != nil)
             
         if isAuthenticSonyMicroSD {
             let model: String?
-            if volName.hasPrefix("NW-") {
+            if let usb = connectedUsb {
+                model = usb.modelName
+            } else if volName.hasPrefix("NW-") {
                 model = volName
             } else if hasSonyWalkmanPackage {
                 model = "NW-A300Series"
@@ -822,8 +869,12 @@ public final class WalkmanDeviceDetector: @unchecked Sendable {
             || FileManager.default.fileExists(atPath: mountUrl.appendingPathComponent("SONY_CARD.IND").path)
         let hasDevIcon = FileManager.default.fileExists(atPath: mountUrl.appendingPathComponent("DevIcon.fil").path)
         
+        let connectedUsb = WalkmanUSBDetector.shared.connectedDevices.first(where: { $0.isAndroid })
+
         let seriesRaw: String
-        if name.contains("WM1ZM2") {
+        if let usb = connectedUsb {
+            seriesRaw = usb.modelName
+        } else if name.contains("WM1ZM2") {
             seriesRaw = "NW-WM1ZM2"
         } else if name.contains("WM1AM2") {
             seriesRaw = "NW-WM1AM2"
@@ -836,7 +887,15 @@ public final class WalkmanDeviceDetector: @unchecked Sendable {
         } else if name.contains("A100") || name.contains("A105") || name.contains("A106") {
             seriesRaw = "NW-A100Series"
         } else if hasSonyPkg {
-            seriesRaw = "NW-A300Series"
+            if capacityGb >= 200 {
+                seriesRaw = "NW-WM1ZM2"
+            } else if capacityGb >= 100 {
+                seriesRaw = "NW-WM1AM2"
+            } else if capacityGb >= 50 {
+                seriesRaw = "NW-ZX700Series"
+            } else {
+                seriesRaw = "NW-A300Series"
+            }
         } else if name.contains("ZX300") {
             seriesRaw = "NW-ZX300Series"
         } else if name.contains("WM1") {
