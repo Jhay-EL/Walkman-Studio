@@ -489,7 +489,7 @@ public struct ArtistsView: View {
         }
         .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
         .disabled((displayedArtists.isEmpty && activeArtist == nil) || isPreparingLyricsSheet)
-        .help("Batch generate and sync lyrics for artists")
+        .help("LRC Fetcher: Fetch and sync .LRC lyrics for artists")
     }
     
     private var wideTopToolbarLayout: some View {

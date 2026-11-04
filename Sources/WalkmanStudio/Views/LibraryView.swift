@@ -416,7 +416,7 @@ public struct LibraryView: View {
             }
             .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
             .disabled(visibleTracks.isEmpty || isPreparingLyricsSheet)
-            .help("Batch generate and sync lyrics for library tracks")
+            .help("LRC Fetcher: Fetch and sync .LRC lyrics for library tracks")
 
             let unanalyzedCount = visibleTracks.filter { !$0.isSenseMeAnalyzed }.count
             let hasSelection = selectedTrackId != nil

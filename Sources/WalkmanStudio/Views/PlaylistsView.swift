@@ -1439,7 +1439,7 @@ public struct PlaylistsView: View {
         }
         .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
         .disabled(isPreparingLyricsSheet)
-        .help("Generate Walkman Lyrics for this playlist")
+        .help("LRC Fetcher: Fetch and sync .LRC lyrics for this playlist")
     }
 
     // MARK: - Responsive Detail Header Subviews

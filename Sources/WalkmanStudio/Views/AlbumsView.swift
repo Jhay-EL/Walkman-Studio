@@ -460,7 +460,7 @@ public struct AlbumsView: View {
         }
         .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
         .disabled((displayedAlbums.isEmpty && selectedAlbum == nil) || isPreparingLyricsSheet)
-        .help("Batch generate and sync lyrics for albums")
+        .help("LRC Fetcher: Fetch and sync .LRC lyrics for albums")
     }
     
     private var wideToolbarLayout: some View {

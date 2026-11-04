@@ -494,7 +494,7 @@ public struct RecentlyAddedView: View {
             }
             .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
             .disabled(displayedTracks.isEmpty || isPreparingLyricsSheet)
-            .help("Batch generate and sync lyrics for recently added tracks")
+            .help("LRC Fetcher: Fetch and sync .LRC lyrics for recently added tracks")
         }
     }
     

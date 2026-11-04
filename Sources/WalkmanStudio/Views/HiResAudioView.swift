@@ -686,7 +686,7 @@ public struct HiResAudioView: View {
             }
             .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
             .disabled(displayedTracks.isEmpty || isPreparingLyricsSheet)
-            .help("Batch generate and sync lyrics for Hi-Res audio tracks")
+            .help("LRC Fetcher: Fetch and sync .LRC lyrics for Hi-Res audio tracks")
         }
     }
     
