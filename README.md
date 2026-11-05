@@ -9,22 +9,50 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v3.0.1-brightgreen?style=for-the-badge" alt="Release v3.0.1" />
+  <img src="https://img.shields.io/badge/Release-v3.1.0-brightgreen?style=for-the-badge" alt="Release v3.1.0" />
   <img src="https://img.shields.io/badge/Platform-macOS%2013%2B%20(Ventura%20%7C%20Sonoma%20%7C%20Sequoia)-black?style=for-the-badge&logo=apple" alt="macOS" />
   <img src="https://img.shields.io/badge/Language-Swift%205.9%2B-orange?style=for-the-badge&logo=swift" alt="Swift" />
   <img src="https://img.shields.io/badge/Architecture-Universal%20(arm64%20%2F%20x86__64)-blue?style=for-the-badge" alt="Universal Architecture" />
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License" />
 </p>
 
+> [!TIP]
+> **Latest Release:** [**Walkman Studio v3.1.0**](#-whats-new-in-v310) is now available! Featuring the all-new **LRC Fetcher (Batch Synchronized Lyrics Generator)**, authentic **Sony SensMe™ Highlight Playback & Surfing**, **Fluid Window Expansion**, and **Language Study Studio**. [Download v3.1.0 DMGs below](#downloads--releases-v310).
+
 A dedicated native macOS desktop application built specifically for managing Sony Walkman digital audio players on both **Apple Silicon** (M1, M2, M3, M4) and **Intel-based MacBooks & Macs** (Core i5, i7, i9, Xeon). Walkman Studio provides universal hardware support for both **Classic Non-Android Sony OS / Linux DAPs** (NW-A30/A40/A50, NW-ZX100/ZX300, NW-WM1A/WM1Z) and modern **Android-based Walkmans** (NW-A100/A300, NW-ZX500/ZX700, NW-WM1AM2/WM1ZM2), alongside a standalone **Local Music Library** and interactive **SensMe™ Mood Channels Player** right on macOS.
 
-Walkman Studio automates multi-device dual-drive management, Sony 12 Tone / SenseMe™ acoustic analysis, strict hardware-compliant ID3v2.3/Vorbis metadata tagging, Baseline RGB JPEG artwork conversion, `.LRC` synchronized lyrics fetching, same-storage duplicate music cleaning, batch FFmpeg audio transcoding, `.M3U8` CRLF playlist creation, waveform audio trimming, and macOS dotfile purging.
+Walkman Studio automates multi-device dual-drive management, Sony 12 Tone / SenseMe™ acoustic analysis, strict hardware-compliant ID3v2.3/Vorbis metadata tagging, Baseline RGB JPEG artwork conversion, high-throughput batch `.LRC` synchronized lyrics fetching (LRC Fetcher), same-storage duplicate music cleaning, batch FFmpeg audio transcoding, `.M3U8` CRLF playlist creation, waveform audio trimming, and macOS dotfile purging.
 
 Walkman Studio focuses strictly on safe, non-destructive music library management, pristine audio preservation, and seamless hardware compatibility.
 
 <p align="center">
   <img src="assets/sc/01_device_overview_dashboard.png" alt="Walkman Studio Interface" width="100%" />
 </p>
+
+---
+
+## 🌟 What's New in v3.1.0
+
+### 🎤 LRC Fetcher (Batch Synchronized Lyrics Generator)
+The flagship feature of **v3.1.0** delivers high-speed, automated retrieval of timestamp-accurate `.lrc` synchronized lyrics directly into your Walkman or local music library:
+* **Universal Library Integration:** Dedicated circular 38×38pt Liquid Glass lyrics buttons (`quote.bubble`) built into every library view header: **All Songs**, **Recently Added**, **Albums**, **Artists**, **Hi-Res Audio**, **Playlists**, and **Language Study**.
+* **Flexible Contextual Scopes:**
+  * **All Tracks in View:** Scans and fetches lyrics for all tracks in the currently active view.
+  * **Selected Track(s):** Targets only highlighted or checked rows in the track list.
+  * **Active Item:** Targets the open Album, Artist, or Playlist directly.
+  * **Choose Specific...:** Launches an interactive Liquid Glass checklist modal featuring live search, "Select All" / "Deselect All", and real-time missing-lyrics diagnostics.
+* **Concurrent Multi-Worker Engine:** Parallel asynchronous workers query the open-source **[LRCLIB](https://lrclib.net)** API (`/api/get` & `/api/search`) with exact millisecond duration matching and automatic fallback to **[Lyrics.ovh](https://lyrics.ovh)**.
+* **Live Progress & Interactive Metric Dashboard:** Real-time animated progress bar, speed/ETA metrics, and interactive status metric pills (**Synced .LRC**, **Plain Text**, **Skipped**, **Not Found**) with a searchable per-track result breakdown card.
+* **Strict Date & Timestamp Preservation:** Original file modification timestamps and addition dates are preserved so existing songs never jump unexpectedly in "Recently Added" smart playlists.
+* **Compliant Companion `.LRC` Files:** Automatically writes standardized companion `.lrc` files directly adjacent to audio tracks for instant recognition on Sony Walkman devices and the built-in Now Playing player.
+
+### ⚡ Additional Enhancements & Minor Fixes in v3.1.0
+* **Language Study Studio (`/LEARNING`):** Native management for Sony Walkman's root `/LEARNING` directory with instant audio format filters (MP3, M4A/AAC, FLAC) and $O(1)$ cached segmented views for audiobooks, language lessons, and podcasts.
+* **Authentic Sony SensMe™ Highlight Playback:** Audio surfing now tunes in directly at the 12-Tone acoustic climax position (`senseMeHighlightSec`) with zero audio leakage from 0:00, paired with *Highlight (45s)* vs *Full Track* range toggles and active gold chorus badges.
+* **Fluid Window Expansion on Track Detail:** Opening the Track Detail panel (Inspector) smoothly widens the macOS window by +300pt, preserving 100% of the table and grid space for your music library, with screen-edge boundary protection.
+* **Permanently Static Navigation Sidebar:** Navigation sidebar is locked at 260pt and never collapses or auto-hides when opening or closing inspector views.
+* **Expandable Liquid Glass Search Bar:** Compact search icon morphs into a translucent liquid glass search bar with fluid spring physics, synchronized fade transitions, and click-outside collapse.
+* **Android Walkman Heuristics & USB Detection:** Improved capacity heuristics, USB composite PID matching, and broader audio format support across Android Walkman models.
 
 ---
 
@@ -88,17 +116,26 @@ Sony Walkman digital audio players deliver exceptional audio fidelity via their 
 * **Streamlined 1-Click Transfers:** Immediate transfer initiation with real-time transfer progress feedback.
 * **Automated Filesystem Sanitization:** Strips illegal FAT32/exFAT characters (`< > : " / \ | ? *`), trailing periods, and spaces, organizing songs into clean `/MUSIC/Artist/Album/NN - Title.ext` hierarchies.
 
-### 5. Fullscreen Player & Real-Time Synchronized Lyrics (.LRC)
+### 5. Fullscreen Player & Synchronized Lyrics (.LRC) Engine
 * **Immersive Fullscreen Now Playing View:** Dedicated fullscreen playback view with dynamic blurred ambient backgrounds, large album artwork, playback controls, and live synchronized lyrics.
-* **Karaoke-Style Smooth Autoscroll:** Highlights the active vocal line with high contrast while gently scrolling past and upcoming lyrics.
-* **Automated Online Lyrics Fetching (LRCLIB API):** Queries the open-source **[LRCLIB](https://lrclib.net)** API (`/api/get` and `/api/search`) to automatically retrieve timestamp-accurate synchronized `.lrc` files matched by title, artist, album, and duration (with fallback to **[Lyrics.ovh](https://lyrics.ovh)**).
+* **Karaoke-Style Smooth Autoscroll:** Highlights the active vocal line with high contrast while gently scrolling past and upcoming lyrics with a natural 0.3s vocal lead-time advance.
+* **Batch Synchronized .LRC Lyrics Fetcher (LRC Fetcher):**
+  * **Universal Library Integration:** Dedicated circular 38×38pt Liquid Glass lyrics buttons (`quote.bubble`) built into every library view header: **All Songs**, **Recently Added**, **Albums**, **Artists**, **Hi-Res Audio**, **Playlists**, and **Language Study**.
+  * **Contextual Selection Scopes:**
+    * *All Tracks in View:* Scans and fetches lyrics for all tracks displayed in the current tab.
+    * *Selected Track(s):* Scopes fetching strictly to rows highlighted or checked in the song table.
+    * *Active Item:* Scopes fetching directly to the currently opened Album, Artist, or Playlist.
+    * *Choose Specific...:* Reveals an interactive Liquid Glass checklist modal featuring a live search bar, "Select All" / "Deselect All" shortcuts, real-time candidate track counts, and missing-lyrics diagnostics.
+  * **Concurrent Multi-Worker Engine:** Parallel asynchronous workers query the **[LRCLIB](https://lrclib.net)** API (`/api/get` and `/api/search`) with indexed track title, artist, album, and millisecond duration matching, falling back gracefully to **[Lyrics.ovh](https://lyrics.ovh)**.
+  * **Live Progress & Interactive Metric Dashboard:** Real-time animated progress bar, processing speed, ETA, and interactive status metric pill buttons (**Synced .LRC**, **Plain Text**, **Skipped**, and **Not Found**) with a filterable track result breakdown card.
+  * **Strict Timestamp & Date Added Preservation:** Preserves original file modification dates and internal addition timestamps so updated tracks never jump unexpectedly to the top of "Recently Added" smart playlists.
+  * **Automatic Companion File Generation:** Generates clean, hardware-compliant companion `.lrc` files directly adjacent to audio tracks in Walkman and Local Library storage.
 * **Multi-Source Device Lyrics Viewer:** Reads and displays lyrics already stored on your Walkman:
   * Companion `.lrc` and `.txt` files with auto-decoding (UTF-8, Windows-1252, ISO-8859-1, UTF-16).
   * Embedded FLAC Vorbis comments (`LYRICS`, `UNSYNCEDLYRICS`, `SYNCEDLYRICS`).
   * Embedded MP4 / M4A / ALAC `©lyr` atoms.
   * Embedded MP3 ID3v2 `USLT`, `SYLT`, and `ULT` frames across all standard text encodings.
 * **Built-in Lyrics Editor:** Edit timestamps, paste custom text, or sync line-by-line lyrics and save directly as companion `.lrc` files alongside your audio files.
-* **Date Added Preservation:** Adding or editing lyrics preserves the track's original transfer date, preventing older songs from jumping to the "Recently Added" smart playlist.
 
 ### 6. Standalone Song & Bulk Album Metadata Editors
 * **Ergonomic Liquid Glass Modal Sheets:** Right-click any track or album in any view to launch dedicated, spacious modal tag editors designed for detailed cataloging without accidental edits.
@@ -332,19 +369,19 @@ These classic non-Android Walkmans run Sony's proprietary real-time audio OS. Wa
 
 ---
 
-## Downloads & Releases (v3.0.1)
+## Downloads & Releases (v3.1.0)
 
 Pre-built `.dmg` disk images and `.zip` standalone archives are available for all modern Mac hardware:
 
 | Package | Architecture | Supported Mac Models | Primary Download (GitHub) | Mirror Download (Google Drive) |
 | :--- | :--- | :--- | :--- | :--- |
-| **Apple Silicon DMG** | `arm64` | MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4) | [Walkman-Studio-3.0.1-arm64.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.0.1/Walkman-Studio-3.0.1-arm64.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1S0cuB6XqxwdlDMoI52WCVAvei9JIxqxN?usp=share_link) |
-| **Intel Mac DMG** | `x86_64` | Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac mini, Mac Pro | [Walkman-Studio-3.0.1-intel.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.0.1/Walkman-Studio-3.0.1-intel.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1S0cuB6XqxwdlDMoI52WCVAvei9JIxqxN?usp=share_link) |
-| **Universal 2 DMG** | `arm64` + `x86_64` | Universal package running natively on all Macs (macOS 13.0+) | [Walkman-Studio-3.0.1-universal.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.0.1/Walkman-Studio-3.0.1-universal.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1S0cuB6XqxwdlDMoI52WCVAvei9JIxqxN?usp=share_link) |
+| **Apple Silicon DMG** | `arm64` | MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4) | [Walkman-Studio-3.1.0-arm64.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.1.0/Walkman-Studio-3.1.0-arm64.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1KjkVl7U-FBZ0Ics4OuttyOj6HanPajpg?usp=share_link) |
+| **Intel Mac DMG** | `x86_64` | Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac mini, Mac Pro | [Walkman-Studio-3.1.0-intel.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.1.0/Walkman-Studio-3.1.0-intel.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1KjkVl7U-FBZ0Ics4OuttyOj6HanPajpg?usp=share_link) |
+| **Universal 2 DMG** | `arm64` + `x86_64` | Universal package running natively on all Macs (macOS 13.0+) | [Walkman-Studio-3.1.0-universal.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.1.0/Walkman-Studio-3.1.0-universal.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1KjkVl7U-FBZ0Ics4OuttyOj6HanPajpg?usp=share_link) |
 
 > [!NOTE]
 > **Alternative Download Mirror:**
-> If the GitHub Releases page is inaccessible or returns an error, all release packages, `.dmg` installers, standalone `.zip` archives, and cryptographic checksums are directly available on our **[Google Drive Release Mirror](https://drive.google.com/drive/folders/1S0cuB6XqxwdlDMoI52WCVAvei9JIxqxN?usp=share_link)**.
+> If the GitHub Releases page is inaccessible or returns an error, all release packages, `.dmg` installers, standalone `.zip` archives, and cryptographic checksums are directly available on our **[Google Drive Release Mirror](https://drive.google.com/drive/folders/1KjkVl7U-FBZ0Ics4OuttyOj6HanPajpg?usp=share_link)**.
 
 > [!TIP]
 > **Which package should I choose?**
