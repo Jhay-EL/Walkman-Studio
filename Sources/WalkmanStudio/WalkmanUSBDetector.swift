@@ -105,9 +105,9 @@ public final class WalkmanUSBDetector: ObservableObject, @unchecked Sendable {
     private func identifySonyWalkman(vendorId: Int, productId: Int, productName: String, serial: String?) -> ConnectedUSBWalkman? {
         let upperName = productName.uppercased()
         
-        // 1. Match by known Android Walkman USB Product IDs
+        // 1. Match by known Android Walkman USB Product IDs (both MTP only and MTP+ADB composite)
         switch productId {
-        case 0x0d00, 0x0cff:
+        case 0x0d00, 0x0cff, 0x0d02:
             return ConnectedUSBWalkman(
                 modelName: "NW-A105",
                 seriesName: "NW-A100 Series",
@@ -117,7 +117,7 @@ public final class WalkmanUSBDetector: ObservableObject, @unchecked Sendable {
                 isAndroid: true,
                 iconKey: "nw-a100"
             )
-        case 0x0d01:
+        case 0x0d01, 0x0d03:
             return ConnectedUSBWalkman(
                 modelName: "NW-ZX507",
                 seriesName: "NW-ZX500 Series",
@@ -127,7 +127,7 @@ public final class WalkmanUSBDetector: ObservableObject, @unchecked Sendable {
                 isAndroid: true,
                 iconKey: "nw-zx500"
             )
-        case 0x0e6e:
+        case 0x0e6e, 0x0e72:
             return ConnectedUSBWalkman(
                 modelName: "NW-A306",
                 seriesName: "NW-A300 Series",
@@ -137,7 +137,7 @@ public final class WalkmanUSBDetector: ObservableObject, @unchecked Sendable {
                 isAndroid: true,
                 iconKey: "nw-a300"
             )
-        case 0x0e6f:
+        case 0x0e6f, 0x0e73:
             return ConnectedUSBWalkman(
                 modelName: "NW-ZX707",
                 seriesName: "NW-ZX700 Series",
@@ -147,7 +147,7 @@ public final class WalkmanUSBDetector: ObservableObject, @unchecked Sendable {
                 isAndroid: true,
                 iconKey: "nw-zx700"
             )
-        case 0x0e70:
+        case 0x0e70, 0x0e74:
             return ConnectedUSBWalkman(
                 modelName: "NW-WM1AM2",
                 seriesName: "NW-WM1 Series M2",
@@ -157,7 +157,7 @@ public final class WalkmanUSBDetector: ObservableObject, @unchecked Sendable {
                 isAndroid: true,
                 iconKey: "nw-wm1am2"
             )
-        case 0x0e71:
+        case 0x0e71, 0x0e75:
             return ConnectedUSBWalkman(
                 modelName: "NW-WM1ZM2",
                 seriesName: "NW-WM1 Series M2",
@@ -231,6 +231,19 @@ public final class WalkmanUSBDetector: ObservableObject, @unchecked Sendable {
                 serialNumber: serial,
                 isAndroid: true,
                 iconKey: "nw-wm1zm2"
+            )
+        }
+        
+        // 3. Fallback for any Sony Walkman USB device (Vendor ID 0x054c confirmed)
+        if upperName.contains("WALKMAN") {
+            return ConnectedUSBWalkman(
+                modelName: "Android Walkman",
+                seriesName: "Android Walkman Series",
+                vendorId: vendorId,
+                productId: productId,
+                serialNumber: serial,
+                isAndroid: true,
+                iconKey: "nw-a300"
             )
         }
         

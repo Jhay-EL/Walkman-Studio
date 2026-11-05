@@ -1725,39 +1725,43 @@ public struct LocalLibraryView: View {
         guard let targetDrive = walkmanDrive else {
             // No Walkman device connected -> Show Warning Alert offering redirect to Transfer & Convert tab
             transferWarningTitle = "No Walkman Connected"
-            transferWarningMessage = "Please connect your Sony Walkman DAP via USB Mass Storage to transfer songs directly.\n\nWould you like to redirect to the Transfer & Convert tab to prepare your queue?"
+            transferWarningMessage = "Please connect your Sony Walkman DAP via USB to transfer songs directly.\n\nWould you like to redirect to the Transfer & Convert tab to prepare your queue?"
             pendingWarningTracks = tracks
             hasMixedFormats = false
             showTransferWarningAlert = true
             return
         }
 
+        let isTargetAndroid = WalkmanDeviceDetector.isAndroidModel(modelRaw: targetDrive.name)
+            || WalkmanUSBDetector.shared.connectedDevices.contains(where: { $0.isAndroid })
+
         // 2. Format Support Check
         let unsupported = tracks.filter { track in
             let ext = URL(fileURLWithPath: track.fullPath).pathExtension.lowercased()
-            return !TransferQueueService.isFormatSupported(ext: ext)
+            return !TransferQueueService.isFormatSupported(ext: ext, isAndroid: isTargetAndroid)
         }
 
         if !unsupported.isEmpty {
             let uniqueExts = Array(Set(unsupported.map { ".\(URL(fileURLWithPath: $0.fullPath).pathExtension.lowercased())" })).sorted().joined(separator: ", ")
             pendingWarningTracks = tracks
 
+            let deviceDesc = isTargetAndroid ? "your Android Walkman" : "Sony Walkman firmware"
             if unsupported.count == tracks.count {
                 // ALL selected tracks are unsupported
                 hasMixedFormats = false
                 transferWarningTitle = "Unsupported Audio Format"
-                transferWarningMessage = "The selected track\(tracks.count == 1 ? " is" : "s are") in an audio format (\(uniqueExts)) not natively supported by Sony Walkman non-Android firmware.\n\nRedirect to the Transfer & Convert tab to optimize and convert \(tracks.count == 1 ? "this track" : "these tracks") before transferring to your Walkman?"
+                transferWarningMessage = "The selected track\(tracks.count == 1 ? " is" : "s are") in an audio format (\(uniqueExts)) not natively supported by \(deviceDesc).\n\nRedirect to the Transfer & Convert tab to optimize and convert \(tracks.count == 1 ? "this track" : "these tracks") before transferring to your Walkman?"
                 showTransferWarningAlert = true
             } else {
                 // MIXED: some supported, some unsupported
                 hasMixedFormats = true
                 let supported = tracks.filter { track in
                     let ext = URL(fileURLWithPath: track.fullPath).pathExtension.lowercased()
-                    return TransferQueueService.isFormatSupported(ext: ext)
+                    return TransferQueueService.isFormatSupported(ext: ext, isAndroid: isTargetAndroid)
                 }
                 supportedTracksForMixedChoice = supported
                 transferWarningTitle = "Unsupported Formats Detected"
-                transferWarningMessage = "\(unsupported.count) of \(tracks.count) selected tracks are in formats (\(uniqueExts)) not natively playable on Sony Walkman.\n\nWould you like to redirect to the Transfer & Convert tab to optimize all tracks, or transfer only the \(supported.count) supported track\(supported.count == 1 ? "" : "s") directly?"
+                transferWarningMessage = "\(unsupported.count) of \(tracks.count) selected tracks are in formats (\(uniqueExts)) not natively playable on \(deviceDesc).\n\nWould you like to redirect to the Transfer & Convert tab to optimize all tracks, or transfer only the \(supported.count) supported track\(supported.count == 1 ? "" : "s") directly?"
                 showTransferWarningAlert = true
             }
             return

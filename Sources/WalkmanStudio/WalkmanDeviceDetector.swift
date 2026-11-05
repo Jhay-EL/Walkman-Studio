@@ -34,6 +34,12 @@ public final class WalkmanDeviceDetector: @unchecked Sendable {
     private var lastKnownInternalDevice: WalkmanDeviceInfo? = nil
     private var lastKnownDeviceByModelRaw: [String: WalkmanDeviceInfo] = [:]
     
+    public var currentLastKnownInternalDevice: WalkmanDeviceInfo? {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        return lastKnownInternalDevice
+    }
+    
     // -------------------------------------------------------------------------
     // All Supported Non-Android Sony Walkman Hardware
     // -------------------------------------------------------------------------
@@ -457,7 +463,26 @@ public final class WalkmanDeviceDetector: @unchecked Sendable {
             } else if volName.contains("A105") || volName.contains("A106") {
                 model = "NW-A105"
             } else if hasSonyWalkmanPackage {
-                model = "NW-WM1AM2"
+                // Capacity-based heuristic for Android Walkmans:
+                // NW-A105 / NW-A306: ~32 GB internal (< 50 GB)
+                // NW-ZX507 / NW-ZX707: ~64 GB internal (50-99 GB)
+                // NW-WM1AM2: ~128 GB internal (100-199 GB)
+                // NW-WM1ZM2: ~256 GB internal (>= 200 GB)
+                var statv = statvfs()
+                if statvfs(volumeURL.path, &statv) == 0 && statv.f_frsize > 0 && statv.f_blocks > 0 {
+                    let totalGb = Double(Int64(statv.f_frsize) * Int64(statv.f_blocks)) / (1024 * 1024 * 1024)
+                    if totalGb >= 200 {
+                        model = "NW-WM1ZM2"
+                    } else if totalGb >= 100 {
+                        model = "NW-WM1AM2"
+                    } else if totalGb >= 50 {
+                        model = "NW-ZX707"
+                    } else {
+                        model = "NW-A306"
+                    }
+                } else {
+                    model = "NW-WM1AM2"
+                }
             } else {
                 model = volName
             }
@@ -491,7 +516,7 @@ public final class WalkmanDeviceDetector: @unchecked Sendable {
             } else if volName.hasPrefix("NW-") {
                 model = volName
             } else if hasSonyWalkmanPackage {
-                model = "NW-A300Series"
+                model = WalkmanDeviceDetector.shared.currentLastKnownInternalDevice?.modelRaw ?? "NW-A300Series"
             } else {
                 model = nil
             }
@@ -632,7 +657,7 @@ public final class WalkmanDeviceDetector: @unchecked Sendable {
     
     public static func isAndroidModel(modelRaw: String) -> Bool {
         let clean = modelRaw.uppercased().replacingOccurrences(of: "-", with: "").replacingOccurrences(of: " ", with: "")
-        let androidTokens = ["A100", "A105", "A106", "A107", "A300", "A306", "A307", "ZX500", "ZX505", "ZX507", "ZX700", "ZX706", "ZX707", "WM1AM2", "WM1ZM2"]
+        let androidTokens = ["A100", "A105", "A106", "A107", "A300", "A306", "A307", "ZX500", "ZX505", "ZX507", "ZX700", "ZX706", "ZX707", "WM1AM2", "WM1ZM2", "ANDROID"]
         return androidTokens.contains(where: { clean.contains($0) })
     }
 
@@ -662,7 +687,10 @@ public final class WalkmanDeviceDetector: @unchecked Sendable {
             }
         }
         if formats.isEmpty {
-            formats = ["FLAC", "MP3", "WAV", "AIFF", "ALAC", "DSD", "APE"]
+            formats = isAndroid ? ["FLAC", "MP3", "WAV", "AIFF", "ALAC", "DSD", "APE", "OGG", "OPUS"] : ["FLAC", "MP3", "WAV", "AIFF", "ALAC", "DSD", "APE"]
+        } else if isAndroid {
+            if !formats.contains("OGG") { formats.append("OGG") }
+            if !formats.contains("OPUS") { formats.append("OPUS") }
         }
         
         // Resolve Specific Model Variant from internal capacity
@@ -738,10 +766,28 @@ public final class WalkmanDeviceDetector: @unchecked Sendable {
                 specific = UserDefaults.standard.string(forKey: "last_known_walkman_specific_ZX500") ?? "NW-ZX507"
             }
             return ("NW-ZX500 Series", specific, "Sony Walkman \(specific)")
-        } else if upper.contains("WM1AM2") {
-            return ("NW-WM1 Series M2", "NW-WM1AM2", "Sony Walkman NW-WM1AM2")
         } else if upper.contains("WM1ZM2") {
             return ("NW-WM1 Series M2", "NW-WM1ZM2", "Sony Walkman NW-WM1ZM2")
+        } else if upper.contains("WM1AM2") || upper.contains("WM1M2") {
+            let specific = capacityGb >= 200 ? "NW-WM1ZM2" : "NW-WM1AM2"
+            return ("NW-WM1 Series M2", specific, "Sony Walkman \(specific)")
+        } else if upper.contains("ANDROID") {
+            let specific: String
+            let series: String
+            if capacityGb >= 200 {
+                series = "NW-WM1 Series M2"
+                specific = "NW-WM1ZM2"
+            } else if capacityGb >= 100 {
+                series = "NW-WM1 Series M2"
+                specific = "NW-WM1AM2"
+            } else if capacityGb >= 50 {
+                series = "NW-ZX700 Series"
+                specific = "NW-ZX707"
+            } else {
+                series = "NW-A300 Series"
+                specific = "NW-A306"
+            }
+            return (series, specific, "Sony Walkman \(specific)")
         } else if upper.contains("A50") {
             let specific: String
             if capacityGb > 0 && capacityGb < 20 {
@@ -930,7 +976,7 @@ public final class WalkmanDeviceDetector: @unchecked Sendable {
                 hasCfw: hasCfw,
                 displayResolution: isAndroid ? "1280x720" : "800x480",
                 internalCapacityGb: capacityGb,
-                supportedAudioFormats: ["FLAC", "MP3", "WAV", "AIFF", "ALAC", "DSD", "APE"]
+                supportedAudioFormats: isAndroid ? ["FLAC", "MP3", "WAV", "AIFF", "ALAC", "DSD", "APE", "OGG", "OPUS"] : ["FLAC", "MP3", "WAV", "AIFF", "ALAC", "DSD", "APE"]
             )
         }
         

@@ -18,19 +18,26 @@ public final class TransferQueueService: ObservableObject {
         "flac", "mp3", "m4a", "aac", "alac", "wav", "aiff", "aif", "dsf", "dff", "ape", "wma"
     ]
 
+    // Android Walkman Supported Audio Formats (NW-A100/A300, NW-ZX500/ZX700, NW-WM1AM2/ZM2)
+    // Supports all standard Walkman formats plus OGG Vorbis and Opus
+    public static let supportedAndroidExtensions: Set<String> = [
+        "flac", "mp3", "m4a", "aac", "alac", "wav", "aiff", "aif", "dsf", "dff", "ape", "wma", "ogg", "opus"
+    ]
+
     private init() {}
 
     // -------------------------------------------------------------------------
     // Format Validation
     // -------------------------------------------------------------------------
-    public static func isFormatSupported(ext: String) -> Bool {
+    public static func isFormatSupported(ext: String, isAndroid: Bool = false) -> Bool {
         let clean = ext.trimmingCharacters(in: CharacterSet(charactersIn: ".")).lowercased()
-        return supportedWalkmanExtensions.contains(clean)
+        let allowed = isAndroid ? supportedAndroidExtensions : supportedWalkmanExtensions
+        return allowed.contains(clean)
     }
 
-    public static func isTrackSupported(_ track: Track) -> Bool {
+    public static func isTrackSupported(_ track: Track, isAndroid: Bool = false) -> Bool {
         let ext = URL(fileURLWithPath: track.fullPath).pathExtension
-        return isFormatSupported(ext: ext)
+        return isFormatSupported(ext: ext, isAndroid: isAndroid)
     }
 
     // -------------------------------------------------------------------------
