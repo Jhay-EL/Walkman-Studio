@@ -10,6 +10,9 @@ private enum RenameLocation {
 public struct PlaylistsView: View {
     let activeDrive: WalkmanDrive?
     let libraryTracks: [Track]
+    var onEditTrack: ((Track) -> Void)? = nil
+    var onEditTrackWithList: ((Track, [Track]) -> Void)? = nil
+    var onInspectTrack: ((Track) -> Void)? = nil
     
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var playlists: [Playlist] = []
@@ -26,6 +29,10 @@ public struct PlaylistsView: View {
     @State private var isPreparingLyricsSheet: Bool = false
     @State private var messageBanner: String?
     @State private var cachedTrackLookup: [String: Track] = [:]
+    
+    // Direct Track Metadata Editor State
+    @State private var trackToEditLocally: Track? = nil
+    @State private var trackListToEditLocally: [Track] = []
     
     // Drag & Drop Reordering & Transfer State
     @State private var draggedTrackIndex: Int? = nil
@@ -44,9 +51,18 @@ public struct PlaylistsView: View {
     @State private var isSplitterDragging: Bool = false
     @State private var hasPushedResizeCursor: Bool = false
     
-    public init(activeDrive: WalkmanDrive?, libraryTracks: [Track]) {
+    public init(
+        activeDrive: WalkmanDrive?,
+        libraryTracks: [Track],
+        onEditTrack: ((Track) -> Void)? = nil,
+        onEditTrackWithList: ((Track, [Track]) -> Void)? = nil,
+        onInspectTrack: ((Track) -> Void)? = nil
+    ) {
         self.activeDrive = activeDrive
         self.libraryTracks = libraryTracks
+        self.onEditTrack = onEditTrack
+        self.onEditTrackWithList = onEditTrackWithList
+        self.onInspectTrack = onInspectTrack
         _cachedTrackLookup = State(initialValue: PlaylistsView.buildLookupTable(tracks: libraryTracks))
         let savedWidth = UserDefaults.standard.double(forKey: "playlists_sidebar_width")
         _sidebarWidth = State(initialValue: savedWidth >= 180 ? CGFloat(savedWidth) : 270.0)
@@ -69,9 +85,20 @@ public struct PlaylistsView: View {
         
         let musicURL = URL(fileURLWithPath: drive.musicDir)
         let learningURL = URL(fileURLWithPath: drive.learningDir)
-        var searchDirs = [musicURL]
-        if FileManager.default.fileExists(atPath: learningURL.path) {
-            searchDirs.append(learningURL)
+        let mountURL = URL(fileURLWithPath: drive.mountPoint)
+        var searchDirs: [URL] = [musicURL]
+        let candidates = [
+            mountURL.appendingPathComponent("PLAYLISTS"),
+            mountURL.appendingPathComponent("Playlists"),
+            mountURL.appendingPathComponent("playlists"),
+            musicURL.appendingPathComponent("Playlists"),
+            musicURL.appendingPathComponent("PLAYLISTS"),
+            learningURL
+        ]
+        for dir in candidates {
+            if FileManager.default.fileExists(atPath: dir.path), !searchDirs.contains(dir) {
+                searchDirs.append(dir)
+            }
         }
         
         var list: [Playlist] = []
@@ -145,7 +172,70 @@ public struct PlaylistsView: View {
             return tr
         }
         let fn = (path as NSString).lastPathComponent.lowercased()
-        return cachedTrackLookup[fn]
+        if let tr = cachedTrackLookup[fn] {
+            return tr
+        }
+        if let drive = activeDrive {
+            let fullURL: URL
+            if path.hasPrefix("/") {
+                fullURL = URL(fileURLWithPath: path)
+            } else {
+                fullURL = URL(fileURLWithPath: drive.musicDir).appendingPathComponent(path)
+            }
+            if FileManager.default.fileExists(atPath: fullURL.path),
+               let info = AudioTagger.shared.readMetadata(fileURL: fullURL) {
+                let filename = fullURL.lastPathComponent
+                let ext = fullURL.pathExtension.uppercased()
+                let stem = fullURL.deletingPathExtension().lastPathComponent
+                let effTitle = info.title.isEmpty ? stem : info.title
+                let effArtist = info.artist.isEmpty ? "Unknown Artist" : info.artist
+                let effAlbum = info.album.isEmpty ? "Unknown Album" : info.album
+                let size = (try? FileManager.default.attributesOfItem(atPath: fullURL.path)[.size] as? Int64) ?? 0
+                return Track(
+                    filename: filename,
+                    relativePath: path,
+                    fullPath: fullURL.path,
+                    format: ext,
+                    title: effTitle,
+                    artist: effArtist,
+                    album: effAlbum,
+                    trackNum: info.trackNumber,
+                    year: info.year,
+                    genre: info.genre,
+                    durationSeconds: info.durationSeconds,
+                    bitrateKbps: info.bitrateKbps,
+                    sampleRate: info.sampleRate,
+                    bitsPerSample: info.bitsPerSample,
+                    hasArtwork: info.hasArtwork,
+                    sizeBytes: size,
+                    dateAdded: Date(),
+                    isSenseMeAnalyzed: false,
+                    senseMeBpm: nil,
+                    senseMeValence: nil,
+                    senseMeArousal: nil,
+                    senseMeChannels: [],
+                    senseMeHighlightSec: nil
+                )
+            }
+        }
+        return nil
+    }
+
+    private func handleEditTrack(for index: Int) {
+        guard index >= 0 && index < resolvedPlaylistTracks.count else { return }
+        let item = resolvedPlaylistTracks[index]
+        guard let track = item.track ?? resolvedTrack(for: item.path) else { return }
+        
+        let allPlaylistTracks = resolvedPlaylistTracks.compactMap { $0.track ?? resolvedTrack(for: $0.path) }
+        
+        if let onEditTrackWithList = onEditTrackWithList {
+            onEditTrackWithList(track, allPlaylistTracks)
+        } else if let onEditTrack = onEditTrack {
+            onEditTrack(track)
+        } else {
+            self.trackListToEditLocally = allPlaylistTracks
+            self.trackToEditLocally = track
+        }
     }
     
     private func persistPlaylistChanges(newTracks: [String], isManualSave: Bool = false) {
@@ -1042,6 +1132,14 @@ public struct PlaylistsView: View {
                                                     onRemoveSelected: removeSelectedTracks,
                                                     onAddToPlaylist: { targetPl in
                                                         addTrackToPlaylist(trackPath, playlist: targetPl)
+                                                    },
+                                                    onEditTrack: {
+                                                        handleEditTrack(for: index)
+                                                    },
+                                                    onInspectTrack: {
+                                                        if let tr = matchedTrack ?? resolvedTrack(for: trackPath) {
+                                                            onInspectTrack?(tr)
+                                                        }
                                                     }
                                                 )
                                                 .opacity(isDragSource ? 0.35 : 1.0)
@@ -1152,6 +1250,25 @@ public struct PlaylistsView: View {
                 ),
                 onDismiss: {
                     showBatchLyricsSheet = false
+                }
+            )
+        }
+        .sheet(item: $trackToEditLocally) { track in
+            SongMetadataEditorSheet(
+                track: track,
+                trackList: !trackListToEditLocally.isEmpty ? trackListToEditLocally : [track],
+                onSavedTrack: { updatedTrack in
+                    if self.player.currentTrack?.id == updatedTrack.id {
+                        self.player.updateTrackInfo(track: updatedTrack)
+                    }
+                    let key = PlaylistsView.normalizeKey(updatedTrack.fullPath)
+                    self.cachedTrackLookup[key] = updatedTrack
+                    self.cachedTrackLookup[updatedTrack.filename.lowercased()] = updatedTrack
+                    self.updateResolvedTracks()
+                },
+                onDismiss: {
+                    trackToEditLocally = nil
+                    trackListToEditLocally = []
                 }
             )
         }
@@ -2073,6 +2190,8 @@ private struct PlaylistTrackRow: View {
     let onMoveSelectedToBottom: () -> Void
     let onRemoveSelected: () -> Void
     var onAddToPlaylist: ((Playlist) -> Void)? = nil
+    var onEditTrack: (() -> Void)? = nil
+    var onInspectTrack: (() -> Void)? = nil
     
     @State private var isHovered = false
 
@@ -2292,6 +2411,16 @@ private struct PlaylistTrackRow: View {
                 
                 Divider()
                 
+                if onEditTrack != nil {
+                    Button {
+                        onEditTrack?()
+                    } label: {
+                        Label("Edit Song Metadata...", systemImage: "square.and.pencil")
+                    }
+                    
+                    Divider()
+                }
+                
                 Button(action: onToggleSelect) {
                     Label("Deselect This Track", systemImage: "circle")
                 }
@@ -2304,8 +2433,23 @@ private struct PlaylistTrackRow: View {
                     Button(action: onPlay) {
                         Label("Play Now", systemImage: "play.fill")
                     }
-                    Divider()
                 }
+                
+                if onEditTrack != nil {
+                    Button {
+                        onEditTrack?()
+                    } label: {
+                        Label("Edit Song Metadata...", systemImage: "square.and.pencil")
+                    }
+                }
+                
+                if onInspectTrack != nil {
+                    Button("Inspect in Sidebar") {
+                        onInspectTrack?()
+                    }
+                }
+                
+                Divider()
                 
                 if !otherPlaylists.isEmpty {
                     Menu {
