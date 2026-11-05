@@ -4,7 +4,7 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
-VERSION="3.0.1"
+VERSION="3.1.0"
 DIST_DIR="$DIR/dist"
 APP_NAME="Walkman Studio"
 APP_BUNDLE="$DIR/$APP_NAME.app"
@@ -59,52 +59,35 @@ shasum -a 256 *.zip *.dmg > SHA256SUMS.txt
 
 # 5. Generate Release Notes (Markdown & HTML)
 cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.md"
-# Walkman Studio v3.0.1
+# Walkman Studio v3.1.0
 
-Walkman Studio v3.0.1 delivers critical resilience fixes and model identification accuracy improvements for Sony Walkman users alongside the complete Optical Liquid Glass Design System, CoreAudio Trim & Cut Studio, and Duplicates Studio across Apple Silicon (`arm64`) and Intel-based Macs (`x86_64`).
-
----
-
-## What's New in v3.0.1
-
-### Standalone MicroSD Card Model Accuracy Fix
-* **Decoupled MicroSD Capacity Heuristics:** Resolved an issue where standalone MicroSD cards (e.g. 256GB / 237GB) caused Walkman Studio to misidentify an authentic `NW-A55` as an `NW-A57` when internal storage was unmounted or ejected.
-* **Session & Persistent Device Memory:** Walkman Studio now securely caches authentically identified device models in memory and macOS preferences across volume unmounts, restarts, and ejects.
-* **Strict Heuristic Upper Bounds:** Applied hardware capacity safety bounds across all series (`A50`, `A40`, `A30`, `A100`, `A300`, `ZX300`, `ZX500`, `ZX700`, `WM1`) so SD expansion storage never forces higher internal tiers.
-
-### Local Music Library Resilience & Missing Folder Auto-Resolution
-* **Real-Time Missing & Renamed Folder Detection:** Monitored folders moved, renamed, or deleted in Finder are instantly detected instead of silently failing or leaving stale ghost tracks.
-* **Liquid Glass Amber Warning Banner:** Surfaces an ambient amber alert with one-click actions:
-  * **"Relocate Folder...":** Re-links moved or renamed folders in Finder, instantly updating all track paths, relative indices, album art, and 12-Tone SensMe mood channels without re-scanning or re-importing.
-  * **"Remove Missing":** Safely purges missing folders and orphaned ghost tracks from the SQLite library database with a single click.
-* **Missing Audio File Playback Guard:** Double-clicking or attempting to preview an audio file that was moved or deleted on disk now displays a clear *"Audio File Not Found"* alert with the missing path and a direct relocation shortcut.
-* **Manage Folders Enhancements:** `ManageLocalFoldersSheet` displays `MISSING OR RENAMED` status badges and dedicated **"Relocate..."** picker buttons.
-
-### Safe Eject Deadlock & Ejection Hang Fix
-* **Dynamic Binary Discovery:** Dynamically locates `dot_clean` across `/usr/sbin` and `/usr/bin`, eliminating launch errors on modern macOS releases.
-* **10-Second Watchdog Timeout:** Safe Eject is guarded with timeout watchdogs to prevent Foundation deadlocks when unmounting sluggish FAT32/exFAT drives.
+Walkman Studio v3.1.0 is headlined by the all-new **LRC Fetcher (Batch Synchronized Lyrics Generator)**, enabling high-speed multi-threaded retrieval of timestamp-accurate `.lrc` lyrics across your entire library or selected playlists and albums, accompanied by targeted UI enhancements, playback refinements, and minor fixes across Apple Silicon (`arm64`) and Intel-based Macs (`x86_64`).
 
 ---
 
-## Core v3.0 Capabilities
+## Headline Feature: LRC Fetcher (Batch Synchronized Lyrics Generator)
 
-### Optical Liquid Glass Design System Language
-* **Sony Signature Series Obsidian Chassis:** Solid obsidian surfaces (`#101114`), refraction glass lenses, specular edge highlights, and tactile spring physics.
-* **Standardized 38pt Baseline Height & 28pt Capsule Pills:** All primary interactive controls share a uniform 38pt height baseline and 28pt compact action pills.
-* **Responsive Toolbars & Layout Protection:** Dynamic `ViewThatFits` adaptations with minimum $1320\times 720$ window constraints to fit 13" Intel and Apple Silicon MacBooks seamlessly.
+* **Universal Library Integration:** Dedicated circular 38×38pt Liquid Glass lyrics buttons (`quote.bubble`) built into every library view header: *All Songs*, *Recently Added*, *Albums*, *Artists*, *Hi-Res Audio*, *Playlists*, and *Language Study*.
+* **Flexible Contextual Selection Scopes:**
+  * **All Tracks in View:** Scans and fetches lyrics for all tracks in the currently selected view.
+  * **Selected Track(s):** Scopes fetching strictly to rows highlighted or checked in the song table.
+  * **Active Item:** Scopes fetching directly to the currently opened Album, Artist, or Playlist.
+  * **Choose Specific...:** Interactive Liquid Glass checklist sheet featuring live search, "Select All" / "Deselect All" shortcuts, real-time candidate track counts, and missing-lyrics diagnostics.
+* **Concurrent Multi-Worker Engine:** High-throughput asynchronous worker pool querying the open-source **LRCLIB** API (`/api/get` & `/api/search`) with exact millisecond duration matching and automatic fallback to **Lyrics.ovh**.
+* **Live Progress & Interactive Metric Dashboard:** Real-time animated progress bar, speed/ETA calculations, and interactive status metric pills (**Synced .LRC**, **Plain Text**, **Skipped**, **Not Found**) with a searchable per-track result breakdown card.
+* **Strict Timestamp & Date Added Preservation:** Original audio file modification dates and internal timestamps are strictly preserved, preventing existing library tracks from falsely jumping to the top of "Recently Added" smart playlists.
+* **Compliant Companion .LRC Files:** Automatically writes standardized companion `.lrc` files directly adjacent to audio tracks for instant recognition on Sony Walkman hardware and the built-in Now Playing player.
 
-### Interactive Trim & Cut Audio Studio
-* **Native CoreAudio DSP Waveform Engine:** Precision audio editing with gapless looping and non-destructive preview auditioning.
-* **Stereo Channel Routing:** Invert Left/Right stereo channels, downmix to Mono, isolate single channels, or invert phase 180°.
-* **Smooth Envelopes & Gain Trim:** Configurable fade-in/fade-out curves and -12dB to +12dB gain adjustment with strict ID3v2.3/Vorbis preservation.
+---
 
-### Partition-Isolated Duplicate Music Detection (Duplicates Studio)
-* **Strict Same-Storage Scoping:** Partition-isolated duplicate comparison strictly within the same storage partition (Internal Flash, MicroSD, or Local Library).
-* **Smart Quality Auto-Resolution:** Automatically preserves higher-resolution lossless files (e.g. 24-bit Hi-Res FLAC) over lossy copies while purging AppleDouble `._*` shadow files.
+## Minor Fixes & Improvements
 
-### Android Walkman Ecosystem Support
-* **Full Modern Android DAP Detection:** Auto-detects Android-based Walkmans (NW-A100, NW-A300, NW-ZX500, NW-ZX700, NW-WM1AM2/ZM2).
-* **Dynamic Artwork & Tag Adaptation:** Formats tags for Sony W.Music and eliminates Android MediaStore 0:00 ghost tracks.
+* **Language Study Studio:** Added dedicated support for Sony Walkman's root `/LEARNING` directory for audiobooks, podcasts, and language lessons, complete with instant format filters (MP3, M4A/AAC, FLAC) and $O(1)$ cached segmented views.
+* **Authentic Sony SensMe™ Highlight Playback:** Audio surfing now tunes in directly at the 12-Tone acoustic climax position (`senseMeHighlightSec`) with zero audio leakage from 0:00, paired with *Highlight (45s)* vs *Full Track* range toggles and active gold chorus badges.
+* **Fluid Window Expansion on Track Detail:** Opening the Track Detail panel (Inspector) smoothly widens the macOS window by +300pt, preserving 100% of the table and grid space for your music library, with screen-edge boundary protection.
+* **Static Navigation Sidebar:** Navigation sidebar is locked at 260pt and never collapses or auto-hides when opening or closing inspector views.
+* **Expandable Liquid Glass Search Bar:** Compact search icon morphs into a translucent liquid glass search bar with fluid spring physics, synchronized fade transitions, and click-outside collapse.
+* **Android Walkman Heuristics & Detection:** Improved capacity heuristics, USB composite PID matching, and broader audio format support across Android Walkman models.
 
 ---
 
@@ -112,12 +95,12 @@ Walkman Studio v3.0.1 delivers critical resilience fixes and model identificatio
 
 | Installer | Architecture | Target System |
 | :--- | :--- | :--- |
-| **`Walkman-Studio-3.0.1-arm64.dmg`** | Apple Silicon (`arm64`) | MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4) |
-| **`Walkman-Studio-3.0.1-intel.dmg`** | Intel (`x86_64`) | Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac Pro |
-| **`Walkman-Studio-3.0.1-universal.dmg`** | Universal 2 (`arm64` + `x86_64`) | Universal package running natively on all Macs (macOS 13.0+) |
+| **`Walkman-Studio-3.1.0-arm64.dmg`** | Apple Silicon (`arm64`) | MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4) |
+| **`Walkman-Studio-3.1.0-intel.dmg`** | Intel (`x86_64`) | Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac Pro |
+| **`Walkman-Studio-3.1.0-universal.dmg`** | Universal 2 (`arm64` + `x86_64`) | Universal package running natively on all Macs (macOS 13.0+) |
 
 ### Alternative Mirror
-* **Google Drive:** [Download v3.0.1 Release Files on Google Drive](https://drive.google.com/drive/folders/1S0cuB6XqxwdlDMoI52WCVAvei9JIxqxN?usp=share_link)
+* **Google Drive:** [Download v3.1.0 Release Files on Google Drive](https://drive.google.com/drive/folders/1KjkVl7U-FBZ0Ics4OuttyOj6HanPajpg?usp=share_link)
 
 ---
 
@@ -129,38 +112,39 @@ Walkman Studio v3.0.1 delivers critical resilience fixes and model identificatio
 EOF
 
 cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
-<h1>Walkman Studio v3.0.1</h1>
+<h1>Walkman Studio v3.1.0</h1>
 
-<p>Walkman Studio v3.0.1 delivers critical resilience fixes and model identification accuracy improvements for Sony Walkman users alongside the complete Optical Liquid Glass Design System, CoreAudio Trim &amp; Cut Studio, and Duplicates Studio across Apple Silicon (<code>arm64</code>) and Intel-based Macs (<code>x86_64</code>).</p>
+<p>Walkman Studio v3.1.0 is headlined by the all-new <strong>LRC Fetcher (Batch Synchronized Lyrics Generator)</strong>, enabling high-speed multi-threaded retrieval of timestamp-accurate <code>.lrc</code> lyrics across your entire library or selected playlists and albums, accompanied by targeted UI enhancements, playback refinements, and minor fixes across Apple Silicon (<code>arm64</code>) and Intel-based Macs (<code>x86_64</code>).</p>
 
 <hr>
 
-<h2>What's New in v3.0.1</h2>
-
-<h3>Standalone MicroSD Card Model Accuracy Fix</h3>
+<h2>Headline Feature: LRC Fetcher (Batch Synchronized Lyrics Generator)</h2>
 <ul>
-  <li><strong>Decoupled MicroSD Capacity Heuristics:</strong> Resolved an issue where standalone MicroSD cards (e.g. 256GB / 237GB) caused Walkman Studio to misidentify an authentic <code>NW-A55</code> as an <code>NW-A57</code> when internal storage was unmounted or ejected.</li>
-  <li><strong>Session &amp; Persistent Device Memory:</strong> Walkman Studio now securely caches authentically identified device models in memory and macOS preferences across volume unmounts, restarts, and ejects.</li>
-  <li><strong>Strict Heuristic Upper Bounds:</strong> Applied hardware capacity safety bounds across all series (<code>A50</code>, <code>A40</code>, <code>A30</code>, <code>A100</code>, <code>A300</code>, <code>ZX300</code>, <code>ZX500</code>, <code>ZX700</code>, <code>WM1</code>) so SD expansion storage never forces higher internal tiers.</li>
-</ul>
-
-<h3>Local Music Library Resilience &amp; Missing Folder Auto-Resolution</h3>
-<ul>
-  <li><strong>Real-Time Missing &amp; Renamed Folder Detection:</strong> Monitored folders moved, renamed, or deleted in Finder are instantly detected instead of silently failing or leaving stale ghost tracks.</li>
-  <li><strong>Liquid Glass Amber Warning Banner:</strong> Surfaces an ambient amber alert with one-click actions:
+  <li><strong>Universal Library Integration:</strong> Dedicated circular 38&times;38pt Liquid Glass lyrics buttons (<code>quote.bubble</code>) built into every library view header: <em>All Songs</em>, <em>Recently Added</em>, <em>Albums</em>, <em>Artists</em>, <em>Hi-Res Audio</em>, <em>Playlists</em>, and <em>Language Study</em>.</li>
+  <li><strong>Flexible Contextual Selection Scopes:</strong>
     <ul>
-      <li><strong>&ldquo;Relocate Folder...&rdquo;:</strong> Re-links moved or renamed folders in Finder, instantly updating all track paths, relative indices, album art, and 12-Tone SensMe mood channels without re-scanning or re-importing.</li>
-      <li><strong>&ldquo;Remove Missing&rdquo;:</strong> Safely purges missing folders and orphaned ghost tracks from the SQLite library database with a single click.</li>
+      <li><strong>All Tracks in View:</strong> Scans and fetches lyrics for all tracks in the currently selected view.</li>
+      <li><strong>Selected Track(s):</strong> Scopes fetching strictly to rows highlighted or checked in the song table.</li>
+      <li><strong>Active Item:</strong> Scopes fetching directly to the currently opened Album, Artist, or Playlist.</li>
+      <li><strong>Choose Specific...:</strong> Interactive Liquid Glass checklist sheet featuring live search, &ldquo;Select All&rdquo; / &ldquo;Deselect All&rdquo; shortcuts, real-time candidate track counts, and missing-lyrics diagnostics.</li>
     </ul>
   </li>
-  <li><strong>Missing Audio File Playback Guard:</strong> Double-clicking or attempting to preview an audio file that was moved or deleted on disk now displays a clear <em>&ldquo;Audio File Not Found&rdquo;</em> alert with the missing path and a direct relocation shortcut.</li>
-  <li><strong>Manage Folders Enhancements:</strong> <code>ManageLocalFoldersSheet</code> displays <code>MISSING OR RENAMED</code> status badges and dedicated <strong>&ldquo;Relocate...&rdquo;</strong> picker buttons.</li>
+  <li><strong>Concurrent Multi-Worker Engine:</strong> High-throughput asynchronous worker pool querying the open-source <strong>LRCLIB</strong> API (<code>/api/get</code> &amp; <code>/api/search</code>) with exact millisecond duration matching and automatic fallback to <strong>Lyrics.ovh</strong>.</li>
+  <li><strong>Live Progress &amp; Interactive Metric Dashboard:</strong> Real-time animated progress bar, speed/ETA calculations, and interactive status metric pills (<strong>Synced .LRC</strong>, <strong>Plain Text</strong>, <strong>Skipped</strong>, <strong>Not Found</strong>) with a searchable per-track result breakdown card.</li>
+  <li><strong>Strict Timestamp &amp; Date Added Preservation:</strong> Original audio file modification dates and internal timestamps are strictly preserved, preventing existing library tracks from falsely jumping to the top of &ldquo;Recently Added&rdquo; smart playlists.</li>
+  <li><strong>Compliant Companion .LRC Files:</strong> Automatically writes standardized companion <code>.lrc</code> files directly alongside audio tracks for instant recognition on Sony Walkman hardware and the built-in Now Playing player.</li>
 </ul>
 
-<h3>Safe Eject Deadlock &amp; Ejection Hang Fix</h3>
+<hr>
+
+<h2>Minor Fixes &amp; Improvements</h2>
 <ul>
-  <li><strong>Dynamic Binary Discovery:</strong> Dynamically locates <code>dot_clean</code> across <code>/usr/sbin</code> and <code>/usr/bin</code>, eliminating launch errors on modern macOS releases.</li>
-  <li><strong>10-Second Watchdog Timeout:</strong> Safe Eject is guarded with timeout watchdogs to prevent Foundation deadlocks when unmounting sluggish FAT32/exFAT drives.</li>
+  <li><strong>Language Study Studio:</strong> Added dedicated support for Sony Walkman's root <code>/LEARNING</code> directory for audiobooks, podcasts, and language lessons, complete with instant format filters (MP3, M4A/AAC, FLAC) and O(1) cached segmented views.</li>
+  <li><strong>Authentic Sony SensMe&trade; Highlight Playback:</strong> Audio surfing now tunes in directly at the 12-Tone acoustic climax position (<code>senseMeHighlightSec</code>) with zero audio leakage from 0:00, paired with <em>Highlight (45s)</em> vs <em>Full Track</em> range toggles and active gold chorus badges.</li>
+  <li><strong>Fluid Window Expansion on Track Detail:</strong> Opening the Track Detail panel (Inspector) smoothly widens the macOS window by +300pt, preserving 100% of the table and grid space for your music library, with screen-edge boundary protection.</li>
+  <li><strong>Static Navigation Sidebar:</strong> Navigation sidebar is locked at 260pt and never collapses or auto-hides when opening or closing inspector views.</li>
+  <li><strong>Expandable Liquid Glass Search Bar:</strong> Compact search icon morphs into a translucent liquid glass search bar with fluid spring physics, synchronized fade transitions, and click-outside collapse.</li>
+  <li><strong>Android Walkman Heuristics &amp; Detection:</strong> Improved capacity heuristics, USB composite PID matching, and broader audio format support across Android Walkman models.</li>
 </ul>
 
 <hr>
@@ -177,17 +161,17 @@ cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
   </thead>
   <tbody>
     <tr>
-      <td><strong><code>Walkman-Studio-3.0.1-arm64.dmg</code></strong></td>
+      <td><strong><code>Walkman-Studio-3.1.0-arm64.dmg</code></strong></td>
       <td>Apple Silicon (<code>arm64</code>)</td>
       <td>MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4)</td>
     </tr>
     <tr>
-      <td><strong><code>Walkman-Studio-3.0.1-intel.dmg</code></strong></td>
+      <td><strong><code>Walkman-Studio-3.1.0-intel.dmg</code></strong></td>
       <td>Intel (<code>x86_64</code>)</td>
       <td>Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac Pro</td>
     </tr>
     <tr>
-      <td><strong><code>Walkman-Studio-3.0.1-universal.dmg</code></strong></td>
+      <td><strong><code>Walkman-Studio-3.1.0-universal.dmg</code></strong></td>
       <td>Universal 2 (<code>arm64</code> + <code>x86_64</code>)</td>
       <td>Universal package running natively on all Macs (macOS 13.0+)</td>
     </tr>
@@ -195,7 +179,7 @@ cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
 </table>
 
 <h3>Alternative Mirror</h3>
-<p><strong>Google Drive:</strong> <a href="https://drive.google.com/drive/folders/1S0cuB6XqxwdlDMoI52WCVAvei9JIxqxN?usp=share_link" target="_blank" rel="noopener noreferrer">Download v3.0.1 Release Files on Google Drive</a></p>
+<p><strong>Google Drive:</strong> <a href="https://drive.google.com/drive/folders/1KjkVl7U-FBZ0Ics4OuttyOj6HanPajpg?usp=share_link" target="_blank" rel="noopener noreferrer">Download v3.1.0 Release Files on Google Drive</a></p>
 
 <hr>
 
