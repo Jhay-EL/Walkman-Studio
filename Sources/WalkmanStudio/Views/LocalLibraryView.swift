@@ -103,6 +103,7 @@ public struct LocalLibraryView: View {
     @State private var recentSortOrder = defaultRecentSortOrder
     @State private var formatFilter: String = "ALL"
     @State private var searchQuery: String = ""
+    @State private var isSearchExpanded: Bool = false
     @State private var isDropTargeted: Bool = false
     @State private var isImportHovered: Bool = false
     @State private var folderToRemove: LocalMusicFolder? = nil
@@ -461,6 +462,7 @@ public struct LocalLibraryView: View {
                 compactTopBar
                 narrowTopBar
             }
+            .animation(.spring(response: 0.35, dampingFraction: 0.84), value: isSearchExpanded)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .background(Color.clear)
@@ -758,7 +760,6 @@ public struct LocalLibraryView: View {
     private var wideTopBar: some View {
         HStack(spacing: 10) {
             searchFieldView
-                .frame(minWidth: 160, maxWidth: 240)
 
             displayBySegmentedControl
                 .fixedSize(horizontal: true, vertical: false)
@@ -768,8 +769,20 @@ public struct LocalLibraryView: View {
 
             Spacer(minLength: 4)
 
-            toolbarActionButtons
-                .fixedSize(horizontal: true, vertical: false)
+            if !isSearchExpanded {
+                toolbarActionButtons
+                    .fixedSize(horizontal: true, vertical: false)
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity
+                                .combined(with: .move(edge: .trailing))
+                                .combined(with: .scale(scale: 0.92, anchor: .trailing)),
+                            removal: .opacity
+                                .combined(with: .move(edge: .trailing))
+                                .combined(with: .scale(scale: 0.92, anchor: .trailing))
+                        )
+                    )
+            }
         }
     }
 
@@ -777,15 +790,26 @@ public struct LocalLibraryView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 searchFieldView
-                    .frame(minWidth: 120, maxWidth: .infinity)
 
                 combinedFilterSortMenu
                     .fixedSize(horizontal: true, vertical: false)
 
                 Spacer(minLength: 4)
 
-                toolbarActionButtons
-                    .fixedSize(horizontal: true, vertical: false)
+                if !isSearchExpanded {
+                    toolbarActionButtons
+                        .fixedSize(horizontal: true, vertical: false)
+                        .transition(
+                            .asymmetric(
+                                insertion: .opacity
+                                    .combined(with: .move(edge: .trailing))
+                                    .combined(with: .scale(scale: 0.92, anchor: .trailing)),
+                                removal: .opacity
+                                    .combined(with: .move(edge: .trailing))
+                                    .combined(with: .scale(scale: 0.92, anchor: .trailing))
+                            )
+                        )
+                }
             }
 
             displayBySegmentedControl
@@ -796,10 +820,24 @@ public struct LocalLibraryView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 searchFieldView
-                    .frame(minWidth: 100, maxWidth: .infinity)
                 combinedFilterSortMenu
                     .fixedSize(horizontal: true, vertical: false)
-                toolbarActionButtons
+                
+                Spacer(minLength: 4)
+                
+                if !isSearchExpanded {
+                    toolbarActionButtons
+                        .transition(
+                            .asymmetric(
+                                insertion: .opacity
+                                    .combined(with: .move(edge: .trailing))
+                                    .combined(with: .scale(scale: 0.92, anchor: .trailing)),
+                                removal: .opacity
+                                    .combined(with: .move(edge: .trailing))
+                                    .combined(with: .scale(scale: 0.92, anchor: .trailing))
+                            )
+                        )
+                }
             }
 
             displayBySegmentedControl
@@ -810,52 +848,13 @@ public struct LocalLibraryView: View {
     // TOOLBAR COMPONENTS
     // -------------------------------------------------------------------------
     private var searchFieldView: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(searchQuery.isEmpty ? WalkmanTheme.silverMuted : WalkmanTheme.silverLight)
-
-            TextField("Search local tracks, artists, albums, folders...", text: $searchQuery)
-                .textFieldStyle(.plain)
-                .font(.system(size: 13))
-                .foregroundStyle(.white)
-
-            if !searchQuery.isEmpty {
-                Button(action: { searchQuery = "" }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 13))
-                        .foregroundStyle(WalkmanTheme.silverMuted)
-                }
-                .buttonStyle(.plain)
-                .help("Clear search query")
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7.5)
-        .frame(minHeight: 36)
-        .background(
-            ZStack {
-                Color.white.opacity(0.06)
-                VStack(spacing: 0) {
-                    LinearGradient(
-                        stops: [
-                            .init(color: .white.opacity(0.12), location: 0.0),
-                            .init(color: .clear, location: 1.0)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 7)
-                    Spacer(minLength: 0)
-                }
-            }
+        ExpandableLiquidGlassSearchBar(
+            text: $searchQuery,
+            isExpanded: $isSearchExpanded,
+            placeholder: "Search local tracks, artists, albums, folders...",
+            expandedWidth: 260,
+            helpText: "Search Local Library"
         )
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.white.opacity(searchQuery.isEmpty ? 0.12 : 0.30), lineWidth: 0.85)
-        )
-        .shadow(color: Color.black.opacity(0.15), radius: 2.5, x: 0, y: 1)
     }
 
     private var displayBySegmentedControl: some View {

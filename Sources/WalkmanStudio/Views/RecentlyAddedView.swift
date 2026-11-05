@@ -69,6 +69,7 @@ public struct RecentlyAddedView: View {
     
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var searchQuery: String = ""
+    @State private var isSearchExpanded: Bool = false
     @State private var formatFilter: String = "ALL"
     @State private var timeScope: RecentlyAddedTimeScope = .past30Days
     @State private var sortOrder = defaultSortOrder
@@ -85,7 +86,6 @@ public struct RecentlyAddedView: View {
         FilterOption(id: "FLAC", title: "FLAC", icon: nil, isHiRes: false),
         FilterOption(id: "MP3", title: "MP3", icon: nil, isHiRes: false),
         FilterOption(id: "M4A", title: "M4A", icon: nil, isHiRes: false),
-        FilterOption(id: "LEARNING", title: "Language Study", icon: "character.book.closed.fill", isHiRes: false),
         FilterOption(id: "HI-RES", title: "Hi-Res", icon: "waveform", isHiRes: true)
     ]
     
@@ -163,8 +163,6 @@ public struct RecentlyAddedView: View {
             // 1. Format filter
             if formatFilter == "HI-RES" {
                 if track.bitsPerSample <= 16 && track.sampleRate <= 48000 { return false }
-            } else if formatFilter == "LEARNING" {
-                if !track.isLanguageStudy { return false }
             } else if formatFilter != "ALL" {
                 if track.format != formatFilter { return false }
             }
@@ -252,6 +250,7 @@ public struct RecentlyAddedView: View {
                 compactToolbarLayout
                 narrowToolbarLayout
             }
+            .animation(.spring(response: 0.35, dampingFraction: 0.84), value: isSearchExpanded)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .background(Color.clear)
@@ -321,18 +320,31 @@ public struct RecentlyAddedView: View {
     private var wideToolbarLayout: some View {
         HStack(spacing: 8) {
             searchFieldView
-                .frame(minWidth: 110, maxWidth: 200)
             
             formatSegmentedBar
                 .fixedSize(horizontal: true, vertical: false)
             
             Spacer(minLength: 4)
             
-            playbackControlsView
-                .fixedSize(horizontal: true, vertical: false)
-            
-            statusIndicatorView
-                .fixedSize(horizontal: true, vertical: false)
+            if !isSearchExpanded {
+                HStack(spacing: 8) {
+                    playbackControlsView
+                        .fixedSize(horizontal: true, vertical: false)
+                    
+                    statusIndicatorView
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .transition(
+                    .asymmetric(
+                        insertion: .opacity
+                            .combined(with: .move(edge: .trailing))
+                            .combined(with: .scale(scale: 0.92, anchor: .trailing)),
+                        removal: .opacity
+                            .combined(with: .move(edge: .trailing))
+                            .combined(with: .scale(scale: 0.92, anchor: .trailing))
+                    )
+                )
+            }
         }
     }
     
@@ -340,15 +352,28 @@ public struct RecentlyAddedView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 searchFieldView
-                    .frame(minWidth: 80, maxWidth: .infinity)
                 
                 Spacer(minLength: 4)
                 
-                playbackControlsView
-                    .fixedSize(horizontal: true, vertical: false)
-                
-                statusIndicatorView
-                    .fixedSize(horizontal: true, vertical: false)
+                if !isSearchExpanded {
+                    HStack(spacing: 8) {
+                        playbackControlsView
+                            .fixedSize(horizontal: true, vertical: false)
+                        
+                        statusIndicatorView
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity
+                                .combined(with: .move(edge: .trailing))
+                                .combined(with: .scale(scale: 0.92, anchor: .trailing)),
+                            removal: .opacity
+                                .combined(with: .move(edge: .trailing))
+                                .combined(with: .scale(scale: 0.92, anchor: .trailing))
+                        )
+                    )
+                }
             }
             
             ScrollView(.horizontal, showsIndicators: false) {
@@ -363,18 +388,37 @@ public struct RecentlyAddedView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 searchFieldView
-                    .frame(minWidth: 80, maxWidth: .infinity)
                 
                 Spacer(minLength: 4)
                 
-                statusIndicatorView
-                    .fixedSize(horizontal: true, vertical: false)
+                if !isSearchExpanded {
+                    statusIndicatorView
+                        .fixedSize(horizontal: true, vertical: false)
+                        .transition(
+                            .asymmetric(
+                                insertion: .opacity
+                                    .combined(with: .move(edge: .trailing))
+                                    .combined(with: .scale(scale: 0.92, anchor: .trailing)),
+                                removal: .opacity
+                                    .combined(with: .move(edge: .trailing))
+                                    .combined(with: .scale(scale: 0.92, anchor: .trailing))
+                            )
+                        )
+                }
             }
             
-            HStack(spacing: 8) {
-                playbackControlsView
-                    .fixedSize(horizontal: true, vertical: false)
-                Spacer(minLength: 0)
+            if !isSearchExpanded {
+                HStack(spacing: 8) {
+                    playbackControlsView
+                        .fixedSize(horizontal: true, vertical: false)
+                    Spacer(minLength: 0)
+                }
+                .transition(
+                    .asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .leading)),
+                        removal: .opacity.combined(with: .move(edge: .leading))
+                    )
+                )
             }
             
             ScrollView(.horizontal, showsIndicators: false) {
@@ -386,51 +430,13 @@ public struct RecentlyAddedView: View {
     }
     
     private var searchFieldView: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(searchQuery.isEmpty ? WalkmanTheme.silverMuted : WalkmanTheme.silverLight)
-            
-            TextField("Search recently added...", text: $searchQuery)
-                .textFieldStyle(.plain)
-                .font(.system(size: 13))
-                .foregroundStyle(.white)
-            
-            if !searchQuery.isEmpty {
-                Button(action: { searchQuery = "" }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 13))
-                        .foregroundStyle(WalkmanTheme.silverMuted)
-                }
-                .buttonStyle(.plain)
-                .help("Clear search")
-            }
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 38)
-        .background(
-            ZStack {
-                Color.white.opacity(0.06)
-                VStack(spacing: 0) {
-                    LinearGradient(
-                        stops: [
-                            .init(color: .white.opacity(0.12), location: 0.0),
-                            .init(color: .clear, location: 1.0)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 7)
-                    Spacer(minLength: 0)
-                }
-            }
+        ExpandableLiquidGlassSearchBar(
+            text: $searchQuery,
+            isExpanded: $isSearchExpanded,
+            placeholder: "Search recently added...",
+            expandedWidth: 260,
+            helpText: "Search recently added"
         )
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.white.opacity(searchQuery.isEmpty ? 0.12 : 0.30), lineWidth: 0.85)
-        )
-        .shadow(color: Color.black.opacity(0.15), radius: 2.5, x: 0, y: 1)
     }
     
     private var formatSegmentedBar: some View {
@@ -511,12 +517,13 @@ public struct RecentlyAddedView: View {
                 Image(systemName: "clock.arrow.circlepath")
                     .font(.system(size: 11.5, weight: .bold))
                     .foregroundStyle(Color.white.opacity(0.55))
-                Text(displayedTracks.count == 1 ? "1 Recent" : "\(displayedTracks.count.formatted()) Recent")
+                Text("\(displayedTracks.count.formatted())")
                     .font(.system(size: 12.5, weight: .medium, design: .monospaced))
                     .foregroundStyle(WalkmanTheme.silverLight)
                     .lineLimit(1)
             }
         }
+        .help(displayedTracks.count == 1 ? "1 Recent Track" : "\(displayedTracks.count.formatted()) Recent Tracks")
         .padding(.horizontal, 14)
         .frame(height: 38)
         .background(

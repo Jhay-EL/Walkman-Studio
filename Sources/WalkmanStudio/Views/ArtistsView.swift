@@ -23,6 +23,7 @@ public struct ArtistsView: View {
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var selectedArtistName: String? = nil
     @State private var searchQuery: String = ""
+    @State private var isSearchExpanded: Bool = false
     @State private var formatFilter: String = "ALL"
     @State private var cachedArtists: [ArtistItem] = []
     @State private var displayedArtists: [ArtistItem] = []
@@ -34,7 +35,6 @@ public struct ArtistsView: View {
         FilterOption(id: "FLAC", title: "FLAC", icon: nil, isHiRes: false),
         FilterOption(id: "MP3", title: "MP3", icon: nil, isHiRes: false),
         FilterOption(id: "M4A", title: "M4A", icon: nil, isHiRes: false),
-        FilterOption(id: "LEARNING", title: "Language Study", icon: "character.book.closed.fill", isHiRes: false),
         FilterOption(id: "HI-RES", title: "Hi-Res", icon: "waveform", isHiRes: true)
     ]
     
@@ -184,8 +184,6 @@ public struct ArtistsView: View {
                 switch formatFilter {
                 case "HI-RES":
                     return track.bitsPerSample > 16 || track.sampleRate > 48000
-                case "LEARNING":
-                    return track.isLanguageStudy
                 case "FLAC":
                     return track.format == "FLAC"
                 case "MP3":
@@ -382,52 +380,13 @@ public struct ArtistsView: View {
     // -------------------------------------------------------------------------
     
     private var searchFieldView: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(searchQuery.isEmpty ? WalkmanTheme.silverMuted : WalkmanTheme.silverLight)
-            
-            TextField("Filter artists...", text: $searchQuery)
-                .textFieldStyle(.plain)
-                .font(.system(size: 13))
-                .foregroundStyle(.white)
-            
-            if !searchQuery.isEmpty {
-                Button(action: { searchQuery = "" }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 13))
-                        .foregroundStyle(WalkmanTheme.silverMuted)
-                }
-                .buttonStyle(.plain)
-                .help("Clear filter")
-            }
-        }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 7)
-        .frame(height: 38)
-        .background(
-            ZStack {
-                Color.white.opacity(0.06)
-                VStack(spacing: 0) {
-                    LinearGradient(
-                        stops: [
-                            .init(color: .white.opacity(0.12), location: 0.0),
-                            .init(color: .clear, location: 1.0)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 6)
-                    Spacer(minLength: 0)
-                }
-            }
+        ExpandableLiquidGlassSearchBar(
+            text: $searchQuery,
+            isExpanded: $isSearchExpanded,
+            placeholder: "Filter artists...",
+            expandedWidth: 260,
+            helpText: "Filter artists"
         )
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.white.opacity(searchQuery.isEmpty ? 0.12 : 0.30), lineWidth: 0.85)
-        )
-        .shadow(color: Color.black.opacity(0.15), radius: 2.5, x: 0, y: 1)
     }
     
     private var leftEmptyStateView: some View {
@@ -462,6 +421,7 @@ public struct ArtistsView: View {
             compactTopToolbarLayout
             narrowTopToolbarLayout
         }
+        .animation(.spring(response: 0.35, dampingFraction: 0.84), value: isSearchExpanded)
         .padding(.horizontal, 16)
         .padding(.vertical, 9)
         .background(Color.clear)
@@ -495,22 +455,35 @@ public struct ArtistsView: View {
     private var wideTopToolbarLayout: some View {
         HStack(spacing: 8) {
             searchFieldView
-                .frame(minWidth: 110, idealWidth: 190, maxWidth: 240)
             
             artistFormatSegmentedBar
                 .fixedSize(horizontal: true, vertical: false)
             
             Spacer(minLength: 4)
             
-            if let artist = activeArtist {
-                artistActionButtons(for: artist)
-                    .fixedSize(horizontal: true, vertical: false)
+            if !isSearchExpanded {
+                HStack(spacing: 8) {
+                    if let artist = activeArtist {
+                        artistActionButtons(for: artist)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                    
+                    batchLyricsButton
+                    
+                    artistCountPill
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .transition(
+                    .asymmetric(
+                        insertion: .opacity
+                            .combined(with: .move(edge: .trailing))
+                            .combined(with: .scale(scale: 0.92, anchor: .trailing)),
+                        removal: .opacity
+                            .combined(with: .move(edge: .trailing))
+                            .combined(with: .scale(scale: 0.92, anchor: .trailing))
+                    )
+                )
             }
-            
-            batchLyricsButton
-            
-            artistCountPill
-                .fixedSize(horizontal: true, vertical: false)
         }
     }
     
@@ -518,19 +491,32 @@ public struct ArtistsView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 searchFieldView
-                    .frame(minWidth: 90, maxWidth: .infinity)
                 
                 Spacer(minLength: 4)
                 
-                if let artist = activeArtist {
-                    artistActionButtons(for: artist)
-                        .fixedSize(horizontal: true, vertical: false)
+                if !isSearchExpanded {
+                    HStack(spacing: 8) {
+                        if let artist = activeArtist {
+                            artistActionButtons(for: artist)
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                        
+                        batchLyricsButton
+                        
+                        artistCountPill
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity
+                                .combined(with: .move(edge: .trailing))
+                                .combined(with: .scale(scale: 0.92, anchor: .trailing)),
+                            removal: .opacity
+                                .combined(with: .move(edge: .trailing))
+                                .combined(with: .scale(scale: 0.92, anchor: .trailing))
+                        )
+                    )
                 }
-                
-                batchLyricsButton
-                
-                artistCountPill
-                    .fixedSize(horizontal: true, vertical: false)
             }
             
             ScrollView(.horizontal, showsIndicators: false) {
@@ -545,20 +531,41 @@ public struct ArtistsView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 searchFieldView
-                    .frame(minWidth: 80, maxWidth: .infinity)
                 
                 Spacer(minLength: 4)
                 
-                batchLyricsButton
-                
-                artistCountPill
-                    .fixedSize(horizontal: true, vertical: false)
+                if !isSearchExpanded {
+                    HStack(spacing: 8) {
+                        batchLyricsButton
+                        
+                        artistCountPill
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity
+                                .combined(with: .move(edge: .trailing))
+                                .combined(with: .scale(scale: 0.92, anchor: .trailing)),
+                            removal: .opacity
+                                .combined(with: .move(edge: .trailing))
+                                .combined(with: .scale(scale: 0.92, anchor: .trailing))
+                        )
+                    )
+                }
             }
             
-            if let artist = activeArtist {
-                HStack(spacing: 8) {
-                    artistActionButtons(for: artist)
-                        .fixedSize(horizontal: true, vertical: false)
+            if !isSearchExpanded {
+                if let artist = activeArtist {
+                    HStack(spacing: 8) {
+                        artistActionButtons(for: artist)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity.combined(with: .move(edge: .leading)),
+                            removal: .opacity.combined(with: .move(edge: .leading))
+                        )
+                    )
                 }
             }
             
@@ -634,11 +641,12 @@ public struct ArtistsView: View {
             Image(systemName: "person.2")
                 .font(.system(size: 11.5, weight: .semibold))
                 .foregroundStyle(WalkmanTheme.silverMuted)
-            Text(displayedArtists.count == 1 ? "1 Artist" : "\(displayedArtists.count.formatted()) Artists")
+            Text("\(displayedArtists.count.formatted())")
                 .font(.system(size: 12.5, weight: .medium, design: .monospaced))
                 .foregroundStyle(WalkmanTheme.silverLight)
                 .lineLimit(1)
         }
+        .help(displayedArtists.count == 1 ? "1 Artist" : "\(displayedArtists.count.formatted()) Artists")
         .padding(.horizontal, 14)
         .frame(height: 38)
         .background(

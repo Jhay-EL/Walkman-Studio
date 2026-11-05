@@ -52,6 +52,7 @@ public struct HiResAudioView: View {
     @State private var trackSortOption: HiResTrackSortOption = .defaultOrder
     @State private var albumSortOption: AlbumSortOption = .recentlyAdded
     @State private var searchQuery: String = ""
+    @State private var isSearchExpanded: Bool = false
     @State private var formatFilter: String = "ALL"
     @State private var baseHiResTracks: [Track] = []
     @State private var displayedTracks: [Track] = []
@@ -478,6 +479,7 @@ public struct HiResAudioView: View {
             compactToolbarLayout
             narrowToolbarLayout
         }
+        .animation(.spring(response: 0.35, dampingFraction: 0.84), value: isSearchExpanded)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(Color.clear)
@@ -494,7 +496,6 @@ public struct HiResAudioView: View {
     private var wideToolbarLayout: some View {
         HStack(spacing: 8) {
             searchFieldView
-                .frame(minWidth: 110, maxWidth: 210)
             
             formatSegmentedBar
                 .fixedSize(horizontal: true, vertical: false)
@@ -504,11 +505,25 @@ public struct HiResAudioView: View {
             
             Spacer(minLength: 4)
             
-            playbackControlsView
-                .fixedSize(horizontal: true, vertical: false)
-            
-            trackCountPill
-                .fixedSize(horizontal: true, vertical: false)
+            if !isSearchExpanded {
+                HStack(spacing: 8) {
+                    playbackControlsView
+                        .fixedSize(horizontal: true, vertical: false)
+                    
+                    trackCountPill
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .transition(
+                    .asymmetric(
+                        insertion: .opacity
+                            .combined(with: .move(edge: .trailing))
+                            .combined(with: .scale(scale: 0.92, anchor: .trailing)),
+                        removal: .opacity
+                            .combined(with: .move(edge: .trailing))
+                            .combined(with: .scale(scale: 0.92, anchor: .trailing))
+                    )
+                )
+            }
         }
     }
     
@@ -516,15 +531,28 @@ public struct HiResAudioView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 searchFieldView
-                    .frame(minWidth: 80, maxWidth: .infinity)
                 
                 Spacer(minLength: 4)
                 
-                playbackControlsView
-                    .fixedSize(horizontal: true, vertical: false)
-                
-                trackCountPill
-                    .fixedSize(horizontal: true, vertical: false)
+                if !isSearchExpanded {
+                    HStack(spacing: 8) {
+                        playbackControlsView
+                            .fixedSize(horizontal: true, vertical: false)
+                        
+                        trackCountPill
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity
+                                .combined(with: .move(edge: .trailing))
+                                .combined(with: .scale(scale: 0.92, anchor: .trailing)),
+                            removal: .opacity
+                                .combined(with: .move(edge: .trailing))
+                                .combined(with: .scale(scale: 0.92, anchor: .trailing))
+                        )
+                    )
+                }
             }
             
             ScrollView(.horizontal, showsIndicators: false) {
@@ -544,18 +572,37 @@ public struct HiResAudioView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 searchFieldView
-                    .frame(minWidth: 80, maxWidth: .infinity)
                 
                 Spacer(minLength: 4)
                 
-                trackCountPill
-                    .fixedSize(horizontal: true, vertical: false)
+                if !isSearchExpanded {
+                    trackCountPill
+                        .fixedSize(horizontal: true, vertical: false)
+                        .transition(
+                            .asymmetric(
+                                insertion: .opacity
+                                    .combined(with: .move(edge: .trailing))
+                                    .combined(with: .scale(scale: 0.92, anchor: .trailing)),
+                                removal: .opacity
+                                    .combined(with: .move(edge: .trailing))
+                                    .combined(with: .scale(scale: 0.92, anchor: .trailing))
+                            )
+                        )
+                }
             }
             
-            HStack(spacing: 8) {
-                playbackControlsView
-                    .fixedSize(horizontal: true, vertical: false)
-                Spacer(minLength: 0)
+            if !isSearchExpanded {
+                HStack(spacing: 8) {
+                    playbackControlsView
+                        .fixedSize(horizontal: true, vertical: false)
+                    Spacer(minLength: 0)
+                }
+                .transition(
+                    .asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .leading)),
+                        removal: .opacity.combined(with: .move(edge: .leading))
+                    )
+                )
             }
             
             ScrollView(.horizontal, showsIndicators: false) {
@@ -580,51 +627,13 @@ public struct HiResAudioView: View {
     }
     
     private var searchFieldView: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(searchQuery.isEmpty ? WalkmanTheme.silverMuted : WalkmanTheme.silverLight)
-            
-            TextField("Search Hi-Res titles, artists, albums...", text: $searchQuery)
-                .textFieldStyle(.plain)
-                .font(.system(size: 13))
-                .foregroundStyle(.white)
-            
-            if !searchQuery.isEmpty {
-                Button(action: { searchQuery = "" }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 13))
-                        .foregroundStyle(WalkmanTheme.silverMuted)
-                }
-                .buttonStyle(.plain)
-                .help("Clear search")
-            }
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 38)
-        .background(
-            ZStack {
-                Color.white.opacity(0.06)
-                VStack(spacing: 0) {
-                    LinearGradient(
-                        stops: [
-                            .init(color: .white.opacity(0.12), location: 0.0),
-                            .init(color: .clear, location: 1.0)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 7)
-                    Spacer(minLength: 0)
-                }
-            }
+        ExpandableLiquidGlassSearchBar(
+            text: $searchQuery,
+            isExpanded: $isSearchExpanded,
+            placeholder: "Search Hi-Res titles, artists, albums...",
+            expandedWidth: 260,
+            helpText: "Search Hi-Res tracks"
         )
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.white.opacity(searchQuery.isEmpty ? 0.12 : 0.30), lineWidth: 0.85)
-        )
-        .shadow(color: Color.black.opacity(0.15), radius: 2.5, x: 0, y: 1)
     }
     
     private var formatSegmentedBar: some View {
@@ -699,6 +708,7 @@ public struct HiResAudioView: View {
                 .font(.system(size: 12.5, weight: .medium, design: .monospaced))
                 .foregroundStyle(WalkmanTheme.hiResGoldLight)
         }
+        .help(countPillHelpText)
         .padding(.horizontal, 14)
         .frame(height: 38)
         .background(
@@ -747,6 +757,17 @@ public struct HiResAudioView: View {
     }
     
     private var countPillText: String {
+        switch viewMode {
+        case .tracks:
+            return "\(displayedTracks.count.formatted())"
+        case .albums:
+            return "\(uniqueAlbumCount.formatted())"
+        case .artists:
+            return "\(uniqueArtistCount.formatted())"
+        }
+    }
+    
+    private var countPillHelpText: String {
         switch viewMode {
         case .tracks:
             return displayedTracks.count == 1 ? "1 Master" : "\(displayedTracks.count.formatted()) Masters"

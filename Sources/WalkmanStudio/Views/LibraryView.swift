@@ -27,6 +27,7 @@ public struct LibraryView: View {
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var formatFilter: String = "ALL"
     @State private var searchQuery: String = ""
+    @State private var isSearchExpanded: Bool = false
     @State private var sortOrder = defaultSortOrder
     @State private var displayedTracks: [Track] = []
     @State private var sortedBaseTracks: [Track] = []
@@ -84,8 +85,6 @@ public struct LibraryView: View {
                 filtered = baseList
             case "HI-RES":
                 filtered = baseList.filter { $0.bitsPerSample > 16 || $0.sampleRate > 48000 }
-            case "LEARNING":
-                filtered = baseList.filter { $0.isLanguageStudy }
             default:
                 filtered = baseList.filter { $0.format == formatFilter }
             }
@@ -99,7 +98,6 @@ public struct LibraryView: View {
                 switch formatFilter {
                 case "ALL": return true
                 case "HI-RES": return track.bitsPerSample > 16 || track.sampleRate > 48000
-                case "LEARNING": return track.isLanguageStudy
                 default: return track.format == formatFilter
                 }
             }
@@ -166,7 +164,6 @@ public struct LibraryView: View {
         FilterOption(id: "FLAC", title: "FLAC", icon: nil, isHiRes: false),
         FilterOption(id: "MP3", title: "MP3", icon: nil, isHiRes: false),
         FilterOption(id: "M4A", title: "M4A", icon: nil, isHiRes: false),
-        FilterOption(id: "LEARNING", title: "Language Study", icon: "character.book.closed.fill", isHiRes: false),
         FilterOption(id: "HI-RES", title: "Hi-Res", icon: "waveform", isHiRes: true)
     ]
     
@@ -180,6 +177,7 @@ public struct LibraryView: View {
                 compactToolbarLayout
                 narrowToolbarLayout
             }
+            .animation(.spring(response: 0.35, dampingFraction: 0.84), value: isSearchExpanded)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .background(Color.clear)
@@ -244,18 +242,31 @@ public struct LibraryView: View {
     private var wideToolbarLayout: some View {
         HStack(spacing: 8) {
             searchFieldView
-                .frame(minWidth: 110, maxWidth: 220)
             
             formatSegmentedBar
                 .fixedSize(horizontal: true, vertical: false)
             
             Spacer(minLength: 4)
             
-            playbackControlsView
-                .fixedSize(horizontal: true, vertical: false)
-            
-            statusIndicatorView
-                .fixedSize(horizontal: true, vertical: false)
+            if !isSearchExpanded {
+                HStack(spacing: 8) {
+                    playbackControlsView
+                        .fixedSize(horizontal: true, vertical: false)
+                    
+                    statusIndicatorView
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .transition(
+                    .asymmetric(
+                        insertion: .opacity
+                            .combined(with: .move(edge: .trailing))
+                            .combined(with: .scale(scale: 0.92, anchor: .trailing)),
+                        removal: .opacity
+                            .combined(with: .move(edge: .trailing))
+                            .combined(with: .scale(scale: 0.92, anchor: .trailing))
+                    )
+                )
+            }
         }
     }
     
@@ -263,15 +274,28 @@ public struct LibraryView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 searchFieldView
-                    .frame(minWidth: 80, maxWidth: .infinity)
                 
                 Spacer(minLength: 4)
                 
-                playbackControlsView
-                    .fixedSize(horizontal: true, vertical: false)
-                
-                statusIndicatorView
-                    .fixedSize(horizontal: true, vertical: false)
+                if !isSearchExpanded {
+                    HStack(spacing: 8) {
+                        playbackControlsView
+                            .fixedSize(horizontal: true, vertical: false)
+                        
+                        statusIndicatorView
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity
+                                .combined(with: .move(edge: .trailing))
+                                .combined(with: .scale(scale: 0.92, anchor: .trailing)),
+                            removal: .opacity
+                                .combined(with: .move(edge: .trailing))
+                                .combined(with: .scale(scale: 0.92, anchor: .trailing))
+                        )
+                    )
+                }
             }
             
             ScrollView(.horizontal, showsIndicators: false) {
@@ -286,18 +310,37 @@ public struct LibraryView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 searchFieldView
-                    .frame(minWidth: 80, maxWidth: .infinity)
                 
                 Spacer(minLength: 4)
                 
-                statusIndicatorView
-                    .fixedSize(horizontal: true, vertical: false)
+                if !isSearchExpanded {
+                    statusIndicatorView
+                        .fixedSize(horizontal: true, vertical: false)
+                        .transition(
+                            .asymmetric(
+                                insertion: .opacity
+                                    .combined(with: .move(edge: .trailing))
+                                    .combined(with: .scale(scale: 0.92, anchor: .trailing)),
+                                removal: .opacity
+                                    .combined(with: .move(edge: .trailing))
+                                    .combined(with: .scale(scale: 0.92, anchor: .trailing))
+                            )
+                        )
+                }
             }
             
-            HStack(spacing: 8) {
-                playbackControlsView
-                    .fixedSize(horizontal: true, vertical: false)
-                Spacer(minLength: 0)
+            if !isSearchExpanded {
+                HStack(spacing: 8) {
+                    playbackControlsView
+                        .fixedSize(horizontal: true, vertical: false)
+                    Spacer(minLength: 0)
+                }
+                .transition(
+                    .asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .leading)),
+                        removal: .opacity.combined(with: .move(edge: .leading))
+                    )
+                )
             }
             
             ScrollView(.horizontal, showsIndicators: false) {
@@ -309,52 +352,13 @@ public struct LibraryView: View {
     }
     
     private var searchFieldView: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(searchQuery.isEmpty ? WalkmanTheme.silverMuted : WalkmanTheme.silverLight)
-            
-            TextField("Search title, artist, or album...", text: $searchQuery)
-                .textFieldStyle(.plain)
-                .font(.system(size: 13))
-                .foregroundStyle(.white)
-            
-            if !searchQuery.isEmpty {
-                Button(action: { searchQuery = "" }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 13))
-                        .foregroundStyle(WalkmanTheme.silverMuted)
-                }
-                .buttonStyle(.plain)
-                .help("Clear search")
-            }
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 38)
-        .background(
-            ZStack {
-                Color.white.opacity(0.06)
-                // Top specular sheen
-                VStack(spacing: 0) {
-                    LinearGradient(
-                        stops: [
-                            .init(color: .white.opacity(0.12), location: 0.0),
-                            .init(color: .clear, location: 1.0)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 7)
-                    Spacer(minLength: 0)
-                }
-            }
+        ExpandableLiquidGlassSearchBar(
+            text: $searchQuery,
+            isExpanded: $isSearchExpanded,
+            placeholder: "Search title, artist, or album...",
+            expandedWidth: 260,
+            helpText: "Search tracks"
         )
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(Color.white.opacity(searchQuery.isEmpty ? 0.12 : 0.30), lineWidth: 0.85)
-        )
-        .shadow(color: Color.black.opacity(0.15), radius: 2.5, x: 0, y: 1)
     }
     
     private var formatSegmentedBar: some View {
@@ -470,12 +474,13 @@ public struct LibraryView: View {
                 Image(systemName: "music.note")
                     .font(.system(size: 11.5, weight: .bold))
                     .foregroundStyle(Color.white.opacity(0.55))
-                Text(visibleTracks.count == 1 ? "1 Track" : "\(visibleTracks.count.formatted()) Tracks")
+                Text("\(visibleTracks.count.formatted())")
                     .font(.system(size: 12.5, weight: .medium, design: .monospaced))
                     .foregroundStyle(WalkmanTheme.silverLight)
                     .lineLimit(1)
             }
         }
+        .help(visibleTracks.count == 1 ? "1 Track" : "\(visibleTracks.count.formatted()) Tracks")
         .padding(.horizontal, 14)
         .frame(height: 38)
         .background(
