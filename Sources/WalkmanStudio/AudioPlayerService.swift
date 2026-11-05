@@ -32,6 +32,15 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
     @Published public var isSeeking: Bool = false
     @Published public var isShuffle: Bool = false
     @Published public var isRepeat: Bool = false
+    
+    /// Timestamp where the current track started (e.g. SensMe highlight position)
+    @Published public var currentHighlightStartTime: Double? = nil
+
+    /// If set (e.g. 45.0 for SensMe Highlight Preview mode), automatically advances to the next track when duration is reached
+    @Published public var highlightPreviewDuration: Double? = nil
+
+    /// Optional callback to customize next track starting time in specialized modes like SensMe (isManualSkip indicates whether user skipped)
+    public var onAdvanceToNextTrack: ((_ nextTrack: Track, _ isManualSkip: Bool) -> Double?)? = nil
 
     /// Convenience accessors forwarding to `progress`
     public var currentTime: Double {
@@ -95,7 +104,15 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
         let interval = CMTime(seconds: 0.1, preferredTimescale: 600)
         timeObserverToken = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             guard let self = self, !self.isSeeking else { return }
-            self.progress.currentTime = CMTimeGetSeconds(time)
+            let sec = CMTimeGetSeconds(time)
+            self.progress.currentTime = sec
+            
+            // Check if SensMe Highlight Preview duration has elapsed (e.g. 45 seconds from highlight start)
+            if let start = self.currentHighlightStartTime, let maxDur = self.highlightPreviewDuration, maxDur > 0 {
+                if sec >= (start + maxDur) {
+                    self.playNext()
+                }
+            }
         }
     }
 
@@ -105,7 +122,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.playNext()
+            self?.playNext(isManualSkip: false)
         }
     }
 
@@ -272,9 +289,23 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
                 self.currentQueue = queue
             }
             if let start = startTime {
-                seek(to: start)
-            }
-            if autoPlay && !isPlaying {
+                self.currentHighlightStartTime = start
+                self.progress.currentTime = start
+                self.isSeeking = true
+                let target = CMTime(seconds: start, preferredTimescale: 600)
+                let tolerance = CMTime(seconds: 0.05, preferredTimescale: 600)
+                player.seek(to: target, toleranceBefore: tolerance, toleranceAfter: tolerance) { [weak self] _ in
+                    guard let self = self else { return }
+                    self.isSeeking = false
+                    let actual = CMTimeGetSeconds(self.player.currentTime())
+                    self.progress.currentTime = (actual.isFinite && actual >= 0) ? actual : start
+                    if autoPlay && !self.isPlaying {
+                        self.player.play()
+                        self.isPlaying = true
+                        self.updateNowPlayingInfo()
+                    }
+                }
+            } else if autoPlay && !isPlaying {
                 player.play()
                 self.isPlaying = true
                 updateNowPlayingInfo()
@@ -291,6 +322,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
         self.progress.currentTime = initialTime
         self.progress.duration = track.durationSeconds
         self.isPlaying = autoPlay
+        self.currentHighlightStartTime = (initialTime > 0) ? initialTime : nil
 
         let url = URL(fileURLWithPath: track.fullPath)
         
@@ -301,18 +333,29 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
             
             DispatchQueue.main.async {
                 guard let self = self, self.currentTrack?.id == track.id else { return }
-                self.player.replaceCurrentItem(with: item)
                 if initialTime > 0 {
                     self.isSeeking = true
+                }
+                self.player.replaceCurrentItem(with: item)
+                if initialTime > 0 {
                     let target = CMTime(seconds: initialTime, preferredTimescale: 600)
-                    self.player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-                        self?.isSeeking = false
+                    let tolerance = CMTime(seconds: 0.05, preferredTimescale: 600)
+                    self.player.seek(to: target, toleranceBefore: tolerance, toleranceAfter: tolerance) { [weak self] finished in
+                        guard let self = self else { return }
+                        self.isSeeking = false
+                        let actual = CMTimeGetSeconds(self.player.currentTime())
+                        self.progress.currentTime = (actual.isFinite && actual >= 0) ? actual : initialTime
+                        if self.isPlaying {
+                            self.player.play()
+                        }
+                        self.updateNowPlayingInfo()
                     }
+                } else {
+                    if self.isPlaying {
+                        self.player.play()
+                    }
+                    self.updateNowPlayingInfo()
                 }
-                if self.isPlaying {
-                    self.player.play()
-                }
-                self.updateNowPlayingInfo()
             }
         }
 
@@ -329,9 +372,23 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
                 self.currentCoverArt = cover
             }
             if let start = startTime {
-                seek(to: start)
-            }
-            if !isPlaying {
+                self.currentHighlightStartTime = start
+                self.progress.currentTime = start
+                self.isSeeking = true
+                let target = CMTime(seconds: start, preferredTimescale: 600)
+                let tolerance = CMTime(seconds: 0.05, preferredTimescale: 600)
+                player.seek(to: target, toleranceBefore: tolerance, toleranceAfter: tolerance) { [weak self] _ in
+                    guard let self = self else { return }
+                    self.isSeeking = false
+                    let actual = CMTimeGetSeconds(self.player.currentTime())
+                    self.progress.currentTime = (actual.isFinite && actual >= 0) ? actual : start
+                    if !self.isPlaying {
+                        self.player.play()
+                        self.isPlaying = true
+                        self.updateNowPlayingInfo()
+                    }
+                }
+            } else if !isPlaying {
                 player.play()
                 self.isPlaying = true
                 updateNowPlayingInfo()
@@ -381,6 +438,9 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
         player.replaceCurrentItem(with: nil)
         currentTrack = nil
         currentQueue = []
+        currentHighlightStartTime = nil
+        highlightPreviewDuration = nil
+        onAdvanceToNextTrack = nil
         progress.currentTime = 0.0
         progress.duration = 0.0
         currentCoverArt = nil
@@ -399,9 +459,15 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
         self.isSeeking = true
         progress.currentTime = seconds
         let targetTime = CMTime(seconds: seconds, preferredTimescale: 600)
-        player.seek(to: targetTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-            self?.isSeeking = false
-            self?.updateNowPlayingInfo()
+        let tolerance = CMTime(seconds: 0.05, preferredTimescale: 600)
+        player.seek(to: targetTime, toleranceBefore: tolerance, toleranceAfter: tolerance) { [weak self] _ in
+            guard let self = self else { return }
+            self.isSeeking = false
+            let actual = CMTimeGetSeconds(self.player.currentTime())
+            if actual.isFinite && actual >= 0 {
+                self.progress.currentTime = actual
+            }
+            self.updateNowPlayingInfo()
         }
         updateNowPlayingInfo()
     }
@@ -415,9 +481,15 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
             self.isSeeking = true
             self.progress.currentTime = seconds
             let targetTime = CMTime(seconds: seconds, preferredTimescale: 600)
-            player.seek(to: targetTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-                self?.isSeeking = false
-                self?.updateNowPlayingInfo()
+            let tolerance = CMTime(seconds: 0.05, preferredTimescale: 600)
+            player.seek(to: targetTime, toleranceBefore: tolerance, toleranceAfter: tolerance) { [weak self] _ in
+                guard let self = self else { return }
+                self.isSeeking = false
+                let actual = CMTimeGetSeconds(self.player.currentTime())
+                if actual.isFinite && actual >= 0 {
+                    self.progress.currentTime = actual
+                }
+                self.updateNowPlayingInfo()
             }
             if !isPlaying {
                 player.play()
@@ -429,7 +501,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
         }
     }
 
-    public func playNext() {
+    public func playNext(isManualSkip: Bool = true) {
         let queue: [Track]
         if Thread.isMainThread, let active = MainActor.assumeIsolated({ activeQueueProvider?() }), !active.isEmpty {
             queue = active
@@ -441,7 +513,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
 
         guard let current = currentTrack else {
             if let first = queue.first {
-                play(track: first, in: queue)
+                let start = onAdvanceToNextTrack?(first, isManualSkip)
+                play(track: first, in: queue, startTime: start)
             }
             return
         }
@@ -449,7 +522,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
         if isShuffle && queue.count > 1 {
             let candidates = queue.filter { $0.id != current.id }
             if let random = candidates.randomElement() {
-                play(track: random, in: queue)
+                let start = onAdvanceToNextTrack?(random, isManualSkip)
+                play(track: random, in: queue, startTime: start)
                 return
             }
         }
@@ -457,19 +531,23 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
         if let idx = queue.firstIndex(where: { $0.id == current.id }) {
             let nextIdx = idx + 1
             if nextIdx < queue.count {
-                play(track: queue[nextIdx], in: queue)
+                let next = queue[nextIdx]
+                let start = onAdvanceToNextTrack?(next, isManualSkip)
+                play(track: next, in: queue, startTime: start)
             } else if let first = queue.first {
                 // Loop around queue
-                play(track: first, in: queue)
+                let start = onAdvanceToNextTrack?(first, isManualSkip)
+                play(track: first, in: queue, startTime: start)
             }
         } else {
             if let first = queue.first {
-                play(track: first, in: queue)
+                let start = onAdvanceToNextTrack?(first, isManualSkip)
+                play(track: first, in: queue, startTime: start)
             }
         }
     }
 
-    public func playPrevious() {
+    public func playPrevious(isManualSkip: Bool = true) {
         let queue: [Track]
         if Thread.isMainThread, let active = MainActor.assumeIsolated({ activeQueueProvider?() }), !active.isEmpty {
             queue = active
@@ -481,7 +559,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
 
         guard let current = currentTrack else {
             if let first = queue.first {
-                play(track: first, in: queue)
+                let start = onAdvanceToNextTrack?(first, isManualSkip)
+                play(track: first, in: queue, startTime: start)
             }
             return
         }
@@ -495,15 +574,19 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
         if let idx = queue.firstIndex(where: { $0.id == current.id }) {
             let prevIdx = idx - 1
             if prevIdx >= 0 {
-                play(track: queue[prevIdx], in: queue)
+                let prev = queue[prevIdx]
+                let start = onAdvanceToNextTrack?(prev, isManualSkip)
+                play(track: prev, in: queue, startTime: start)
             } else if let last = queue.last {
-                play(track: last, in: queue)
+                let start = onAdvanceToNextTrack?(last, isManualSkip)
+                play(track: last, in: queue, startTime: start)
             } else {
                 seek(to: 0)
             }
         } else {
             if let last = queue.last {
-                play(track: last, in: queue)
+                let start = onAdvanceToNextTrack?(last, isManualSkip)
+                play(track: last, in: queue, startTime: start)
             } else {
                 seek(to: 0)
             }

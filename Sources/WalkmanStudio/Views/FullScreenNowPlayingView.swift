@@ -787,8 +787,8 @@ public struct FullScreenNowPlayingView: View {
         }
     }
 
-    /// Lead time (0.3s / 300ms) to ensure lyric highlighting anticipates vocal onset with zero lag, matching Track Details pane.
-    private let lyricLeadTimeSeconds: Double = 0.3
+    /// Lead time (0.5s / 500ms) to ensure lyric highlighting anticipates vocal onset with zero lag, matching Track Details pane.
+    private let lyricLeadTimeSeconds: Double = 0.5
 
     private func updateActiveLyric(proxy: ScrollViewProxy, forceScroll: Bool = false) {
         guard !parsedLines.isEmpty else { return }
@@ -990,19 +990,25 @@ public struct FullScreenNowPlayingView: View {
             let local = !forceOnline ? AudioTagger.shared.extractLyrics(fileURL: fileURL) : nil
             let localParsed = (local != nil && !local!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ?
                 MetadataStudioView.parseLyrics(local, durationSeconds: track.durationSeconds) : []
-            let isLocalSynced = local != nil && local!.contains("[") && localParsed.contains(where: { $0.timeInSeconds != nil })
 
-            if isLocalSynced {
+            if !forceOnline {
                 DispatchQueue.main.async {
                     guard self.player.currentTrack?.id == track.id else { return }
-                    self.lyrics = local
-                    self.parsedLines = localParsed
+                    if let local = local, !localParsed.isEmpty {
+                        self.lyrics = local
+                        self.parsedLines = localParsed
+                        self.lyricsError = nil
+                    } else {
+                        self.lyrics = nil
+                        self.parsedLines = []
+                        self.lyricsError = "No lyrics found on device"
+                    }
                     self.isLoadingLyrics = false
                 }
                 return
             }
 
-            // If local lyrics are missing or plain text (unsynced), fetch synchronized lyrics online via LyricsService
+            // Only when forceOnline == true (user manually clicked "Search Online")
             Task {
                 do {
                     let res = try await LyricsService.shared.fetchLyrics(

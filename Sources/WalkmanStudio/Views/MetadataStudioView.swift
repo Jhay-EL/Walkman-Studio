@@ -14,6 +14,7 @@ public struct MetadataStudioView: View {
     @State private var verifiedMetadata: AudioFileMetadata? = nil
     @State private var cachedLyricLines: [ParsedLyricLine] = []
     @State private var isLyricsCopied: Bool = false
+    @State private var isFetchingLyrics: Bool = false
     @State private var senseMeInfo: SenseMeInfo? = nil
     
     public init(
@@ -328,6 +329,7 @@ public struct MetadataStudioView: View {
             lyrics = nil
             verifiedMetadata = nil
             cachedLyricLines = []
+            isFetchingLyrics = false
             senseMeInfo = nil
             return
         }
@@ -344,10 +346,12 @@ public struct MetadataStudioView: View {
                 lyrics = nil
                 verifiedMetadata = nil
                 cachedLyricLines = []
+                isFetchingLyrics = false
                 senseMeInfo = nil
             }
             
             let url = URL(fileURLWithPath: tr.fullPath)
+            let trackDuration = tr.durationSeconds
             
             let details = await Task.detached(priority: .userInitiated) { () -> LoadedTrackDetails? in
                 if Task.isCancelled { return nil }
@@ -359,7 +363,7 @@ public struct MetadataStudioView: View {
                 let meta = AudioTagger.shared.readMetadata(fileURL: url)
                 if Task.isCancelled { return nil }
                 let rawLyrics = lyr ?? meta?.lyrics
-                let parsedLines = Self.parseLyrics(rawLyrics)
+                let parsedLines = Self.parseLyrics(rawLyrics, durationSeconds: trackDuration)
                 let senseMe = SenseMeEngine.shared.inspect(fileURL: url)
                 if Task.isCancelled { return nil }
                 if senseMe.isAnalyzed && !tr.isSenseMeAnalyzed {
@@ -387,6 +391,7 @@ public struct MetadataStudioView: View {
             self.verifiedMetadata = details.meta
             self.cachedLyricLines = details.parsedLines
             self.senseMeInfo = details.senseMe
+            self.isFetchingLyrics = false
         }
     }
     
@@ -594,6 +599,19 @@ public struct MetadataStudioView: View {
                                 isHiRes: isHiRes,
                                 onCopy: copyLyricsToClipboard
                             )
+                        } else if isFetchingLyrics {
+                            // Online searching indicator
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Searching synchronized lyrics online...")
+                                    .font(WalkmanFont.monoSmall)
+                                    .foregroundStyle(WalkmanTheme.silverMuted)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .liquidGlass(cornerRadius: 10)
                         } else {
                             // Empty state indicating no lyrics inside the Lyrics container
                             HStack(spacing: 8) {
@@ -1024,11 +1042,12 @@ private struct LiveLyricsReader: View {
     @ObservedObject private var progress = AudioPlayerService.shared.progress
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var activeLineId: Int? = nil
+    @State private var hoveredLineId: Int? = nil
     
-    /// Lead time (0.3s / 300ms) to ensure lyric highlighting anticipates vocal onset with zero lag.
-    private let lyricLeadTimeSeconds: Double = 0.3
+    /// Lead time (0.5s / 500ms) to ensure lyric highlighting anticipates vocal onset with zero lag.
+    private let lyricLeadTimeSeconds: Double = 0.5
     
-    private func updateActiveLine(proxy: ScrollViewProxy) {
+    private func updateActiveLine(proxy: ScrollViewProxy, forceScroll: Bool = false) {
         let isPlayingThis = (player.currentTrack?.id == trackId && player.isPlaying)
         guard isPlayingThis else {
             if activeLineId != nil {
@@ -1048,10 +1067,10 @@ private struct LiveLyricsReader: View {
             }
         }
         
-        if newId != activeLineId {
+        if forceScroll || newId != activeLineId {
             activeLineId = newId
             if let targetId = newId {
-                withAnimation(.easeInOut(duration: 0.25)) {
+                withAnimation(.easeInOut(duration: 0.28)) {
                     proxy.scrollTo(targetId, anchor: .center)
                 }
             }
@@ -1064,8 +1083,23 @@ private struct LiveLyricsReader: View {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(lines, id: \.id) { line in
                         let active = (activeLineId == line.id)
-                        lyricRow(line: line, active: active)
-                            .id(line.id)
+                        let isHovered = (hoveredLineId == line.id)
+                        
+                        Button(action: {
+                            if let t = line.timeInSeconds {
+                                player.seekTo(time: t, in: player.currentTrack)
+                            }
+                        }) {
+                            lyricRow(line: line, active: active, hovered: isHovered)
+                        }
+                        .buttonStyle(.plain)
+                        .id(line.id)
+                        .onHover { h in
+                            if line.timeInSeconds != nil {
+                                hoveredLineId = h ? line.id : nil
+                                if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                            }
+                        }
                     }
                 }
                 .padding(8)
@@ -1078,28 +1112,50 @@ private struct LiveLyricsReader: View {
                 }
             }
             .onAppear {
-                updateActiveLine(proxy: proxy)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                    updateActiveLine(proxy: proxy, forceScroll: true)
+                }
             }
             .onChange(of: progress.currentTime) {
                 updateActiveLine(proxy: proxy)
             }
             .onChange(of: player.isPlaying) {
-                updateActiveLine(proxy: proxy)
+                if player.isPlaying {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                        updateActiveLine(proxy: proxy, forceScroll: true)
+                    }
+                } else {
+                    updateActiveLine(proxy: proxy)
+                }
+            }
+            .onChange(of: lines) {
+                activeLineId = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                    updateActiveLine(proxy: proxy, forceScroll: true)
+                }
+            }
+            .onChange(of: player.currentTrack?.id) {
+                activeLineId = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                    updateActiveLine(proxy: proxy, forceScroll: true)
+                }
             }
             .onChange(of: trackId) {
                 activeLineId = nil
-                updateActiveLine(proxy: proxy)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                    updateActiveLine(proxy: proxy, forceScroll: true)
+                }
             }
         }
     }
     
     @ViewBuilder
-    private func lyricRow(line: MetadataStudioView.ParsedLyricLine, active: Bool) -> some View {
+    private func lyricRow(line: MetadataStudioView.ParsedLyricLine, active: Bool, hovered: Bool = false) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             if let formatted = line.formattedTimestamp {
                 Text(formatted)
                     .font(.system(size: 10, weight: active ? .semibold : .regular, design: .monospaced))
-                    .foregroundStyle(active ? WalkmanTheme.hiResGold : Color.white.opacity(0.35))
+                    .foregroundStyle(active ? WalkmanTheme.hiResGold : (hovered ? WalkmanTheme.silverLight : Color.white.opacity(0.35)))
                     .frame(width: 38, alignment: .leading)
                     .lineLimit(1)
             }
@@ -1108,7 +1164,7 @@ private struct LiveLyricsReader: View {
                 .font(.system(size: 12.5, weight: active ? .semibold : .regular))
                 .foregroundStyle(
                     active ? (isHiRes ? WalkmanTheme.hiResGoldLight : Color.white) :
-                    (line.text.isEmpty ? Color.secondary.opacity(0.5) : Color.white.opacity(0.68))
+                    (hovered ? Color.white.opacity(0.92) : (line.text.isEmpty ? Color.secondary.opacity(0.5) : Color.white.opacity(0.68)))
                 )
                 .multilineTextAlignment(.leading)
                 .textSelection(.enabled)
@@ -1118,13 +1174,19 @@ private struct LiveLyricsReader: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 3.5)
         .background(
-            active ?
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(Color.white.opacity(0.08))
-                .overlay(
+            Group {
+                if active {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .stroke(WalkmanTheme.hiResGold.opacity(0.25), lineWidth: 0.8)
-                ) : nil
+                        .fill(Color.white.opacity(0.08))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .stroke(WalkmanTheme.hiResGold.opacity(0.25), lineWidth: 0.8)
+                        )
+                } else if hovered {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.white.opacity(0.04))
+                }
+            }
         )
     }
 }

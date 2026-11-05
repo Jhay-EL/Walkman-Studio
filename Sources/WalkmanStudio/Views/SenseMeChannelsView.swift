@@ -451,6 +451,7 @@ public struct SenseMeChannelsView: View {
             handleChannelSwitched(to: newIndex)
         }
         .onAppear {
+            configurePlayerForSenseMe()
             // Default select the channel matching the current time of day
             let hour = Calendar.current.component(.hour, from: Date())
             if let idx = displayedChannels.firstIndex(where: { $0.isCurrentlyActive(at: hour) }) {
@@ -470,6 +471,13 @@ public struct SenseMeChannelsView: View {
                         _ = generateRandomizedPlaylist(for: selectedChannel)
                     }
                 }
+            }
+        }
+        .onDisappear {
+            channelAutoPlayTask?.cancel()
+            if !player.isPlaying {
+                player.highlightPreviewDuration = nil
+                player.onAdvanceToNextTrack = nil
             }
         }
     }
@@ -763,6 +771,34 @@ public struct SenseMeChannelsView: View {
         let currentTracks = tracks(for: selectedChannel)
 
         return VStack(spacing: 0) {
+            // Channel Header Bar: Channel Name, Track Count & Sony Playback Range Selector
+            HStack(spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(WalkmanTheme.hiResGold)
+
+                    Text(selectedChannel.name)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(Color.white)
+
+                    Text("• \(currentTracks.count) Songs")
+                        .font(.system(size: 12))
+                        .foregroundStyle(WalkmanTheme.silverMuted)
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 8)
+            .background(Color.white.opacity(0.02))
+            .overlay(
+                Rectangle()
+                    .fill(Color.white.opacity(0.06))
+                    .frame(height: 0.8),
+                alignment: .bottom
+            )
+
             // Channel Tracks Table
             if currentTracks.isEmpty {
                 VStack(spacing: 12) {
@@ -979,6 +1015,39 @@ public struct SenseMeChannelsView: View {
     }
 
     // -------------------------------------------------------------------------
+    // SONY SENSEME PLAYBACK CONFIGURATION & HIGHLIGHT CALCULATION
+    // -------------------------------------------------------------------------
+    private func configurePlayerForSenseMe() {
+        player.highlightPreviewDuration = nil
+        player.onAdvanceToNextTrack = { [weak localLibrary] nextTrack, isManualSkip in
+            guard isManualSkip else {
+                // If the track is finished till the end, start the next track from the start (0.0)
+                return 0.0
+            }
+            // If the track was skipped on the music player, start at the highlights
+            let target = localLibrary?.tracks.first(where: { $0.id == nextTrack.id }) ?? nextTrack
+            if let hl = target.senseMeHighlightSec, hl > 0 {
+                return hl
+            }
+            if target.durationSeconds > 25.0 {
+                return min(max(15.0, target.durationSeconds * 0.35), 90.0)
+            }
+            return 0.0
+        }
+    }
+
+    private func highlightStartTime(for track: Track) -> Double {
+        if let hl = track.senseMeHighlightSec, hl > 0 {
+            return hl
+        }
+        // Heuristic fallback if track hasn't been parsed for STSA: 35% of song duration (clamped 15s - 90s)
+        if track.durationSeconds > 25.0 {
+            return min(max(15.0, track.durationSeconds * 0.35), 90.0)
+        }
+        return 0.0
+    }
+
+    // -------------------------------------------------------------------------
     // LOGIC & ACTIONS
     // -------------------------------------------------------------------------
     private func handleChannelSwitched(to newIndex: Int) {
@@ -1021,11 +1090,15 @@ public struct SenseMeChannelsView: View {
         }
 
         let firstTrack = currentTracks[0]
+        let start = highlightStartTime(for: firstTrack)
+        onInspectTrack?(firstTrack)
         player.isShuffle = true
+        configurePlayerForSenseMe()
         player.play(
             track: firstTrack,
             coverArt: nil,
-            in: currentTracks
+            in: currentTracks,
+            startTime: start > 0 ? start : nil
         )
     }
 
@@ -1154,8 +1227,16 @@ public struct SenseMeChannelsView: View {
         }
 
         let first = channelTracks[0]
+        let start = highlightStartTime(for: first)
+        onInspectTrack?(first)
         player.isShuffle = true
-        player.play(track: first, coverArt: nil, in: channelTracks)
+        configurePlayerForSenseMe()
+        player.play(
+            track: first,
+            coverArt: nil,
+            in: channelTracks,
+            startTime: start > 0 ? start : nil
+        )
     }
 
     private func startBatchAnalysis() {
@@ -1515,6 +1596,17 @@ private struct SenseMeChannelTableView: View {
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var selectedTrackId: String? = nil
 
+    private func playTrackInChannel(_ track: Track, forceBeginning: Bool = false) {
+        self.selectedTrackId = track.id
+        onInspectTrack?(track)
+        if forceBeginning {
+            player.play(track: track, in: allChannelTracks, startTime: nil)
+        } else {
+            let start = track.senseMeHighlightSec ?? (track.durationSeconds > 25.0 ? min(max(15.0, track.durationSeconds * 0.35), 90.0) : 0.0)
+            player.play(track: track, in: allChannelTracks, startTime: start > 0 ? start : nil)
+        }
+    }
+
     var body: some View {
         Table(tracks, selection: $selectedTrackId) {
             TableColumn("#") { track in
@@ -1523,11 +1615,10 @@ private struct SenseMeChannelTableView: View {
                 let pos = (tracks.firstIndex(where: { $0.id == track.id }) ?? 0) + 1
 
                 Button(action: {
-                    self.selectedTrackId = track.id
                     if isPlayingThis {
                         player.pause()
                     } else {
-                        player.play(track: track, in: allChannelTracks)
+                        playTrackInChannel(track)
                     }
                 }) {
                     ZStack {
@@ -1552,10 +1643,22 @@ private struct SenseMeChannelTableView: View {
                 HStack(spacing: 8) {
                     TrackCoverThumbnail(track: track, size: 28, isPlaying: isPlayingThis)
 
-                    Text(track.title)
-                        .font(isPlayingThis ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
-                        .foregroundStyle(isPlayingThis ? WalkmanTheme.hiResGold : Color.white)
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(track.title)
+                            .font(isPlayingThis ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
+                            .foregroundStyle(isPlayingThis ? WalkmanTheme.hiResGold : Color.white)
+                            .lineLimit(1)
+
+                        if isCurrent, let hl = player.currentHighlightStartTime, hl > 0 {
+                            HStack(spacing: 3) {
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 8, weight: .bold))
+                                Text("Chorus Highlight (\(formatTime(hl)))")
+                                    .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                            }
+                            .foregroundStyle(WalkmanTheme.hiResGold.opacity(0.85))
+                        }
+                    }
                 }
             }
             .width(min: 160, ideal: 240)
@@ -1599,10 +1702,16 @@ private struct SenseMeChannelTableView: View {
         .contextMenu(forSelectionType: String.self) { selection in
             if let id = selection.first, let tr = tracks.first(where: { $0.id == id }) {
                 Button("Play Now") {
-                    player.play(track: tr, in: allChannelTracks)
+                    playTrackInChannel(tr)
                 }
-                if let highlight = tr.senseMeHighlightSec, highlight > 0 {
+                Button("Play from Beginning") {
+                    playTrackInChannel(tr, forceBeginning: true)
+                }
+                let highlight = tr.senseMeHighlightSec ?? (tr.durationSeconds > 25.0 ? min(max(15.0, tr.durationSeconds * 0.35), 90.0) : 0.0)
+                if highlight > 0 {
                     Button("Play Chorus Highlight (\(formatTime(highlight)))") {
+                        self.selectedTrackId = tr.id
+                        onInspectTrack?(tr)
                         player.play(track: tr, in: allChannelTracks, startTime: highlight)
                     }
                 }
@@ -1634,15 +1743,29 @@ private struct SenseMeChannelTableView: View {
             }
         } primaryAction: { selection in
             if let firstId = selection.first, let track = tracks.first(where: { $0.id == firstId }) {
-                self.selectedTrackId = track.id
                 if player.currentTrack?.id == track.id && player.isPlaying {
                     player.pause()
                 } else {
-                    player.play(track: track, in: allChannelTracks)
+                    playTrackInChannel(track)
                 }
             }
         }
         .tableScrollBottomInset(88)
+        .onChange(of: selectedTrackId) { newId in
+            if let id = newId, let tr = tracks.first(where: { $0.id == id }) {
+                onInspectTrack?(tr)
+            }
+        }
+        .onChange(of: player.currentTrack?.id) { newTrackId in
+            if let id = newTrackId, tracks.contains(where: { $0.id == id }) {
+                self.selectedTrackId = id
+            }
+        }
+        .onAppear {
+            if let currentId = player.currentTrack?.id, tracks.contains(where: { $0.id == currentId }) {
+                self.selectedTrackId = currentId
+            }
+        }
     }
 
     private func formatTime(_ sec: Double) -> String {
