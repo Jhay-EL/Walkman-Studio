@@ -310,11 +310,12 @@ public struct LiquidGlassButtonStyle: ButtonStyle {
         let configuration: Configuration
         let variant: Variant
         let cornerRadius: CGFloat
+        @Environment(\.isEnabled) private var isEnabled
         @State private var isHovered = false
         
         var body: some View {
             configuration.label
-                .opacity(configuration.isPressed ? 0.85 : 1.0)
+                .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1.0) : 0.40)
                 .background(
                     ZStack {
                         switch variant {
@@ -327,21 +328,23 @@ public struct LiquidGlassButtonStyle: ButtonStyle {
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
+                            .opacity(isEnabled ? 1.0 : 0.35)
                         case .gold:
                             WalkmanTheme.hiResGoldGradient
+                                .opacity(isEnabled ? 1.0 : 0.35)
                         case .glass, .capsule:
-                            Color.white.opacity(isHovered ? 0.14 : 0.08)
+                            Color.white.opacity(isHovered && isEnabled ? 0.14 : (isEnabled ? 0.08 : 0.04))
                         case .subtle:
-                            Color.white.opacity(isHovered ? 0.10 : 0.05)
+                            Color.white.opacity(isHovered && isEnabled ? 0.10 : (isEnabled ? 0.05 : 0.025))
                         case .destructive:
-                            Color.red.opacity(isHovered ? 0.22 : 0.12)
+                            Color.red.opacity(isHovered && isEnabled ? 0.22 : (isEnabled ? 0.12 : 0.06))
                         }
                         
                         // Surface optical liquid gloss (top specular reflection)
                         VStack(spacing: 0) {
                             LinearGradient(
                                 stops: [
-                                    .init(color: Color.white.opacity(variant == .prominent ? 0.65 : (variant == .destructive ? 0.28 : 0.35)), location: 0.0),
+                                    .init(color: Color.white.opacity((variant == .prominent ? 0.65 : (variant == .destructive ? 0.28 : 0.35)) * (isEnabled ? 1.0 : 0.30)), location: 0.0),
                                     .init(color: Color.white.opacity(0.0), location: 1.0)
                                 ],
                                 startPoint: .top,
@@ -359,16 +362,16 @@ public struct LiquidGlassButtonStyle: ButtonStyle {
                             variant == .destructive ?
                             LinearGradient(
                                 stops: [
-                                    .init(color: Color.red.opacity(isHovered ? 0.55 : 0.30), location: 0.0),
-                                    .init(color: Color.red.opacity(isHovered ? 0.25 : 0.10), location: 1.0)
+                                    .init(color: Color.red.opacity((isHovered && isEnabled) ? 0.55 : 0.30), location: 0.0),
+                                    .init(color: Color.red.opacity((isHovered && isEnabled) ? 0.25 : 0.10), location: 1.0)
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ) :
                             LinearGradient(
                                 stops: [
-                                    .init(color: Color.white.opacity(isHovered ? 0.60 : 0.38), location: 0.0),
-                                    .init(color: Color.white.opacity(isHovered ? 0.28 : 0.14), location: 0.5),
+                                    .init(color: Color.white.opacity((isHovered && isEnabled) ? 0.60 : (isEnabled ? 0.38 : 0.15)), location: 0.0),
+                                    .init(color: Color.white.opacity((isHovered && isEnabled) ? 0.28 : (isEnabled ? 0.14 : 0.06)), location: 0.5),
                                     .init(color: Color.white.opacity(0.05), location: 1.0)
                                 ],
                                 startPoint: .topLeading,
@@ -380,21 +383,28 @@ public struct LiquidGlassButtonStyle: ButtonStyle {
                 )
                 .compositingGroup()
                 .shadow(
-                    color: Color.black.opacity(isHovered ? 0.25 : 0.14),
-                    radius: isHovered ? 6 : 3,
+                    color: Color.black.opacity(isEnabled ? (isHovered ? 0.25 : 0.14) : 0.06),
+                    radius: isHovered && isEnabled ? 6 : 3,
                     x: 0,
-                    y: isHovered ? 3 : 1.5
+                    y: isHovered && isEnabled ? 3 : 1.5
                 )
-                .scaleEffect(configuration.isPressed ? 0.97 : (isHovered ? 1.025 : 1.0))
+                .scaleEffect(configuration.isPressed && isEnabled ? 0.97 : ((isHovered && isEnabled) ? 1.025 : 1.0))
                 .animation(.spring(response: 0.22, dampingFraction: 0.70), value: configuration.isPressed)
                 .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
                 .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
                 .onHover { hovering in
+                    guard isEnabled else { return }
                     guard isHovered != hovering else { return }
                     isHovered = hovering
                     if hovering {
                         NSCursor.pointingHand.set()
                     } else {
+                        NSCursor.arrow.set()
+                    }
+                }
+                .onChange(of: isEnabled) { _, enabled in
+                    if !enabled && isHovered {
+                        isHovered = false
                         NSCursor.arrow.set()
                     }
                 }

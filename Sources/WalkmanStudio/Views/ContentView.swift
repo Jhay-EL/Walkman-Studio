@@ -1,6 +1,17 @@
 import SwiftUI
 import AppKit
 import Combine
+import QuartzCore
+
+private struct DriveLibraryCache: Sendable {
+    var tracks: [Track] = []
+    var cachedArtists: [ArtistItem] = []
+    var cachedAlbums: [AlbumItem] = []
+    var cachedRecentTracks: [Track] = []
+    var cachedLanguageTracks: [Track] = []
+    var libraryStats: (albums: Int, artists: Int, hiRes: Int, recentlyAdded: Int, languageStudy: Int) = (0, 0, 0, 0, 0)
+    var isLoaded: Bool = false
+}
 
 public struct ContentView: View {
     @State private var drives: [WalkmanDrive] = []
@@ -25,6 +36,14 @@ public struct ContentView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var isFullScreenPlayerPresented: Bool = false
     @State private var showingMtpHelpSheet: Bool = false
+    @State private var driveCache: [String: DriveLibraryCache] = [:]
+    @State private var libraryScanTask: Task<Void, Never>? = nil
+
+    // Window tracking & Track Detail (Inspector) expansion state
+    @State private var hostWindow: NSWindow? = nil
+    @State private var savedWidthBeforeInspector: CGFloat? = nil
+    @State private var savedShiftOnInspectorOpen: CGFloat = 0
+    @State private var expectedWidthWithInspector: CGFloat = 0
     
     @ObservedObject private var player = AudioPlayerService.shared
     @ObservedObject private var localLibrary = LocalMusicLibraryService.shared
@@ -37,10 +56,11 @@ public struct ContentView: View {
     private let didBecomeActivePublisher = NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
     private let heartbeatTimer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
     
-    @State private var libraryStats: (albums: Int, artists: Int, hiRes: Int, recentlyAdded: Int) = (0, 0, 0, 0)
+    @State private var libraryStats: (albums: Int, artists: Int, hiRes: Int, recentlyAdded: Int, languageStudy: Int) = (0, 0, 0, 0, 0)
     @State private var cachedArtists: [ArtistItem] = []
     @State private var cachedAlbums: [AlbumItem] = []
     @State private var cachedRecentTracks: [Track] = []
+    @State private var cachedLanguageTracks: [Track] = []
     @ObservedObject private var duplicateFinder = DuplicateFinderService.shared
     
     private var selectedTrack: Track? {
@@ -49,6 +69,9 @@ public struct ContentView: View {
                 return tr
             }
             if let tr = cachedRecentTracks.first(where: { $0.id == id }) {
+                return tr
+            }
+            if let tr = cachedLanguageTracks.first(where: { $0.id == id }) {
                 return tr
             }
             if let tr = localLibrary.tracks.first(where: { $0.id == id }) {
@@ -63,6 +86,9 @@ public struct ContentView: View {
                 return tr
             }
             if let tr = cachedRecentTracks.first(where: { $0.id == playing.id }) {
+                return tr
+            }
+            if let tr = cachedLanguageTracks.first(where: { $0.id == playing.id }) {
                 return tr
             }
             if let tr = localLibrary.tracks.first(where: { $0.id == playing.id }) {
@@ -114,6 +140,9 @@ public struct ContentView: View {
         if selectedTab == .hiRes {
             return tracks.filter { $0.bitsPerSample > 16 || $0.sampleRate > 48000 }
         }
+        if selectedTab == .languageStudy {
+            return cachedLanguageTracks
+        }
         return pool
     }
 
@@ -126,13 +155,17 @@ public struct ContentView: View {
         self.activeDevice = device
         self.deviceInfo = device.deviceInfo
         let devDrives = device.drives
+        let targetDrive: WalkmanDrive?
         if let current = activeDrive, devDrives.contains(where: { $0.mountPoint == current.mountPoint }) {
             // Keep current drive if it belongs to this device
+            targetDrive = current
         } else {
             // Prefer MicroSD on this device, otherwise internal
-            self.activeDrive = device.microsdDrive ?? devDrives.first
+            targetDrive = device.microsdDrive ?? devDrives.first
         }
-        refreshLibrary()
+        if let target = targetDrive {
+            selectDrive(target)
+        }
     }
 
     private func selectDrive(_ drive: WalkmanDrive) {
@@ -140,7 +173,31 @@ public struct ContentView: View {
             self.activeDevice = parentDev
             self.deviceInfo = parentDev.deviceInfo
         }
+        
+        guard activeDrive?.mountPoint != drive.mountPoint else { return }
+        
+        libraryScanTask?.cancel()
+        libraryScanTask = nil
+        selectedTrackId = nil
         self.activeDrive = drive
+        
+        if let cached = driveCache[drive.mountPoint], cached.isLoaded {
+            self.tracks = cached.tracks
+            self.cachedArtists = cached.cachedArtists
+            self.cachedAlbums = cached.cachedAlbums
+            self.cachedRecentTracks = cached.cachedRecentTracks
+            self.cachedLanguageTracks = cached.cachedLanguageTracks
+            self.libraryStats = cached.libraryStats
+            self.isScanning = false
+        } else {
+            self.tracks = []
+            self.cachedArtists = []
+            self.cachedAlbums = []
+            self.cachedRecentTracks = []
+            self.cachedLanguageTracks = []
+            self.libraryStats = (0, 0, 0, 0, 0)
+            self.isScanning = true
+        }
         refreshLibrary()
     }
 
@@ -179,15 +236,21 @@ public struct ContentView: View {
             self.cachedArtists = []
             self.cachedAlbums = []
             self.cachedRecentTracks = []
-            self.libraryStats = (0, 0, 0, 0)
+            self.cachedLanguageTracks = []
+            self.libraryStats = (0, 0, 0, 0, 0)
+            self.driveCache.removeAll()
             self.isEjecting = false
             if let current = AudioPlayerService.shared.currentTrack, !localLibrary.tracks.contains(where: { $0.id == current.id }) {
                 AudioPlayerService.shared.stopAndClear()
             }
-            if selectedTab == .overview || selectedTab == .library || selectedTab == .recentlyAdded || selectedTab == .albums || selectedTab == .artists || selectedTab == .hiRes || selectedTab == .playlists || selectedTab == .backupRestore {
+            if selectedTab == .overview || selectedTab == .library || selectedTab == .recentlyAdded || selectedTab == .albums || selectedTab == .artists || selectedTab == .hiRes || selectedTab == .languageStudy || selectedTab == .playlists || selectedTab == .backupRestore {
                 self.selectedTab = .localLibrary
             }
         } else {
+            // Clean up unmounted drives from driveCache
+            let currentMounts = Set(detected.map { $0.mountPoint })
+            self.driveCache = self.driveCache.filter { currentMounts.contains($0.key) }
+
             // 1. Maintain active device if still connected, otherwise pick first
             if let current = activeDevice, let stillPresent = detectedDevices.first(where: { $0.id == current.id }) {
                 self.activeDevice = stillPresent
@@ -198,11 +261,30 @@ public struct ContentView: View {
 
             // 2. Maintain active drive for the active device
             let availableDrives = self.activeDevice?.drives ?? detected
+            let targetDrive: WalkmanDrive?
             if let current = activeDrive, availableDrives.contains(where: { $0.mountPoint == current.mountPoint }) {
-                // Keep current active drive
+                targetDrive = current
             } else {
-                // Prefer MicroSD on active device if present, otherwise internal
-                self.activeDrive = self.activeDevice?.microsdDrive ?? availableDrives.first
+                targetDrive = self.activeDevice?.microsdDrive ?? availableDrives.first
+            }
+
+            if let target = targetDrive, activeDrive?.mountPoint != target.mountPoint {
+                self.activeDrive = target
+                if let cached = driveCache[target.mountPoint], cached.isLoaded {
+                    self.tracks = cached.tracks
+                    self.cachedArtists = cached.cachedArtists
+                    self.cachedAlbums = cached.cachedAlbums
+                    self.cachedRecentTracks = cached.cachedRecentTracks
+                    self.cachedLanguageTracks = cached.cachedLanguageTracks
+                    self.libraryStats = cached.libraryStats
+                } else {
+                    self.tracks = []
+                    self.cachedArtists = []
+                    self.cachedAlbums = []
+                    self.cachedRecentTracks = []
+                    self.cachedLanguageTracks = []
+                    self.libraryStats = (0, 0, 0, 0, 0)
+                }
             }
 
             // If the currently playing track was on a drive that is no longer mounted, stop playback
@@ -239,30 +321,37 @@ public struct ContentView: View {
             self.cachedArtists = []
             self.cachedAlbums = []
             self.cachedRecentTracks = []
-            self.libraryStats = (0, 0, 0, 0)
+            self.cachedLanguageTracks = []
+            self.libraryStats = (0, 0, 0, 0, 0)
             self.isScanning = false
             return
         }
         
         isScanning = true
         let expectedMount = drive.mountPoint
-        Task {
+        
+        libraryScanTask?.cancel()
+        libraryScanTask = Task {
             var scanDirs: [URL] = [URL(fileURLWithPath: drive.musicDir)]
             let learningURL = URL(fileURLWithPath: drive.learningDir)
             if FileManager.default.fileExists(atPath: learningURL.path) {
                 scanDirs.append(learningURL)
             }
+            if Task.isCancelled { return }
             let result = await LibraryScanner.shared.scan(directories: scanDirs)
+            if Task.isCancelled { return }
             
             // Precompute library statistics and models off the main thread once
-            let (stats, precomputedArtists, precomputedAlbums, precomputedRecent) = await Task.detached(priority: .userInitiated) {
+            let (stats, precomputedArtists, precomputedAlbums, precomputedRecent, precomputedLanguage) = await Task.detached(priority: .userInitiated) {
                 let artists = ArtistsView.buildArtists(from: result.tracks)
                 let albums = AlbumsView.buildAlbums(from: result.tracks)
                 let recent = result.tracks.sorted { $0.dateAdded > $1.dateAdded }
+                let language = result.tracks.filter { $0.isLanguageStudy }
                 
                 var albumSet = Set<String>()
                 var artistSet = Set<String>()
                 var hiRes = 0
+                let languageStudy = language.count
                 let thirtyDaysAgo = Date().addingTimeInterval(-30 * 86400)
                 var recentCount = 0
                 for track in result.tracks {
@@ -277,16 +366,30 @@ public struct ContentView: View {
                 if recentCount == 0 && !result.tracks.isEmpty {
                     recentCount = min(50, result.tracks.count)
                 }
-                let computedStats = (albumSet.count, artistSet.count, hiRes, recentCount)
-                return (computedStats, artists, albums, recent)
+                let computedStats = (albumSet.count, artistSet.count, hiRes, recentCount, languageStudy)
+                return (computedStats, artists, albums, recent, language)
             }.value
             
+            if Task.isCancelled { return }
+            
             await MainActor.run {
+                let cacheEntry = DriveLibraryCache(
+                    tracks: result.tracks,
+                    cachedArtists: precomputedArtists,
+                    cachedAlbums: precomputedAlbums,
+                    cachedRecentTracks: precomputedRecent,
+                    cachedLanguageTracks: precomputedLanguage,
+                    libraryStats: stats,
+                    isLoaded: true
+                )
+                self.driveCache[expectedMount] = cacheEntry
+                
                 guard self.activeDrive?.mountPoint == expectedMount else { return }
                 self.tracks = result.tracks
                 self.cachedArtists = precomputedArtists
                 self.cachedAlbums = precomputedAlbums
                 self.cachedRecentTracks = precomputedRecent
+                self.cachedLanguageTracks = precomputedLanguage
                 self.libraryStats = stats
                 self.isScanning = false
             }
@@ -317,10 +420,39 @@ public struct ContentView: View {
         let precomputedArtists = ArtistsView.buildArtists(from: newTracks)
         let precomputedAlbums = AlbumsView.buildAlbums(from: newTracks)
         let precomputedRecent = newTracks.sorted { $0.dateAdded > $1.dateAdded }
+        let precomputedLanguage = newTracks.filter { $0.isLanguageStudy }
         
         self.cachedArtists = precomputedArtists
         self.cachedAlbums = precomputedAlbums
         self.cachedRecentTracks = precomputedRecent
+        self.cachedLanguageTracks = precomputedLanguage
+        
+        // Update all relevant driveCache entries
+        for (mount, cached) in driveCache {
+            var updatedCacheTracks = cached.tracks
+            var didModify = false
+            for i in 0..<updatedCacheTracks.count {
+                if let updated = map[updatedCacheTracks[i].fullPath] {
+                    updatedCacheTracks[i] = updated
+                    didModify = true
+                }
+            }
+            if didModify {
+                let cacheArtists = ArtistsView.buildArtists(from: updatedCacheTracks)
+                let cacheAlbums = AlbumsView.buildAlbums(from: updatedCacheTracks)
+                let cacheRecent = updatedCacheTracks.sorted { $0.dateAdded > $1.dateAdded }
+                let cacheLanguage = updatedCacheTracks.filter { $0.isLanguageStudy }
+                driveCache[mount] = DriveLibraryCache(
+                    tracks: updatedCacheTracks,
+                    cachedArtists: cacheArtists,
+                    cachedAlbums: cacheAlbums,
+                    cachedRecentTracks: cacheRecent,
+                    cachedLanguageTracks: cacheLanguage,
+                    libraryStats: cached.libraryStats,
+                    isLoaded: true
+                )
+            }
+        }
     }
     
     private func deleteTrackFromDevice(_ track: Track) {
@@ -338,12 +470,14 @@ public struct ContentView: View {
         // 3. Immediately update UI state (optimistic removal)
         self.tracks.removeAll(where: { $0.id == track.id })
         self.cachedRecentTracks.removeAll(where: { $0.id == track.id })
+        self.cachedLanguageTracks.removeAll(where: { $0.id == track.id })
         self.cachedAlbums = AlbumsView.buildAlbums(from: self.tracks)
         self.cachedArtists = ArtistsView.buildArtists(from: self.tracks)
         
         var albumSet = Set<String>()
         var artistSet = Set<String>()
         var hiRes = 0
+        var languageStudy = 0
         let thirtyDaysAgo = Date().addingTimeInterval(-30 * 86400)
         var recentCount = 0
         for tr in self.tracks {
@@ -353,12 +487,53 @@ public struct ContentView: View {
             albumSet.insert(cleanAlb.lowercased())
             if !art.isEmpty { artistSet.insert(art) }
             if tr.bitsPerSample > 16 || tr.sampleRate > 48000 { hiRes += 1 }
+            if tr.isLanguageStudy { languageStudy += 1 }
             if tr.dateAdded >= thirtyDaysAgo { recentCount += 1 }
         }
         if recentCount == 0 && !self.tracks.isEmpty {
             recentCount = min(50, self.tracks.count)
         }
-        self.libraryStats = (albumSet.count, artistSet.count, hiRes, recentCount)
+        self.libraryStats = (albumSet.count, artistSet.count, hiRes, recentCount, languageStudy)
+        
+        // Also remove from driveCache
+        for (mount, cached) in driveCache {
+            if cached.tracks.contains(where: { $0.id == track.id }) {
+                var updatedCacheTracks = cached.tracks
+                updatedCacheTracks.removeAll(where: { $0.id == track.id })
+                let cacheRecent = cached.cachedRecentTracks.filter { $0.id != track.id }
+                let cacheLanguage = cached.cachedLanguageTracks.filter { $0.id != track.id }
+                let cacheAlbums = AlbumsView.buildAlbums(from: updatedCacheTracks)
+                let cacheArtists = ArtistsView.buildArtists(from: updatedCacheTracks)
+                
+                var cAlbumSet = Set<String>()
+                var cArtistSet = Set<String>()
+                var cHiRes = 0
+                var cLanguageStudy = 0
+                var cRecentCount = 0
+                for tr in updatedCacheTracks {
+                    let alb = tr.album.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let cleanAlb = alb.isEmpty ? "Unknown Album" : alb
+                    let art = tr.primaryArtist.trimmingCharacters(in: .whitespacesAndNewlines)
+                    cAlbumSet.insert(cleanAlb.lowercased())
+                    if !art.isEmpty { cArtistSet.insert(art) }
+                    if tr.bitsPerSample > 16 || tr.sampleRate > 48000 { cHiRes += 1 }
+                    if tr.isLanguageStudy { cLanguageStudy += 1 }
+                    if tr.dateAdded >= thirtyDaysAgo { cRecentCount += 1 }
+                }
+                if cRecentCount == 0 && !updatedCacheTracks.isEmpty {
+                    cRecentCount = min(50, updatedCacheTracks.count)
+                }
+                driveCache[mount] = DriveLibraryCache(
+                    tracks: updatedCacheTracks,
+                    cachedArtists: cacheArtists,
+                    cachedAlbums: cacheAlbums,
+                    cachedRecentTracks: cacheRecent,
+                    cachedLanguageTracks: cacheLanguage,
+                    libraryStats: (cAlbumSet.count, cArtistSet.count, cHiRes, cRecentCount, cLanguageStudy),
+                    isLoaded: true
+                )
+            }
+        }
         
         // 4. Physical deletion on device in background
         Task {
@@ -404,12 +579,14 @@ public struct ContentView: View {
         // 3. Immediately update UI state (optimistic removal)
         self.tracks.removeAll(where: { trackIds.contains($0.id) })
         self.cachedRecentTracks.removeAll(where: { trackIds.contains($0.id) })
+        self.cachedLanguageTracks.removeAll(where: { trackIds.contains($0.id) })
         self.cachedAlbums = AlbumsView.buildAlbums(from: self.tracks)
         self.cachedArtists = ArtistsView.buildArtists(from: self.tracks)
         
         var albumSet = Set<String>()
         var artistSet = Set<String>()
         var hiRes = 0
+        var languageStudy = 0
         let thirtyDaysAgo = Date().addingTimeInterval(-30 * 86400)
         var recentCount = 0
         for tr in self.tracks {
@@ -419,12 +596,54 @@ public struct ContentView: View {
             albumSet.insert(cleanAlb.lowercased())
             if !art.isEmpty { artistSet.insert(art) }
             if tr.bitsPerSample > 16 || tr.sampleRate > 48000 { hiRes += 1 }
+            if tr.isLanguageStudy { languageStudy += 1 }
             if tr.dateAdded >= thirtyDaysAgo { recentCount += 1 }
         }
         if recentCount == 0 && !self.tracks.isEmpty {
             recentCount = min(50, self.tracks.count)
         }
-        self.libraryStats = (albumSet.count, artistSet.count, hiRes, recentCount)
+        self.libraryStats = (albumSet.count, artistSet.count, hiRes, recentCount, languageStudy)
+        
+        // Also remove from driveCache
+        for (mount, cached) in driveCache {
+            let hasAlbumTracks = cached.tracks.contains(where: { trackIds.contains($0.id) })
+            if hasAlbumTracks {
+                var updatedCacheTracks = cached.tracks
+                updatedCacheTracks.removeAll(where: { trackIds.contains($0.id) })
+                let cacheRecent = cached.cachedRecentTracks.filter { !trackIds.contains($0.id) }
+                let cacheLanguage = cached.cachedLanguageTracks.filter { !trackIds.contains($0.id) }
+                let cacheAlbums = AlbumsView.buildAlbums(from: updatedCacheTracks)
+                let cacheArtists = ArtistsView.buildArtists(from: updatedCacheTracks)
+                
+                var cAlbumSet = Set<String>()
+                var cArtistSet = Set<String>()
+                var cHiRes = 0
+                var cLanguageStudy = 0
+                var cRecentCount = 0
+                for tr in updatedCacheTracks {
+                    let alb = tr.album.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let cleanAlb = alb.isEmpty ? "Unknown Album" : alb
+                    let art = tr.primaryArtist.trimmingCharacters(in: .whitespacesAndNewlines)
+                    cAlbumSet.insert(cleanAlb.lowercased())
+                    if !art.isEmpty { cArtistSet.insert(art) }
+                    if tr.bitsPerSample > 16 || tr.sampleRate > 48000 { cHiRes += 1 }
+                    if tr.isLanguageStudy { cLanguageStudy += 1 }
+                    if tr.dateAdded >= thirtyDaysAgo { cRecentCount += 1 }
+                }
+                if cRecentCount == 0 && !updatedCacheTracks.isEmpty {
+                    cRecentCount = min(50, updatedCacheTracks.count)
+                }
+                driveCache[mount] = DriveLibraryCache(
+                    tracks: updatedCacheTracks,
+                    cachedArtists: cacheArtists,
+                    cachedAlbums: cacheAlbums,
+                    cachedRecentTracks: cacheRecent,
+                    cachedLanguageTracks: cacheLanguage,
+                    libraryStats: (cAlbumSet.count, cArtistSet.count, cHiRes, cRecentCount, cLanguageStudy),
+                    isLoaded: true
+                )
+            }
+        }
         
         // 4. Physical deletion on device in background
         Task {
@@ -690,7 +909,7 @@ public struct ContentView: View {
 
     public var body: some View {
         ZStack {
-            NavigationSplitView(columnVisibility: $columnVisibility) {
+            NavigationSplitView(columnVisibility: .constant(.all)) {
                 SidebarView(
                     selectedTab: $selectedTab,
                     devices: devices,
@@ -704,6 +923,7 @@ public struct ContentView: View {
                     albumCount: libraryStats.albums,
                     artistCount: libraryStats.artists,
                     hiResCount: libraryStats.hiRes,
+                    languageStudyCount: libraryStats.languageStudy,
                     duplicateCount: duplicateFinder.duplicateGroups.count,
                     queueCount: queueCount,
                     deviceInfo: deviceInfo,
@@ -719,6 +939,7 @@ public struct ContentView: View {
                 .frame(width: 260)
                 .navigationSplitViewColumnWidth(min: 260, ideal: 260, max: 260)
                 .toolbarBackground(.hidden, for: .windowToolbar)
+                .removeSidebarToggle()
             } detail: {
                 ZStack(alignment: .bottom) {
                     ZStack {
@@ -833,6 +1054,7 @@ public struct ContentView: View {
                                         self.trackToTrimCut = track
                                     }
                                 )
+                                .id("library_\(activeDrive?.mountPoint ?? "no_drive")")
                             }
                                 
                             case .recentlyAdded:
@@ -857,6 +1079,7 @@ public struct ContentView: View {
                                         self.trackToTrimCut = track
                                     }
                                 )
+                                .id("recent_\(activeDrive?.mountPoint ?? "no_drive")")
                                 
                             case .albums:
                                 AlbumsView(
@@ -886,6 +1109,7 @@ public struct ContentView: View {
                                         deleteTrackFromDevice(track)
                                     }
                                 )
+                                .id("albums_\(activeDrive?.mountPoint ?? "no_drive")")
                                 
                             case .artists:
                                 ArtistsView(
@@ -906,6 +1130,7 @@ public struct ContentView: View {
                                         self.trackToTrimCut = track
                                     }
                                 )
+                                .id("artists_\(activeDrive?.mountPoint ?? "no_drive")")
                                 
                             case .hiRes:
                                 HiResAudioView(
@@ -936,6 +1161,34 @@ public struct ContentView: View {
                                         deleteTrackFromDevice(track)
                                     }
                                 )
+                                .id("hires_\(activeDrive?.mountPoint ?? "no_drive")")
+                                
+                            case .languageStudy:
+                                LanguageStudyView(
+                                    tracks: cachedLanguageTracks,
+                                    activeDrive: activeDrive,
+                                    onSelectTrack: { track in
+                                        self.selectedTrackId = track.id
+                                        self.showInspector = true
+                                    },
+                                    onEditTrack: { track in
+                                        self.trackToEdit = track
+                                    },
+                                    onEditTrackWithList: { track, list in
+                                        self.trackListToEdit = list
+                                        self.trackToEdit = track
+                                    },
+                                    onTrimCutTrack: { track in
+                                        self.trackToTrimCut = track
+                                    },
+                                    onDeleteTrack: { track in
+                                        deleteTrackFromDevice(track)
+                                    },
+                                    onNavigateToTransfer: {
+                                        self.selectedTab = .transfer
+                                    }
+                                )
+                                .id("language_\(activeDrive?.mountPoint ?? "no_drive")")
                                 
                             case .duplicates:
                                 DuplicatesView(
@@ -960,9 +1213,20 @@ public struct ContentView: View {
                             case .playlists:
                                 PlaylistsView(
                                     activeDrive: activeDrive,
-                                    libraryTracks: tracks
+                                    libraryTracks: tracks,
+                                    onEditTrack: { track in
+                                        self.trackToEdit = track
+                                    },
+                                    onEditTrackWithList: { track, list in
+                                        self.trackListToEdit = list
+                                        self.trackToEdit = track
+                                    },
+                                    onInspectTrack: { track in
+                                        self.selectedTrackId = track.id
+                                        self.showInspector = true
+                                    }
                                 )
-                                .id(activeDrive?.mountPoint ?? "no_drive")
+                                .id("playlists_\(activeDrive?.mountPoint ?? "no_drive")")
                                 .padding(14)
 
                             case .backupRestore:
@@ -1018,7 +1282,6 @@ public struct ContentView: View {
                                 }
                             }
                         )
-                        .id(selectedTrack?.id ?? "empty_inspector")
                     }
                     .toolbar {
                         if !isFullScreenPlayerPresented {
@@ -1054,14 +1317,16 @@ public struct ContentView: View {
                                 Label("Inspector", systemImage: "sidebar.trailing")
                             }
                             .help("Toggle Metadata & Artwork Inspector (Cmd+I)")
+                            .keyboardShortcut("i", modifiers: [.command])
                         }
                     }
                     .toolbarBackground(.hidden, for: .windowToolbar)
+                    .removeSidebarToggle()
                 }
                 .navigationSplitViewStyle(.balanced)
                 .toolbarBackground(.hidden, for: .windowToolbar)
                 .toolbar(isFullScreenPlayerPresented ? .hidden : .visible, for: .windowToolbar)
-                .removeSidebarToggle(if: isFullScreenPlayerPresented)
+                .removeSidebarToggle()
                 .opacity(isFullScreenPlayerPresented ? 0 : 1)
 
             if isFullScreenPlayerPresented {
@@ -1195,6 +1460,94 @@ public struct ContentView: View {
                 }
             )
         }
+        .background(WindowAccessor { window in
+            self.hostWindow = window
+        })
+        .onChange(of: showInspector) { isPresented in
+            handleInspectorVisibilityChanged(isPresented: isPresented)
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // WINDOW EXPANSION ON TRACK DETAIL (INSPECTOR) TOGGLE
+    // -------------------------------------------------------------------------
+    private func handleInspectorVisibilityChanged(isPresented: Bool) {
+        guard let window = hostWindow ?? NSApp.keyWindow ?? NSApp.mainWindow else { return }
+
+        // Do not attempt window frame resize in macOS native fullscreen
+        if window.styleMask.contains(.fullScreen) { return }
+
+        let inspectorWidth: CGFloat = 300.0
+        let minW: CGFloat = window.minSize.width > 0 ? window.minSize.width : 1320
+        let currentFrame = window.frame
+        let screen = window.screen ?? NSScreen.main
+        let visibleFrame = screen?.visibleFrame ?? currentFrame
+
+        if isPresented {
+            // Record pre-open width
+            self.savedWidthBeforeInspector = currentFrame.size.width
+
+            let targetWidth = min(currentFrame.size.width + inspectorWidth, visibleFrame.width)
+            self.expectedWidthWithInspector = targetWidth
+
+            var targetOriginX = currentFrame.origin.x
+            if targetOriginX + targetWidth > visibleFrame.maxX {
+                let overflow = (targetOriginX + targetWidth) - visibleFrame.maxX
+                targetOriginX = max(visibleFrame.minX, targetOriginX - overflow)
+            }
+            self.savedShiftOnInspectorOpen = currentFrame.origin.x - targetOriginX
+
+            var newFrame = currentFrame
+            newFrame.origin.x = targetOriginX
+            newFrame.size.width = targetWidth
+
+            window.setFrame(newFrame, display: true)
+        } else {
+            // Determine contracted target width
+            let targetWidth: CGFloat
+            if let saved = savedWidthBeforeInspector, abs(currentFrame.size.width - expectedWidthWithInspector) < 15 {
+                targetWidth = max(saved, minW)
+            } else {
+                targetWidth = max(currentFrame.size.width - inspectorWidth, minW)
+            }
+
+            var targetOriginX = currentFrame.origin.x
+            if savedShiftOnInspectorOpen > 0, abs(currentFrame.size.width - expectedWidthWithInspector) < 15 {
+                targetOriginX = min(currentFrame.origin.x + savedShiftOnInspectorOpen, visibleFrame.maxX - targetWidth)
+            }
+
+            self.savedWidthBeforeInspector = nil
+            self.savedShiftOnInspectorOpen = 0
+            self.expectedWidthWithInspector = 0
+
+            var newFrame = currentFrame
+            newFrame.origin.x = targetOriginX
+            newFrame.size.width = targetWidth
+
+            window.setFrame(newFrame, display: true)
+        }
+    }
+}
+
+private struct WindowAccessor: NSViewRepresentable {
+    let onWindow: (NSWindow) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            if let w = view.window {
+                onWindow(w)
+            }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            if let w = nsView.window {
+                onWindow(w)
+            }
+        }
     }
 }
 
@@ -1204,30 +1557,30 @@ private extension View {
         isPresented: Binding<Bool>,
         @ViewBuilder content: @escaping () -> Content
     ) -> some View {
-        if #available(macOS 14.0, *) {
-            self.inspector(isPresented: isPresented) {
-                content()
-                    .inspectorColumnWidth(min: 280, ideal: 300, max: 320)
-            }
-        } else {
-            HStack(spacing: 0) {
-                self
+        self
+            .padding(.trailing, isPresented.wrappedValue ? 301 : 0)
+            .animation(nil, value: isPresented.wrappedValue)
+            .overlay(alignment: .trailing) {
                 if isPresented.wrappedValue {
-                    Divider()
-                        .overlay(Color.white.opacity(0.08))
-                    content()
-                        .frame(width: 300)
-                        .background(WalkmanTheme.background)
-                        .transition(.move(edge: .trailing))
+                    HStack(spacing: 0) {
+                        Rectangle()
+                            .fill(Color.black)
+                            .frame(width: 1)
+                        content()
+                            .frame(width: 300)
+                            .background(WalkmanTheme.background)
+                    }
+                    .ignoresSafeArea()
+                    .transition(.move(edge: .trailing))
                 }
             }
-        }
+            .animation(.easeInOut(duration: 0.28), value: isPresented.wrappedValue)
     }
 
     @ViewBuilder
-    func removeSidebarToggle(if condition: Bool) -> some View {
+    func removeSidebarToggle() -> some View {
         if #available(macOS 14.0, *) {
-            self.toolbar(removing: condition ? .sidebarToggle : nil)
+            self.toolbar(removing: .sidebarToggle)
         } else {
             self
         }

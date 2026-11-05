@@ -17,6 +17,16 @@ public struct WindowConfigurator: NSViewRepresentable {
                 configure(window)
             }
         }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            if let window = view.window {
+                configure(window)
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            if let window = view.window {
+                configure(window)
+            }
+        }
         return view
     }
     
@@ -71,6 +81,16 @@ public struct WindowConfigurator: NSViewRepresentable {
                     }
                 }
             }
+            hideSidebarToggleButtons(in: themeFrame)
+        }
+        
+        // Strip any synthesized or residual sidebar toggle toolbar items from window toolbar
+        if let toolbar = window.toolbar {
+            for (idx, item) in toolbar.items.enumerated().reversed() {
+                if item.itemIdentifier == .toggleSidebar || item.itemIdentifier.rawValue.localizedCaseInsensitiveContains("toggleSidebar") || item.itemIdentifier.rawValue.localizedCaseInsensitiveContains("sidebarToggle") {
+                    toolbar.removeItem(at: idx)
+                }
+            }
         }
         
         // Configure split view holding priorities so:
@@ -79,6 +99,25 @@ public struct WindowConfigurator: NSViewRepresentable {
         // 3. Inspector (trailing) is rigid at its configured width.
         if let contentView = window.contentView {
             configureSplitViews(in: contentView, isRoot: true)
+        }
+    }
+    
+    private func hideSidebarToggleButtons(in view: NSView) {
+        if let btn = view as? NSButton {
+            let actionName = btn.action.map { NSStringFromSelector($0) } ?? ""
+            let tooltip = btn.toolTip ?? ""
+            let accessibility = btn.accessibilityLabel() ?? ""
+            if actionName.localizedCaseInsensitiveContains("toggleSidebar") ||
+               tooltip.localizedCaseInsensitiveContains("sidebar") ||
+               accessibility.localizedCaseInsensitiveContains("sidebar") {
+                btn.isHidden = true
+                btn.alphaValue = 0.0
+                btn.frame = .zero
+                btn.isEnabled = false
+            }
+        }
+        for sub in view.subviews {
+            hideSidebarToggleButtons(in: sub)
         }
     }
     
@@ -91,6 +130,10 @@ public struct WindowConfigurator: NSViewRepresentable {
                 if controller.splitViewItems.count >= 2 {
                     if isRoot {
                         controller.splitViewItems[0].holdingPriority = .defaultHigh
+                        controller.splitViewItems[0].canCollapse = false
+                        controller.splitViewItems[0].isCollapsed = false
+                        controller.splitViewItems[0].minimumThickness = 260
+                        controller.splitViewItems[0].maximumThickness = 260
                         controller.splitViewItems[1].holdingPriority = .defaultLow
                         
                         for sub in splitView.subviews {
@@ -150,10 +193,6 @@ struct WalkmanStudioApp: App {
         .defaultSize(width: 1440, height: 880)
         .windowToolbarStyle(.unified(showsTitle: false))
         .commands {
-            SidebarCommands()
-            if #available(macOS 14.0, *) {
-                InspectorCommands()
-            }
             CommandGroup(replacing: .appInfo) {
                 Button("About Walkman Studio") {
                     NotificationCenter.default.post(name: .showAboutWalkmanStudio, object: nil)
