@@ -211,11 +211,13 @@ extension Track {
 
     /// Whether this track belongs to Language Study mode (/LEARNING/ or language/audiobook/podcast genre)
     public var isLanguageStudy: Bool {
-        fullPath.contains("/LEARNING/") ||
-        genre.localizedCaseInsensitiveContains("language") ||
-        genre.localizedCaseInsensitiveContains("audiobook") ||
-        genre.localizedCaseInsensitiveContains("podcast") ||
-        genre.localizedCaseInsensitiveContains("learning")
+        if fullPath.contains("/LEARNING/") { return true }
+        guard !genre.isEmpty else { return false }
+        let g = genre.lowercased()
+        return g.contains("language") ||
+               g.contains("audiobook") ||
+               g.contains("podcast") ||
+               g.contains("learning")
     }
 
     /// Extracts any featured or guest artists if present.

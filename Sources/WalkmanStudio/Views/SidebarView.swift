@@ -10,6 +10,7 @@ public enum NavigationTab: String, CaseIterable, Identifiable, Hashable {
     case albums = "Albums"
     case artists = "Artists"
     case hiRes = "Hi-Res Audio"
+    case languageStudy = "Language Study"
     case playlists = "Playlists"
     case duplicates = "Duplicates"
     case transfer = "Transfer & Convert"
@@ -27,6 +28,7 @@ public enum NavigationTab: String, CaseIterable, Identifiable, Hashable {
         case .albums: return "square.stack.fill"
         case .artists: return "music.mic"
         case .hiRes: return "waveform.badge.magnifyingglass"
+        case .languageStudy: return "character.book.closed.fill"
         case .playlists: return "list.bullet.rectangle.portrait.fill"
         case .duplicates: return "doc.on.doc.fill"
         case .transfer: return "arrow.up.arrow.down.circle.fill"
@@ -48,6 +50,7 @@ public struct SidebarView: View {
     var albumCount: Int = 0
     var artistCount: Int = 0
     var hiResCount: Int = 0
+    var languageStudyCount: Int = 0
     var duplicateCount: Int = 0
     let queueCount: Int
     var deviceInfo: WalkmanDeviceInfo? = nil
@@ -216,6 +219,16 @@ public struct SidebarView: View {
                         title: "Hi-Res Audio",
                         icon: "waveform.badge.magnifyingglass",
                         badge: hiResCount > 0 ? "\(hiResCount.formatted())" : nil
+                    )
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 3.5, leading: 10, bottom: 3.5, trailing: 10))
+
+                    SidebarRow(
+                        tab: .languageStudy,
+                        selectedTab: $selectedTab,
+                        title: "Language Study",
+                        icon: "character.book.closed.fill",
+                        badge: languageStudyCount > 0 ? "\(languageStudyCount.formatted())" : nil
                     )
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets(top: 3.5, leading: 10, bottom: 3.5, trailing: 10))

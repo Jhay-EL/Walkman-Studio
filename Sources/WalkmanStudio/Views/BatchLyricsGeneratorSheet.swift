@@ -7,6 +7,7 @@ public struct BatchLyricsGeneratorSheet: View {
         case allSongs
         case recentlyAdded
         case hiRes
+        case languageStudy
         case albums(selectedAlbumName: String?, albumTrackCount: Int)
         case artists(selectedArtistName: String?, artistTrackCount: Int)
         case playlist(playlistName: String, playlistTrackCount: Int)
@@ -661,6 +662,8 @@ public struct BatchLyricsGeneratorSheet: View {
             return "All Recently Added"
         case .hiRes:
             return "All Hi-Res Audio Tracks"
+        case .languageStudy:
+            return "All Language Study Tracks"
         case .albums:
             return "All Albums"
         case .artists:
