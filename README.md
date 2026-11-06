@@ -16,9 +16,6 @@
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License" />
 </p>
 
-> [!TIP]
-> **Latest Release:** [**Walkman Studio v3.1.0**](#-whats-new-in-v310) is now available! Featuring the all-new **LRC Fetcher (Batch Synchronized Lyrics Generator)**, authentic **Sony SensMe™ Highlight Playback & Surfing**, **Fluid Window Expansion**, and **Language Study Studio**. [Download v3.1.0 DMGs below](#downloads--releases-v310).
-
 A dedicated native macOS desktop application built specifically for managing Sony Walkman digital audio players on both **Apple Silicon** (M1, M2, M3, M4) and **Intel-based MacBooks & Macs** (Core i5, i7, i9, Xeon). Walkman Studio provides universal hardware support for both **Classic Non-Android Sony OS / Linux DAPs** (NW-A30/A40/A50, NW-ZX100/ZX300, NW-WM1A/WM1Z) and modern **Android-based Walkmans** (NW-A100/A300, NW-ZX500/ZX700, NW-WM1AM2/WM1ZM2), alongside a standalone **Local Music Library** and interactive **SensMe™ Mood Channels Player** right on macOS.
 
 Walkman Studio automates multi-device dual-drive management, Sony 12 Tone / SenseMe™ acoustic analysis, strict hardware-compliant ID3v2.3/Vorbis metadata tagging, Baseline RGB JPEG artwork conversion, high-throughput batch `.LRC` synchronized lyrics fetching (LRC Fetcher), same-storage duplicate music cleaning, batch FFmpeg audio transcoding, `.M3U8` CRLF playlist creation, waveform audio trimming, and macOS dotfile purging.
@@ -28,31 +25,6 @@ Walkman Studio focuses strictly on safe, non-destructive music library managemen
 <p align="center">
   <img src="assets/sc/01_device_overview_dashboard.png" alt="Walkman Studio Interface" width="100%" />
 </p>
-
----
-
-## 🌟 What's New in v3.1.0
-
-### 🎤 LRC Fetcher (Batch Synchronized Lyrics Generator)
-The flagship feature of **v3.1.0** delivers high-speed, automated retrieval of timestamp-accurate `.lrc` synchronized lyrics directly into your Walkman or local music library:
-* **Universal Library Integration:** Dedicated circular 38×38pt Liquid Glass lyrics buttons (`quote.bubble`) built into every library view header: **All Songs**, **Recently Added**, **Albums**, **Artists**, **Hi-Res Audio**, **Playlists**, and **Language Study**.
-* **Flexible Contextual Scopes:**
-  * **All Tracks in View:** Scans and fetches lyrics for all tracks in the currently active view.
-  * **Selected Track(s):** Targets only highlighted or checked rows in the track list.
-  * **Active Item:** Targets the open Album, Artist, or Playlist directly.
-  * **Choose Specific...:** Launches an interactive Liquid Glass checklist modal featuring live search, "Select All" / "Deselect All", and real-time missing-lyrics diagnostics.
-* **Concurrent Multi-Worker Engine:** Parallel asynchronous workers query the open-source **[LRCLIB](https://lrclib.net)** API (`/api/get` & `/api/search`) with exact millisecond duration matching and automatic fallback to **[Lyrics.ovh](https://lyrics.ovh)**.
-* **Live Progress & Interactive Metric Dashboard:** Real-time animated progress bar, speed/ETA metrics, and interactive status metric pills (**Synced .LRC**, **Plain Text**, **Skipped**, **Not Found**) with a searchable per-track result breakdown card.
-* **Strict Date & Timestamp Preservation:** Original file modification timestamps and addition dates are preserved so existing songs never jump unexpectedly in "Recently Added" smart playlists.
-* **Compliant Companion `.LRC` Files:** Automatically writes standardized companion `.lrc` files directly adjacent to audio tracks for instant recognition on Sony Walkman devices and the built-in Now Playing player.
-
-### ⚡ Additional Enhancements & Minor Fixes in v3.1.0
-* **Language Study Studio (`/LEARNING`):** Native management for Sony Walkman's root `/LEARNING` directory with instant audio format filters (MP3, M4A/AAC, FLAC) and $O(1)$ cached segmented views for audiobooks, language lessons, and podcasts.
-* **Authentic Sony SensMe™ Highlight Playback:** Audio surfing now tunes in directly at the 12-Tone acoustic climax position (`senseMeHighlightSec`) with zero audio leakage from 0:00, paired with *Highlight (45s)* vs *Full Track* range toggles and active gold chorus badges.
-* **Fluid Window Expansion on Track Detail:** Opening the Track Detail panel (Inspector) smoothly widens the macOS window by +300pt, preserving 100% of the table and grid space for your music library, with screen-edge boundary protection.
-* **Permanently Static Navigation Sidebar:** Navigation sidebar is locked at 260pt and never collapses or auto-hides when opening or closing inspector views.
-* **Expandable Liquid Glass Search Bar:** Compact search icon morphs into a translucent liquid glass search bar with fluid spring physics, synchronized fade transitions, and click-outside collapse.
-* **Android Walkman Heuristics & USB Detection:** Improved capacity heuristics, USB composite PID matching, and broader audio format support across Android Walkman models.
 
 ---
 
