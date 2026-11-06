@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License" />
 </p>
 
-A dedicated native macOS desktop application built specifically for managing Sony Walkman digital audio players on both **Apple Silicon** (M1, M2, M3, M4) and **Intel-based MacBooks & Macs** (Core i5, i7, i9, Xeon). Walkman Studio provides universal hardware support for both **Classic Non-Android Sony OS / Linux DAPs** (NW-A30/A40/A50, NW-ZX100/ZX300, NW-WM1A/WM1Z) and modern **Android-based Walkmans** (NW-A100/A300, NW-ZX500/ZX700, NW-WM1AM2/WM1ZM2), alongside a standalone **Local Music Library** and interactive **SensMe™ Mood Channels Player** right on macOS.
+A dedicated native macOS desktop application built specifically for managing Sony Walkman digital audio players on both **Apple Silicon** and **Intel-based MacBooks & Macs**. Walkman Studio provides universal hardware support for both **Classic Non-Android Sony OS / Linux DAPs** and modern **Android-based Walkmans**, alongside a standalone **Local Music Library** and interactive **SensMe™ Mood Channels Player** right on macOS.
 
 Walkman Studio automates multi-device dual-drive management, Sony 12 Tone / SenseMe™ acoustic analysis, strict hardware-compliant ID3v2.3/Vorbis metadata tagging, Baseline RGB JPEG artwork conversion, high-throughput batch `.LRC` synchronized lyrics fetching (LRC Fetcher), same-storage duplicate music cleaning, batch FFmpeg audio transcoding, `.M3U8` CRLF playlist creation, waveform audio trimming, and macOS dotfile purging.
 
