@@ -542,6 +542,9 @@ public struct FullScreenNowPlayingView: View {
                     isEnabled: player.currentTrack != nil,
                     onSeek: { target in
                         player.seek(to: target)
+                    },
+                    onSeekingChanged: { editing in
+                        player.isSeeking = editing
                     }
                 )
                 .frame(width: artworkDimension)
@@ -765,6 +768,11 @@ public struct FullScreenNowPlayingView: View {
                     }
                     .onChange(of: progress.currentTime) {
                         updateActiveLyric(proxy: proxy)
+                    }
+                    .onChange(of: player.isSeeking) {
+                        if !player.isSeeking {
+                            updateActiveLyric(proxy: proxy, forceScroll: true)
+                        }
                     }
                     .onChange(of: player.isPlaying) {
                         updateActiveLyric(proxy: proxy)
@@ -1126,6 +1134,7 @@ private struct FullScreenScrubberBar: View {
     let isHiRes: Bool
     let isEnabled: Bool
     let onSeek: (Double) -> Void
+    var onSeekingChanged: ((Bool) -> Void)? = nil
 
     @State private var dragValue: Double? = nil
     @State private var isHovering: Bool = false
@@ -1188,6 +1197,9 @@ private struct FullScreenScrubberBar: View {
                     DragGesture(minimumDistance: 0)
                         .onChanged { gesture in
                             guard isEnabled, duration > 0 else { return }
+                            if dragValue == nil {
+                                onSeekingChanged?(true)
+                            }
                             let ratio = max(0, min(1, gesture.location.x / w))
                             dragValue = Double(ratio) * duration
                         }
@@ -1197,6 +1209,7 @@ private struct FullScreenScrubberBar: View {
                             let target = Double(ratio) * duration
                             onSeek(target)
                             dragValue = nil
+                            onSeekingChanged?(false)
                         }
                 )
             }

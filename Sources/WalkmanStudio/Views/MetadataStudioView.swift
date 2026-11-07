@@ -1197,6 +1197,11 @@ private struct LiveLyricsReader: View {
             .onChange(of: progress.currentTime) {
                 updateActiveLine(proxy: proxy)
             }
+            .onChange(of: player.isSeeking) {
+                if !player.isSeeking {
+                    updateActiveLine(proxy: proxy, forceScroll: true)
+                }
+            }
             .onChange(of: player.isPlaying) {
                 if player.isPlaying {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {

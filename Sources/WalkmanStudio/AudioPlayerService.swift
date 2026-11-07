@@ -101,7 +101,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
     }
 
     private func setupTimeObserver() {
-        let interval = CMTime(seconds: 0.1, preferredTimescale: 600)
+        let interval = CMTime(seconds: 0.1, preferredTimescale: 44100)
         timeObserverToken = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             guard let self = self, !self.isSeeking else { return }
             let sec = CMTimeGetSeconds(time)
@@ -292,10 +292,9 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
                 self.currentHighlightStartTime = start
                 self.progress.currentTime = start
                 self.isSeeking = true
-                let target = CMTime(seconds: start, preferredTimescale: 600)
-                let tolerance = CMTime(seconds: 0.05, preferredTimescale: 600)
-                player.seek(to: target, toleranceBefore: tolerance, toleranceAfter: tolerance) { [weak self] _ in
-                    guard let self = self else { return }
+                let target = CMTime(seconds: start, preferredTimescale: 44100)
+                player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
+                    guard let self = self, finished else { return }
                     self.isSeeking = false
                     let actual = CMTimeGetSeconds(self.player.currentTime())
                     self.progress.currentTime = (actual.isFinite && actual >= 0) ? actual : start
@@ -326,22 +325,25 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
 
         let url = URL(fileURLWithPath: track.fullPath)
         
-        // Asynchronous asset loading off the main UI thread
+        // Asynchronous asset loading off the main UI thread with sample-accurate duration & timing
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let asset = AVURLAsset(url: url, options: [AVURLAssetPreferPreciseDurationAndTimingKey: false])
+            let asset = AVURLAsset(url: url, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
             let item = AVPlayerItem(asset: asset)
+            let assetDur = CMTimeGetSeconds(asset.duration)
             
             DispatchQueue.main.async {
                 guard let self = self, self.currentTrack?.id == track.id else { return }
+                if assetDur.isFinite && assetDur > 0 {
+                    self.progress.duration = assetDur
+                }
                 if initialTime > 0 {
                     self.isSeeking = true
                 }
                 self.player.replaceCurrentItem(with: item)
                 if initialTime > 0 {
-                    let target = CMTime(seconds: initialTime, preferredTimescale: 600)
-                    let tolerance = CMTime(seconds: 0.05, preferredTimescale: 600)
-                    self.player.seek(to: target, toleranceBefore: tolerance, toleranceAfter: tolerance) { [weak self] finished in
-                        guard let self = self else { return }
+                    let target = CMTime(seconds: initialTime, preferredTimescale: 44100)
+                    self.player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
+                        guard let self = self, finished else { return }
                         self.isSeeking = false
                         let actual = CMTimeGetSeconds(self.player.currentTime())
                         self.progress.currentTime = (actual.isFinite && actual >= 0) ? actual : initialTime
@@ -375,10 +377,9 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
                 self.currentHighlightStartTime = start
                 self.progress.currentTime = start
                 self.isSeeking = true
-                let target = CMTime(seconds: start, preferredTimescale: 600)
-                let tolerance = CMTime(seconds: 0.05, preferredTimescale: 600)
-                player.seek(to: target, toleranceBefore: tolerance, toleranceAfter: tolerance) { [weak self] _ in
-                    guard let self = self else { return }
+                let target = CMTime(seconds: start, preferredTimescale: 44100)
+                player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
+                    guard let self = self, finished else { return }
                     self.isSeeking = false
                     let actual = CMTimeGetSeconds(self.player.currentTime())
                     self.progress.currentTime = (actual.isFinite && actual >= 0) ? actual : start
@@ -458,10 +459,9 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
     public func seek(to seconds: Double) {
         self.isSeeking = true
         progress.currentTime = seconds
-        let targetTime = CMTime(seconds: seconds, preferredTimescale: 600)
-        let tolerance = CMTime(seconds: 0.05, preferredTimescale: 600)
-        player.seek(to: targetTime, toleranceBefore: tolerance, toleranceAfter: tolerance) { [weak self] _ in
-            guard let self = self else { return }
+        let targetTime = CMTime(seconds: seconds, preferredTimescale: 44100)
+        player.seek(to: targetTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
+            guard let self = self, finished else { return }
             self.isSeeking = false
             let actual = CMTimeGetSeconds(self.player.currentTime())
             if actual.isFinite && actual >= 0 {
@@ -480,10 +480,9 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
         if currentTrack?.id == target.id && player.currentItem != nil {
             self.isSeeking = true
             self.progress.currentTime = seconds
-            let targetTime = CMTime(seconds: seconds, preferredTimescale: 600)
-            let tolerance = CMTime(seconds: 0.05, preferredTimescale: 600)
-            player.seek(to: targetTime, toleranceBefore: tolerance, toleranceAfter: tolerance) { [weak self] _ in
-                guard let self = self else { return }
+            let targetTime = CMTime(seconds: seconds, preferredTimescale: 44100)
+            player.seek(to: targetTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
+                guard let self = self, finished else { return }
                 self.isSeeking = false
                 let actual = CMTimeGetSeconds(self.player.currentTime())
                 if actual.isFinite && actual >= 0 {
