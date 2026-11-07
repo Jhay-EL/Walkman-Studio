@@ -11,6 +11,7 @@ public struct BatchLyricsGeneratorSheet: View {
         case albums(selectedAlbumName: String?, albumTrackCount: Int)
         case artists(selectedArtistName: String?, artistTrackCount: Int)
         case playlist(playlistName: String, playlistTrackCount: Int)
+        case localLibrary
     }
 
     public enum LyricsScope: String, CaseIterable, Identifiable {
@@ -74,6 +75,7 @@ public struct BatchLyricsGeneratorSheet: View {
     // Configuration State
     @State private var selectedScope: LyricsScope = .allInTab
     @State private var onlyMissingLyrics: Bool = true
+    @State private var autoAlignPregap: Bool = true
     @State private var sheetState: SheetState = .configure
 
     // Custom Scope Selection State
@@ -527,13 +529,20 @@ public struct BatchLyricsGeneratorSheet: View {
             switch tabContext {
             case .playlist(let name, _):
                 return "Batch search online databases for synchronized .lrc lyrics for playlist '\(name)' and sync them to your Sony Walkman storage."
+            case .localLibrary:
+                return "Batch search online databases for synchronized .lrc lyrics and save companion .lrc files directly to your Mac Local Music Library."
             default:
                 return "Batch search online databases for synchronized .lrc lyrics and sync them directly to your Sony Walkman storage."
             }
         case .running:
             return "Parallel multi-track fetching active. Searching LRCLIB and Lyrics.ovh for timestamped .LRC lyrics..."
         case .completed:
-            return "Finished scanning and saving .lrc companion files to your Walkman library."
+            switch tabContext {
+            case .localLibrary:
+                return "Finished scanning and saving .lrc companion files to your Local Music Library on Mac."
+            default:
+                return "Finished scanning and saving .lrc companion files to your Walkman library."
+            }
         }
     }
 
@@ -648,6 +657,37 @@ public struct BatchLyricsGeneratorSheet: View {
                     )
                 }
                 .buttonStyle(.plain)
+
+                // Option: Auto-align pregap silence
+                Button(action: {
+                    autoAlignPregap.toggle()
+                }) {
+                    HStack(alignment: .center, spacing: 12) {
+                        Image(systemName: autoAlignPregap ? "checkmark.square.fill" : "square")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(autoAlignPregap ? Color.white : WalkmanTheme.silverMuted)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Acoustic lead-in silence auto-alignment (Recommended)")
+                                .font(WalkmanFont.calloutMedium)
+                                .foregroundStyle(WalkmanTheme.silverLight)
+                            Text("Analyzes leading audio waveform to align .LRC timestamps to physical vocal onset.")
+                                .font(WalkmanFont.caption)
+                                .foregroundStyle(WalkmanTheme.silverMuted)
+                        }
+
+                        Spacer()
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.white.opacity(0.04))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color.white.opacity(0.08), lineWidth: 0.8)
+                    )
+                }
+                .buttonStyle(.plain)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -670,6 +710,8 @@ public struct BatchLyricsGeneratorSheet: View {
             return "All Artists"
         case .playlist(let name, _):
             return "All Tracks in '\(name)'"
+        case .localLibrary:
+            return "All Tracks in Local Library"
         }
     }
 
@@ -681,6 +723,8 @@ public struct BatchLyricsGeneratorSheet: View {
             return "\(availableArtists.count) artists (\(allTracks.count) total tracks)"
         case .playlist(let name, let count):
             return "\(count) tracks in playlist '\(name)'"
+        case .localLibrary:
+            return "\(allTracks.count) tracks indexed in Local Music Library"
         default:
             return "\(allTracks.count) tracks in the current library tab"
         }
@@ -1686,12 +1730,20 @@ public struct BatchLyricsGeneratorSheet: View {
         }
 
         do {
-            let res = try await LyricsService.shared.fetchLyrics(
+            var res = try await LyricsService.shared.fetchLyrics(
                 title: track.title,
                 artist: track.artist,
                 album: track.album,
                 durationSeconds: track.durationSeconds
             )
+            if autoAlignPregap && res.synced {
+                let (calibrated, _) = await AudioAcousticAligner.shared.calibrateLRC(
+                    audioURL: trackURL,
+                    lyrics: res.lyrics,
+                    durationSeconds: track.durationSeconds
+                )
+                res = LyricsResult(synced: true, lyrics: calibrated, source: res.source)
+            }
             return (track, .success(res))
         } catch {
             return (track, .failure(error))
