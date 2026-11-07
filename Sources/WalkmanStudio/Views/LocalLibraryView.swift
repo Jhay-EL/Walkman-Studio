@@ -110,6 +110,11 @@ public struct LocalLibraryView: View {
     @State private var showRemoveConfirmation: Bool = false
     @Namespace private var modeAnimationNamespace
 
+    // Batch .LRC Lyrics Fetcher State
+    @State private var showBatchLyricsSheet: Bool = false
+    @State private var isPreparingLyricsSheet: Bool = false
+    @State private var batchLyricsSelectedTracks: [Track] = []
+
     // Direct Transfer to Walkman State
     @State private var isDirectTransferring: Bool = false
     @State private var directTransferProgress: Double = 0.0
@@ -365,6 +370,26 @@ public struct LocalLibraryView: View {
         }
     }
 
+    private var isPlayingFromVisibleList: Bool {
+        guard player.isPlaying, let current = player.currentTrack else { return false }
+        return currentTabTracks.contains { $0.id == current.id }
+    }
+
+    private var batchLyricsTabContext: BatchLyricsGeneratorSheet.TabContext {
+        switch displayMode {
+        case .songs:
+            return .localLibrary
+        case .recentlyAdded:
+            return .recentlyAdded
+        case .albums:
+            return .albums(selectedAlbumName: nil, albumTrackCount: effectiveTracks.count)
+        case .artists:
+            return .artists(selectedArtistName: nil, artistTrackCount: effectiveTracks.count)
+        case .folders:
+            return .localLibrary
+        }
+    }
+
     private func syncQueueWithActiveTab() {
         if displayMode == .songs || displayMode == .recentlyAdded {
             let active = currentTabTracks
@@ -567,6 +592,19 @@ public struct LocalLibraryView: View {
                 isComplete: directTransferComplete,
                 onDone: {
                     showDirectTransferSheet = false
+                }
+            )
+        }
+        .sheet(isPresented: $showBatchLyricsSheet) {
+            BatchLyricsGeneratorSheet(
+                allTracks: currentTabTracks,
+                selectedTracks: batchLyricsSelectedTracks,
+                tabContext: batchLyricsTabContext,
+                precomputedAlbums: localService.precomputedAlbums.isEmpty ? nil : localService.precomputedAlbums,
+                precomputedArtists: localService.precomputedArtists.isEmpty ? nil : localService.precomputedArtists,
+                onDismiss: {
+                    showBatchLyricsSheet = false
+                    batchLyricsSelectedTracks = []
                 }
             )
         }
@@ -870,7 +908,53 @@ public struct LocalLibraryView: View {
     }
 
     private var toolbarActionButtons: some View {
-        importFolderButton
+        HStack(spacing: 8) {
+            Button(action: togglePlaybackAll) {
+                Image(systemName: isPlayingFromVisibleList ? "pause.fill" : "play.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 36, height: 36)
+                    .foregroundStyle(WalkmanTheme.silverLight)
+            }
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 18))
+            .disabled(currentTabTracks.isEmpty)
+            .help(isPlayingFromVisibleList ? "Pause playback" : "Play all visible tracks in order")
+
+            Button(action: shufflePlaybackAll) {
+                Image(systemName: "shuffle")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 36, height: 36)
+                    .foregroundStyle(WalkmanTheme.silverLight)
+            }
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 18))
+            .disabled(currentTabTracks.isEmpty)
+            .help("Shuffle and play visible tracks")
+
+            Button(action: {
+                isPreparingLyricsSheet = true
+                batchLyricsSelectedTracks = currentTabTracks.filter { selectedTrackId == $0.id }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    showBatchLyricsSheet = true
+                    isPreparingLyricsSheet = false
+                }
+            }) {
+                if isPreparingLyricsSheet {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.8)
+                        .frame(width: 36, height: 36)
+                } else {
+                    Image(systemName: "quote.bubble")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 36, height: 36)
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                }
+            }
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 18))
+            .disabled(currentTabTracks.isEmpty || isPreparingLyricsSheet)
+            .help("LRC Fetcher: Batch fetch and sync .LRC lyrics for Local Music Library tracks")
+
+            importFolderButton
+        }
     }
 
     private var importFolderButton: some View {
@@ -1358,6 +1442,14 @@ public struct LocalLibraryView: View {
                 onInspectTrack(track)
             }
 
+            Button {
+                let targets = sourceTracks.filter { selection.contains($0.id) }
+                batchLyricsSelectedTracks = targets.isEmpty ? [track] : targets
+                showBatchLyricsSheet = true
+            } label: {
+                Label(selection.count > 1 ? "Fetch .LRC Lyrics for \(selection.count) Tracks..." : "Fetch Synchronized Lyrics (.LRC)...", systemImage: "quote.bubble")
+            }
+
             Divider()
 
             Button("Reveal in Finder") {
@@ -1544,6 +1636,11 @@ public struct LocalLibraryView: View {
                         onTransfer: {
                             let folderTracks = effectiveTracks.filter { $0.fullPath.hasPrefix(folder.path) }
                             handleTransferToWalkman(tracks: folderTracks)
+                        },
+                        onFetchLyrics: {
+                            let folderTracks = effectiveTracks.filter { $0.fullPath.hasPrefix(folder.path) }
+                            batchLyricsSelectedTracks = folderTracks
+                            showBatchLyricsSheet = true
                         }
                     )
                 }
@@ -1823,6 +1920,7 @@ private struct LocalFolderRowCard: View {
     let onReveal: () -> Void
     let onRemove: () -> Void
     var onTransfer: (() -> Void)? = nil
+    var onFetchLyrics: (() -> Void)? = nil
 
     @State private var isHovered = false
 
@@ -1966,6 +2064,14 @@ private struct LocalFolderRowCard: View {
                     onTransfer()
                 } label: {
                     Label("Transfer Folder to Walkman", systemImage: "arrow.right.circle.fill")
+                }
+                Divider()
+            }
+            if let onFetchLyrics = onFetchLyrics {
+                Button {
+                    onFetchLyrics()
+                } label: {
+                    Label("Fetch .LRC Lyrics for Folder...", systemImage: "quote.bubble")
                 }
                 Divider()
             }
