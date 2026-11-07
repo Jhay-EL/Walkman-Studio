@@ -162,7 +162,7 @@ public final class LyricsService: @unchecked Sendable {
             if let getRes = await queryLrclibGet(title: cleanTitle, artist: primaryArtist, album: album, duration: durationSeconds), getRes.synced {
                 return getRes
             }
-            if let looseRes = await queryLrclibGetLoose(title: cleanTitle, artist: primaryArtist), looseRes.synced {
+            if let looseRes = await queryLrclibGetLoose(title: cleanTitle, artist: primaryArtist, duration: durationSeconds), looseRes.synced {
                 return looseRes
             }
         }
@@ -188,7 +188,7 @@ public final class LyricsService: @unchecked Sendable {
 
         // If cleanTitle didn't yield synced lyrics, check raw title in case it has a specific synced entry
         if cleanTitle != title && !primaryArtist.isEmpty {
-            if let rawLoose = await queryLrclibGetLoose(title: title, artist: primaryArtist), rawLoose.synced {
+            if let rawLoose = await queryLrclibGetLoose(title: title, artist: primaryArtist, duration: durationSeconds), rawLoose.synced {
                 return rawLoose
             }
             if let rawResult = await queryLrclibSearch(
@@ -203,7 +203,7 @@ public final class LyricsService: @unchecked Sendable {
 
         // Direct match plain lyrics from /api/get loose
         if !primaryArtist.isEmpty && !cleanTitle.isEmpty {
-            if let looseRes = await queryLrclibGetLoose(title: cleanTitle, artist: primaryArtist), !looseRes.lyrics.isEmpty {
+            if let looseRes = await queryLrclibGetLoose(title: cleanTitle, artist: primaryArtist, duration: durationSeconds), !looseRes.lyrics.isEmpty {
                 return looseRes
             }
         }
@@ -220,7 +220,7 @@ public final class LyricsService: @unchecked Sendable {
 
         // Fallback with raw title if cleaned title differed
         if cleanTitle != title && !primaryArtist.isEmpty {
-            if let rawGet = await queryLrclibGetLoose(title: title, artist: primaryArtist) {
+            if let rawGet = await queryLrclibGetLoose(title: title, artist: primaryArtist, duration: durationSeconds) {
                 return rawGet
             }
             if let rawResult = await queryLrclibSearch(
@@ -296,7 +296,8 @@ public final class LyricsService: @unchecked Sendable {
 
     private func queryLrclibGetLoose(
         title: String,
-        artist: String
+        artist: String,
+        duration: Double = 0
     ) async -> LyricsResult? {
         guard !title.isEmpty, !artist.isEmpty else { return nil }
         var comps = URLComponents(string: "https://lrclib.net/api/get")
@@ -313,6 +314,19 @@ public final class LyricsService: @unchecked Sendable {
               let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
         }
+
+        // Duration guard: if candidate duration differs by more than 3.5 seconds from our track,
+        // do not accept synced lyrics because timestamps will belong to a different edit/version.
+        if duration > 10, let candidateDur = dict["duration"] as? Double, candidateDur > 0 {
+            let delta = abs(candidateDur - duration)
+            if delta > 3.5 {
+                if let plain = dict["plainLyrics"] as? String, !plain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    return LyricsResult(synced: false, lyrics: plain, source: "LRCLIB (Plain - Duration Mismatched)")
+                }
+                return nil
+            }
+        }
+
         return extractFromLrclibDict(dict)
     }
 
@@ -338,22 +352,52 @@ public final class LyricsService: @unchecked Sendable {
             return nil
         }
 
-        // Prioritize candidates with syncedLyrics and close duration
+        // Prioritize candidates with syncedLyrics AND matching duration within tolerance (<= 3.0s)
         let sorted = results.sorted { a, b in
             let aSynced = (a["syncedLyrics"] as? String)?.isEmpty == false
             let bSynced = (b["syncedLyrics"] as? String)?.isEmpty == false
+            let aDur = a["duration"] as? Double ?? 0
+            let bDur = b["duration"] as? Double ?? 0
+            let aDelta = duration > 10 ? abs(aDur - duration) : 0
+            let bDelta = duration > 10 ? abs(bDur - duration) : 0
+            let aWithinTolerance = duration > 10 ? (aDelta <= 3.0) : true
+            let bWithinTolerance = duration > 10 ? (bDelta <= 3.0) : true
+
+            if aSynced && bSynced {
+                if aWithinTolerance != bWithinTolerance {
+                    return aWithinTolerance && !bWithinTolerance
+                }
+                return aDelta < bDelta
+            }
             if aSynced != bSynced {
-                return aSynced && !bSynced
+                if aSynced && aWithinTolerance { return true }
+                if bSynced && bWithinTolerance { return false }
+                // Penalize synced lyrics if they belong to a completely wrong edit (delta > 5.0s)
+                if aSynced && aDelta > 5.0 && bWithinTolerance {
+                    return false
+                }
+                if bSynced && bDelta > 5.0 && aWithinTolerance {
+                    return true
+                }
+                return aSynced
             }
-            if duration > 10 {
-                let aDur = a["duration"] as? Double ?? 0
-                let bDur = b["duration"] as? Double ?? 0
-                return abs(aDur - duration) < abs(bDur - duration)
-            }
-            return false
+            return aDelta < bDelta
         }
 
         for item in sorted {
+            let isSynced = (item["syncedLyrics"] as? String)?.isEmpty == false
+            let itemDur = item["duration"] as? Double ?? 0
+            let itemDelta = duration > 10 ? abs(itemDur - duration) : 0
+
+            // If candidate has synced lyrics but duration differs significantly (> 5.0s),
+            // prefer returning plain lyrics over corrupted/desynced timestamps.
+            if isSynced && duration > 10 && itemDelta > 5.0 {
+                if let plain = item["plainLyrics"] as? String, !plain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    return LyricsResult(synced: false, lyrics: plain, source: "LRCLIB (Plain - Duration Mismatched)")
+                }
+                continue
+            }
+
             if let res = extractFromLrclibDict(item) {
                 return res
             }
