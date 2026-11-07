@@ -727,3 +727,43 @@ public struct LiquidGlassIconBadge: View {
         .shadow(color: Color.black.opacity(0.25), radius: 3, y: 1.5)
     }
 }
+
+public struct CalibrationPillButtonStyle: ButtonStyle {
+    public var isProminent: Bool = false
+    public var isGold: Bool = false
+
+    public init(isProminent: Bool = false, isGold: Bool = false) {
+        self.isProminent = isProminent
+        self.isGold = isGold
+    }
+
+    public func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+            .foregroundStyle(
+                isGold ? Color.black :
+                (isProminent ? Color.black : (configuration.isPressed ? Color.white : WalkmanTheme.silverLight))
+            )
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(
+                Group {
+                    if isGold {
+                        WalkmanTheme.hiResGoldGradient
+                    } else if isProminent {
+                        LinearGradient(colors: [Color.white, Color(white: 0.9)], startPoint: .top, endPoint: .bottom)
+                    } else {
+                        Color.white.opacity(configuration.isPressed ? 0.18 : 0.09)
+                    }
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(isGold || isProminent ? Color.clear : Color.white.opacity(0.15), lineWidth: 0.8)
+            )
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
