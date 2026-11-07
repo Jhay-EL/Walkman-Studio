@@ -918,9 +918,20 @@ public final class WalkmanEngine: @unchecked Sendable {
     /// 1. Walkman NW-A45/A55/A50/A30 requires chronological [mm:ss.xx] timestamps to unlock the "Display Lyrics" option.
     ///    If plain text lyrics are provided, timestamps are synthesized sequentially across the song's duration.
     /// 2. Enforces standard CRLF (\r\n) line endings, UTF-8 without BOM, strict [mm:ss.xx] timestamps, and chronological order.
-    public func writeCompanionLyrics(destinationAudioURL: URL, lyrics: String, durationSeconds: Double = 0) throws {
+    public func writeCompanionLyrics(
+        destinationAudioURL: URL,
+        lyrics: String,
+        durationSeconds: Double = 0,
+        offsetSeconds: Double = 0.0,
+        synthesizePlainTimestamps: Bool = false
+    ) throws {
         let lrcURL = destinationAudioURL.deletingPathExtension().appendingPathExtension("lrc")
-        let formattedLyrics = prepareWalkmanLRC(lyrics: lyrics, durationSeconds: durationSeconds)
+        let formattedLyrics = prepareWalkmanLRC(
+            lyrics: lyrics,
+            durationSeconds: durationSeconds,
+            offsetSeconds: offsetSeconds,
+            synthesizePlainTimestamps: synthesizePlainTimestamps
+        )
         guard !formattedLyrics.isEmpty else { return }
 
         do {
@@ -938,19 +949,24 @@ public final class WalkmanEngine: @unchecked Sendable {
     }
 
     /// Prepares lyrics text for Sony Walkman: ensures every line has [mm:ss.xx] timestamps, CRLF endings,
-    /// chronological ordering, strips incompatible headers, and adjusts for any [offset:+/-ms] tag.
-    public func prepareWalkmanLRC(lyrics: String, durationSeconds: Double = 0) -> String {
+    /// chronological ordering, strips incompatible headers, and adjusts for any global offset.
+    public func prepareWalkmanLRC(
+        lyrics: String,
+        durationSeconds: Double = 0,
+        offsetSeconds: Double = 0.0,
+        synthesizePlainTimestamps: Bool = false
+    ) -> String {
         let rawLines = lyrics.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
         guard !rawLines.isEmpty else { return "" }
 
         // 1. Check for global [offset:+/-ms] tag (e.g. [offset:500] or [offset:-200])
-        var offsetSeconds = 0.0
+        var totalOffsetSeconds = offsetSeconds
         for line in rawLines {
             let lower = line.lowercased()
             if lower.hasPrefix("[offset:") {
                 let inside = lower.dropFirst(8).replacingOccurrences(of: "]", with: "").trimmingCharacters(in: .whitespaces)
                 if let ms = Double(inside) {
-                    offsetSeconds = ms / 1000.0
+                    totalOffsetSeconds += (ms / 1000.0)
                 }
             }
         }
@@ -1022,7 +1038,7 @@ public final class WalkmanEngine: @unchecked Sendable {
                     }
 
                     let totalSec = (h * 3600.0) + (m * 60.0) + s + (cs / 100.0)
-                    let adjustedSec = max(0.0, totalSec + offsetSeconds)
+                    let adjustedSec = max(0.0, totalSec + totalOffsetSeconds)
                     timedLines.append(TimedLine(timeSeconds: adjustedSec, formattedText: textFormatted))
                 }
             }
@@ -1044,10 +1060,14 @@ public final class WalkmanEngine: @unchecked Sendable {
             return formattedLines.joined(separator: "\r\n") + "\r\n"
         }
 
-        // Plain text lyrics: synthesize sequential timestamps so the Sony Walkman RTOS firmware
-        // accepts the .lrc file and enables the "Display Lyrics" button instead of greying it out.
+        // Plain text lyrics: if synthesis is not explicitly requested, save plain text with CRLF line endings.
+        // This avoids confusing users with fake/random timestamps that don't match the vocals.
         let nonEmptyLines = rawLines.filter { !$0.isEmpty }
         guard !nonEmptyLines.isEmpty else { return "" }
+
+        if !synthesizePlainTimestamps {
+            return nonEmptyLines.joined(separator: "\r\n") + "\r\n"
+        }
 
         let effectiveDuration = durationSeconds > 10.0 ? durationSeconds : Double(max(60, nonEmptyLines.count * 4))
         let startSec: Double = 3.0

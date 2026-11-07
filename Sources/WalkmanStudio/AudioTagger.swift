@@ -1481,10 +1481,19 @@ public final class AudioTagger: @unchecked Sendable {
         return lyricsResult
     }
 
-    public func saveLyrics(fileURL: URL, lyrics: String) throws {
+    public func saveLyrics(
+        fileURL: URL,
+        lyrics: String,
+        durationSeconds: Double = 0,
+        offsetSeconds: Double = 0.0,
+        synthesizePlainTimestamps: Bool = false
+    ) throws {
         try WalkmanEngine.shared.writeCompanionLyrics(
             destinationAudioURL: fileURL,
-            lyrics: lyrics
+            lyrics: lyrics,
+            durationSeconds: durationSeconds,
+            offsetSeconds: offsetSeconds,
+            synthesizePlainTimestamps: synthesizePlainTimestamps
         )
         lyricsCache.setObject(lyrics as NSString, forKey: fileURL as NSURL)
     }

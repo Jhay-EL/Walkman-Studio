@@ -1709,7 +1709,11 @@ public struct BatchLyricsGeneratorSheet: View {
             case .success(let lyricsResult):
                 let trackURL = URL(fileURLWithPath: track.fullPath)
                 do {
-                    try AudioTagger.shared.saveLyrics(fileURL: trackURL, lyrics: lyricsResult.lyrics)
+                    try AudioTagger.shared.saveLyrics(
+                        fileURL: trackURL,
+                        lyrics: lyricsResult.lyrics,
+                        durationSeconds: track.durationSeconds
+                    )
                     if lyricsResult.synced {
                         syncedCount += 1
                         currentTrackStage = "Saved synchronized .LRC file"
