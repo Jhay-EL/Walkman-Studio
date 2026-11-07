@@ -245,7 +245,11 @@ public struct ArtistsView: View {
                                         onCustomPhoto: {
                                             promptCustomPhoto(for: art.name)
                                         },
-                                        onTransferArtist: onTransferArtist != nil ? { onTransferArtist?(art) } : nil
+                                        onTransferArtist: onTransferArtist != nil ? { onTransferArtist?(art) } : nil,
+                                        onFetchLyrics: {
+                                            selectedArtistName = art.name
+                                            showBatchLyricsSheet = true
+                                        }
                                     )
                                 }
                             }
@@ -1103,6 +1107,13 @@ public struct ArtistsView: View {
             } label: {
                 Label("Refresh Artist Photo", systemImage: "arrow.clockwise")
             }
+
+            Button {
+                selectedArtistName = artist.name
+                showBatchLyricsSheet = true
+            } label: {
+                Label("Fetch .LRC Lyrics for Artist...", systemImage: "quote.bubble")
+            }
             
             if let rep = artist.representativeTrack, rep.hasArtwork {
                 Button {
@@ -1390,6 +1401,7 @@ private struct ArtistListRowView: View {
     let onRefreshPhoto: () -> Void
     let onCustomPhoto: () -> Void
     var onTransferArtist: (() -> Void)? = nil
+    var onFetchLyrics: (() -> Void)? = nil
     
     @State private var isHovered = false
     
@@ -1475,6 +1487,13 @@ private struct ArtistListRowView: View {
             }
             Button("Play All (\(artist.trackCount) tracks)") {
                 onPlayAll()
+            }
+            if let onFetchLyrics = onFetchLyrics {
+                Button {
+                    onFetchLyrics()
+                } label: {
+                    Label("Fetch .LRC Lyrics for Artist...", systemImage: "quote.bubble")
+                }
             }
             Divider()
             Button("Refresh Artist Photo") {

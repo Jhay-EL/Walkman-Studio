@@ -288,7 +288,10 @@ public struct AlbumsView: View {
                         onDeleteTrack?(tr)
                     },
                     onTransferAlbum: onTransferAlbum != nil ? { onTransferAlbum?(album) } : nil,
-                    onTransferTrack: onTransferTrack
+                    onTransferTrack: onTransferTrack,
+                    onFetchLyrics: {
+                        showBatchLyricsSheet = true
+                    }
                 )
             } else {
                 // Albums Grid View
@@ -317,7 +320,11 @@ public struct AlbumsView: View {
                                         onDeleteAlbum: {
                                             onDeleteAlbum?(alb)
                                         },
-                                        onTransferAlbum: onTransferAlbum != nil ? { onTransferAlbum?(alb) } : nil
+                                        onTransferAlbum: onTransferAlbum != nil ? { onTransferAlbum?(alb) } : nil,
+                                        onFetchLyrics: {
+                                            selectedAlbum = alb
+                                            showBatchLyricsSheet = true
+                                        }
                                     )
                                 }
                             }
@@ -1003,6 +1010,7 @@ private struct AlbumGridCard: View {
     var onEditAlbum: (() -> Void)? = nil
     var onDeleteAlbum: (() -> Void)? = nil
     var onTransferAlbum: (() -> Void)? = nil
+    var onFetchLyrics: (() -> Void)? = nil
     
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var isHovered = false
@@ -1168,6 +1176,14 @@ private struct AlbumGridCard: View {
             } label: {
                 Label("Edit Album Metadata...", systemImage: "square.and.pencil")
             }
+
+            if let onFetchLyrics = onFetchLyrics {
+                Button {
+                    onFetchLyrics()
+                } label: {
+                    Label("Fetch .LRC Lyrics for Album...", systemImage: "quote.bubble")
+                }
+            }
             
             Button {
                 ArtworkExportService.exportArtwork(for: album)
@@ -1217,6 +1233,7 @@ private struct AlbumDetailView: View {
     var onDeleteTrack: ((Track) -> Void)? = nil
     var onTransferAlbum: (() -> Void)? = nil
     var onTransferTrack: ((Track) -> Void)? = nil
+    var onFetchLyrics: (() -> Void)? = nil
     
     @ObservedObject private var player = AudioPlayerService.shared
     
@@ -1577,6 +1594,14 @@ private struct AlbumDetailView: View {
             } label: {
                 Label("Edit Album Metadata...", systemImage: "square.and.pencil")
             }
+
+            if let onFetchLyrics = onFetchLyrics {
+                Button {
+                    onFetchLyrics()
+                } label: {
+                    Label("Fetch .LRC Lyrics for Album...", systemImage: "quote.bubble")
+                }
+            }
             Button {
                 ArtworkExportService.exportArtwork(for: album)
             } label: {
@@ -1768,6 +1793,14 @@ private struct AlbumDetailView: View {
                 onEditAlbum?()
             } label: {
                 Label("Edit Album Metadata...", systemImage: "square.and.pencil")
+            }
+
+            if let onFetchLyrics = onFetchLyrics {
+                Button {
+                    onFetchLyrics()
+                } label: {
+                    Label("Fetch .LRC Lyrics for Album...", systemImage: "quote.bubble")
+                }
             }
             
             if let rep = album.representativeTrack {
