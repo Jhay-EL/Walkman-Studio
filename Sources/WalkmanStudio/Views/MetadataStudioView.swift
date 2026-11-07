@@ -133,7 +133,11 @@ public struct MetadataStudioView: View {
         return try? NSRegularExpression(pattern: pattern)
     }()
 
-    public nonisolated static func parseLyrics(_ raw: String?, durationSeconds: Double = 0) -> [ParsedLyricLine] {
+    public nonisolated static func parseLyrics(
+        _ raw: String?,
+        durationSeconds: Double = 0,
+        synthesizePlainTimestamps: Bool = false
+    ) -> [ParsedLyricLine] {
         guard let raw = raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
         let rawLines = raw.components(separatedBy: .newlines)
         
@@ -212,8 +216,8 @@ public struct MetadataStudioView: View {
                 }
                 return tA < tB
             }
-        } else if !result.isEmpty && durationSeconds > 10.0 {
-            // Synthesize progressive chronological timestamps for unsynced plain text lyrics
+        } else if synthesizePlainTimestamps && !result.isEmpty && durationSeconds > 10.0 {
+            // Synthesize progressive chronological timestamps for unsynced plain text lyrics ONLY if explicitly requested
             let nonEmpty = result.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             if !nonEmpty.isEmpty {
                 let startSec: Double = 2.5
@@ -423,6 +427,38 @@ public struct MetadataStudioView: View {
         }
     }
 
+    private func nudgeLyricsOffset(delta: Double) {
+        guard let tr = track, let rawLyr = lyrics, !rawLyr.isEmpty else { return }
+        let shifted = WalkmanEngine.shared.prepareWalkmanLRC(
+            lyrics: rawLyr,
+            durationSeconds: tr.durationSeconds,
+            offsetSeconds: delta
+        )
+        let fileURL = URL(fileURLWithPath: tr.fullPath)
+        try? AudioTagger.shared.saveLyrics(fileURL: fileURL, lyrics: shifted, durationSeconds: tr.durationSeconds)
+        self.lyrics = shifted
+        self.cachedLyricLines = Self.parseLyrics(shifted, durationSeconds: tr.durationSeconds)
+    }
+
+    private func autoAlignTrackPregap() {
+        guard let tr = track, let rawLyr = lyrics, !rawLyr.isEmpty else { return }
+        let fileURL = URL(fileURLWithPath: tr.fullPath)
+        Task {
+            let (calibrated, offset) = await AudioAcousticAligner.shared.calibrateLRC(
+                audioURL: fileURL,
+                lyrics: rawLyr,
+                durationSeconds: tr.durationSeconds
+            )
+            if abs(offset) >= 0.10 {
+                try? AudioTagger.shared.saveLyrics(fileURL: fileURL, lyrics: calibrated, durationSeconds: tr.durationSeconds)
+                await MainActor.run {
+                    self.lyrics = calibrated
+                    self.cachedLyricLines = Self.parseLyrics(calibrated, durationSeconds: tr.durationSeconds)
+                }
+            }
+        }
+    }
+
     private func copyPathToClipboard() {
         guard let tr = track else { return }
         NSPasteboard.general.clearContents()
@@ -589,7 +625,18 @@ public struct MetadataStudioView: View {
                     
                     // 3. LYRICS CONTAINER
                     VStack(alignment: .leading, spacing: 8) {
-                        sectionHeader(title: "Lyrics", icon: "quote.bubble.fill")
+                        HStack(spacing: 8) {
+                            sectionHeader(title: "Lyrics", icon: "quote.bubble.fill")
+                            if hasLyricsOnWalkman {
+                                Text(isSyncedLyrics ? "Synced .LRC" : "Plain Lyrics")
+                                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                                    .foregroundStyle(isSyncedLyrics ? WalkmanTheme.hiResGoldLight : .secondary)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(isSyncedLyrics ? WalkmanTheme.hiResGold.opacity(0.18) : Color.white.opacity(0.06))
+                                    .clipShape(Capsule())
+                            }
+                        }
                         
                         if hasLyricsOnWalkman {
                             // Isolated Live Lyrics Reader with Throttled Auto-Scrolling
@@ -599,6 +646,37 @@ public struct MetadataStudioView: View {
                                 isHiRes: isHiRes,
                                 onCopy: copyLyricsToClipboard
                             )
+
+                            if isSyncedLyrics {
+                                HStack(spacing: 5) {
+                                    Text("Nudge:")
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .foregroundStyle(.secondary)
+                                    
+                                    Button("-0.5s") { nudgeLyricsOffset(delta: -0.5) }
+                                        .buttonStyle(CalibrationPillButtonStyle())
+
+                                    Button("-0.1s") { nudgeLyricsOffset(delta: -0.1) }
+                                        .buttonStyle(CalibrationPillButtonStyle())
+
+                                    Button("+0.1s") { nudgeLyricsOffset(delta: 0.1) }
+                                        .buttonStyle(CalibrationPillButtonStyle())
+
+                                    Button("+0.5s") { nudgeLyricsOffset(delta: 0.5) }
+                                        .buttonStyle(CalibrationPillButtonStyle())
+
+                                    Spacer()
+
+                                    Button(action: { autoAlignTrackPregap() }) {
+                                        HStack(spacing: 3) {
+                                            Image(systemName: "waveform.badge.magnifyingglass")
+                                            Text("Auto Pregap")
+                                        }
+                                    }
+                                    .buttonStyle(CalibrationPillButtonStyle(isGold: true))
+                                }
+                                .padding(.top, 2)
+                            }
                         } else if isFetchingLyrics {
                             // Online searching indicator
                             HStack(spacing: 8) {

@@ -707,6 +707,38 @@ public struct QueueItemEditorSheet: View {
                 }
             }
 
+            if lyricsDraft.contains("[") {
+                HStack(spacing: 5) {
+                    Text("Nudge Timestamps:")
+                        .font(WalkmanFont.captionBold)
+                        .foregroundStyle(.secondary)
+
+                    Button("-0.5s") { nudgeDraftOffset(-0.5) }
+                        .buttonStyle(CalibrationPillButtonStyle())
+
+                    Button("-0.1s") { nudgeDraftOffset(-0.1) }
+                        .buttonStyle(CalibrationPillButtonStyle())
+
+                    Button("+0.1s") { nudgeDraftOffset(0.1) }
+                        .buttonStyle(CalibrationPillButtonStyle())
+
+                    Button("+0.5s") { nudgeDraftOffset(0.5) }
+                        .buttonStyle(CalibrationPillButtonStyle())
+
+                    Spacer()
+
+                    Button(action: autoAlignDraftPregap) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "waveform.badge.magnifyingglass")
+                            Text("Auto Pregap")
+                        }
+                    }
+                    .buttonStyle(CalibrationPillButtonStyle(isGold: true))
+                    .help("Scans first 12s of the audio file to detect lead-in silence and aligns timestamps to onset")
+                }
+                .padding(.vertical, 2)
+            }
+
             TextEditor(text: $lyricsDraft)
                 .font(WalkmanFont.mono)
                 .scrollContentBackground(.hidden)
@@ -1175,6 +1207,39 @@ public struct QueueItemEditorSheet: View {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
                         self.lyricsErrorMessage = nil
                     }
+                }
+            }
+        }
+    }
+
+    private func nudgeDraftOffset(_ delta: Double) {
+        guard !lyricsDraft.isEmpty else { return }
+        let shifted = WalkmanEngine.shared.prepareWalkmanLRC(
+            lyrics: lyricsDraft,
+            durationSeconds: currentItem.durationSeconds,
+            offsetSeconds: delta
+        )
+        self.lyricsDraft = shifted
+        self.isLyricsModified = true
+    }
+
+    private func autoAlignDraftPregap() {
+        guard !lyricsDraft.isEmpty else { return }
+        Task {
+            let (calibrated, offset) = await AudioAcousticAligner.shared.calibrateLRC(
+                audioURL: currentItem.sourceURL,
+                lyrics: lyricsDraft,
+                durationSeconds: currentItem.durationSeconds
+            )
+            if abs(offset) >= 0.10 {
+                await MainActor.run {
+                    self.lyricsDraft = calibrated
+                    self.isLyricsModified = true
+                    self.lyricsStatusMessage = "Pregap Aligned: \(offset >= 0 ? "+" : "")\(String(format: "%.1f", offset))s"
+                }
+            } else {
+                await MainActor.run {
+                    self.lyricsStatusMessage = "Pregap already optimal (<0.1s)"
                 }
             }
         }
