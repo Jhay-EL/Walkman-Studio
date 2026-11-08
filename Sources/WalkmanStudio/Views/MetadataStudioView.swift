@@ -430,38 +430,6 @@ public struct MetadataStudioView: View {
         }
     }
 
-    private func nudgeLyricsOffset(delta: Double) {
-        guard let tr = track, let rawLyr = lyrics, !rawLyr.isEmpty else { return }
-        let shifted = WalkmanEngine.shared.prepareWalkmanLRC(
-            lyrics: rawLyr,
-            durationSeconds: tr.durationSeconds,
-            offsetSeconds: delta
-        )
-        let fileURL = URL(fileURLWithPath: tr.fullPath)
-        try? AudioTagger.shared.saveLyrics(fileURL: fileURL, lyrics: shifted, durationSeconds: tr.durationSeconds)
-        self.lyrics = shifted
-        self.cachedLyricLines = Self.parseLyrics(shifted, durationSeconds: tr.durationSeconds)
-    }
-
-    private func autoAlignTrackPregap() {
-        guard let tr = track, let rawLyr = lyrics, !rawLyr.isEmpty else { return }
-        let fileURL = URL(fileURLWithPath: tr.fullPath)
-        Task {
-            let (calibrated, offset) = await AudioAcousticAligner.shared.calibrateLRC(
-                audioURL: fileURL,
-                lyrics: rawLyr,
-                durationSeconds: tr.durationSeconds
-            )
-            if abs(offset) >= 0.10 {
-                try? AudioTagger.shared.saveLyrics(fileURL: fileURL, lyrics: calibrated, durationSeconds: tr.durationSeconds)
-                await MainActor.run {
-                    self.lyrics = calibrated
-                    self.cachedLyricLines = Self.parseLyrics(calibrated, durationSeconds: tr.durationSeconds)
-                }
-            }
-        }
-    }
-
     private func copyPathToClipboard() {
         guard let tr = track else { return }
         NSPasteboard.general.clearContents()
@@ -679,38 +647,6 @@ public struct MetadataStudioView: View {
                                     onCopy: copyLyricsToClipboard
                                 )
                                 .transition(.opacity.combined(with: .move(edge: .top)))
-
-                                if isSyncedLyrics {
-                                    HStack(spacing: 5) {
-                                        Text("Nudge:")
-                                            .font(.system(size: 10, weight: .semibold))
-                                            .foregroundStyle(.secondary)
-                                        
-                                        Button("-0.5s") { nudgeLyricsOffset(delta: -0.5) }
-                                            .buttonStyle(CalibrationPillButtonStyle())
-
-                                        Button("-0.1s") { nudgeLyricsOffset(delta: -0.1) }
-                                            .buttonStyle(CalibrationPillButtonStyle())
-
-                                        Button("+0.1s") { nudgeLyricsOffset(delta: 0.1) }
-                                            .buttonStyle(CalibrationPillButtonStyle())
-
-                                        Button("+0.5s") { nudgeLyricsOffset(delta: 0.5) }
-                                            .buttonStyle(CalibrationPillButtonStyle())
-
-                                        Spacer()
-
-                                        Button(action: { autoAlignTrackPregap() }) {
-                                            HStack(spacing: 3) {
-                                                Image(systemName: "waveform.badge.magnifyingglass")
-                                                Text("Auto Pregap")
-                                            }
-                                        }
-                                        .buttonStyle(CalibrationPillButtonStyle(isGold: true))
-                                    }
-                                    .padding(.top, 2)
-                                    .transition(.opacity)
-                                }
                             } else {
                                 // Small Mode: Compact Expandable Preview Card
                                 SmallLyricsPreviewCard(
