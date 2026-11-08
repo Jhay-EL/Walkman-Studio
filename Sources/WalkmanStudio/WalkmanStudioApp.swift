@@ -189,10 +189,10 @@ struct WalkmanStudioApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .frame(minWidth: 1520, idealWidth: 1640, minHeight: 720, idealHeight: 880)
+                .frame(minWidth: 1520, idealWidth: 1820, minHeight: 720, idealHeight: 880)
                 .background(WindowConfigurator())
         }
-        .defaultSize(width: 1640, height: 920)
+        .defaultSize(width: 1820, height: 920)
         .windowToolbarStyle(.unified(showsTitle: false))
         .commands {
             CommandGroup(replacing: .appInfo) {

@@ -23,7 +23,7 @@ public struct ContentView: View {
     @State private var isRefreshingDrives: Bool = false
     @State private var selectedTab: NavigationTab = .localLibrary
     @State private var selectedTrackId: String?
-    @State private var showInspector: Bool = false
+    @State private var showInspector: Bool = true
     @State private var isEjecting: Bool = false
     @State private var queueCount: Int = 0
     @State private var deviceInfo: WalkmanDeviceInfo? = nil
@@ -1626,6 +1626,19 @@ public struct ContentView: View {
         }
         .background(WindowAccessor { window in
             self.hostWindow = window
+            if self.showInspector {
+                let screen = window.screen ?? NSScreen.main
+                let visibleFrame = screen?.visibleFrame ?? window.frame
+                let dynamicMinW = min(1520.0 + 300.0, visibleFrame.width)
+                window.minSize = NSSize(width: dynamicMinW, height: window.minSize.height)
+                window.contentMinSize = NSSize(width: dynamicMinW, height: window.contentMinSize.height)
+                
+                var frame = window.frame
+                if frame.size.width < dynamicMinW {
+                    frame.size.width = dynamicMinW
+                    window.setFrame(frame, display: true, animate: false)
+                }
+            }
         })
         .onChange(of: showInspector) { isPresented in
             handleInspectorVisibilityChanged(isPresented: isPresented)
