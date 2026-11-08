@@ -16,6 +16,7 @@ public struct MetadataStudioView: View {
     @State private var isLyricsCopied: Bool = false
     @State private var isFetchingLyrics: Bool = false
     @State private var senseMeInfo: SenseMeInfo? = nil
+    @State private var isLyricsExpanded: Bool = false
     
     public init(
         track: Track?,
@@ -335,6 +336,7 @@ public struct MetadataStudioView: View {
             cachedLyricLines = []
             isFetchingLyrics = false
             senseMeInfo = nil
+            isLyricsExpanded = false
             return
         }
         
@@ -352,6 +354,7 @@ public struct MetadataStudioView: View {
                 cachedLyricLines = []
                 isFetchingLyrics = false
                 senseMeInfo = nil
+                isLyricsExpanded = false
             }
             
             let url = URL(fileURLWithPath: tr.fullPath)
@@ -636,46 +639,93 @@ public struct MetadataStudioView: View {
                                     .background(isSyncedLyrics ? WalkmanTheme.hiResGold.opacity(0.18) : Color.white.opacity(0.06))
                                     .clipShape(Capsule())
                             }
+                            
+                            Spacer()
+                            
+                            if hasLyricsOnWalkman {
+                                Button(action: {
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                                        isLyricsExpanded.toggle()
+                                    }
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: isLyricsExpanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                                            .font(.system(size: 9.5, weight: .semibold))
+                                        Text(isLyricsExpanded ? "Collapse" : "Expand")
+                                            .font(.system(size: 10.5, weight: .medium))
+                                    }
+                                    .foregroundStyle(WalkmanTheme.silverLight)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3)
+                                    .background(Color.white.opacity(0.06))
+                                    .clipShape(Capsule())
+                                    .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 0.75))
+                                }
+                                .buttonStyle(.plain)
+                                .help(isLyricsExpanded ? "Collapse lyrics to compact view" : "Enlarge lyrics container")
+                                .onHover { h in
+                                    if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                                }
+                            }
                         }
                         
                         if hasLyricsOnWalkman {
-                            // Isolated Live Lyrics Reader with Throttled Auto-Scrolling
-                            LiveLyricsReader(
-                                lines: cachedLyricLines,
-                                trackId: tr.id,
-                                isHiRes: isHiRes,
-                                onCopy: copyLyricsToClipboard
-                            )
+                            if isLyricsExpanded {
+                                // Enlarged Mode: Isolated Live Lyrics Reader with Throttled Auto-Scrolling
+                                LiveLyricsReader(
+                                    lines: cachedLyricLines,
+                                    trackId: tr.id,
+                                    isHiRes: isHiRes,
+                                    onCopy: copyLyricsToClipboard
+                                )
+                                .transition(.opacity.combined(with: .move(edge: .top)))
 
-                            if isSyncedLyrics {
-                                HStack(spacing: 5) {
-                                    Text("Nudge:")
-                                        .font(.system(size: 10, weight: .semibold))
-                                        .foregroundStyle(.secondary)
-                                    
-                                    Button("-0.5s") { nudgeLyricsOffset(delta: -0.5) }
-                                        .buttonStyle(CalibrationPillButtonStyle())
+                                if isSyncedLyrics {
+                                    HStack(spacing: 5) {
+                                        Text("Nudge:")
+                                            .font(.system(size: 10, weight: .semibold))
+                                            .foregroundStyle(.secondary)
+                                        
+                                        Button("-0.5s") { nudgeLyricsOffset(delta: -0.5) }
+                                            .buttonStyle(CalibrationPillButtonStyle())
 
-                                    Button("-0.1s") { nudgeLyricsOffset(delta: -0.1) }
-                                        .buttonStyle(CalibrationPillButtonStyle())
+                                        Button("-0.1s") { nudgeLyricsOffset(delta: -0.1) }
+                                            .buttonStyle(CalibrationPillButtonStyle())
 
-                                    Button("+0.1s") { nudgeLyricsOffset(delta: 0.1) }
-                                        .buttonStyle(CalibrationPillButtonStyle())
+                                        Button("+0.1s") { nudgeLyricsOffset(delta: 0.1) }
+                                            .buttonStyle(CalibrationPillButtonStyle())
 
-                                    Button("+0.5s") { nudgeLyricsOffset(delta: 0.5) }
-                                        .buttonStyle(CalibrationPillButtonStyle())
+                                        Button("+0.5s") { nudgeLyricsOffset(delta: 0.5) }
+                                            .buttonStyle(CalibrationPillButtonStyle())
 
-                                    Spacer()
+                                        Spacer()
 
-                                    Button(action: { autoAlignTrackPregap() }) {
-                                        HStack(spacing: 3) {
-                                            Image(systemName: "waveform.badge.magnifyingglass")
-                                            Text("Auto Pregap")
+                                        Button(action: { autoAlignTrackPregap() }) {
+                                            HStack(spacing: 3) {
+                                                Image(systemName: "waveform.badge.magnifyingglass")
+                                                Text("Auto Pregap")
+                                            }
                                         }
+                                        .buttonStyle(CalibrationPillButtonStyle(isGold: true))
                                     }
-                                    .buttonStyle(CalibrationPillButtonStyle(isGold: true))
+                                    .padding(.top, 2)
+                                    .transition(.opacity)
                                 }
-                                .padding(.top, 2)
+                            } else {
+                                // Small Mode: Compact Expandable Preview Card
+                                SmallLyricsPreviewCard(
+                                    lines: cachedLyricLines,
+                                    trackId: tr.id,
+                                    isSyncedLyrics: isSyncedLyrics,
+                                    onExpand: {
+                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                                            isLyricsExpanded = true
+                                        }
+                                    },
+                                    onCopy: copyLyricsToClipboard,
+                                    onEdit: onEdit
+                                )
+                                .transition(.opacity)
                             }
                         } else if isFetchingLyrics {
                             // Online searching indicator
@@ -939,6 +989,7 @@ public struct MetadataStudioView: View {
             .ignoresSafeArea(edges: .top)
         }
         .task(id: track?.id) {
+            isLyricsExpanded = false
             await loadTrackData()
         }
         .onReceive(NotificationCenter.default.publisher(for: .trackMetadataDidUpdate)) { notif in
@@ -1110,6 +1161,119 @@ private struct AudioSpecRow: View {
 
 
 // MARK: - Isolated Live Components
+
+private struct SmallLyricsPreviewCard: View {
+    let lines: [MetadataStudioView.ParsedLyricLine]
+    let trackId: String
+    let isSyncedLyrics: Bool
+    let onExpand: () -> Void
+    let onCopy: () -> Void
+    let onEdit: (() -> Void)?
+
+    @ObservedObject private var progress = AudioPlayerService.shared.progress
+    @ObservedObject private var player = AudioPlayerService.shared
+    @State private var isHovered: Bool = false
+
+    /// Lead time (0.5s / 500ms) matching full lyrics reader
+    private let lyricLeadTimeSeconds: Double = 0.5
+
+    private var activeLinePreview: String? {
+        let isPlayingThis = (player.currentTrack?.id == trackId && player.isPlaying)
+        guard isPlayingThis, !lines.isEmpty else { return nil }
+
+        let now = progress.currentTime + lyricLeadTimeSeconds
+        var foundText: String? = nil
+        for line in lines {
+            guard let t = line.timeInSeconds else { continue }
+            if now >= t {
+                foundText = line.text
+            } else {
+                break
+            }
+        }
+        return foundText
+    }
+
+    var body: some View {
+        let isPlayingThis = (player.currentTrack?.id == trackId && player.isPlaying)
+        let activeLine = activeLinePreview
+
+        Button(action: onExpand) {
+            HStack(spacing: 9) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(isHovered ? 0.12 : 0.05))
+                        .frame(width: 28, height: 28)
+                    Image(systemName: isPlayingThis ? "waveform" : "quote.bubble.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(isSyncedLyrics ? WalkmanTheme.hiResGoldLight : WalkmanTheme.silverLight)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    if let text = activeLine, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(text)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Color.white)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+
+                        HStack(spacing: 4) {
+                            Text("Live Lyrics")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(WalkmanTheme.hiResGoldLight)
+                            Text("• Click to enlarge")
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(Color.secondary)
+                        }
+                    } else {
+                        Text(isSyncedLyrics ? "Synchronized Lyrics Available" : "Plain Lyrics Available")
+                            .font(.system(size: 11.5, weight: .medium))
+                            .foregroundStyle(Color.white.opacity(0.92))
+                            .lineLimit(1)
+
+                        Text("\(lines.count) lines • Click to expand")
+                            .font(.system(size: 9.5))
+                            .foregroundStyle(Color.secondary)
+                    }
+                }
+
+                Spacer(minLength: 4)
+
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(isHovered ? Color.white : WalkmanTheme.silverMuted)
+                }
+                .padding(6)
+                .background(Color.white.opacity(isHovered ? 0.12 : 0.04))
+                .clipShape(Circle())
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .liquidGlass(cornerRadius: 10)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color.white.opacity(isHovered ? 0.22 : 0.08), lineWidth: 0.8)
+            )
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button(action: onCopy) {
+                Label("Copy Lyrics to Clipboard", systemImage: "doc.on.doc")
+            }
+            if let onEdit = onEdit {
+                Button(action: onEdit) {
+                    Label("Edit Metadata & Fetch Lyrics...", systemImage: "pencil")
+                }
+            }
+        }
+        .onHover { h in
+            isHovered = h
+            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+    }
+}
 
 private struct LiveLyricsReader: View {
     let lines: [MetadataStudioView.ParsedLyricLine]
