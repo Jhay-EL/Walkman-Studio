@@ -4,7 +4,7 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
-VERSION="3.1.0"
+VERSION="3.1.1"
 DIST_DIR="$DIR/dist"
 APP_NAME="Walkman Studio"
 APP_BUNDLE="$DIR/$APP_NAME.app"
@@ -59,9 +59,9 @@ shasum -a 256 *.zip *.dmg > SHA256SUMS.txt
 
 # 5. Generate Release Notes (Markdown & HTML)
 cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.md"
-# Walkman Studio v3.1.0
+# Walkman Studio v3.1.1
 
-Walkman Studio v3.1.0 is headlined by the all-new **LRC Fetcher (Batch Synchronized Lyrics Generator)**, enabling high-speed multi-threaded retrieval of timestamp-accurate `.lrc` lyrics across your entire library or selected playlists and albums, accompanied by targeted UI enhancements, playback refinements, and minor fixes across Apple Silicon (`arm64`) and Intel-based Macs (`x86_64`).
+Walkman Studio v3.1.1 is headlined by the all-new **LRC Fetcher (Batch Synchronized Lyrics Generator)**, enabling high-speed multi-threaded retrieval of timestamp-accurate `.lrc` lyrics across your entire library or selected playlists and albums, accompanied by targeted UI enhancements, playback refinements, and minor fixes across Apple Silicon (`arm64`) and Intel-based Macs (`x86_64`).
 
 ---
 
@@ -95,12 +95,12 @@ Walkman Studio v3.1.0 is headlined by the all-new **LRC Fetcher (Batch Synchroni
 
 | Installer | Architecture | Target System |
 | :--- | :--- | :--- |
-| **`Walkman-Studio-3.1.0-arm64.dmg`** | Apple Silicon (`arm64`) | MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4) |
-| **`Walkman-Studio-3.1.0-intel.dmg`** | Intel (`x86_64`) | Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac Pro |
-| **`Walkman-Studio-3.1.0-universal.dmg`** | Universal 2 (`arm64` + `x86_64`) | Universal package running natively on all Macs (macOS 13.0+) |
+| **`Walkman-Studio-3.1.1-arm64.dmg`** | Apple Silicon (`arm64`) | MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4) |
+| **`Walkman-Studio-3.1.1-intel.dmg`** | Intel (`x86_64`) | Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac Pro |
+| **`Walkman-Studio-3.1.1-universal.dmg`** | Universal 2 (`arm64` + `x86_64`) | Universal package running natively on all Macs (macOS 13.0+) |
 
 ### Alternative Mirror
-* **Google Drive:** [Download v3.1.0 Release Files on Google Drive](https://drive.google.com/drive/folders/1KjkVl7U-FBZ0Ics4OuttyOj6HanPajpg?usp=share_link)
+* **Google Drive:** [Download v3.1.1 Release Files on Google Drive](https://drive.google.com/drive/folders/1KjkVl7U-FBZ0Ics4OuttyOj6HanPajpg?usp=share_link)
 
 ---
 
@@ -112,9 +112,9 @@ Walkman Studio v3.1.0 is headlined by the all-new **LRC Fetcher (Batch Synchroni
 EOF
 
 cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
-<h1>Walkman Studio v3.1.0</h1>
+<h1>Walkman Studio v3.1.1</h1>
 
-<p>Walkman Studio v3.1.0 is headlined by the all-new <strong>LRC Fetcher (Batch Synchronized Lyrics Generator)</strong>, enabling high-speed multi-threaded retrieval of timestamp-accurate <code>.lrc</code> lyrics across your entire library or selected playlists and albums, accompanied by targeted UI enhancements, playback refinements, and minor fixes across Apple Silicon (<code>arm64</code>) and Intel-based Macs (<code>x86_64</code>).</p>
+<p>Walkman Studio v3.1.1 is headlined by the all-new <strong>LRC Fetcher (Batch Synchronized Lyrics Generator)</strong>, enabling high-speed multi-threaded retrieval of timestamp-accurate <code>.lrc</code> lyrics across your entire library or selected playlists and albums, accompanied by targeted UI enhancements, playback refinements, and minor fixes across Apple Silicon (<code>arm64</code>) and Intel-based Macs (<code>x86_64</code>).</p>
 
 <hr>
 
@@ -161,17 +161,17 @@ cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
   </thead>
   <tbody>
     <tr>
-      <td><strong><code>Walkman-Studio-3.1.0-arm64.dmg</code></strong></td>
+      <td><strong><code>Walkman-Studio-3.1.1-arm64.dmg</code></strong></td>
       <td>Apple Silicon (<code>arm64</code>)</td>
       <td>MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4)</td>
     </tr>
     <tr>
-      <td><strong><code>Walkman-Studio-3.1.0-intel.dmg</code></strong></td>
+      <td><strong><code>Walkman-Studio-3.1.1-intel.dmg</code></strong></td>
       <td>Intel (<code>x86_64</code>)</td>
       <td>Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac Pro</td>
     </tr>
     <tr>
-      <td><strong><code>Walkman-Studio-3.1.0-universal.dmg</code></strong></td>
+      <td><strong><code>Walkman-Studio-3.1.1-universal.dmg</code></strong></td>
       <td>Universal 2 (<code>arm64</code> + <code>x86_64</code>)</td>
       <td>Universal package running natively on all Macs (macOS 13.0+)</td>
     </tr>
@@ -179,7 +179,7 @@ cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
 </table>
 
 <h3>Alternative Mirror</h3>
-<p><strong>Google Drive:</strong> <a href="https://drive.google.com/drive/folders/1KjkVl7U-FBZ0Ics4OuttyOj6HanPajpg?usp=share_link" target="_blank" rel="noopener noreferrer">Download v3.1.0 Release Files on Google Drive</a></p>
+<p><strong>Google Drive:</strong> <a href="https://drive.google.com/drive/folders/1KjkVl7U-FBZ0Ics4OuttyOj6HanPajpg?usp=share_link" target="_blank" rel="noopener noreferrer">Download v3.1.1 Release Files on Google Drive</a></p>
 
 <hr>
 

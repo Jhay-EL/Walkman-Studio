@@ -5,8 +5,8 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
 ARCH="${1:-universal}"
-VERSION="3.1.0"
-BUILD_NUM="310"
+VERSION="3.1.1"
+BUILD_NUM="311"
 
 APP_NAME="Walkman Studio"
 APP_BUNDLE="$DIR/$APP_NAME.app"
