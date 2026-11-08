@@ -895,36 +895,59 @@ private struct SidebarRow: View {
 private struct DeviceDisconnectedSidebarRow: View {
     @Binding var selectedTab: NavigationTab
     @State private var isHovered = false
+    @ObservedObject private var usbDetector = WalkmanUSBDetector.shared
 
     private var isSelected: Bool {
         selectedTab == .overview
     }
 
+    private var connectedUsb: ConnectedUSBWalkman? {
+        usbDetector.connectedDevices.first(where: { $0.isAndroid })
+    }
+
+    private var displayTitle: String {
+        if let usb = connectedUsb {
+            let name = usb.modelName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if name.lowercased().hasPrefix("sony") {
+                return name
+            } else if name.lowercased().contains("walkman") {
+                return "Sony \(name)"
+            } else {
+                return "Sony Walkman \(name)"
+            }
+        }
+        return "Sony Walkman"
+    }
+
     var body: some View {
         Button(action: { selectedTab = .overview }) {
             HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(Color.white.opacity(0.06))
-                        .frame(width: 28, height: 28)
-                    Image(systemName: "cable.connector.horizontal")
-                        .font(.system(size: 13))
-                        .foregroundStyle(WalkmanTheme.silverMuted)
+                if let usb = connectedUsb {
+                    WalkmanDeviceIconView(size: 28, modelName: usb.modelName, hasBackground: false)
+                } else {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.06))
+                            .frame(width: 28, height: 28)
+                        Image(systemName: "cable.connector.horizontal")
+                            .font(.system(size: 13))
+                            .foregroundStyle(WalkmanTheme.silverMuted)
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Sony Walkman")
+                    Text(displayTitle)
                         .font(.system(size: 13, weight: isSelected ? .bold : .semibold))
                         .foregroundStyle(isSelected ? .white : WalkmanTheme.silverLight)
                         .lineLimit(1)
 
                     HStack(spacing: 4) {
                         Circle()
-                            .fill(Color.secondary.opacity(0.6))
+                            .fill(connectedUsb != nil ? Color.green : Color.secondary.opacity(0.6))
                             .frame(width: 5, height: 5)
-                        Text("Not Connected")
+                        Text(connectedUsb != nil ? "Connected (MTP)" : "Not Connected")
                             .font(.system(size: 10.5))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(connectedUsb != nil ? Color.green.opacity(0.9) : .secondary)
                     }
                 }
 
@@ -951,6 +974,6 @@ private struct DeviceDisconnectedSidebarRow: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-        .help("View Sony Walkman connection setup and supported models")
+        .help(connectedUsb != nil ? "Sony Walkman connected via USB in MTP mode" : "View Sony Walkman connection setup and supported models")
     }
 }

@@ -36,6 +36,7 @@ public struct ContentView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var isFullScreenPlayerPresented: Bool = false
     @State private var showingMtpHelpSheet: Bool = false
+    @ObservedObject private var usbDetector = WalkmanUSBDetector.shared
     @State private var driveCache: [String: DriveLibraryCache] = [:]
     @State private var libraryScanTask: Task<Void, Never>? = nil
 
@@ -713,13 +714,204 @@ public struct ContentView: View {
     
     @ViewBuilder
     private var disconnectedDeviceView: some View {
+        Group {
+            if let usbDev = usbDetector.connectedDevices.first(where: { $0.isAndroid }) {
+                usbMtpConnectedDeviceView(usbDev)
+            } else {
+                pureDisconnectedDeviceView
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(WalkmanTheme.background)
+    }
+
+    private func resolvedUsbDeviceTitle(_ usbDev: ConnectedUSBWalkman) -> String {
+        let name = usbDev.modelName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if name.lowercased().hasPrefix("sony") {
+            return name
+        } else if name.lowercased().contains("walkman") {
+            return "Sony \(name)"
+        } else {
+            return "Sony Walkman \(name)"
+        }
+    }
+
+    @ViewBuilder
+    private func usbMtpConnectedDeviceView(_ usbDev: ConnectedUSBWalkman) -> some View {
+        VStack(spacing: 22) {
+            Spacer()
+            
+            // Hero Icon / Hardware Avatar
+            VStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(WalkmanTheme.card)
+                        .frame(width: 96, height: 96)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                        )
+                        .shadow(color: Color.black.opacity(0.35), radius: 10, x: 0, y: 4)
+                    
+                    WalkmanDeviceIconView(
+                        size: 72,
+                        modelName: usbDev.modelName,
+                        hasBackground: false
+                    )
+                }
+                
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 7, height: 7)
+                    Text("USB Connected • MTP File Transfer")
+                        .font(WalkmanFont.subheadlineMedium)
+                        .foregroundStyle(Color.green.opacity(0.95))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Color.green.opacity(0.12))
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule().stroke(Color.green.opacity(0.28), lineWidth: 0.8)
+                )
+            }
+            
+            // Device Title & macOS MTP Notice
+            VStack(spacing: 6) {
+                Text(resolvedUsbDeviceTitle(usbDev))
+                    .font(WalkmanFont.title2)
+                    .foregroundStyle(.white)
+                
+                Text("Android Walkmans connect in MTP mode. macOS does not mount internal storage into Finder automatically.")
+                    .font(WalkmanFont.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 480)
+            }
+            
+            // Guidance Info Card
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.06))
+                            .frame(width: 32, height: 32)
+                        Image(systemName: "folder.badge.gearshape")
+                            .font(.system(size: 14))
+                            .foregroundStyle(WalkmanTheme.hiResGoldLight)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Direct Music Folder Selection (Recommended)")
+                            .font(WalkmanFont.calloutBold)
+                            .foregroundStyle(.white)
+                        Text("Select your Walkman's Music folder directly to manage tracks, tags, and fetch companion .lrc lyrics instantly.")
+                            .font(WalkmanFont.caption)
+                            .foregroundStyle(.secondary)
+                            .lineSpacing(2)
+                    }
+                }
+                
+                Divider()
+                    .overlay(Color.white.opacity(0.08))
+                
+                HStack(alignment: .top, spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.06))
+                            .frame(width: 32, height: 32)
+                        Image(systemName: "externaldrive.badge.wifi")
+                            .font(.system(size: 14))
+                            .foregroundStyle(WalkmanTheme.silverLight)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Finder Virtual Volume Mount")
+                            .font(WalkmanFont.calloutBold)
+                            .foregroundStyle(.white)
+                        Text("Use free macOS MTP utilities (like MacDroid or OpenMTP) to mount storage to /Volumes/ for automatic scanning.")
+                            .font(WalkmanFont.caption)
+                            .foregroundStyle(.secondary)
+                            .lineSpacing(2)
+                    }
+                }
+            }
+            .padding(18)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(WalkmanTheme.card)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                    )
+            )
+            .frame(maxWidth: 500)
+            .shadow(color: Color.black.opacity(0.25), radius: 8, x: 0, y: 3)
+            
+            // Single Unified Action Controls (Zero Duplication)
+            HStack(spacing: 12) {
+                Button(action: selectCustomStorageFolder) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "folder.badge.plus")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Select Storage Folder...")
+                            .font(WalkmanFont.calloutMedium)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                }
+                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 18))
+                .help("Browse and select your Walkman's Music folder or MicroSD card directory")
+                
+                Button(action: { showingMtpHelpSheet = true }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "questionmark.circle")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Mac Transfer Guide")
+                            .font(WalkmanFont.calloutMedium)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .foregroundStyle(WalkmanTheme.silverLight)
+                }
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 18))
+                .help("Open step-by-step instructions for Android Walkman file transfer on macOS")
+                
+                Button(action: refreshDrives) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Detect Drives")
+                            .font(WalkmanFont.calloutMedium)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .foregroundStyle(WalkmanTheme.silverLight)
+                }
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 18))
+                .help("Scan macOS volumes for mounted Walkman storage or inserted MicroSD cards")
+            }
+            .padding(.top, 4)
+            
+            Spacer()
+        }
+    }
+
+    @ViewBuilder
+    private var pureDisconnectedDeviceView: some View {
         VStack(spacing: 24) {
             Spacer()
             
             ZStack {
                 Circle()
-                    .fill(Color.white.opacity(0.08))
+                    .fill(Color.white.opacity(0.06))
                     .frame(width: 88, height: 88)
+                    .overlay(
+                        Circle().stroke(Color.white.opacity(0.10), lineWidth: 1)
+                    )
+                    .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 3)
                 
                 Image(systemName: "cable.connector.horizontal")
                     .font(.system(size: 36))
@@ -728,87 +920,14 @@ public struct ContentView: View {
             
             VStack(spacing: 8) {
                 Text("Connect Sony Walkman")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(WalkmanFont.title1)
                     .foregroundStyle(.white)
                 
-                Text("Plug in your Sony Walkman via USB cable or insert your MicroSD card. Both Sony OS and Android-based Walkmans are supported.")
-                    .font(.system(size: 13))
+                Text("Plug in your Sony Walkman via USB cable or insert your MicroSD card. Both classic Sony OS and modern Android-based Walkmans are supported.")
+                    .font(WalkmanFont.callout)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                    .frame(maxWidth: 440)
-            }
-            
-            if let usbDev = WalkmanUSBDetector.shared.connectedDevices.first(where: { $0.isAndroid }) {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 12) {
-                        WalkmanDeviceIconView(size: 38, modelName: usbDev.modelName, hasBackground: false)
-                        
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Sony Walkman \(usbDev.modelName)")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(.white)
-                            
-                            HStack(spacing: 5) {
-                                Circle()
-                                    .fill(Color.green)
-                                    .frame(width: 7, height: 7)
-                                Text("Connected via USB (MTP File Transfer Mode)")
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundStyle(Color.green.opacity(0.95))
-                            }
-                        }
-                        
-                        Spacer()
-                    }
-                    
-                    Text("macOS requires an MTP bridge (e.g. MacDroid, OpenMTP) to mount Android internal storage to Finder, or you can select your Walkman Music folder directly.")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    
-                    HStack(spacing: 10) {
-                        Button(action: selectCustomStorageFolder) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "folder.badge.plus")
-                                Text("Select Storage Folder")
-                            }
-                            .font(.system(size: 12, weight: .semibold))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 7)
-                            .background(Color.accentColor)
-                            .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        
-                        Button(action: { showingMtpHelpSheet = true }) {
-                            HStack(spacing: 5) {
-                                Image(systemName: "questionmark.circle")
-                                Text("Mac Transfer Guide")
-                            }
-                            .font(.system(size: 12, weight: .medium))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(Color.white.opacity(0.08))
-                            .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        
-                        Spacer()
-                    }
-                }
-                .padding(16)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(red: 26/255, green: 26/255, blue: 32/255))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(Color.accentColor.opacity(0.3), lineWidth: 1)
-                        )
-                )
-                .frame(maxWidth: 480)
+                    .frame(maxWidth: 460)
             }
             
             if let unsupported = WalkmanEngine.shared.lastUnsupportedModel {
@@ -817,11 +936,11 @@ public struct ContentView: View {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(WalkmanTheme.hiResGold)
                         Text("Unrecognized Device: \(unsupported)")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(WalkmanFont.calloutBold)
                             .foregroundStyle(.white)
                     }
                     Text("Ensure your Sony Walkman or MicroSD card is properly formatted with a /Music/ or /MUSIC/ directory.")
-                        .font(.system(size: 11))
+                        .font(WalkmanFont.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
@@ -836,36 +955,48 @@ public struct ContentView: View {
                 Button(action: refreshDrives) {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 12, weight: .semibold))
                         Text("Detect Drives")
+                            .font(WalkmanFont.calloutMedium)
                     }
-                    .font(.system(size: 12.5, weight: .semibold))
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 7)
-                    .background(WalkmanTheme.silverGradient)
+                    .padding(.vertical, 8)
                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 18))
+                .help("Scan macOS volumes for mounted Walkman storage or inserted MicroSD cards")
                 
                 Button(action: selectCustomStorageFolder) {
-                    HStack(spacing: 5) {
+                    HStack(spacing: 6) {
                         Image(systemName: "folder")
+                            .font(.system(size: 12, weight: .semibold))
                         Text("Select Storage Folder...")
+                            .font(WalkmanFont.calloutMedium)
                     }
-                    .font(.system(size: 12, weight: .medium))
                     .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background(Color.white.opacity(0.08))
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .padding(.vertical, 8)
+                    .foregroundStyle(WalkmanTheme.silverLight)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 18))
+                .help("Select a Walkman Music folder or MicroSD card manually")
+                
+                Button(action: { showingMtpHelpSheet = true }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "questionmark.circle")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Mac Transfer Guide")
+                            .font(WalkmanFont.calloutMedium)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .foregroundStyle(WalkmanTheme.silverLight)
+                }
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 18))
+                .help("Instructions for Android Walkman file transfer on macOS")
             }
             
             Spacer()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(WalkmanTheme.background)
     }
 
     @ViewBuilder
