@@ -1511,7 +1511,7 @@ public struct ContentView: View {
         if window.styleMask.contains(.fullScreen) { return }
 
         let inspectorWidth: CGFloat = 300.0
-        let baseMinW: CGFloat = 1440.0
+        let baseMinW: CGFloat = 1520.0
         let currentFrame = window.frame
         let screen = window.screen ?? NSScreen.main
         let visibleFrame = screen?.visibleFrame ?? currentFrame
@@ -1542,15 +1542,16 @@ public struct ContentView: View {
             window.setFrame(newFrame, display: true)
         } else {
             // Restore base minimum width constraint
-            window.minSize = NSSize(width: baseMinW, height: window.minSize.height)
-            window.contentMinSize = NSSize(width: baseMinW, height: window.contentMinSize.height)
+            let effectiveBaseMinW = min(baseMinW, visibleFrame.width)
+            window.minSize = NSSize(width: effectiveBaseMinW, height: window.minSize.height)
+            window.contentMinSize = NSSize(width: effectiveBaseMinW, height: window.contentMinSize.height)
 
             // Determine contracted target width
             let targetWidth: CGFloat
             if let saved = savedWidthBeforeInspector, abs(currentFrame.size.width - expectedWidthWithInspector) < 15 {
-                targetWidth = max(saved, baseMinW)
+                targetWidth = max(saved, effectiveBaseMinW)
             } else {
-                targetWidth = max(currentFrame.size.width - inspectorWidth, baseMinW)
+                targetWidth = max(currentFrame.size.width - inspectorWidth, effectiveBaseMinW)
             }
 
             var targetOriginX = currentFrame.origin.x
