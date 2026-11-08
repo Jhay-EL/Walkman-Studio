@@ -767,3 +767,46 @@ public struct CalibrationPillButtonStyle: ButtonStyle {
     }
 }
 
+// MARK: - Interactive Table Cell Navigation Link
+public struct TableNavigationLink: View {
+    public let text: String
+    public let color: Color
+    public var hoverColor: Color
+    public let action: () -> Void
+
+    @State private var isHovered: Bool = false
+
+    public init(
+        text: String,
+        color: Color,
+        hoverColor: Color = WalkmanTheme.hiResGoldLight,
+        action: @escaping () -> Void
+    ) {
+        self.text = text
+        self.color = color
+        self.hoverColor = hoverColor
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            Text(text)
+                .font(WalkmanFont.callout)
+                .foregroundStyle(isHovered ? hoverColor : color)
+                .underline(isHovered, color: hoverColor.opacity(0.85))
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .buttonStyle(.plain)
+        .onHover { h in
+            isHovered = h
+            if h {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+    }
+}
+
+

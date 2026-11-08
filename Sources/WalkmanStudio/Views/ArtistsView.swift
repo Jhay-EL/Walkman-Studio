@@ -12,6 +12,7 @@ public struct ArtistsView: View {
     let tracks: [Track]
     let precomputedArtists: [ArtistItem]?
     let showToolbar: Bool
+    var initialSelectedArtistName: String? = nil
     let onSelectTrack: (Track) -> Void
     var onEditTrack: ((Track) -> Void)? = nil
     var onEditTrackWithList: ((Track, [Track]) -> Void)? = nil
@@ -42,6 +43,7 @@ public struct ArtistsView: View {
         tracks: [Track],
         precomputedArtists: [ArtistItem]? = nil,
         showToolbar: Bool = true,
+        initialSelectedArtistName: String? = nil,
         onSelectTrack: @escaping (Track) -> Void,
         onEditTrack: ((Track) -> Void)? = nil,
         onEditTrackWithList: ((Track, [Track]) -> Void)? = nil,
@@ -53,6 +55,7 @@ public struct ArtistsView: View {
         self.tracks = tracks
         self.precomputedArtists = precomputedArtists
         self.showToolbar = showToolbar
+        self.initialSelectedArtistName = initialSelectedArtistName
         self.onSelectTrack = onSelectTrack
         self.onEditTrack = onEditTrack
         self.onEditTrackWithList = onEditTrackWithList
@@ -64,7 +67,7 @@ public struct ArtistsView: View {
         let initial = precomputedArtists ?? []
         self._cachedArtists = State(initialValue: initial)
         self._displayedArtists = State(initialValue: initial)
-        self._selectedArtistName = State(initialValue: initial.first?.name)
+        self._selectedArtistName = State(initialValue: initialSelectedArtistName ?? initial.first?.name)
     }
     
     private var baseArtists: [ArtistItem] {
@@ -174,6 +177,25 @@ public struct ArtistsView: View {
         }
         return displayedArtists.first
     }
+
+    private func selectTargetArtistIfNeeded(proxy: ScrollViewProxy? = nil) {
+        guard let target = initialSelectedArtistName, !target.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let list = baseArtists.isEmpty ? cachedArtists : baseArtists
+        if let match = list.first(where: {
+            $0.name.localizedCaseInsensitiveCompare(target) == .orderedSame
+        }) {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                self.selectedArtistName = match.name
+            }
+            if let proxy = proxy {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        proxy.scrollTo(match.name, anchor: .center)
+                    }
+                }
+            }
+        }
+    }
     
     private func filteredAlbums(for artist: ArtistItem) -> [AlbumItem] {
         if formatFilter == "ALL" {
@@ -224,38 +246,47 @@ public struct ArtistsView: View {
                     if displayedArtists.isEmpty {
                         leftEmptyStateView
                     } else {
-                        ScrollView {
-                            LazyVStack(spacing: 3) {
-                                ForEach(displayedArtists) { art in
-                                    let isSelected = activeArtist?.name == art.name
-                                    ArtistListRowView(
-                                        artist: art,
-                                        isSelected: isSelected,
-                                        onSelect: {
-                                            selectedArtistName = art.name
-                                        },
-                                        onPlayAll: {
-                                            if let first = art.tracks.first {
-                                                player.play(track: first, in: art.tracks)
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                LazyVStack(spacing: 3) {
+                                    ForEach(displayedArtists) { art in
+                                        let isSelected = activeArtist?.name == art.name
+                                        ArtistListRowView(
+                                            artist: art,
+                                            isSelected: isSelected,
+                                            onSelect: {
+                                                selectedArtistName = art.name
+                                            },
+                                            onPlayAll: {
+                                                if let first = art.tracks.first {
+                                                    player.play(track: first, in: art.tracks)
+                                                }
+                                            },
+                                            onRefreshPhoto: {
+                                                ArtistArtCache.shared.refresh(artistName: art.name, representativeTrack: art.representativeTrack)
+                                            },
+                                            onCustomPhoto: {
+                                                promptCustomPhoto(for: art.name)
+                                            },
+                                            onTransferArtist: onTransferArtist != nil ? { onTransferArtist?(art) } : nil,
+                                            onFetchLyrics: {
+                                                selectedArtistName = art.name
+                                                showBatchLyricsSheet = true
                                             }
-                                        },
-                                        onRefreshPhoto: {
-                                            ArtistArtCache.shared.refresh(artistName: art.name, representativeTrack: art.representativeTrack)
-                                        },
-                                        onCustomPhoto: {
-                                            promptCustomPhoto(for: art.name)
-                                        },
-                                        onTransferArtist: onTransferArtist != nil ? { onTransferArtist?(art) } : nil,
-                                        onFetchLyrics: {
-                                            selectedArtistName = art.name
-                                            showBatchLyricsSheet = true
-                                        }
-                                    )
+                                        )
+                                        .id(art.name)
+                                    }
                                 }
+                                .padding(.horizontal, 8)
+                                .padding(.top, 8)
+                                .padding(.bottom, 88)
                             }
-                            .padding(.horizontal, 8)
-                            .padding(.top, 8)
-                            .padding(.bottom, 88)
+                            .onAppear {
+                                selectTargetArtistIfNeeded(proxy: proxy)
+                            }
+                            .onChange(of: initialSelectedArtistName) { _, _ in
+                                selectTargetArtistIfNeeded(proxy: proxy)
+                            }
                         }
                     }
                 }

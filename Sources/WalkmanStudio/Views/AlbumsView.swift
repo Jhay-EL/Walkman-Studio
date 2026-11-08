@@ -36,6 +36,8 @@ public struct AlbumsView: View {
     let precomputedAlbums: [AlbumItem]?
     let showToolbar: Bool
     let externalSortOption: AlbumSortOption?
+    var initialSelectedAlbumName: String? = nil
+    var initialSelectedAlbumArtist: String? = nil
     let onSelectTrack: (Track) -> Void
     var onEditAlbum: ((AlbumItem) -> Void)? = nil
     var onEditTrack: ((Track) -> Void)? = nil
@@ -70,6 +72,8 @@ public struct AlbumsView: View {
         precomputedAlbums: [AlbumItem]? = nil,
         showToolbar: Bool = true,
         externalSortOption: AlbumSortOption? = nil,
+        initialSelectedAlbumName: String? = nil,
+        initialSelectedAlbumArtist: String? = nil,
         onSelectTrack: @escaping (Track) -> Void,
         onEditAlbum: ((AlbumItem) -> Void)? = nil,
         onEditTrack: ((Track) -> Void)? = nil,
@@ -84,6 +88,8 @@ public struct AlbumsView: View {
         self.precomputedAlbums = precomputedAlbums
         self.showToolbar = showToolbar
         self.externalSortOption = externalSortOption
+        self.initialSelectedAlbumName = initialSelectedAlbumName
+        self.initialSelectedAlbumArtist = initialSelectedAlbumArtist
         self.onSelectTrack = onSelectTrack
         self.onEditAlbum = onEditAlbum
         self.onEditTrack = onEditTrack
@@ -97,6 +103,13 @@ public struct AlbumsView: View {
         let initial = precomputedAlbums ?? []
         self._cachedAlbums = State(initialValue: initial)
         self._displayedAlbums = State(initialValue: initial)
+        if let target = initialSelectedAlbumName, !target.isEmpty {
+            let matched = initial.first(where: {
+                $0.name.localizedCaseInsensitiveCompare(target) == .orderedSame &&
+                (initialSelectedAlbumArtist == nil || $0.artist.localizedCaseInsensitiveCompare(initialSelectedAlbumArtist!) == .orderedSame)
+            }) ?? initial.first(where: { $0.name.localizedCaseInsensitiveCompare(target) == .orderedSame })
+            self._selectedAlbum = State(initialValue: matched)
+        }
     }
     
     private var effectiveSortOption: AlbumSortOption {
@@ -257,6 +270,19 @@ public struct AlbumsView: View {
             }
         }
     }
+
+    private func selectTargetAlbumIfNeeded() {
+        guard let target = initialSelectedAlbumName, !target.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let list = baseAlbums.isEmpty ? cachedAlbums : baseAlbums
+        if let match = list.first(where: { alb in
+            alb.name.localizedCaseInsensitiveCompare(target) == .orderedSame &&
+            (initialSelectedAlbumArtist == nil || alb.artist.localizedCaseInsensitiveCompare(initialSelectedAlbumArtist!) == .orderedSame)
+        }) ?? list.first(where: { $0.name.localizedCaseInsensitiveCompare(target) == .orderedSame }) {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                self.selectedAlbum = match
+            }
+        }
+    }
     
     public var body: some View {
         VStack(spacing: 0) {
@@ -344,6 +370,10 @@ public struct AlbumsView: View {
             } else if precomputedAlbums != nil {
                 recomputeDisplayedAlbums()
             }
+            selectTargetAlbumIfNeeded()
+        }
+        .onChange(of: initialSelectedAlbumName) { _, _ in
+            selectTargetAlbumIfNeeded()
         }
         .onChange(of: precomputedAlbums) { _, newPrecomputed in
             if let newPrecomputed = newPrecomputed {

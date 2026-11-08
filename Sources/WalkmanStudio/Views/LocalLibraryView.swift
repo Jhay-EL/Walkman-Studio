@@ -126,6 +126,9 @@ public struct LocalLibraryView: View {
     @State private var directTransferTargetName: String = "Sony Walkman"
 
     // Missing Folders and Unreachable Files Resilience State
+    @State private var targetAlbumName: String? = nil
+    @State private var targetAlbumArtist: String? = nil
+    @State private var targetArtistName: String? = nil
     @State private var showPurgeConfirmation: Bool = false
     @State private var showPlaybackMissingAlert: Bool = false
     @State private var missingTrackForAlert: Track? = nil
@@ -550,7 +553,14 @@ public struct LocalLibraryView: View {
         .onChange(of: recentSortOrder) { _, _ in
             syncQueueWithActiveTab()
         }
-        .onChange(of: displayMode) { _, _ in
+        .onChange(of: displayMode) { oldMode, newMode in
+            if newMode != .albums {
+                targetAlbumName = nil
+                targetAlbumArtist = nil
+            }
+            if newMode != .artists {
+                targetArtistName = nil
+            }
             syncQueueWithActiveTab()
         }
         .onChange(of: searchQuery) { _, _ in
@@ -1092,18 +1102,39 @@ public struct LocalLibraryView: View {
             .width(min: 130, ideal: 220)
 
             TableColumn("Artist", value: \.artist) { track in
-                Text(track.artist.isEmpty ? "Unknown Artist" : track.artist)
-                    .font(WalkmanFont.callout)
-                    .foregroundStyle(Color.white.opacity(0.85))
-                    .lineLimit(1)
+                let artistName = track.artist.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !artistName.isEmpty {
+                    TableNavigationLink(text: artistName, color: Color.white.opacity(0.85)) {
+                        self.targetArtistName = artistName
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            self.displayMode = .artists
+                        }
+                    }
+                } else {
+                    Text(artistName.isEmpty ? "Unknown Artist" : artistName)
+                        .font(WalkmanFont.callout)
+                        .foregroundStyle(Color.white.opacity(0.85))
+                        .lineLimit(1)
+                }
             }
             .width(min: 90, ideal: 140)
 
             TableColumn("Album", value: \.album) { track in
-                Text(track.album.isEmpty ? "—" : track.album)
-                    .font(WalkmanFont.callout)
-                    .foregroundStyle(Color.secondary)
-                    .lineLimit(1)
+                let albumName = track.album.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !albumName.isEmpty {
+                    TableNavigationLink(text: albumName, color: Color.secondary) {
+                        self.targetAlbumName = albumName
+                        self.targetAlbumArtist = track.artist
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            self.displayMode = .albums
+                        }
+                    }
+                } else {
+                    Text(albumName.isEmpty ? "—" : albumName)
+                        .font(WalkmanFont.callout)
+                        .foregroundStyle(Color.secondary)
+                        .lineLimit(1)
+                }
             }
             .width(min: 90, ideal: 150)
 
@@ -1269,18 +1300,39 @@ public struct LocalLibraryView: View {
             .width(min: 130, ideal: 220)
 
             TableColumn("Artist", value: \.artist) { track in
-                Text(track.artist.isEmpty ? "Unknown Artist" : track.artist)
-                    .font(WalkmanFont.callout)
-                    .foregroundStyle(Color.white.opacity(0.85))
-                    .lineLimit(1)
+                let artistName = track.artist.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !artistName.isEmpty {
+                    TableNavigationLink(text: artistName, color: Color.white.opacity(0.85)) {
+                        self.targetArtistName = artistName
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            self.displayMode = .artists
+                        }
+                    }
+                } else {
+                    Text(artistName.isEmpty ? "Unknown Artist" : artistName)
+                        .font(WalkmanFont.callout)
+                        .foregroundStyle(Color.white.opacity(0.85))
+                        .lineLimit(1)
+                }
             }
             .width(min: 90, ideal: 140)
 
             TableColumn("Album", value: \.album) { track in
-                Text(track.album.isEmpty ? "—" : track.album)
-                    .font(WalkmanFont.callout)
-                    .foregroundStyle(Color.secondary)
-                    .lineLimit(1)
+                let albumName = track.album.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !albumName.isEmpty {
+                    TableNavigationLink(text: albumName, color: Color.secondary) {
+                        self.targetAlbumName = albumName
+                        self.targetAlbumArtist = track.artist
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            self.displayMode = .albums
+                        }
+                    }
+                } else {
+                    Text(albumName.isEmpty ? "—" : albumName)
+                        .font(WalkmanFont.callout)
+                        .foregroundStyle(Color.secondary)
+                        .lineLimit(1)
+                }
             }
             .width(min: 90, ideal: 150)
 
@@ -1486,6 +1538,8 @@ public struct LocalLibraryView: View {
             precomputedAlbums: precomputed,
             showToolbar: false,
             externalSortOption: mappedAlbumSortOption,
+            initialSelectedAlbumName: targetAlbumName,
+            initialSelectedAlbumArtist: targetAlbumArtist,
             onSelectTrack: { track in
                 selectedTrackId = track.id
                 onInspectTrack(track)
@@ -1521,7 +1575,7 @@ public struct LocalLibraryView: View {
                 handleTransferToWalkman(tracks: [track])
             }
         )
-        .id("local-albums-\(formatFilter)-\(searchQuery)-\(filteredTracks.count)")
+        .id("local-albums-\(formatFilter)-\(searchQuery)-\(filteredTracks.count)-\(targetAlbumName ?? "all")")
     }
 
     // -------------------------------------------------------------------------
@@ -1534,6 +1588,7 @@ public struct LocalLibraryView: View {
             tracks: filteredTracks,
             precomputedArtists: precomputed,
             showToolbar: false,
+            initialSelectedArtistName: targetArtistName,
             onSelectTrack: { track in
                 selectedTrackId = track.id
                 onInspectTrack(track)
@@ -1561,7 +1616,7 @@ public struct LocalLibraryView: View {
                 handleTransferToWalkman(tracks: [track])
             }
         )
-        .id("local-artists-\(formatFilter)-\(searchQuery)-\(filteredTracks.count)")
+        .id("local-artists-\(formatFilter)-\(searchQuery)-\(filteredTracks.count)-\(targetArtistName ?? "all")")
     }
 
     // -------------------------------------------------------------------------

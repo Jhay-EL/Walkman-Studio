@@ -64,6 +64,8 @@ public struct RecentlyAddedView: View {
     var onDeleteTrack: ((Track) -> Void)? = nil
     var onEditTrack: ((Track) -> Void)? = nil
     var onTrimCutTrack: ((Track) -> Void)? = nil
+    var onNavigateToArtist: ((String) -> Void)? = nil
+    var onNavigateToAlbum: ((String, String?) -> Void)? = nil
     
     private static let defaultSortOrder = [KeyPathComparator(\RankedTrack.dateAdded, order: .reverse)]
     
@@ -97,7 +99,9 @@ public struct RecentlyAddedView: View {
         onGoToTransfer: @escaping () -> Void,
         onDeleteTrack: ((Track) -> Void)? = nil,
         onEditTrack: ((Track) -> Void)? = nil,
-        onTrimCutTrack: ((Track) -> Void)? = nil
+        onTrimCutTrack: ((Track) -> Void)? = nil,
+        onNavigateToArtist: ((String) -> Void)? = nil,
+        onNavigateToAlbum: ((String, String?) -> Void)? = nil
     ) {
         self.tracks = tracks
         self.isLoading = isLoading
@@ -107,6 +111,8 @@ public struct RecentlyAddedView: View {
         self.onDeleteTrack = onDeleteTrack
         self.onEditTrack = onEditTrack
         self.onTrimCutTrack = onTrimCutTrack
+        self.onNavigateToArtist = onNavigateToArtist
+        self.onNavigateToAlbum = onNavigateToAlbum
     }
     
     // MARK: - Fast Date & Duration Formatters (Computed lazily for visible cells only)
@@ -717,18 +723,32 @@ public struct RecentlyAddedView: View {
             .width(min: 130, ideal: 220)
             
             TableColumn("Artist", value: \.artist) { item in
-                Text(item.artist.isEmpty ? "Unknown Artist" : item.artist)
-                    .font(WalkmanFont.callout)
-                    .foregroundStyle(Color.white.opacity(0.85))
-                    .lineLimit(1)
+                let artistName = item.artist.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !artistName.isEmpty && onNavigateToArtist != nil {
+                    TableNavigationLink(text: artistName, color: Color.white.opacity(0.85)) {
+                        onNavigateToArtist?(artistName)
+                    }
+                } else {
+                    Text(artistName.isEmpty ? "Unknown Artist" : artistName)
+                        .font(WalkmanFont.callout)
+                        .foregroundStyle(Color.white.opacity(0.85))
+                        .lineLimit(1)
+                }
             }
             .width(min: 90, ideal: 140)
             
             TableColumn("Album", value: \.album) { item in
-                Text(item.album.isEmpty ? "—" : item.album)
-                    .font(WalkmanFont.callout)
-                    .foregroundStyle(Color.secondary)
-                    .lineLimit(1)
+                let albumName = item.album.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !albumName.isEmpty && onNavigateToAlbum != nil {
+                    TableNavigationLink(text: albumName, color: Color.secondary) {
+                        onNavigateToAlbum?(albumName, item.artist)
+                    }
+                } else {
+                    Text(albumName.isEmpty ? "—" : albumName)
+                        .font(WalkmanFont.callout)
+                        .foregroundStyle(Color.secondary)
+                        .lineLimit(1)
+                }
             }
             .width(min: 90, ideal: 150)
             

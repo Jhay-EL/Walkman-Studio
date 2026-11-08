@@ -61,6 +61,9 @@ public struct ContentView: View {
     @State private var cachedAlbums: [AlbumItem] = []
     @State private var cachedRecentTracks: [Track] = []
     @State private var cachedLanguageTracks: [Track] = []
+    @State private var targetAlbumName: String? = nil
+    @State private var targetAlbumArtist: String? = nil
+    @State private var targetArtistName: String? = nil
     @ObservedObject private var duplicateFinder = DuplicateFinderService.shared
     
     private var selectedTrack: Track? {
@@ -1052,6 +1055,15 @@ public struct ContentView: View {
                                     },
                                     onTrimCutTrack: { track in
                                         self.trackToTrimCut = track
+                                    },
+                                    onNavigateToArtist: { artist in
+                                        self.targetArtistName = artist
+                                        self.selectedTab = .artists
+                                    },
+                                    onNavigateToAlbum: { album, artist in
+                                        self.targetAlbumName = album
+                                        self.targetAlbumArtist = artist
+                                        self.selectedTab = .albums
                                     }
                                 )
                                 .id("library_\(activeDrive?.mountPoint ?? "no_drive")")
@@ -1077,6 +1089,15 @@ public struct ContentView: View {
                                     },
                                     onTrimCutTrack: { track in
                                         self.trackToTrimCut = track
+                                    },
+                                    onNavigateToArtist: { artist in
+                                        self.targetArtistName = artist
+                                        self.selectedTab = .artists
+                                    },
+                                    onNavigateToAlbum: { album, artist in
+                                        self.targetAlbumName = album
+                                        self.targetAlbumArtist = artist
+                                        self.selectedTab = .albums
                                     }
                                 )
                                 .id("recent_\(activeDrive?.mountPoint ?? "no_drive")")
@@ -1085,6 +1106,8 @@ public struct ContentView: View {
                                 AlbumsView(
                                     tracks: tracks,
                                     precomputedAlbums: cachedAlbums,
+                                    initialSelectedAlbumName: targetAlbumName,
+                                    initialSelectedAlbumArtist: targetAlbumArtist,
                                     onSelectTrack: { track in
                                         self.selectedTrackId = track.id
                                         self.showInspector = true
@@ -1109,12 +1132,13 @@ public struct ContentView: View {
                                         deleteTrackFromDevice(track)
                                     }
                                 )
-                                .id("albums_\(activeDrive?.mountPoint ?? "no_drive")")
+                                .id("albums_\(activeDrive?.mountPoint ?? "no_drive")_\(targetAlbumName ?? "all")")
                                 
                             case .artists:
                                 ArtistsView(
                                     tracks: tracks,
                                     precomputedArtists: cachedArtists,
+                                    initialSelectedArtistName: targetArtistName,
                                     onSelectTrack: { track in
                                         self.selectedTrackId = track.id
                                         self.showInspector = true
@@ -1130,7 +1154,7 @@ public struct ContentView: View {
                                         self.trackToTrimCut = track
                                     }
                                 )
-                                .id("artists_\(activeDrive?.mountPoint ?? "no_drive")")
+                                .id("artists_\(activeDrive?.mountPoint ?? "no_drive")_\(targetArtistName ?? "all")")
                                 
                             case .hiRes:
                                 HiResAudioView(
@@ -1366,6 +1390,15 @@ public struct ContentView: View {
         }
         .onReceive(heartbeatTimer) { _ in
             checkDrivesHeartbeat()
+        }
+        .onChange(of: selectedTab) { oldTab, newTab in
+            if newTab != .albums {
+                targetAlbumName = nil
+                targetAlbumArtist = nil
+            }
+            if newTab != .artists {
+                targetArtistName = nil
+            }
         }
         .onChange(of: player.currentTrack?.id) { _, newTrackId in
             if let newId = newTrackId {
