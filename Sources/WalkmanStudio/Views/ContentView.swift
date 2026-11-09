@@ -24,6 +24,7 @@ public struct ContentView: View {
     @State private var selectedTab: NavigationTab = .localLibrary
     @State private var selectedTrackId: String?
     @State private var showInspector: Bool = true
+    @State private var wasInspectorOpenBeforeDisabledTab: Bool = false
     @State private var isEjecting: Bool = false
     @State private var queueCount: Int = 0
     @State private var deviceInfo: WalkmanDeviceInfo? = nil
@@ -148,6 +149,19 @@ public struct ContentView: View {
     private var editingTrackList: [Track] {
         guard let track = trackToEdit else { return [] }
         return getEditingTrackList(for: track)
+    }
+    
+    private var isInspectorAllowedForActiveTab: Bool {
+        isInspectorAllowed(for: selectedTab)
+    }
+
+    private func isInspectorAllowed(for tab: NavigationTab) -> Bool {
+        switch tab {
+        case .duplicates, .transfer, .backupRestore:
+            return false
+        default:
+            return true
+        }
     }
     
     private func selectDevice(_ device: WalkmanDevice) {
@@ -1416,8 +1430,9 @@ public struct ContentView: View {
                             Spacer(minLength: 0)
                             TrackPreviewBar(
                                 libraryTracks: !tracks.isEmpty ? tracks : localLibrary.tracks,
-                                isInspectorPresented: showInspector,
+                                isInspectorPresented: showInspector && isInspectorAllowedForActiveTab,
                                 onOpenInspector: {
+                                    guard isInspectorAllowedForActiveTab else { return }
                                     if let cur = player.currentTrack {
                                         self.selectedTrackId = cur.id
                                     }
@@ -1440,7 +1455,7 @@ public struct ContentView: View {
                     .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
                     .background(WalkmanTheme.background.ignoresSafeArea())
                     .adaptiveInspector(isPresented: Binding(
-                        get: { showInspector && !isFullScreenPlayerPresented },
+                        get: { showInspector && isInspectorAllowedForActiveTab && !isFullScreenPlayerPresented },
                         set: { showInspector = $0 }
                     )) {
                         MetadataStudioView(
@@ -1477,19 +1492,21 @@ public struct ContentView: View {
                                 .help("Clean macOS junk files and safely unmount Walkman")
                             }
                             
-                            // Inspector Toggle
-                            Button(action: {
-                                if !showInspector && selectedTrackId == nil, let cur = player.currentTrack {
-                                    self.selectedTrackId = cur.id
+                            // Inspector Toggle (Only shown when the active tab supports Track Details)
+                            if isInspectorAllowedForActiveTab {
+                                Button(action: {
+                                    if !showInspector && selectedTrackId == nil, let cur = player.currentTrack {
+                                        self.selectedTrackId = cur.id
+                                    }
+                                    withAnimation(.easeInOut(duration: 0.25)) {
+                                        showInspector.toggle()
+                                    }
+                                }) {
+                                    Label("Inspector", systemImage: "sidebar.trailing")
                                 }
-                                withAnimation(.easeInOut(duration: 0.25)) {
-                                    showInspector.toggle()
-                                }
-                            }) {
-                                Label("Inspector", systemImage: "sidebar.trailing")
+                                .help("Toggle Metadata & Artwork Inspector (Cmd+I)")
+                                .keyboardShortcut("i", modifiers: [.command])
                             }
-                            .help("Toggle Metadata & Artwork Inspector (Cmd+I)")
-                            .keyboardShortcut("i", modifiers: [.command])
                         }
                     }
                     .toolbarBackground(.hidden, for: .windowToolbar)
@@ -1546,6 +1563,21 @@ public struct ContentView: View {
             }
             if newTab != .artists {
                 targetArtistName = nil
+            }
+            if !isInspectorAllowed(for: newTab) {
+                if showInspector {
+                    wasInspectorOpenBeforeDisabledTab = true
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        showInspector = false
+                    }
+                }
+            } else if !isInspectorAllowed(for: oldTab) {
+                if wasInspectorOpenBeforeDisabledTab {
+                    wasInspectorOpenBeforeDisabledTab = false
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        showInspector = true
+                    }
+                }
             }
         }
         .onChange(of: player.currentTrack?.id) { _, newTrackId in
