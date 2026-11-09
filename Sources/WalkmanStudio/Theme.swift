@@ -418,6 +418,90 @@ public struct LiquidGlassButtonStyle: ButtonStyle {
     }
 }
 
+// MARK: - Liquid Glass Dropdown Button Label Wrapper
+public struct LiquidGlassDropdownLabel<Content: View>: View {
+    public let cornerRadius: CGFloat
+    public let height: CGFloat
+    public let isHovered: Bool
+    public let isHiRes: Bool
+    @ViewBuilder public let content: () -> Content
+
+    public init(
+        cornerRadius: CGFloat = 18,
+        height: CGFloat = 36,
+        isHovered: Bool = false,
+        isHiRes: Bool = false,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.cornerRadius = cornerRadius
+        self.height = height
+        self.isHovered = isHovered
+        self.isHiRes = isHiRes
+        self.content = content
+    }
+
+    public var body: some View {
+        content()
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .frame(height: height)
+            .background(
+                ZStack {
+                    Color.white.opacity(isHovered ? 0.14 : 0.08)
+
+                    // Surface optical liquid gloss (top specular reflection)
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color.white.opacity(isHovered ? 0.42 : 0.35), location: 0.0),
+                                .init(color: Color.white.opacity(0.0), location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 11)
+                        Spacer(minLength: 0)
+                    }
+                }
+            )
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(
+                        isHiRes ?
+                        LinearGradient(
+                            stops: [
+                                .init(color: WalkmanTheme.hiResGold.opacity(isHovered ? 0.70 : 0.50), location: 0.0),
+                                .init(color: WalkmanTheme.hiResGold.opacity(isHovered ? 0.40 : 0.25), location: 0.5),
+                                .init(color: WalkmanTheme.hiResGold.opacity(0.10), location: 1.0)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ) :
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color.white.opacity(isHovered ? 0.60 : 0.38), location: 0.0),
+                                .init(color: Color.white.opacity(isHovered ? 0.28 : 0.14), location: 0.5),
+                                .init(color: Color.white.opacity(0.05), location: 1.0)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            )
+            .compositingGroup()
+            .shadow(
+                color: Color.black.opacity(isHovered ? 0.25 : 0.14),
+                radius: isHovered ? 6 : 3,
+                x: 0,
+                y: isHovered ? 3 : 1.5
+            )
+            .scaleEffect(isHovered ? 1.025 : 1.0)
+            .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+    }
+}
+
 public struct WalkmanPressableButtonStyle: ButtonStyle {
     public init() {}
     public func makeBody(configuration: Configuration) -> some View {

@@ -991,56 +991,24 @@ private struct FormatDropdownMenuView: View {
                 }
             }
         } label: {
-            HStack(spacing: 6) {
-                if let icon = activeOption?.icon {
-                    Image(systemName: icon)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(activeOption?.isHiRes == true ? WalkmanTheme.hiResGold : Color.white)
-                }
-                
-                Text(activeOption?.title ?? selectedFilter)
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(activeOption?.isHiRes == true ? WalkmanTheme.hiResGold : Color.white)
-                    .lineLimit(1)
-                
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(WalkmanTheme.silverMuted)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .frame(height: 38)
-            .background(
-                ZStack {
-                    Capsule()
-                        .fill(Color.white.opacity(isHovered ? 0.12 : 0.06))
-                    
-                    VStack(spacing: 0) {
-                        LinearGradient(
-                            stops: [
-                                .init(color: .white.opacity(isHovered ? 0.28 : 0.16), location: 0.0),
-                                .init(color: .clear, location: 1.0)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                        .frame(height: 7)
-                        Spacer(minLength: 0)
+            LiquidGlassDropdownLabel(height: 38, isHovered: isHovered, isHiRes: activeOption?.isHiRes == true) {
+                HStack(spacing: 7) {
+                    if let icon = activeOption?.icon {
+                        Image(systemName: icon)
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundStyle(activeOption?.isHiRes == true ? WalkmanTheme.hiResGold : WalkmanTheme.silverLight)
                     }
-                    .clipShape(Capsule())
+                    
+                    Text(activeOption?.title ?? selectedFilter)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(activeOption?.isHiRes == true ? WalkmanTheme.hiResGold : Color.white)
+                        .lineLimit(1)
+                    
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9.5, weight: .bold))
+                        .foregroundStyle(WalkmanTheme.silverMuted)
                 }
-            )
-            .clipShape(Capsule())
-            .overlay(
-                Capsule()
-                    .stroke(
-                        activeOption?.isHiRes == true ?
-                            WalkmanTheme.hiResGold.opacity(isHovered ? 0.45 : 0.28) :
-                            Color.white.opacity(isHovered ? 0.28 : 0.12),
-                        lineWidth: 0.85
-                    )
-            )
-            .scaleEffect(isHovered ? 1.02 : 1.0)
+            }
         }
         .buttonStyle(.plain)
         .menuStyle(.borderlessButton)
@@ -1053,7 +1021,6 @@ private struct FormatDropdownMenuView: View {
                 NSCursor.pop()
             }
         }
-        .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
     }
 }
 

@@ -1205,49 +1205,22 @@ private struct LanguageStudyDisplayModeDropdown: View {
                 }
             }
         } label: {
-            HStack(spacing: 6) {
-                Image(systemName: displayMode.icon)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.white)
+            LiquidGlassDropdownLabel(height: 36, isHovered: isHovered) {
+                HStack(spacing: 7) {
+                    Image(systemName: displayMode.icon)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(WalkmanTheme.silverLight)
 
-                Text(displayMode.rawValue)
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(Color.white)
-                    .lineLimit(1)
+                    Text(displayMode.rawValue)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                        .lineLimit(1)
 
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(WalkmanTheme.silverMuted)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .frame(height: 36)
-            .background(
-                ZStack {
-                    Capsule()
-                        .fill(Color.white.opacity(isHovered ? 0.12 : 0.06))
-
-                    VStack(spacing: 0) {
-                        LinearGradient(
-                            stops: [
-                                .init(color: .white.opacity(isHovered ? 0.28 : 0.16), location: 0.0),
-                                .init(color: .clear, location: 1.0)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                        .frame(height: 7)
-                        Spacer(minLength: 0)
-                    }
-                    .clipShape(Capsule())
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9.5, weight: .bold))
+                        .foregroundStyle(WalkmanTheme.silverMuted)
                 }
-            )
-            .clipShape(Capsule())
-            .overlay(
-                Capsule()
-                    .stroke(Color.white.opacity(isHovered ? 0.28 : 0.12), lineWidth: 0.85)
-            )
-            .scaleEffect(isHovered ? 1.02 : 1.0)
+            }
         }
         .buttonStyle(.plain)
         .menuStyle(.borderlessButton)
@@ -1260,7 +1233,6 @@ private struct LanguageStudyDisplayModeDropdown: View {
                 NSCursor.pop()
             }
         }
-        .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
     }
 }
 
