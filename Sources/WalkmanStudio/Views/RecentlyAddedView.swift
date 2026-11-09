@@ -991,7 +991,7 @@ private struct FormatDropdownMenuView: View {
                 }
             }
         } label: {
-            LiquidGlassDropdownLabel(height: 36, isHovered: isHovered, isHiRes: activeOption?.isHiRes == true) {
+            LiquidGlassDropdownLabel(height: 38, isHovered: isHovered, isHiRes: activeOption?.isHiRes == true) {
                 HStack(spacing: 7) {
                     if let icon = activeOption?.icon {
                         Image(systemName: icon)
