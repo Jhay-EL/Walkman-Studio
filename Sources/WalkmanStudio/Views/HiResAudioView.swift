@@ -528,7 +528,7 @@ public struct HiResAudioView: View {
                 )
             }
         }
-        .frame(minWidth: 680)
+        .frame(minWidth: 760)
     }
     
     private var dropdownToolbarLayout: some View {
@@ -837,14 +837,13 @@ public struct HiResAudioView: View {
     // STUDIO MASTER CONSOLE BANNER
     // -------------------------------------------------------------------------
     
-    private var studioConsoleBanner: some View {
-        HStack(spacing: 16) {
-            // Official Japan Audio Society / Sony Hi-Res Audio Logo
+    private func hiResLogoView(size: CGFloat) -> some View {
+        Group {
             if let logo = Self.cachedLogoImage {
                 Image(nsImage: logo)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: 48, height: 48)
+                    .frame(width: size, height: size)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -855,14 +854,14 @@ public struct HiResAudioView: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(WalkmanTheme.hiResGold)
-                        .frame(width: 48, height: 48)
+                        .frame(width: size, height: size)
                     
                     VStack(spacing: 1) {
                         Text("Hi-Res")
-                            .font(.system(size: 12, weight: .black, design: .serif))
+                            .font(.system(size: size * 0.25, weight: .black, design: .serif))
                             .foregroundStyle(Color.black)
                         Text("AUDIO")
-                            .font(.system(size: 8, weight: .bold))
+                            .font(.system(size: size * 0.16, weight: .bold))
                             .tracking(0.5)
                             .foregroundStyle(Color.black)
                     }
@@ -873,6 +872,27 @@ public struct HiResAudioView: View {
                 )
                 .shadow(color: Color.black.opacity(0.35), radius: 5, x: 0, y: 2)
             }
+        }
+    }
+    
+    private var studioConsoleBanner: some View {
+        ViewThatFits(in: .horizontal) {
+            wideStudioConsoleBanner
+            compactStudioConsoleBanner
+        }
+        .padding(14)
+        .background(WalkmanTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 0.85)
+        )
+        .shadow(color: Color.black.opacity(0.20), radius: 4, x: 0, y: 2)
+    }
+    
+    private var wideStudioConsoleBanner: some View {
+        HStack(spacing: 16) {
+            hiResLogoView(size: 48)
             
             VStack(alignment: .leading, spacing: 3.5) {
                 HStack(spacing: 8) {
@@ -897,7 +917,7 @@ public struct HiResAudioView: View {
                     .foregroundStyle(WalkmanTheme.silverMuted)
             }
             
-            Spacer()
+            Spacer(minLength: 12)
             
             // Audio specs capsule
             HStack(spacing: 8) {
@@ -918,15 +938,37 @@ public struct HiResAudioView: View {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(Color.white.opacity(0.08), lineWidth: 0.8)
             )
+            .fixedSize(horizontal: true, vertical: false)
         }
-        .padding(14)
-        .background(WalkmanTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 0.85)
-        )
-        .shadow(color: Color.black.opacity(0.20), radius: 4, x: 0, y: 2)
+    }
+    
+    private var compactStudioConsoleBanner: some View {
+        HStack(spacing: 12) {
+            hiResLogoView(size: 40)
+            
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text("Hi-Res Studio Master")
+                        .font(WalkmanFont.title3)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    
+                    Text("S-Master HX")
+                        .font(WalkmanFont.badge)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
+                        .background(WalkmanTheme.hiResGold.opacity(0.18))
+                        .foregroundStyle(WalkmanTheme.hiResGold)
+                        .clipShape(Capsule())
+                }
+                
+                Text("\(baseHiResTracks.count) Total Masters • Lossless PCM / DSD")
+                    .font(WalkmanFont.subheadline)
+                    .foregroundStyle(WalkmanTheme.silverMuted)
+                    .lineLimit(1)
+            }
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+        }
     }
     
     // -------------------------------------------------------------------------
@@ -1448,26 +1490,58 @@ private struct HiResTrackRowView: View {
         return String(format: "%d:%02d", mins, secs)
     }
     
+    private var bitrateView: some View {
+        Text("\(track.bitrateKbps) kbps")
+            .font(WalkmanFont.monoSmall)
+            .foregroundStyle(isHovered ? WalkmanTheme.silverLight.opacity(0.90) : WalkmanTheme.silverMuted.opacity(0.85))
+            .animation(.easeOut(duration: 0.15), value: isHovered)
+            .fixedSize()
+    }
+    
+    private var formatBadgeView: some View {
+        Text(track.format)
+            .font(WalkmanFont.badge)
+            .padding(.horizontal, 5.5)
+            .padding(.vertical, 2)
+            .background(Color.white.opacity(isHovered ? 0.12 : 0.08))
+            .foregroundStyle(isHovered ? Color.white : WalkmanTheme.silverLight)
+            .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+                    .stroke(Color.white.opacity(isHovered ? 0.22 : 0.12), lineWidth: 0.6)
+            )
+            .fixedSize()
+    }
+    
+    private var durationView: some View {
+        Text(formatDuration(track.durationSeconds))
+            .font(WalkmanFont.mono)
+            .foregroundStyle(isHovered ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
+            .frame(width: 44, alignment: .trailing)
+            .animation(.easeOut(duration: 0.15), value: isHovered)
+            .fixedSize()
+    }
+    
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 10) {
             // Cover Art Thumbnail with Tactile Play/Pause Hover Overlay
             ZStack {
-                TrackCoverThumbnail(track: track, size: 38, isPlaying: isPlayingThis)
+                TrackCoverThumbnail(track: track, size: 36, isPlaying: isPlayingThis)
                 
                 if isHovered {
                     RoundedRectangle(cornerRadius: 4, style: .continuous)
                         .fill(Color.black.opacity(0.40))
-                        .frame(width: 38, height: 38)
+                        .frame(width: 36, height: 36)
                     
                     Image(systemName: isPlayingThis ? "pause.fill" : "play.fill")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(isPlayingThis ? WalkmanTheme.hiResGoldLight : Color.white)
                 }
             }
-            .frame(width: 38, height: 38)
+            .frame(width: 36, height: 36)
             
             VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 7) {
+                HStack(spacing: 6) {
                     Text(track.title)
                         .font(isPlayingThis ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
                         .foregroundStyle(
@@ -1476,12 +1550,13 @@ private struct HiResTrackRowView: View {
                                 (isHovered ? Color.white : WalkmanTheme.silverLight)
                         )
                         .lineLimit(1)
+                        .truncationMode(.tail)
                         .animation(.easeOut(duration: 0.15), value: isHovered)
                     
                     Text("\(track.bitsPerSample)-bit / \(track.sampleRate / 1000)kHz")
                         .font(WalkmanFont.badge)
-                        .padding(.horizontal, 5.5)
-                        .padding(.vertical, 2)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
                         .background(WalkmanTheme.hiResGold.opacity(isPlayingThis ? 0.28 : (isHovered ? 0.22 : 0.16)))
                         .foregroundStyle(isPlayingThis ? Color.white : WalkmanTheme.hiResGoldLight)
                         .clipShape(Capsule())
@@ -1491,42 +1566,41 @@ private struct HiResTrackRowView: View {
                                 lineWidth: 0.6
                             )
                         )
+                        .lineLimit(1)
+                        .fixedSize()
                 }
                 
                 Text("\(track.artist) — \(track.album)")
                     .font(WalkmanFont.subheadline)
                     .foregroundStyle(isHovered ? WalkmanTheme.silverLight.opacity(0.85) : WalkmanTheme.silverMuted)
                     .lineLimit(1)
+                    .truncationMode(.tail)
                     .animation(.easeOut(duration: 0.15), value: isHovered)
             }
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             
-            Spacer()
+            Spacer(minLength: 6)
             
-            Text("\(track.bitrateKbps) kbps")
-                .font(WalkmanFont.monoSmall)
-                .foregroundStyle(isHovered ? WalkmanTheme.silverLight.opacity(0.90) : WalkmanTheme.silverMuted.opacity(0.85))
-                .animation(.easeOut(duration: 0.15), value: isHovered)
-            
-            Text(track.format)
-                .font(WalkmanFont.badge)
-                .padding(.horizontal, 5.5)
-                .padding(.vertical, 2)
-                .background(Color.white.opacity(isHovered ? 0.12 : 0.08))
-                .foregroundStyle(isHovered ? Color.white : WalkmanTheme.silverLight)
-                .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 3.5, style: .continuous)
-                        .stroke(Color.white.opacity(isHovered ? 0.22 : 0.12), lineWidth: 0.6)
-                )
-            
-            Text(formatDuration(track.durationSeconds))
-                .font(WalkmanFont.mono)
-                .foregroundStyle(isHovered ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
-                .frame(width: 46, alignment: .trailing)
-                .animation(.easeOut(duration: 0.15), value: isHovered)
+            ViewThatFits(in: .horizontal) {
+                // Wide: [1694 kbps] [FLAC] [4:12]
+                HStack(spacing: 8) {
+                    bitrateView
+                    formatBadgeView
+                    durationView
+                }
+                
+                // Compact: [FLAC] [4:12]
+                HStack(spacing: 6) {
+                    formatBadgeView
+                    durationView
+                }
+                
+                // Minimal: [4:12]
+                durationView
+            }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 7.5)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
         .background(
             HiResRowBackground(isPlaying: isPlayingThis, isHovered: isHovered)
         )

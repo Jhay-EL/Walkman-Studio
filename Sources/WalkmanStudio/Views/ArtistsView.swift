@@ -277,7 +277,7 @@ public struct ArtistsView: View {
                                         .id(art.name)
                                     }
                                 }
-                                .padding(.horizontal, 8)
+                                .padding(.horizontal, 6)
                                 .padding(.top, 8)
                                 .padding(.bottom, 88)
                             }
@@ -290,7 +290,7 @@ public struct ArtistsView: View {
                         }
                     }
                 }
-                .frame(minWidth: 170, idealWidth: 200, maxWidth: 240)
+                .frame(minWidth: 140, idealWidth: 170, maxWidth: 210)
                 .background(Color.clear)
                 
                 // Vertical Hairline Divider between Master List & Detail Console
@@ -328,7 +328,7 @@ public struct ArtistsView: View {
                                 }
                             }
                         }
-                        .padding(.horizontal, 22)
+                        .padding(.horizontal, 14)
                         .padding(.top, 16)
                         .padding(.bottom, 88)
                     }
@@ -524,7 +524,7 @@ public struct ArtistsView: View {
                 )
             }
         }
-        .frame(minWidth: 580)
+        .frame(minWidth: 720)
     }
     
     private var dropdownTopToolbarLayout: some View {
@@ -946,8 +946,8 @@ public struct ArtistsView: View {
     }
     
     private func artistHeroBanner(for artist: ArtistItem) -> some View {
-        HStack(alignment: .top, spacing: 20) {
-            // Prominent Circular Artist Avatar (120x120 pt)
+        HStack(alignment: .top, spacing: 14) {
+            // Prominent Circular Artist Avatar (96x96 pt)
             artistCoverArtView(for: artist)
             
             // Prominent Metadata Details & Action Controls
@@ -958,9 +958,9 @@ public struct ArtistsView: View {
                     .foregroundStyle(WalkmanTheme.silverMuted)
                     .tracking(1.4)
                 
-                // 2. Big Prominent Artist Name (32pt Bold)
+                // 2. Big Prominent Artist Name (28pt Bold)
                 Text(artist.name)
-                    .font(.system(size: 32, weight: .bold))
+                    .font(.system(size: 28, weight: .bold))
                     .foregroundStyle(.white)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1255,22 +1255,22 @@ public struct ArtistsView: View {
     private func artistAlbumSection(album: AlbumItem, artist: ArtistItem) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             // Album Header Row
-            HStack(spacing: 14) {
+            HStack(spacing: 12) {
                 if let rep = album.representativeTrack {
-                    TrackCoverThumbnail(track: rep, size: 60)
-                        .frame(width: 60, height: 60)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    TrackCoverThumbnail(track: rep, size: 52)
+                        .frame(width: 52, height: 52)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .stroke(Color.white.opacity(0.12), lineWidth: 0.85)
                         )
-                        .shadow(color: Color.black.opacity(0.35), radius: 6, x: 0, y: 3)
+                        .shadow(color: Color.black.opacity(0.35), radius: 5, x: 0, y: 2)
                 }
                 
                 VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 7) {
+                    HStack(spacing: 6) {
                         Text(album.name)
-                            .font(.system(size: 16, weight: .bold))
+                            .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(.white)
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -1278,8 +1278,8 @@ public struct ArtistsView: View {
                         if album.isHiRes {
                             Text("Hi-Res")
                                 .font(WalkmanFont.badge)
-                                .padding(.horizontal, 5.5)
-                                .padding(.vertical, 2)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1.5)
                                 .background(WalkmanTheme.hiResGold.opacity(0.92))
                                 .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                                 .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
@@ -1295,27 +1295,44 @@ public struct ArtistsView: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
                 
-                Spacer(minLength: 12)
+                Spacer(minLength: 8)
                 
-                Button(action: {
-                    if let first = album.tracks.first {
-                        player.play(track: first, in: album.tracks)
+                ViewThatFits(in: .horizontal) {
+                    Button(action: {
+                        if let first = album.tracks.first {
+                            player.play(track: first, in: album.tracks)
+                        }
+                    }) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 9, weight: .bold))
+                            Text("Play Album")
+                                .font(.system(size: 11.5, weight: .medium))
+                                .lineLimit(1)
+                        }
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 5.5)
+                        .foregroundStyle(WalkmanTheme.silverLight)
                     }
-                }) {
-                    HStack(spacing: 5) {
+                    .buttonStyle(LiquidGlassButtonStyle(variant: .subtle, cornerRadius: 12))
+                    .fixedSize(horizontal: true, vertical: false)
+                    
+                    Button(action: {
+                        if let first = album.tracks.first {
+                            player.play(track: first, in: album.tracks)
+                        }
+                    }) {
                         Image(systemName: "play.fill")
-                            .font(.system(size: 9, weight: .bold))
-                        Text("Play Album")
-                            .font(.system(size: 11.5, weight: .medium))
-                            .lineLimit(1)
+                            .font(.system(size: 9.5, weight: .bold))
+                            .frame(width: 28, height: 28)
+                            .foregroundStyle(WalkmanTheme.silverLight)
                     }
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 5.5)
-                    .foregroundStyle(WalkmanTheme.silverLight)
+                    .buttonStyle(LiquidGlassButtonStyle(variant: .subtle, cornerRadius: 14))
+                    .fixedSize(horizontal: true, vertical: false)
+                    .help("Play Album")
                 }
-                .buttonStyle(LiquidGlassButtonStyle(variant: .subtle, cornerRadius: 12))
-                .fixedSize(horizontal: true, vertical: false)
             }
             .contentShape(Rectangle())
             .contextMenu {
@@ -1418,10 +1435,10 @@ private struct ArtistCoverAvatarButton: View {
             ArtistAvatarView(
                 artistName: artist.name,
                 representativeTrack: artist.representativeTrack,
-                size: 120,
+                size: 96,
                 isSelected: false
             )
-            .frame(width: 120, height: 120)
+            .frame(width: 96, height: 96)
             .clipShape(Circle())
             .overlay(
                 Circle()
@@ -1481,12 +1498,12 @@ private struct ArtistListRowView: View {
     
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 // Circular Artist Photo Avatar
                 ArtistAvatarView(
                     artistName: artist.name,
                     representativeTrack: artist.representativeTrack,
-                    size: 36,
+                    size: 32,
                     isSelected: isSelected
                 )
                 
@@ -1504,7 +1521,7 @@ private struct ArtistListRowView: View {
                 
                 Spacer()
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 8)
             .padding(.vertical, 6)
             .background(
                 ZStack {
@@ -1870,10 +1887,33 @@ private struct ArtistTrackRowView: View {
         return String(format: "%d:%02d", mins, secs)
     }
     
+    private var hiResBadgeView: some View {
+        Text("Hi-Res")
+            .font(WalkmanFont.badge)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(WalkmanTheme.hiResGold.opacity(0.18))
+            .foregroundStyle(WalkmanTheme.hiResGold)
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+            .overlay(
+                RoundedRectangle(cornerRadius: 3)
+                    .stroke(WalkmanTheme.hiResGold.opacity(0.40), lineWidth: 0.6)
+            )
+            .fixedSize()
+    }
+    
+    private var durationView: some View {
+        Text(formatDuration(track.durationSeconds))
+            .font(WalkmanFont.mono)
+            .foregroundStyle(WalkmanTheme.silverMuted)
+            .frame(width: 44, alignment: .trailing)
+            .fixedSize()
+    }
+    
     var body: some View {
         let isPlayingThis = player.currentTrack?.id == track.id && player.isPlaying
         
-        HStack(spacing: 12) {
+        HStack(spacing: 8) {
             // Track Number or Play/Pause Indicator
             ZStack {
                 if isHovered || isPlayingThis {
@@ -1886,13 +1926,14 @@ private struct ArtistTrackRowView: View {
                         .foregroundStyle(WalkmanTheme.silverMuted)
                 }
             }
-            .frame(width: 22, alignment: .trailing)
+            .frame(width: 20, alignment: .trailing)
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(track.title)
                     .font(isPlayingThis ? WalkmanFont.bodyBold : WalkmanFont.bodyMedium)
                     .foregroundStyle(isPlayingThis ? WalkmanTheme.silverLight : (isHovered ? Color.white : WalkmanTheme.silverLight))
                     .lineLimit(1)
+                    .truncationMode(.tail)
                 
                 if let feat = track.featuredDisplayString(primaryArtist: artistName) {
                     HStack(spacing: 4) {
@@ -1903,34 +1944,41 @@ private struct ArtistTrackRowView: View {
                             .font(WalkmanFont.subheadline)
                             .foregroundStyle(WalkmanTheme.silverMuted)
                             .lineLimit(1)
+                            .truncationMode(.tail)
                     }
                 }
             }
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             
-            Spacer()
+            Spacer(minLength: 6)
             
-            if track.bitsPerSample > 16 || track.sampleRate > 48000 {
-                Text("Hi-Res")
-                    .font(WalkmanFont.badge)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(WalkmanTheme.hiResGold.opacity(0.18))
-                    .foregroundStyle(WalkmanTheme.hiResGold)
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 3)
-                            .stroke(WalkmanTheme.hiResGold.opacity(0.40), lineWidth: 0.6)
-                    )
+            ViewThatFits(in: .horizontal) {
+                // Wide: [Hi-Res] [FLAC] 3:26
+                HStack(spacing: 6) {
+                    if track.bitsPerSample > 16 || track.sampleRate > 48000 {
+                        hiResBadgeView
+                    }
+                    Text(track.format)
+                        .font(WalkmanFont.badge)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
+                    durationView
+                }
+                
+                // Compact: [Hi-Res] 3:26 or [FLAC] 3:26
+                HStack(spacing: 6) {
+                    if track.bitsPerSample > 16 || track.sampleRate > 48000 {
+                        hiResBadgeView
+                    } else {
+                        Text(track.format)
+                            .font(WalkmanFont.badge)
+                            .foregroundStyle(WalkmanTheme.silverMuted)
+                    }
+                    durationView
+                }
+                
+                // Minimal: 3:26
+                durationView
             }
-            
-            Text(track.format)
-                .font(WalkmanFont.badge)
-                .foregroundStyle(WalkmanTheme.silverMuted)
-            
-            Text(formatDuration(track.durationSeconds))
-                .font(WalkmanFont.mono)
-                .foregroundStyle(WalkmanTheme.silverMuted)
-                .frame(width: 44, alignment: .trailing)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
