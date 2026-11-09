@@ -1626,19 +1626,6 @@ public struct ContentView: View {
         }
         .background(WindowAccessor { window in
             self.hostWindow = window
-            if self.showInspector {
-                let screen = window.screen ?? NSScreen.main
-                let visibleFrame = screen?.visibleFrame ?? window.frame
-                let dynamicMinW = min(1520.0 + 300.0, visibleFrame.width)
-                window.minSize = NSSize(width: dynamicMinW, height: window.minSize.height)
-                window.contentMinSize = NSSize(width: dynamicMinW, height: window.contentMinSize.height)
-                
-                var frame = window.frame
-                if frame.size.width < dynamicMinW {
-                    frame.size.width = dynamicMinW
-                    window.setFrame(frame, display: true, animate: false)
-                }
-            }
         })
         .onChange(of: showInspector) { isPresented in
             handleInspectorVisibilityChanged(isPresented: isPresented)
@@ -1655,7 +1642,7 @@ public struct ContentView: View {
         if window.styleMask.contains(.fullScreen) { return }
 
         let inspectorWidth: CGFloat = 300.0
-        let baseMinW: CGFloat = 1520.0
+        let minW: CGFloat = window.minSize.width > 0 ? window.minSize.width : 1320
         let currentFrame = window.frame
         let screen = window.screen ?? NSScreen.main
         let visibleFrame = screen?.visibleFrame ?? currentFrame
@@ -1674,28 +1661,18 @@ public struct ContentView: View {
             }
             self.savedShiftOnInspectorOpen = currentFrame.origin.x - targetOriginX
 
-            // Dynamically lock window minimum width while inspector is visible
-            let dynamicMinW = min(baseMinW + inspectorWidth, visibleFrame.width)
-            window.minSize = NSSize(width: dynamicMinW, height: window.minSize.height)
-            window.contentMinSize = NSSize(width: dynamicMinW, height: window.contentMinSize.height)
-
             var newFrame = currentFrame
             newFrame.origin.x = targetOriginX
             newFrame.size.width = targetWidth
 
             window.setFrame(newFrame, display: true)
         } else {
-            // Restore base minimum width constraint
-            let effectiveBaseMinW = min(baseMinW, visibleFrame.width)
-            window.minSize = NSSize(width: effectiveBaseMinW, height: window.minSize.height)
-            window.contentMinSize = NSSize(width: effectiveBaseMinW, height: window.contentMinSize.height)
-
             // Determine contracted target width
             let targetWidth: CGFloat
             if let saved = savedWidthBeforeInspector, abs(currentFrame.size.width - expectedWidthWithInspector) < 15 {
-                targetWidth = max(saved, effectiveBaseMinW)
+                targetWidth = max(saved, minW)
             } else {
-                targetWidth = max(currentFrame.size.width - inspectorWidth, effectiveBaseMinW)
+                targetWidth = max(currentFrame.size.width - inspectorWidth, minW)
             }
 
             var targetOriginX = currentFrame.origin.x
