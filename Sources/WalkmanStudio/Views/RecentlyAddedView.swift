@@ -991,7 +991,7 @@ private struct FormatDropdownMenuView: View {
                 }
             }
         } label: {
-            LiquidGlassDropdownLabel(height: 38, isHovered: isHovered, isHiRes: activeOption?.isHiRes == true) {
+            LiquidGlassDropdownLabel(height: 36, isHovered: isHovered, isHiRes: activeOption?.isHiRes == true) {
                 HStack(spacing: 7) {
                     if let icon = activeOption?.icon {
                         Image(systemName: icon)
@@ -1010,15 +1010,23 @@ private struct FormatDropdownMenuView: View {
                 }
             }
         }
+        .menuIndicator(.hidden)
         .buttonStyle(.plain)
-        .menuStyle(.borderlessButton)
-        .fixedSize(horizontal: true, vertical: false)
+        .contentShape(Capsule())
+        .fixedSize()
         .onHover { hovering in
+            guard isHovered != hovering else { return }
             isHovered = hovering
             if hovering {
-                NSCursor.pointingHand.push()
+                NSCursor.pointingHand.set()
             } else {
-                NSCursor.pop()
+                NSCursor.arrow.set()
+            }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.arrow.set()
             }
         }
     }

@@ -447,19 +447,19 @@ public struct LiquidGlassDropdownLabel<Content: View>: View {
             .frame(height: height)
             .background(
                 ZStack {
-                    Color.white.opacity(isHovered ? 0.14 : 0.08)
+                    Color.white.opacity(isHovered ? 0.14 : 0.075)
 
                     // Surface optical liquid gloss (top specular reflection)
                     VStack(spacing: 0) {
                         LinearGradient(
                             stops: [
-                                .init(color: Color.white.opacity(isHovered ? 0.42 : 0.35), location: 0.0),
+                                .init(color: Color.white.opacity(isHovered ? 0.40 : 0.28), location: 0.0),
                                 .init(color: Color.white.opacity(0.0), location: 1.0)
                             ],
                             startPoint: .top,
                             endPoint: .bottom
                         )
-                        .frame(height: 11)
+                        .frame(height: 10)
                         Spacer(minLength: 0)
                     }
                 }
@@ -480,9 +480,9 @@ public struct LiquidGlassDropdownLabel<Content: View>: View {
                         ) :
                         LinearGradient(
                             stops: [
-                                .init(color: Color.white.opacity(isHovered ? 0.60 : 0.38), location: 0.0),
+                                .init(color: Color.white.opacity(isHovered ? 0.60 : 0.36), location: 0.0),
                                 .init(color: Color.white.opacity(isHovered ? 0.28 : 0.14), location: 0.5),
-                                .init(color: Color.white.opacity(0.05), location: 1.0)
+                                .init(color: Color.white.opacity(0.04), location: 1.0)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -492,13 +492,15 @@ public struct LiquidGlassDropdownLabel<Content: View>: View {
             )
             .compositingGroup()
             .shadow(
-                color: Color.black.opacity(isHovered ? 0.25 : 0.14),
-                radius: isHovered ? 6 : 3,
+                color: Color.black.opacity(isHovered ? 0.25 : 0.12),
+                radius: isHovered ? 5 : 2.5,
                 x: 0,
-                y: isHovered ? 3 : 1.5
+                y: isHovered ? 2.5 : 1
             )
             .scaleEffect(isHovered ? 1.025 : 1.0)
             .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+            .contentShape(Capsule())
+            .fixedSize(horizontal: true, vertical: false)
     }
 }
 

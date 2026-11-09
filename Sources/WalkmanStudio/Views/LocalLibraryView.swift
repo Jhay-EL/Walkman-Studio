@@ -2378,15 +2378,23 @@ private struct LocalDisplayModeDropdown: View {
                 }
             }
         }
+        .menuIndicator(.hidden)
         .buttonStyle(.plain)
-        .menuStyle(.borderlessButton)
-        .fixedSize(horizontal: true, vertical: false)
+        .contentShape(Capsule())
+        .fixedSize()
         .onHover { hovering in
+            guard isHovered != hovering else { return }
             isHovered = hovering
             if hovering {
-                NSCursor.pointingHand.push()
+                NSCursor.pointingHand.set()
             } else {
-                NSCursor.pop()
+                NSCursor.arrow.set()
+            }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.arrow.set()
             }
         }
     }
