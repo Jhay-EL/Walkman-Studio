@@ -457,6 +457,7 @@ public struct AlbumsView: View {
     private var toolbarContainer: some View {
         ViewThatFits(in: .horizontal) {
             wideToolbarLayout
+            dropdownToolbarLayout
             compactToolbarLayout
             narrowToolbarLayout
         }
@@ -504,6 +505,39 @@ public struct AlbumsView: View {
             searchFieldView
             
             formatSegmentedBar
+                .fixedSize(horizontal: true, vertical: false)
+            
+            filterMenuButton
+                .fixedSize(horizontal: true, vertical: false)
+            
+            Spacer(minLength: 4)
+            
+            if !isSearchExpanded {
+                HStack(spacing: 8) {
+                    batchLyricsButton
+                    
+                    albumCountPill
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .transition(
+                    .asymmetric(
+                        insertion: .opacity
+                            .combined(with: .move(edge: .trailing))
+                            .combined(with: .scale(scale: 0.92, anchor: .trailing)),
+                        removal: .opacity
+                            .combined(with: .move(edge: .trailing))
+                            .combined(with: .scale(scale: 0.92, anchor: .trailing))
+                    )
+                )
+            }
+        }
+    }
+    
+    private var dropdownToolbarLayout: some View {
+        HStack(spacing: 8) {
+            searchFieldView
+            
+            formatDropdownMenu
                 .fixedSize(horizontal: true, vertical: false)
             
             filterMenuButton
@@ -630,6 +664,16 @@ public struct AlbumsView: View {
     
     private var formatSegmentedBar: some View {
         AlbumFormatSegmentedBarView(
+            options: formatFilterOptions,
+            selectedFilter: $formatFilter,
+            onSelectFilter: { newFilter in
+                formatFilter = newFilter
+            }
+        )
+    }
+    
+    private var formatDropdownMenu: some View {
+        AlbumFormatDropdownMenuView(
             options: formatFilterOptions,
             selectedFilter: $formatFilter,
             onSelectFilter: { newFilter in
@@ -838,6 +882,83 @@ private struct AlbumFilterSortMenuButton: View {
             }
         }
         .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
+    }
+}
+
+// -----------------------------------------------------------------------------
+// ALBUM FORMAT DROPDOWN MENU VIEW (COMPACT LIQUID GLASS DROPDOWN)
+// -----------------------------------------------------------------------------
+private struct AlbumFormatDropdownMenuView: View {
+    let options: [FilterOption]
+    @Binding var selectedFilter: String
+    let onSelectFilter: (String) -> Void
+    
+    @State private var isHovered = false
+    
+    private var activeOption: FilterOption? {
+        options.first(where: { $0.id == selectedFilter })
+    }
+    
+    var body: some View {
+        Menu {
+            ForEach(options) { opt in
+                Button {
+                    withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+                        selectedFilter = opt.id
+                    }
+                    onSelectFilter(opt.id)
+                } label: {
+                    HStack {
+                        if selectedFilter == opt.id {
+                            Image(systemName: "checkmark")
+                        }
+                        if let icon = opt.icon {
+                            Label(opt.title, systemImage: icon)
+                        } else {
+                            Text(opt.title)
+                        }
+                    }
+                }
+            }
+        } label: {
+            LiquidGlassDropdownLabel(height: 38, isHovered: isHovered, isHiRes: activeOption?.isHiRes == true) {
+                HStack(spacing: 7) {
+                    if let icon = activeOption?.icon {
+                        Image(systemName: icon)
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundStyle(activeOption?.isHiRes == true ? WalkmanTheme.hiResGold : WalkmanTheme.silverLight)
+                    }
+                    
+                    Text(activeOption?.title ?? selectedFilter)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(activeOption?.isHiRes == true ? WalkmanTheme.hiResGold : Color.white)
+                        .lineLimit(1)
+                    
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9.5, weight: .bold))
+                        .foregroundStyle(WalkmanTheme.silverMuted)
+                }
+            }
+        }
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .contentShape(Capsule())
+        .fixedSize()
+        .onHover { hovering in
+            guard isHovered != hovering else { return }
+            isHovered = hovering
+            if hovering {
+                NSCursor.pointingHand.set()
+            } else {
+                NSCursor.arrow.set()
+            }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.arrow.set()
+            }
+        }
     }
 }
 
