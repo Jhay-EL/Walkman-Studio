@@ -491,6 +491,7 @@ public struct ArtistsView: View {
     private var wideTopToolbarLayout: some View {
         HStack(spacing: 8) {
             searchFieldView
+                .fixedSize(horizontal: true, vertical: false)
             
             artistFormatSegmentedBar
                 .fixedSize(horizontal: true, vertical: false)
@@ -505,10 +506,12 @@ public struct ArtistsView: View {
                     }
                     
                     batchLyricsButton
+                        .fixedSize(horizontal: true, vertical: false)
                     
                     artistCountPill
                         .fixedSize(horizontal: true, vertical: false)
                 }
+                .fixedSize(horizontal: true, vertical: false)
                 .transition(
                     .asymmetric(
                         insertion: .opacity
@@ -521,11 +524,13 @@ public struct ArtistsView: View {
                 )
             }
         }
+        .frame(minWidth: 580)
     }
     
     private var dropdownTopToolbarLayout: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             searchFieldView
+                .fixedSize(horizontal: true, vertical: false)
             
             artistFormatDropdownMenu
                 .fixedSize(horizontal: true, vertical: false)
@@ -533,17 +538,19 @@ public struct ArtistsView: View {
             Spacer(minLength: 4)
             
             if !isSearchExpanded {
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     if let artist = activeArtist {
                         artistActionButtons(for: artist)
                             .fixedSize(horizontal: true, vertical: false)
                     }
                     
                     batchLyricsButton
+                        .fixedSize(horizontal: true, vertical: false)
                     
                     artistCountPill
                         .fixedSize(horizontal: true, vertical: false)
                 }
+                .fixedSize(horizontal: true, vertical: false)
                 .transition(
                     .asymmetric(
                         insertion: .opacity
@@ -718,7 +725,7 @@ public struct ArtistsView: View {
                 .lineLimit(1)
         }
         .help(displayedArtists.count == 1 ? "1 Artist" : "\(displayedArtists.count.formatted()) Artists")
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 11)
         .frame(height: 38)
         .background(
             ZStack {

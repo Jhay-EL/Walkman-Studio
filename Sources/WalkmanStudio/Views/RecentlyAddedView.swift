@@ -327,6 +327,7 @@ public struct RecentlyAddedView: View {
     private var wideToolbarLayout: some View {
         HStack(spacing: 8) {
             searchFieldView
+                .fixedSize(horizontal: true, vertical: false)
             
             formatSegmentedBar
                 .fixedSize(horizontal: true, vertical: false)
@@ -341,6 +342,7 @@ public struct RecentlyAddedView: View {
                     statusIndicatorView
                         .fixedSize(horizontal: true, vertical: false)
                 }
+                .fixedSize(horizontal: true, vertical: false)
                 .transition(
                     .asymmetric(
                         insertion: .opacity
@@ -353,11 +355,13 @@ public struct RecentlyAddedView: View {
                 )
             }
         }
+        .frame(minWidth: 560)
     }
     
     private var dropdownToolbarLayout: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             searchFieldView
+                .fixedSize(horizontal: true, vertical: false)
             
             formatDropdownMenu
                 .fixedSize(horizontal: true, vertical: false)
@@ -365,13 +369,14 @@ public struct RecentlyAddedView: View {
             Spacer(minLength: 4)
             
             if !isSearchExpanded {
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     playbackControlsView
                         .fixedSize(horizontal: true, vertical: false)
                     
                     statusIndicatorView
                         .fixedSize(horizontal: true, vertical: false)
                 }
+                .fixedSize(horizontal: true, vertical: false)
                 .transition(
                     .asymmetric(
                         insertion: .opacity
@@ -566,7 +571,7 @@ public struct RecentlyAddedView: View {
             }
         }
         .help(displayedTracks.count == 1 ? "1 Recent Track" : "\(displayedTracks.count.formatted()) Recent Tracks")
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 11)
         .frame(height: 38)
         .background(
             ZStack {

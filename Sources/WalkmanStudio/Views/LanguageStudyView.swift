@@ -324,6 +324,7 @@ public struct LanguageStudyView: View {
     private var wideToolbarLayout: some View {
         HStack(spacing: 8) {
             searchFieldView
+                .fixedSize(horizontal: true, vertical: false)
             
             displayModeSegmentedControl
                 .fixedSize(horizontal: true, vertical: false)
@@ -336,6 +337,7 @@ public struct LanguageStudyView: View {
             if !isSearchExpanded {
                 HStack(spacing: 8) {
                     batchLyricsButton
+                        .fixedSize(horizontal: true, vertical: false)
                     
                     playbackControlsView
                         .fixedSize(horizontal: true, vertical: false)
@@ -343,6 +345,7 @@ public struct LanguageStudyView: View {
                     statusIndicatorView
                         .fixedSize(horizontal: true, vertical: false)
                 }
+                .fixedSize(horizontal: true, vertical: false)
                 .transition(
                     .asymmetric(
                         insertion: .opacity
@@ -355,11 +358,13 @@ public struct LanguageStudyView: View {
                 )
             }
         }
+        .frame(minWidth: 700)
     }
     
     private var dropdownToolbarLayout: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             searchFieldView
+                .fixedSize(horizontal: true, vertical: false)
             
             displayModeDropdownMenu
                 .fixedSize(horizontal: true, vertical: false)
@@ -370,8 +375,9 @@ public struct LanguageStudyView: View {
             Spacer(minLength: 4)
             
             if !isSearchExpanded {
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     batchLyricsButton
+                        .fixedSize(horizontal: true, vertical: false)
                     
                     playbackControlsView
                         .fixedSize(horizontal: true, vertical: false)
@@ -379,6 +385,7 @@ public struct LanguageStudyView: View {
                     statusIndicatorView
                         .fixedSize(horizontal: true, vertical: false)
                 }
+                .fixedSize(horizontal: true, vertical: false)
                 .transition(
                     .asymmetric(
                         insertion: .opacity
@@ -635,7 +642,7 @@ public struct LanguageStudyView: View {
                 .lineLimit(1)
         }
         .help(statusIndicatorHelp)
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 11)
         .frame(height: 38)
         .background(
             ZStack {

@@ -497,6 +497,7 @@ public struct HiResAudioView: View {
     private var wideToolbarLayout: some View {
         HStack(spacing: 8) {
             searchFieldView
+                .fixedSize(horizontal: true, vertical: false)
             
             formatSegmentedBar
                 .fixedSize(horizontal: true, vertical: false)
@@ -514,6 +515,7 @@ public struct HiResAudioView: View {
                     trackCountPill
                         .fixedSize(horizontal: true, vertical: false)
                 }
+                .fixedSize(horizontal: true, vertical: false)
                 .transition(
                     .asymmetric(
                         insertion: .opacity
@@ -526,11 +528,13 @@ public struct HiResAudioView: View {
                 )
             }
         }
+        .frame(minWidth: 680)
     }
     
     private var dropdownToolbarLayout: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             searchFieldView
+                .fixedSize(horizontal: true, vertical: false)
             
             formatDropdownMenu
                 .fixedSize(horizontal: true, vertical: false)
@@ -541,13 +545,14 @@ public struct HiResAudioView: View {
             Spacer(minLength: 4)
             
             if !isSearchExpanded {
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     playbackControlsView
                         .fixedSize(horizontal: true, vertical: false)
                     
                     trackCountPill
                         .fixedSize(horizontal: true, vertical: false)
                 }
+                .fixedSize(horizontal: true, vertical: false)
                 .transition(
                     .asymmetric(
                         insertion: .opacity
@@ -743,12 +748,13 @@ public struct HiResAudioView: View {
             Image(systemName: countPillIcon)
                 .font(.system(size: 11.5, weight: .bold))
                 .foregroundStyle(WalkmanTheme.hiResGold)
-            Text(countPillText)
+            Text(displayedTracks.count.formatted())
                 .font(.system(size: 12.5, weight: .medium, design: .monospaced))
                 .foregroundStyle(WalkmanTheme.hiResGoldLight)
+                .lineLimit(1)
         }
         .help(countPillHelpText)
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 11)
         .frame(height: 38)
         .background(
             ZStack {

@@ -503,6 +503,7 @@ public struct AlbumsView: View {
     private var wideToolbarLayout: some View {
         HStack(spacing: 8) {
             searchFieldView
+                .fixedSize(horizontal: true, vertical: false)
             
             formatSegmentedBar
                 .fixedSize(horizontal: true, vertical: false)
@@ -515,10 +516,12 @@ public struct AlbumsView: View {
             if !isSearchExpanded {
                 HStack(spacing: 8) {
                     batchLyricsButton
+                        .fixedSize(horizontal: true, vertical: false)
                     
                     albumCountPill
                         .fixedSize(horizontal: true, vertical: false)
                 }
+                .fixedSize(horizontal: true, vertical: false)
                 .transition(
                     .asymmetric(
                         insertion: .opacity
@@ -531,11 +534,13 @@ public struct AlbumsView: View {
                 )
             }
         }
+        .frame(minWidth: 560)
     }
     
     private var dropdownToolbarLayout: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             searchFieldView
+                .fixedSize(horizontal: true, vertical: false)
             
             formatDropdownMenu
                 .fixedSize(horizontal: true, vertical: false)
@@ -546,12 +551,14 @@ public struct AlbumsView: View {
             Spacer(minLength: 4)
             
             if !isSearchExpanded {
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     batchLyricsButton
+                        .fixedSize(horizontal: true, vertical: false)
                     
                     albumCountPill
                         .fixedSize(horizontal: true, vertical: false)
                 }
+                .fixedSize(horizontal: true, vertical: false)
                 .transition(
                     .asymmetric(
                         insertion: .opacity
@@ -693,7 +700,7 @@ public struct AlbumsView: View {
                 .lineLimit(1)
         }
         .help(displayedAlbums.count == 1 ? "1 Album" : "\(displayedAlbums.count.formatted()) Albums")
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 11)
         .frame(height: 38)
         .background(
             ZStack {

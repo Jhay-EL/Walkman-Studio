@@ -249,6 +249,7 @@ public struct LibraryView: View {
     private var wideToolbarLayout: some View {
         HStack(spacing: 8) {
             searchFieldView
+                .fixedSize(horizontal: true, vertical: false)
             
             formatSegmentedBar
                 .fixedSize(horizontal: true, vertical: false)
@@ -263,6 +264,7 @@ public struct LibraryView: View {
                     statusIndicatorView
                         .fixedSize(horizontal: true, vertical: false)
                 }
+                .fixedSize(horizontal: true, vertical: false)
                 .transition(
                     .asymmetric(
                         insertion: .opacity
@@ -275,11 +277,13 @@ public struct LibraryView: View {
                 )
             }
         }
+        .frame(minWidth: 560)
     }
     
     private var dropdownToolbarLayout: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             searchFieldView
+                .fixedSize(horizontal: true, vertical: false)
             
             formatDropdownMenu
                 .fixedSize(horizontal: true, vertical: false)
@@ -287,13 +291,14 @@ public struct LibraryView: View {
             Spacer(minLength: 4)
             
             if !isSearchExpanded {
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     playbackControlsView
                         .fixedSize(horizontal: true, vertical: false)
                     
                     statusIndicatorView
                         .fixedSize(horizontal: true, vertical: false)
                 }
+                .fixedSize(horizontal: true, vertical: false)
                 .transition(
                     .asymmetric(
                         insertion: .opacity
@@ -523,7 +528,7 @@ public struct LibraryView: View {
             }
         }
         .help(visibleTracks.count == 1 ? "1 Track" : "\(visibleTracks.count.formatted()) Tracks")
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 11)
         .frame(height: 38)
         .background(
             ZStack {

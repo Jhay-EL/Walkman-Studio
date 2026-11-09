@@ -807,8 +807,9 @@ public struct LocalLibraryView: View {
     // TOP NAVIGATION TOOLBAR LAYOUTS (WIDE / COMPACT / NARROW)
     // -------------------------------------------------------------------------
     private var wideTopBar: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             searchFieldView
+                .fixedSize(horizontal: true, vertical: false)
 
             displayBySegmentedControl
                 .fixedSize(horizontal: true, vertical: false)
@@ -833,11 +834,13 @@ public struct LocalLibraryView: View {
                     )
             }
         }
+        .frame(minWidth: 700)
     }
 
     private var dropdownTopBar: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             searchFieldView
+                .fixedSize(horizontal: true, vertical: false)
 
             displayByDropdownMenu
                 .fixedSize(horizontal: true, vertical: false)
@@ -952,7 +955,7 @@ public struct LocalLibraryView: View {
     }
 
     private var toolbarActionButtons: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Button(action: togglePlaybackAll) {
                 Image(systemName: isPlayingFromVisibleList ? "pause.fill" : "play.fill")
                     .font(.system(size: 12, weight: .semibold))
