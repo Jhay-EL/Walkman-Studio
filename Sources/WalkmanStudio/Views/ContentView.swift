@@ -1117,7 +1117,9 @@ public struct ContentView: View {
                                 selectedTrackId: $selectedTrackId,
                                 onInspectTrack: { track in
                                     self.selectedTrackId = track.id
-                                    self.showInspector = true
+                                    withAnimation(.easeInOut(duration: 0.28)) {
+                                        self.showInspector = true
+                                    }
                                 },
                                 onDeleteTrack: { track in
                                     localLibrary.deleteTrack(track: track, moveToTrash: false)
@@ -1147,7 +1149,9 @@ public struct ContentView: View {
                             SenseMeChannelsView(
                                 onInspectTrack: { track in
                                     self.selectedTrackId = track.id
-                                    self.showInspector = true
+                                    withAnimation(.easeInOut(duration: 0.28)) {
+                                        self.showInspector = true
+                                    }
                                 },
                                 onEditTrack: { track in
                                     self.trackToEdit = track
@@ -1173,7 +1177,9 @@ public struct ContentView: View {
                                     selectedTrackId: $selectedTrackId,
                                     onInspectTrack: { track in
                                         self.selectedTrackId = track.id
-                                        self.showInspector = true
+                                        withAnimation(.easeInOut(duration: 0.28)) {
+                                            self.showInspector = true
+                                        }
                                     },
                                     onGoToTransfer: {
                                         self.selectedTab = .transfer
@@ -1207,7 +1213,9 @@ public struct ContentView: View {
                                     selectedTrackId: $selectedTrackId,
                                     onInspectTrack: { track in
                                         self.selectedTrackId = track.id
-                                        self.showInspector = true
+                                        withAnimation(.easeInOut(duration: 0.28)) {
+                                            self.showInspector = true
+                                        }
                                     },
                                     onGoToTransfer: {
                                         self.selectedTab = .transfer
@@ -1241,7 +1249,9 @@ public struct ContentView: View {
                                     initialSelectedAlbumArtist: targetAlbumArtist,
                                     onSelectTrack: { track in
                                         self.selectedTrackId = track.id
-                                        self.showInspector = true
+                                        withAnimation(.easeInOut(duration: 0.28)) {
+                                            self.showInspector = true
+                                        }
                                     },
                                     onEditAlbum: { album in
                                         self.albumToEdit = album
@@ -1272,7 +1282,9 @@ public struct ContentView: View {
                                     initialSelectedArtistName: targetArtistName,
                                     onSelectTrack: { track in
                                         self.selectedTrackId = track.id
-                                        self.showInspector = true
+                                        withAnimation(.easeInOut(duration: 0.28)) {
+                                            self.showInspector = true
+                                        }
                                     },
                                     onEditTrack: { track in
                                         self.trackToEdit = track
@@ -1294,7 +1306,9 @@ public struct ContentView: View {
                                     precomputedArtists: cachedArtists,
                                     onSelectTrack: { track in
                                         self.selectedTrackId = track.id
-                                        self.showInspector = true
+                                        withAnimation(.easeInOut(duration: 0.28)) {
+                                            self.showInspector = true
+                                        }
                                     },
                                     onEditAlbum: { album in
                                         self.albumToEdit = album
@@ -1324,7 +1338,9 @@ public struct ContentView: View {
                                     activeDrive: activeDrive,
                                     onSelectTrack: { track in
                                         self.selectedTrackId = track.id
-                                        self.showInspector = true
+                                        withAnimation(.easeInOut(duration: 0.28)) {
+                                            self.showInspector = true
+                                        }
                                     },
                                     onEditTrack: { track in
                                         self.trackToEdit = track
@@ -1378,7 +1394,9 @@ public struct ContentView: View {
                                     },
                                     onInspectTrack: { track in
                                         self.selectedTrackId = track.id
-                                        self.showInspector = true
+                                        withAnimation(.easeInOut(duration: 0.28)) {
+                                            self.showInspector = true
+                                        }
                                     }
                                 )
                                 .id("playlists_\(activeDrive?.mountPoint ?? "no_drive")")
@@ -1408,7 +1426,9 @@ public struct ContentView: View {
                                     if let cur = player.currentTrack {
                                         self.selectedTrackId = cur.id
                                     }
-                                    self.showInspector = true
+                                    withAnimation(.easeInOut(duration: 0.28)) {
+                                        self.showInspector = true
+                                    }
                                 },
                                 onOpenFullScreen: {
                                     withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
@@ -1467,7 +1487,9 @@ public struct ContentView: View {
                                 if !showInspector && selectedTrackId == nil, let cur = player.currentTrack {
                                     self.selectedTrackId = cur.id
                                 }
-                                showInspector.toggle()
+                                withAnimation(.easeInOut(duration: 0.28)) {
+                                    showInspector.toggle()
+                                }
                             }) {
                                 Label("Inspector", systemImage: "sidebar.trailing")
                             }
@@ -1665,7 +1687,12 @@ public struct ContentView: View {
             newFrame.origin.x = targetOriginX
             newFrame.size.width = targetWidth
 
-            window.setFrame(newFrame, display: true)
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.28
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                context.allowsImplicitAnimation = true
+                window.animator().setFrame(newFrame, display: true)
+            }
         } else {
             // Determine contracted target width
             let targetWidth: CGFloat
@@ -1688,7 +1715,12 @@ public struct ContentView: View {
             newFrame.origin.x = targetOriginX
             newFrame.size.width = targetWidth
 
-            window.setFrame(newFrame, display: true)
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.28
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                context.allowsImplicitAnimation = true
+                window.animator().setFrame(newFrame, display: true)
+            }
         }
     }
 }
@@ -1723,7 +1755,6 @@ private extension View {
     ) -> some View {
         self
             .padding(.trailing, isPresented.wrappedValue ? 301 : 0)
-            .animation(nil, value: isPresented.wrappedValue)
             .overlay(alignment: .trailing) {
                 if isPresented.wrappedValue {
                     HStack(spacing: 0) {
@@ -1735,9 +1766,15 @@ private extension View {
                             .background(WalkmanTheme.background)
                     }
                     .ignoresSafeArea()
-                    .transition(.move(edge: .trailing))
+                    .transition(
+                        .asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .move(edge: .trailing).combined(with: .opacity)
+                        )
+                    )
                 }
             }
+            .clipped()
             .animation(.easeInOut(duration: 0.28), value: isPresented.wrappedValue)
     }
 
