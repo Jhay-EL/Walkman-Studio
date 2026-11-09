@@ -180,6 +180,7 @@ public struct LibraryView: View {
             // -----------------------------------------------------------------
             ViewThatFits(in: .horizontal) {
                 wideToolbarLayout
+                dropdownToolbarLayout
                 compactToolbarLayout
                 narrowToolbarLayout
             }
@@ -250,6 +251,37 @@ public struct LibraryView: View {
             searchFieldView
             
             formatSegmentedBar
+                .fixedSize(horizontal: true, vertical: false)
+            
+            Spacer(minLength: 4)
+            
+            if !isSearchExpanded {
+                HStack(spacing: 8) {
+                    playbackControlsView
+                        .fixedSize(horizontal: true, vertical: false)
+                    
+                    statusIndicatorView
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .transition(
+                    .asymmetric(
+                        insertion: .opacity
+                            .combined(with: .move(edge: .trailing))
+                            .combined(with: .scale(scale: 0.92, anchor: .trailing)),
+                        removal: .opacity
+                            .combined(with: .move(edge: .trailing))
+                            .combined(with: .scale(scale: 0.92, anchor: .trailing))
+                    )
+                )
+            }
+        }
+    }
+    
+    private var dropdownToolbarLayout: some View {
+        HStack(spacing: 8) {
+            searchFieldView
+            
+            formatDropdownMenu
                 .fixedSize(horizontal: true, vertical: false)
             
             Spacer(minLength: 4)
@@ -369,6 +401,16 @@ public struct LibraryView: View {
     
     private var formatSegmentedBar: some View {
         FormatSegmentedBarView(
+            options: filterOptions,
+            selectedFilter: $formatFilter,
+            onSelectFilter: { newFilter in
+                formatFilter = newFilter
+            }
+        )
+    }
+    
+    private var formatDropdownMenu: some View {
+        FormatDropdownMenuView(
             options: filterOptions,
             selectedFilter: $formatFilter,
             onSelectFilter: { newFilter in
@@ -909,6 +951,108 @@ public struct LibraryView: View {
                 }
             }
         }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// FORMAT DROPDOWN MENU VIEW (COMPACT LIQUID GLASS DROPDOWN)
+// -----------------------------------------------------------------------------
+private struct FormatDropdownMenuView: View {
+    let options: [FilterOption]
+    @Binding var selectedFilter: String
+    let onSelectFilter: (String) -> Void
+    
+    @State private var isHovered = false
+    
+    private var activeOption: FilterOption? {
+        options.first(where: { $0.id == selectedFilter })
+    }
+    
+    var body: some View {
+        Menu {
+            ForEach(options) { opt in
+                Button {
+                    withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+                        selectedFilter = opt.id
+                    }
+                    onSelectFilter(opt.id)
+                } label: {
+                    HStack {
+                        if selectedFilter == opt.id {
+                            Image(systemName: "checkmark")
+                        }
+                        if let icon = opt.icon {
+                            Label(opt.title, systemImage: icon)
+                        } else {
+                            Text(opt.title)
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                if let icon = activeOption?.icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(activeOption?.isHiRes == true ? WalkmanTheme.hiResGold : Color.white)
+                }
+                
+                Text(activeOption?.title ?? selectedFilter)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(activeOption?.isHiRes == true ? WalkmanTheme.hiResGold : Color.white)
+                    .lineLimit(1)
+                
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(WalkmanTheme.silverMuted)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .frame(height: 38)
+            .background(
+                ZStack {
+                    Capsule()
+                        .fill(Color.white.opacity(isHovered ? 0.12 : 0.06))
+                    
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: .white.opacity(isHovered ? 0.28 : 0.16), location: 0.0),
+                                .init(color: .clear, location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 7)
+                        Spacer(minLength: 0)
+                    }
+                    .clipShape(Capsule())
+                }
+            )
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(
+                        activeOption?.isHiRes == true ?
+                            WalkmanTheme.hiResGold.opacity(isHovered ? 0.45 : 0.28) :
+                            Color.white.opacity(isHovered ? 0.28 : 0.12),
+                        lineWidth: 0.85
+                    )
+            )
+            .scaleEffect(isHovered ? 1.02 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .menuStyle(.borderlessButton)
+        .fixedSize(horizontal: true, vertical: false)
+        .onHover { hovering in
+            isHovered = hovering
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
     }
 }
 

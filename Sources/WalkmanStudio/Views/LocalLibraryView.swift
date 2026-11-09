@@ -487,6 +487,7 @@ public struct LocalLibraryView: View {
             // -----------------------------------------------------------------
             ViewThatFits(in: .horizontal) {
                 wideTopBar
+                dropdownTopBar
                 compactTopBar
                 narrowTopBar
             }
@@ -834,6 +835,35 @@ public struct LocalLibraryView: View {
         }
     }
 
+    private var dropdownTopBar: some View {
+        HStack(spacing: 8) {
+            searchFieldView
+
+            displayByDropdownMenu
+                .fixedSize(horizontal: true, vertical: false)
+
+            combinedFilterSortMenu
+                .fixedSize(horizontal: true, vertical: false)
+
+            Spacer(minLength: 4)
+
+            if !isSearchExpanded {
+                toolbarActionButtons
+                    .fixedSize(horizontal: true, vertical: false)
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity
+                                .combined(with: .move(edge: .trailing))
+                                .combined(with: .scale(scale: 0.92, anchor: .trailing)),
+                            removal: .opacity
+                                .combined(with: .move(edge: .trailing))
+                                .combined(with: .scale(scale: 0.92, anchor: .trailing))
+                        )
+                    )
+            }
+        }
+    }
+
     private var compactTopBar: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
@@ -907,6 +937,10 @@ public struct LocalLibraryView: View {
 
     private var displayBySegmentedControl: some View {
         LocalDisplayModeSegmentedControl(displayMode: $displayMode)
+    }
+
+    private var displayByDropdownMenu: some View {
+        LocalDisplayModeDropdown(displayMode: $displayMode)
     }
 
     private var combinedFilterSortMenu: some View {
@@ -2302,6 +2336,87 @@ private struct LocalFilterSortDropdown: View {
         }
         .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
         .fixedSize()
+    }
+}
+
+// MARK: - Liquid Glass Display Mode Dropdown Menu
+private struct LocalDisplayModeDropdown: View {
+    @Binding var displayMode: LocalDisplayMode
+    @State private var isHovered = false
+
+    var body: some View {
+        Menu {
+            ForEach(LocalDisplayMode.allCases) { mode in
+                Button {
+                    withAnimation(.spring(response: 0.30, dampingFraction: 0.78)) {
+                        displayMode = mode
+                    }
+                } label: {
+                    HStack {
+                        if displayMode == mode {
+                            Image(systemName: "checkmark")
+                        }
+                        Label(mode.rawValue, systemImage: mode.icon)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: displayMode.icon)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.white)
+
+                Text(displayMode.rawValue)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(Color.white)
+                    .lineLimit(1)
+
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(WalkmanTheme.silverMuted)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .frame(height: 36)
+            .background(
+                ZStack {
+                    Capsule()
+                        .fill(Color.white.opacity(isHovered ? 0.12 : 0.06))
+
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            stops: [
+                                .init(color: .white.opacity(isHovered ? 0.28 : 0.16), location: 0.0),
+                                .init(color: .clear, location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 7)
+                        Spacer(minLength: 0)
+                    }
+                    .clipShape(Capsule())
+                }
+            )
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color.white.opacity(isHovered ? 0.28 : 0.12), lineWidth: 0.85)
+            )
+            .scaleEffect(isHovered ? 1.02 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .menuStyle(.borderlessButton)
+        .fixedSize(horizontal: true, vertical: false)
+        .onHover { hovering in
+            isHovered = hovering
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .animation(.spring(response: 0.22, dampingFraction: 0.72), value: isHovered)
     }
 }
 
