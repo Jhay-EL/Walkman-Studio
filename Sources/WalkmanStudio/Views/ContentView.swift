@@ -1642,7 +1642,7 @@ public struct ContentView: View {
         if window.styleMask.contains(.fullScreen) { return }
 
         let inspectorWidth: CGFloat = 300.0
-        let minW: CGFloat = window.minSize.width > 0 ? window.minSize.width : 1320
+        let minW: CGFloat = window.minSize.width > 0 ? window.minSize.width : 1200
         let currentFrame = window.frame
         let screen = window.screen ?? NSScreen.main
         let visibleFrame = screen?.visibleFrame ?? currentFrame
