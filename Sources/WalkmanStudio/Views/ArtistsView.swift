@@ -623,28 +623,26 @@ public struct ArtistsView: View {
     }
     
     private func artistActionButtons(for artist: ArtistItem) -> some View {
-        HStack(spacing: 7) {
+        let isPlayingArtist = player.isPlaying && artist.tracks.contains(where: { $0.id == player.currentTrack?.id })
+        
+        return HStack(spacing: 7) {
             Button(action: {
                 if let first = artist.tracks.first {
-                    player.play(track: first, in: artist.tracks)
+                    if isPlayingArtist {
+                        player.pause()
+                    } else {
+                        player.play(track: first, in: artist.tracks)
+                    }
                 }
             }) {
-                HStack(spacing: 6) {
-                    Image(systemName: "play.fill")
-                        .font(.system(size: 11, weight: .bold))
-                    Text("Play All")
-                        .font(.system(size: 13, weight: .semibold))
-                        .lineLimit(1)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .frame(height: 38)
-                .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                Image(systemName: isPlayingArtist ? "pause.fill" : "play.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 38, height: 38)
+                    .foregroundStyle(WalkmanTheme.silverLight)
             }
-            .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 19))
-            .fixedSize(horizontal: true, vertical: false)
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
             .disabled(artist.tracks.isEmpty)
-            .help("Play all tracks by \(artist.name)")
+            .help(isPlayingArtist ? "Pause playback" : "Play all tracks by \(artist.name)")
             
             Button(action: {
                 if let randomTrack = artist.tracks.randomElement() {
@@ -652,20 +650,12 @@ public struct ArtistsView: View {
                     player.play(track: randomTrack, in: shuffled)
                 }
             }) {
-                HStack(spacing: 5.5) {
-                    Image(systemName: "shuffle")
-                        .font(.system(size: 11, weight: .semibold))
-                    Text("Shuffle")
-                        .font(.system(size: 13, weight: .medium))
-                        .lineLimit(1)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .frame(height: 38)
-                .foregroundStyle(WalkmanTheme.silverLight)
+                Image(systemName: "shuffle")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 38, height: 38)
+                    .foregroundStyle(WalkmanTheme.silverLight)
             }
             .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
-            .fixedSize(horizontal: true, vertical: false)
             .disabled(artist.tracks.isEmpty)
             .help("Shuffle tracks by \(artist.name)")
         }

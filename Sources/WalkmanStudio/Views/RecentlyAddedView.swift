@@ -500,18 +500,12 @@ public struct RecentlyAddedView: View {
     private var playbackControlsView: some View {
         HStack(spacing: 7) {
             Button(action: togglePlaybackRecent) {
-                HStack(spacing: 6) {
-                    Image(systemName: isPlayingFromVisibleQueue ? "pause.fill" : "play.fill")
-                        .font(.system(size: 11, weight: .bold))
-                    Text(isPlayingFromVisibleQueue ? "Pause" : "Play Recent")
-                        .font(.system(size: 13, weight: .semibold))
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .frame(height: 38)
-                .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                Image(systemName: isPlayingFromVisibleQueue ? "pause.fill" : "play.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 38, height: 38)
+                    .foregroundStyle(WalkmanTheme.silverLight)
             }
-            .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 19))
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
             .disabled(displayedTracks.isEmpty)
             .help(isPlayingFromVisibleQueue ? "Pause playback" : "Play recent tracks in order")
             
