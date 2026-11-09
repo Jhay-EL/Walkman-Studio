@@ -40,11 +40,6 @@ public struct ContentView: View {
     @State private var driveCache: [String: DriveLibraryCache] = [:]
     @State private var libraryScanTask: Task<Void, Never>? = nil
 
-    // Window tracking & Track Detail (Inspector) expansion state
-    @State private var hostWindow: NSWindow? = nil
-    @State private var savedWidthBeforeInspector: CGFloat? = nil
-    @State private var savedShiftOnInspectorOpen: CGFloat = 0
-    @State private var expectedWidthWithInspector: CGFloat = 0
     
     @ObservedObject private var player = AudioPlayerService.shared
     @ObservedObject private var localLibrary = LocalMusicLibraryService.shared
@@ -1117,7 +1112,9 @@ public struct ContentView: View {
                                 selectedTrackId: $selectedTrackId,
                                 onInspectTrack: { track in
                                     self.selectedTrackId = track.id
-                                    self.showInspector = true
+                                    withAnimation(.easeInOut(duration: 0.25)) {
+                                        self.showInspector = true
+                                    }
                                 },
                                 onDeleteTrack: { track in
                                     localLibrary.deleteTrack(track: track, moveToTrash: false)
@@ -1147,7 +1144,9 @@ public struct ContentView: View {
                             SenseMeChannelsView(
                                 onInspectTrack: { track in
                                     self.selectedTrackId = track.id
-                                    self.showInspector = true
+                                    withAnimation(.easeInOut(duration: 0.25)) {
+                                        self.showInspector = true
+                                    }
                                 },
                                 onEditTrack: { track in
                                     self.trackToEdit = track
@@ -1173,7 +1172,9 @@ public struct ContentView: View {
                                     selectedTrackId: $selectedTrackId,
                                     onInspectTrack: { track in
                                         self.selectedTrackId = track.id
-                                        self.showInspector = true
+                                        withAnimation(.easeInOut(duration: 0.25)) {
+                                            self.showInspector = true
+                                        }
                                     },
                                     onGoToTransfer: {
                                         self.selectedTab = .transfer
@@ -1207,7 +1208,9 @@ public struct ContentView: View {
                                     selectedTrackId: $selectedTrackId,
                                     onInspectTrack: { track in
                                         self.selectedTrackId = track.id
-                                        self.showInspector = true
+                                        withAnimation(.easeInOut(duration: 0.25)) {
+                                            self.showInspector = true
+                                        }
                                     },
                                     onGoToTransfer: {
                                         self.selectedTab = .transfer
@@ -1241,7 +1244,9 @@ public struct ContentView: View {
                                     initialSelectedAlbumArtist: targetAlbumArtist,
                                     onSelectTrack: { track in
                                         self.selectedTrackId = track.id
-                                        self.showInspector = true
+                                        withAnimation(.easeInOut(duration: 0.25)) {
+                                            self.showInspector = true
+                                        }
                                     },
                                     onEditAlbum: { album in
                                         self.albumToEdit = album
@@ -1272,7 +1277,9 @@ public struct ContentView: View {
                                     initialSelectedArtistName: targetArtistName,
                                     onSelectTrack: { track in
                                         self.selectedTrackId = track.id
-                                        self.showInspector = true
+                                        withAnimation(.easeInOut(duration: 0.25)) {
+                                            self.showInspector = true
+                                        }
                                     },
                                     onEditTrack: { track in
                                         self.trackToEdit = track
@@ -1294,7 +1301,9 @@ public struct ContentView: View {
                                     precomputedArtists: cachedArtists,
                                     onSelectTrack: { track in
                                         self.selectedTrackId = track.id
-                                        self.showInspector = true
+                                        withAnimation(.easeInOut(duration: 0.25)) {
+                                            self.showInspector = true
+                                        }
                                     },
                                     onEditAlbum: { album in
                                         self.albumToEdit = album
@@ -1324,7 +1333,9 @@ public struct ContentView: View {
                                     activeDrive: activeDrive,
                                     onSelectTrack: { track in
                                         self.selectedTrackId = track.id
-                                        self.showInspector = true
+                                        withAnimation(.easeInOut(duration: 0.25)) {
+                                            self.showInspector = true
+                                        }
                                     },
                                     onEditTrack: { track in
                                         self.trackToEdit = track
@@ -1378,7 +1389,9 @@ public struct ContentView: View {
                                     },
                                     onInspectTrack: { track in
                                         self.selectedTrackId = track.id
-                                        self.showInspector = true
+                                        withAnimation(.easeInOut(duration: 0.25)) {
+                                            self.showInspector = true
+                                        }
                                     }
                                 )
                                 .id("playlists_\(activeDrive?.mountPoint ?? "no_drive")")
@@ -1408,7 +1421,9 @@ public struct ContentView: View {
                                     if let cur = player.currentTrack {
                                         self.selectedTrackId = cur.id
                                     }
-                                    self.showInspector = true
+                                    withAnimation(.easeInOut(duration: 0.25)) {
+                                        self.showInspector = true
+                                    }
                                 },
                                 onOpenFullScreen: {
                                     withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
@@ -1467,7 +1482,9 @@ public struct ContentView: View {
                                 if !showInspector && selectedTrackId == nil, let cur = player.currentTrack {
                                     self.selectedTrackId = cur.id
                                 }
-                                showInspector.toggle()
+                                withAnimation(.easeInOut(duration: 0.25)) {
+                                    showInspector.toggle()
+                                }
                             }) {
                                 Label("Inspector", systemImage: "sidebar.trailing")
                             }
@@ -1624,94 +1641,6 @@ public struct ContentView: View {
                 }
             )
         }
-        .background(WindowAccessor { window in
-            self.hostWindow = window
-        })
-        .onChange(of: showInspector) { isPresented in
-            handleInspectorVisibilityChanged(isPresented: isPresented)
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // WINDOW EXPANSION ON TRACK DETAIL (INSPECTOR) TOGGLE
-    // -------------------------------------------------------------------------
-    private func handleInspectorVisibilityChanged(isPresented: Bool) {
-        guard let window = hostWindow ?? NSApp.keyWindow ?? NSApp.mainWindow else { return }
-
-        // Do not attempt window frame resize in macOS native fullscreen
-        if window.styleMask.contains(.fullScreen) { return }
-
-        let inspectorWidth: CGFloat = 300.0
-        let minW: CGFloat = window.minSize.width > 0 ? window.minSize.width : 1200
-        let currentFrame = window.frame
-        let screen = window.screen ?? NSScreen.main
-        let visibleFrame = screen?.visibleFrame ?? currentFrame
-
-        if isPresented {
-            // Record pre-open width
-            self.savedWidthBeforeInspector = currentFrame.size.width
-
-            let targetWidth = min(currentFrame.size.width + inspectorWidth, visibleFrame.width)
-            self.expectedWidthWithInspector = targetWidth
-
-            var targetOriginX = currentFrame.origin.x
-            if targetOriginX + targetWidth > visibleFrame.maxX {
-                let overflow = (targetOriginX + targetWidth) - visibleFrame.maxX
-                targetOriginX = max(visibleFrame.minX, targetOriginX - overflow)
-            }
-            self.savedShiftOnInspectorOpen = currentFrame.origin.x - targetOriginX
-
-            var newFrame = currentFrame
-            newFrame.origin.x = targetOriginX
-            newFrame.size.width = targetWidth
-
-            window.setFrame(newFrame, display: true)
-        } else {
-            // Determine contracted target width
-            let targetWidth: CGFloat
-            if let saved = savedWidthBeforeInspector, abs(currentFrame.size.width - expectedWidthWithInspector) < 15 {
-                targetWidth = max(saved, minW)
-            } else {
-                targetWidth = max(currentFrame.size.width - inspectorWidth, minW)
-            }
-
-            var targetOriginX = currentFrame.origin.x
-            if savedShiftOnInspectorOpen > 0, abs(currentFrame.size.width - expectedWidthWithInspector) < 15 {
-                targetOriginX = min(currentFrame.origin.x + savedShiftOnInspectorOpen, visibleFrame.maxX - targetWidth)
-            }
-
-            self.savedWidthBeforeInspector = nil
-            self.savedShiftOnInspectorOpen = 0
-            self.expectedWidthWithInspector = 0
-
-            var newFrame = currentFrame
-            newFrame.origin.x = targetOriginX
-            newFrame.size.width = targetWidth
-
-            window.setFrame(newFrame, display: true)
-        }
-    }
-}
-
-private struct WindowAccessor: NSViewRepresentable {
-    let onWindow: (NSWindow) -> Void
-
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            if let w = view.window {
-                onWindow(w)
-            }
-        }
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async {
-            if let w = nsView.window {
-                onWindow(w)
-            }
-        }
     }
 }
 
@@ -1721,24 +1650,25 @@ private extension View {
         isPresented: Binding<Bool>,
         @ViewBuilder content: @escaping () -> Content
     ) -> some View {
-        self
-            .padding(.trailing, isPresented.wrappedValue ? 301 : 0)
-            .animation(nil, value: isPresented.wrappedValue)
-            .overlay(alignment: .trailing) {
-                if isPresented.wrappedValue {
-                    HStack(spacing: 0) {
-                        Rectangle()
-                            .fill(Color.black)
-                            .frame(width: 1)
-                        content()
-                            .frame(width: 300)
-                            .background(WalkmanTheme.background)
-                    }
+        HStack(spacing: 0) {
+            self
+                .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+
+            if isPresented.wrappedValue {
+                Rectangle()
+                    .fill(Color.black)
+                    .frame(width: 1)
+                    .ignoresSafeArea()
+
+                content()
+                    .frame(width: 300)
+                    .background(WalkmanTheme.background)
                     .ignoresSafeArea()
                     .transition(.move(edge: .trailing))
-                }
             }
-            .animation(.easeInOut(duration: 0.28), value: isPresented.wrappedValue)
+        }
+        .clipped()
+        .animation(.easeInOut(duration: 0.25), value: isPresented.wrappedValue)
     }
 
     @ViewBuilder
