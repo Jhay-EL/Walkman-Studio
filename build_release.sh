@@ -68,7 +68,7 @@ Walkman Studio v3.1.1 is a comprehensive UI responsiveness, performance, and lyr
 ## What's New in v3.1.1
 
 ### Responsive In-Window Inspector & Compact Window Layout
-* **In-Window Sliding Track Details Panel:** Track Details now opens smoothly inside the main window (`300pt`) without resizing or shifting your macOS window frame, with full-height divider alignment and automatic hiding on *Duplicates*, *Transfer & Convert*, and *Backup & Restore*.
+* **In-Window Sliding Track Details Panel:** Track Details now opens smoothly inside the main window (`300pt`) without resizing or shifting your macOS window frame, with full-height divider alignment and automatic hiding on *Device Overview*, *Duplicates*, *Transfer & Convert*, and *Backup & Restore*.
 * **Compact `1200×660` Minimum Window Support:** Reduced minimum window size constraints (default `1360×820`) while keeping every library toolbar single-lane via adaptive Liquid Glass dropdown menus and compact segmented control tiers across *Local Music Library*, *All Songs*, *Recently Added*, *Albums*, *Artists*, *Hi-Res Audio*, *Language Study*, and *Duplicates*.
 * **Consistent Liquid Glass Controls:** Standardized circular Liquid Glass Play buttons, native `.menu` dropdown styling, compact *SenseMe* toolbar fallback during scanning, and unclipped multi-tier segmented bars on narrow layouts.
 
@@ -81,7 +81,8 @@ Walkman Studio v3.1.1 is a comprehensive UI responsiveness, performance, and lyr
 * **Strict LRCLIB Duration Guard:** Enforces candidate scoring and `<= 3.5s` duration verification in `LyricsService` to prevent synced timestamps from mismatched edits or radio versions.
 * **Sample-Accurate `.LRC` Seeking & Expandable Lyrics Card:** Fixed `.lrc` timestamp synchronization on scrubber advances in Track Details and Fullscreen Now Playing, and added an expandable / compact lyrics view toggle in the Track Details inspector.
 
-### Interactive Library Navigation & Device Setup Improvements
+### Interactive Library Navigation, Playlists & Device Setup Improvements
+* **In-Playlist Duplicate Track Detection & Cleanup (`PlaylistDuplicateDetector`):** Automatically detects canonical path duplicates and exact-title cross-file duplicates inside each playlist, adds sidebar duplicate count badges, `Show Duplicates Only` filtering, `Select Extras` quick selection, Liquid Glass `Review Playlist Duplicates` cleanup (`Keep Highest Quality` vs `Keep First Position`) modifying only `.m3u8` / `.m3u` sequences without deleting audio files, plus duplicate addition guardrails.
 * **Direct Artist & Album Cross-Navigation:** Track table Artist and Album cells in *All Songs* and *Recently Added* now link directly to the matching discography or album detail view.
 * **Expanded LRC Fetcher Coverage:** Added batch `.LRC` lyrics fetching directly into *Local Music Library* and Album / Artist context menus.
 * **Redesigned Device Connection & Android MTP View:** Unified the disconnected device dashboard and Android Walkman MTP guidance card with cleaner sidebar synchronization.
@@ -97,7 +98,7 @@ Walkman Studio v3.1.1 is a comprehensive UI responsiveness, performance, and lyr
 | **`Walkman-Studio-3.1.1-universal.dmg`** | Universal 2 (`arm64` + `x86_64`) | Universal package running natively on all Macs (macOS 13.0+) |
 
 ### Alternative Mirror
-* **Google Drive:** [Download v3.1.1 Release Files on Google Drive](https://drive.google.com/drive/folders/1KjkVl7U-FBZ0Ics4OuttyOj6HanPajpg?usp=share_link)
+* **Google Drive:** [Download v3.1.1 Release Files on Google Drive](https://drive.google.com/drive/folders/1wC3F0Cdy_iJwdWQvR1VFc5VnvdhyULhd?usp=share_link)
 
 ---
 
@@ -119,7 +120,7 @@ cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
 
 <h3>Responsive In-Window Inspector &amp; Compact Window Layout</h3>
 <ul>
-  <li><strong>In-Window Sliding Track Details Panel:</strong> Track Details now opens smoothly inside the main window (<code>300pt</code>) without resizing or shifting your macOS window frame, with full-height divider alignment and automatic hiding on <em>Duplicates</em>, <em>Transfer &amp; Convert</em>, and <em>Backup &amp; Restore</em>.</li>
+  <li><strong>In-Window Sliding Track Details Panel:</strong> Track Details now opens smoothly inside the main window (<code>300pt</code>) without resizing or shifting your macOS window frame, with full-height divider alignment and automatic hiding on <em>Device Overview</em>, <em>Duplicates</em>, <em>Transfer &amp; Convert</em>, and <em>Backup &amp; Restore</em>.</li>
   <li><strong>Compact <code>1200&times;660</code> Minimum Window Support:</strong> Reduced minimum window size constraints (default <code>1360&times;820</code>) while keeping every library toolbar single-lane via adaptive Liquid Glass dropdown menus and compact segmented control tiers across <em>Local Music Library</em>, <em>All Songs</em>, <em>Recently Added</em>, <em>Albums</em>, <em>Artists</em>, <em>Hi-Res Audio</em>, <em>Language Study</em>, and <em>Duplicates</em>.</li>
   <li><strong>Consistent Liquid Glass Controls:</strong> Standardized circular Liquid Glass Play buttons, native <code>.menu</code> dropdown styling, compact <em>SenseMe</em> toolbar fallback during scanning, and unclipped multi-tier segmented bars on narrow layouts.</li>
 </ul>
@@ -137,8 +138,9 @@ cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
   <li><strong>Sample-Accurate <code>.LRC</code> Seeking &amp; Expandable Lyrics Card:</strong> Fixed <code>.lrc</code> timestamp synchronization on scrubber advances in Track Details and Fullscreen Now Playing, and added an expandable / compact lyrics view toggle in the Track Details inspector.</li>
 </ul>
 
-<h3>Interactive Library Navigation &amp; Device Setup Improvements</h3>
+<h3>Interactive Library Navigation, Playlists &amp; Device Setup Improvements</h3>
 <ul>
+  <li><strong>In-Playlist Duplicate Track Detection &amp; Cleanup (<code>PlaylistDuplicateDetector</code>):</strong> Automatically detects canonical path duplicates and exact-title cross-file duplicates inside each playlist, with sidebar duplicate count badges, <code>Show Duplicates Only</code> filtering, <code>Select Extras</code> quick selection, Liquid Glass review &amp; cleanup (<code>Keep Highest Quality</code> vs <code>Keep First Position</code>) modifying only <code>.m3u8</code> / <code>.m3u</code> files without deleting audio files, plus duplicate addition guardrails.</li>
   <li><strong>Direct Artist &amp; Album Cross-Navigation:</strong> Track table Artist and Album cells in <em>All Songs</em> and <em>Recently Added</em> now link directly to the matching discography or album detail view.</li>
   <li><strong>Expanded LRC Fetcher Coverage:</strong> Added batch <code>.LRC</code> lyrics fetching directly into <em>Local Music Library</em> and Album / Artist context menus.</li>
   <li><strong>Redesigned Device Connection &amp; Android MTP View:</strong> Unified the disconnected device dashboard and Android Walkman MTP guidance card with cleaner sidebar synchronization.</li>
@@ -176,7 +178,7 @@ cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
 </table>
 
 <h3>Alternative Mirror</h3>
-<p><strong>Google Drive:</strong> <a href="https://drive.google.com/drive/folders/1KjkVl7U-FBZ0Ics4OuttyOj6HanPajpg?usp=share_link" target="_blank" rel="noopener noreferrer">Download v3.1.1 Release Files on Google Drive</a></p>
+<p><strong>Google Drive:</strong> <a href="https://drive.google.com/drive/folders/1wC3F0Cdy_iJwdWQvR1VFc5VnvdhyULhd?usp=share_link" target="_blank" rel="noopener noreferrer">Download v3.1.1 Release Files on Google Drive</a></p>
 
 <hr>
 

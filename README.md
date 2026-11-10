@@ -31,11 +31,12 @@ Walkman Studio focuses strictly on safe, non-destructive music library managemen
 ## ✨ What's New in v3.1.1
 
 ### 🖥️ Responsive In-Window Inspector & Compact Window Architecture
-* **In-Window Sliding Track Details Panel:** Track Details now opens smoothly inside the main window (`300pt`) without resizing or shifting the macOS window frame, with aligned full-height borders and automatic hiding on *Duplicates*, *Transfer & Convert*, and *Backup & Restore*.
+* **In-Window Sliding Track Details Panel:** Track Details now opens smoothly inside the main window (`300pt`) without resizing or shifting the macOS window frame, with aligned full-height borders and automatic hiding on *Device Overview*, *Duplicates*, *Transfer & Convert*, and *Backup & Restore*.
 * **Compact `1200×660` Minimum Window Support:** Reduced minimum window constraints (default `1360×820`) while keeping every library toolbar single-lane via adaptive Liquid Glass dropdown menus and compact segmented control tiers across *Local Music Library*, *All Songs*, *Recently Added*, *Albums*, *Artists*, *Hi-Res Audio*, *Language Study*, and *Duplicates*.
 * **Consistent Liquid Glass Controls:** Standardized circular Play controls, native `.menu` dropdowns, compact *SenseMe* toolbar fallback during scanning, and unclipped multi-tier segmented control layouts on narrow windows.
 
-### ⚡ Performance, Lyrics Synchronization & Navigation Improvements
+### ⚡ Performance, Playlists, Lyrics Synchronization & Navigation Improvements
+* **In-Playlist Duplicate Track Detection & Non-Destructive Cleanup:** Automatically detects repeated paths and exact-title cross-file copies within each playlist, complete with sidebar duplicate badges, `Show Duplicates Only` filtering, Liquid Glass review & strategy cleanup (`Keep Highest Quality` vs `Keep First Position`) updating only `.m3u8` / `.m3u` files, and duplicate addition guardrails.
 * **Lag-Free Artists & Hi-Res Audio Inspector Toggles:** Eliminated UI stutter when toggling Track Details on large collections through discrete container width tiers, `LazyVStack` virtualization, cached artist console data, and `Equatable` row diff pruning.
 * **Table Horizontal Scrollbar Fix:** Anchored `TableScrollInsetModifier` horizontal scrollbars cleanly at the bottom edge of *Local Music Library*, *All Songs*, and *Recently Added* instead of floating over track rows.
 * **Acoustic Pregap Calibration (`AudioAcousticAligner`):** Detects mastering lead-in silence via `AVAssetReader` to calibrate `.lrc` `[offset:...]` timestamps in **LRC Fetcher** and the **Transfer Queue Item Editor**, backed by strict `<= 3.5s` LRCLIB duration verification and sample-accurate `.lrc` seek timing.
@@ -362,13 +363,13 @@ Pre-built `.dmg` disk images and `.zip` standalone archives are available for al
 
 | Package | Architecture | Supported Mac Models | Primary Download (GitHub) | Mirror Download (Google Drive) |
 | :--- | :--- | :--- | :--- | :--- |
-| **Apple Silicon DMG** | `arm64` | MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4) | [Walkman-Studio-3.1.1-arm64.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.1.1/Walkman-Studio-3.1.1-arm64.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1KjkVl7U-FBZ0Ics4OuttyOj6HanPajpg?usp=share_link) |
-| **Intel Mac DMG** | `x86_64` | Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac mini, Mac Pro | [Walkman-Studio-3.1.1-intel.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.1.1/Walkman-Studio-3.1.1-intel.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1KjkVl7U-FBZ0Ics4OuttyOj6HanPajpg?usp=share_link) |
-| **Universal 2 DMG** | `arm64` + `x86_64` | Universal package running natively on all Macs (macOS 13.0+) | [Walkman-Studio-3.1.1-universal.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.1.1/Walkman-Studio-3.1.1-universal.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1KjkVl7U-FBZ0Ics4OuttyOj6HanPajpg?usp=share_link) |
+| **Apple Silicon DMG** | `arm64` | MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4) | [Walkman-Studio-3.1.1-arm64.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.1.1/Walkman-Studio-3.1.1-arm64.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1wC3F0Cdy_iJwdWQvR1VFc5VnvdhyULhd?usp=share_link) |
+| **Intel Mac DMG** | `x86_64` | Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac mini, Mac Pro | [Walkman-Studio-3.1.1-intel.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.1.1/Walkman-Studio-3.1.1-intel.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1wC3F0Cdy_iJwdWQvR1VFc5VnvdhyULhd?usp=share_link) |
+| **Universal 2 DMG** | `arm64` + `x86_64` | Universal package running natively on all Macs (macOS 13.0+) | [Walkman-Studio-3.1.1-universal.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.1.1/Walkman-Studio-3.1.1-universal.dmg) | [Google Drive Mirror](https://drive.google.com/drive/folders/1wC3F0Cdy_iJwdWQvR1VFc5VnvdhyULhd?usp=share_link) |
 
 > [!NOTE]
 > **Alternative Download Mirror:**
-> If the GitHub Releases page is inaccessible or returns an error, all release packages, `.dmg` installers, standalone `.zip` archives, and cryptographic checksums are directly available on our **[Google Drive Release Mirror](https://drive.google.com/drive/folders/1KjkVl7U-FBZ0Ics4OuttyOj6HanPajpg?usp=share_link)**.
+> If the GitHub Releases page is inaccessible or returns an error, all release packages, `.dmg` installers, standalone `.zip` archives, and cryptographic checksums are directly available on our **[Google Drive Release Mirror](https://drive.google.com/drive/folders/1wC3F0Cdy_iJwdWQvR1VFc5VnvdhyULhd?usp=share_link)**.
 
 > [!TIP]
 > **Which package should I choose?**
