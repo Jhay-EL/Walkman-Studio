@@ -53,6 +53,48 @@ public final class LibraryScanner: @unchecked Sendable {
         return db
     }
 
+    /// Computes a clean Walkman-relative path from an absolute track path and its scanned root directory (`MUSIC` or `LEARNING`).
+    public static func extractRelativePath(fullPath: String, baseDirPath: String) -> String {
+        WalkmanEngine.canonicalPlaylistRelativePath(fullPath, baseDirPath: baseDirPath)
+    }
+
+    /// Repairs legacy SQLite `relative_path` values poisoned with `Volumes/<Drive>/MUSIC/...` or leading root prefixes.
+    public static func repairRelativePathIfNeeded(_ storedRelPath: String, fullPath: String, baseDirPath: String? = nil) -> String {
+        guard WalkmanEngine.needsPathCanonicalization(storedRelPath) else {
+            return storedRelPath
+        }
+        let repaired = WalkmanEngine.canonicalPlaylistRelativePath(fullPath, baseDirPath: baseDirPath)
+        if !repaired.isEmpty {
+            return repaired
+        }
+        let fallback = WalkmanEngine.canonicalPlaylistRelativePath(storedRelPath, baseDirPath: baseDirPath)
+        return fallback.isEmpty ? storedRelPath : fallback
+    }
+
+    private func persistRepairedRelativePaths(_ updates: [(fullPath: String, relPath: String)], using existingDB: OpaquePointer? = nil) {
+        guard !updates.isEmpty else { return }
+        let ownsDB = (existingDB == nil)
+        guard let db = existingDB ?? getDB() else { return }
+        defer {
+            if ownsDB {
+                sqlite3_close(db)
+            }
+        }
+        sqlite3_exec(db, "BEGIN TRANSACTION;", nil, nil, nil)
+        let sql = "UPDATE tracks_cache SET relative_path = ? WHERE full_path = ?;"
+        var stmt: OpaquePointer?
+        if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
+            for row in updates {
+                sqlite3_bind_text(stmt, 1, (row.relPath as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 2, (row.fullPath as NSString).utf8String, -1, nil)
+                sqlite3_step(stmt)
+                sqlite3_reset(stmt)
+            }
+            sqlite3_finalize(stmt)
+        }
+        sqlite3_exec(db, "COMMIT;", nil, nil, nil)
+    }
+
     public func scan(musicDir: URL, additionalDirs: [URL] = []) async -> (tracks: [Track], albums: [String], artists: [String]) {
         var allDirs: [URL] = [musicDir]
         for dir in additionalDirs {
@@ -78,6 +120,7 @@ public final class LibraryScanner: @unchecked Sendable {
                 var cachedSizes: [String: Int64] = [:]
                 var albumsSet = Set<String>()
                 var artistsSet = Set<String>()
+                var repairedRelPathRows: [(fullPath: String, relPath: String)] = []
 
                 // 1. Read existing cache from SQLite
                 if let db = self.getDB() {
@@ -111,7 +154,11 @@ public final class LibraryScanner: @unchecked Sendable {
                                 let sampleRate = Int(sqlite3_column_int(stmt, 12))
                                 let bitsPerSample = Int(sqlite3_column_int(stmt, 13))
                                 let hasArt = sqlite3_column_int(stmt, 14) != 0
-                                let relPath = sqlite3_column_text(stmt, 15).map { String(cString: $0) } ?? URL(fileURLWithPath: fPath).lastPathComponent
+                                let rawRelPath = sqlite3_column_text(stmt, 15).map { String(cString: $0) } ?? URL(fileURLWithPath: fPath).lastPathComponent
+                                let relPath = Self.repairRelativePathIfNeeded(rawRelPath, fullPath: fPath, baseDirPath: dir.path)
+                                if relPath != rawRelPath {
+                                    repairedRelPathRows.append((fullPath: fPath, relPath: relPath))
+                                }
                                 let dateAddedSec = sqlite3_column_double(stmt, 16)
                                 let effectiveAdded = dateAddedSec > 0 ? dateAddedSec : mtime
                                 let dateAdded = Date(timeIntervalSince1970: effectiveAdded > 0 ? effectiveAdded : CFAbsoluteTimeGetCurrent() + 978307200.0)
@@ -158,6 +205,9 @@ public final class LibraryScanner: @unchecked Sendable {
                             }
                             sqlite3_finalize(stmt)
                         }
+                    }
+                    if !repairedRelPathRows.isEmpty {
+                        self.persistRepairedRelativePaths(repairedRelPathRows, using: db)
                     }
                     sqlite3_close(db)
                 }
@@ -206,7 +256,7 @@ public final class LibraryScanner: @unchecked Sendable {
                                 artistsSet.insert(cached.artist)
                                 albumsSet.insert("\(cached.artist) - \(cached.album)")
                             } else {
-                                let relPath = fullPath.replacingOccurrences(of: scanDir.path, with: "").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                                let relPath = Self.extractRelativePath(fullPath: fullPath, baseDirPath: scanDir.path)
                                 pendingEnrichment.append((fullPath, curSize, curMtime, relPath, ext))
                             }
                         }
@@ -662,6 +712,7 @@ public final class LibraryScanner: @unchecked Sendable {
         defer { sqlite3_close(db) }
         
         var tracks: [Track] = []
+        var repairedRelPathRows: [(fullPath: String, relPath: String)] = []
         let query = """
         SELECT full_path, mtime, size, format, title, artist, album, track_num, year, genre,
                duration_seconds, bitrate_kbps, sample_rate, bits_per_sample, has_artwork, relative_path, date_added
@@ -688,7 +739,11 @@ public final class LibraryScanner: @unchecked Sendable {
                 let sampleRate = Int(sqlite3_column_int(stmt, 12))
                 let bitsPerSample = Int(sqlite3_column_int(stmt, 13))
                 let hasArt = sqlite3_column_int(stmt, 14) != 0
-                let relPath = sqlite3_column_text(stmt, 15).map { String(cString: $0) } ?? URL(fileURLWithPath: fPath).lastPathComponent
+                let rawRelPath = sqlite3_column_text(stmt, 15).map { String(cString: $0) } ?? URL(fileURLWithPath: fPath).lastPathComponent
+                let relPath = Self.repairRelativePathIfNeeded(rawRelPath, fullPath: fPath)
+                if relPath != rawRelPath {
+                    repairedRelPathRows.append((fullPath: fPath, relPath: relPath))
+                }
                 let dateAddedSec = sqlite3_column_double(stmt, 16)
                 let effectiveAdded = dateAddedSec > 0 ? dateAddedSec : mtime
                 let dateAdded = Date(timeIntervalSince1970: effectiveAdded > 0 ? effectiveAdded : CFAbsoluteTimeGetCurrent() + 978307200.0)
@@ -720,6 +775,9 @@ public final class LibraryScanner: @unchecked Sendable {
                 tracks.append(tr)
             }
             sqlite3_finalize(stmt)
+        }
+        if !repairedRelPathRows.isEmpty {
+            persistRepairedRelativePaths(repairedRelPathRows, using: db)
         }
         return tracks
     }

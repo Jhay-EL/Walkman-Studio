@@ -150,26 +150,13 @@ public struct PlaylistDuplicateAnalysis: Sendable, Equatable {
 
 /// Fast single-pass in-memory duplicate analyzer for Walkman playlists (.m3u8 / .m3u).
 public enum PlaylistDuplicateDetector {
-    private static let trimChars = CharacterSet(charactersIn: "/ \t\r\n")
-    private static let slashChars = CharacterSet(charactersIn: "/")
     private static let ignoredArtists: Set<String> = [
         "", "unknown", "unknown artist", "various", "various artists", "va"
     ]
 
-    /// Canonicalizes playlist relative/absolute track paths across slash, case, `./`, `MUSIC/`, and `LEARNING/` differences.
+    /// Canonicalizes playlist relative/absolute track paths across slash, case, `./`, `MUSIC/`, `LEARNING/`, and `Volumes/...` prefixes.
     public static func normalizePathKey(_ path: String) -> String {
-        var s = path.replacingOccurrences(of: "\\", with: "/")
-            .trimmingCharacters(in: trimChars)
-            .lowercased()
-        while s.hasPrefix("./") {
-            s = String(s.dropFirst(2)).trimmingCharacters(in: slashChars)
-        }
-        if s.hasPrefix("music/") {
-            s = String(s.dropFirst(6)).trimmingCharacters(in: slashChars)
-        } else if s.hasPrefix("learning/") {
-            s = String(s.dropFirst(9)).trimmingCharacters(in: slashChars)
-        }
-        return s
+        WalkmanEngine.canonicalPlaylistRelativePath(path).lowercased()
     }
 
     /// Analyzes duplicate tracks within a single playlist (both repeated paths and same-song cross-file copies).

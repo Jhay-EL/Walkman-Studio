@@ -188,6 +188,99 @@ public final class WalkmanEngine: @unchecked Sendable {
         }
     }
 
+    private static let playlistTrimChars = CharacterSet(charactersIn: "/ \t\r\n")
+    private static let playlistSlashChars = CharacterSet(charactersIn: "/")
+    private static let volumesRootPattern = #"(?i)^volumes/[^/]+/(?:music|learning)/+"#
+
+    /// Returns `true` when a stored relative track path still carries an unwanted root/volume prefix or leading `./` or `\`.
+    public static func needsPathCanonicalization(_ rawPath: String) -> Bool {
+        let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return false }
+        if trimmed.contains("\\") || trimmed.hasPrefix("/") || trimmed.hasPrefix("./") {
+            return true
+        }
+        let lower = trimmed.lowercased()
+        if lower.hasPrefix("music/") || lower.hasPrefix("learning/") {
+            return true
+        }
+        return trimmed.range(of: volumesRootPattern, options: .regularExpression) != nil
+    }
+
+    /// Converts any playlist/library path (`Volumes/<Drive>/MUSIC/...`, `/Volumes/...`, `MUSIC/...`, `./...`, backslashes)
+    /// into a Sony Walkman hardware-compliant forward-slash relative path anchored to the music/learning directory.
+    public static func canonicalPlaylistRelativePath(_ rawPath: String, baseDirPath: String? = nil) -> String {
+        var norm = rawPath
+            .replacingOccurrences(of: "\\", with: "/")
+            .trimmingCharacters(in: playlistTrimChars)
+            .precomposedStringWithCanonicalMapping
+
+        while norm.hasPrefix("./") {
+            norm = String(norm.dropFirst(2)).trimmingCharacters(in: playlistSlashChars)
+        }
+
+        var strippedExplicitRoot = false
+        if let baseDirPath = baseDirPath, !baseDirPath.isEmpty {
+            let candidateBases = [
+                baseDirPath,
+                URL(fileURLWithPath: baseDirPath).resolvingSymlinksInPath().path
+            ]
+            for rawBase in candidateBases {
+                let normBase = rawBase
+                    .replacingOccurrences(of: "\\", with: "/")
+                    .trimmingCharacters(in: playlistTrimChars)
+                    .precomposedStringWithCanonicalMapping
+                if !normBase.isEmpty,
+                   let baseRange = norm.range(of: normBase + "/", options: [.anchored, .caseInsensitive]) {
+                    norm = String(norm[baseRange.upperBound...]).trimmingCharacters(in: playlistSlashChars)
+                    strippedExplicitRoot = true
+                    break
+                }
+            }
+        }
+
+        while norm.hasPrefix("./") {
+            norm = String(norm.dropFirst(2)).trimmingCharacters(in: playlistSlashChars)
+        }
+
+        if let volRange = norm.range(of: volumesRootPattern, options: .regularExpression) {
+            norm = String(norm[volRange.upperBound...]).trimmingCharacters(in: playlistSlashChars)
+            strippedExplicitRoot = true
+        }
+
+        if !strippedExplicitRoot {
+            let lower = norm.lowercased()
+            if lower.hasPrefix("music/") {
+                norm = String(norm.dropFirst(6)).trimmingCharacters(in: playlistSlashChars)
+            } else if lower.hasPrefix("learning/") {
+                norm = String(norm.dropFirst(9)).trimmingCharacters(in: playlistSlashChars)
+            }
+        }
+
+        return norm
+    }
+
+    /// Inspects actual directory entries at `mountURL` to preserve true on-disk casing (`MUSIC` vs `Music`) on case-insensitive FAT32/exFAT drives.
+    public func resolvedMusicDirectory(at mountURL: URL, fallbackToRoot: Bool = false) -> String {
+        if let entryNames = try? FileManager.default.contentsOfDirectory(atPath: mountURL.path) {
+            let visibleNames = entryNames.filter { !$0.hasPrefix(".") }
+            if let exactUpper = visibleNames.first(where: { $0 == "MUSIC" }) {
+                return mountURL.appendingPathComponent(exactUpper).path
+            }
+            if let caseMatch = visibleNames.first(where: { $0.lowercased() == "music" }) {
+                return mountURL.appendingPathComponent(caseMatch).path
+            }
+        }
+        let upper = mountURL.appendingPathComponent("MUSIC")
+        let title = mountURL.appendingPathComponent("Music")
+        if FileManager.default.fileExists(atPath: upper.path) {
+            return upper.path
+        }
+        if FileManager.default.fileExists(atPath: title.path) {
+            return title.path
+        }
+        return fallbackToRoot ? mountURL.path : upper.path
+    }
+
     public func writePlaylist(
         musicDir: URL,
         name: String,
@@ -203,16 +296,7 @@ public final class WalkmanEngine: @unchecked Sendable {
         var lines: [String] = ["#EXTM3U"]
         
         for track in relativeTracks {
-            var norm = track.replacingOccurrences(of: "\\", with: "/").trimmingCharacters(in: CharacterSet(charactersIn: "/ \t\r\n"))
-            while norm.hasPrefix("./") {
-                norm = String(norm.dropFirst(2)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            }
-            if norm.lowercased().hasPrefix("music/") {
-                norm = String(norm.dropFirst(6)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            } else if norm.lowercased().hasPrefix("learning/") {
-                norm = String(norm.dropFirst(9)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            }
-            norm = norm.precomposedStringWithCanonicalMapping
+            let norm = Self.canonicalPlaylistRelativePath(track, baseDirPath: musicDir.path)
             if norm.isEmpty { continue }
 
             // Hardware Constraint 5: Sony Walkman NW-A55 Linux RTOS expects relative POSIX paths
@@ -311,14 +395,7 @@ public final class WalkmanEngine: @unchecked Sendable {
                 continue
             }
 
-            var posix = line.replacingOccurrences(of: "\\", with: "/").trimmingCharacters(in: CharacterSet(charactersIn: "/ \t\r\n"))
-            while posix.hasPrefix("./") {
-                posix = String(posix.dropFirst(2)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            }
-            if posix.lowercased().hasPrefix("music/") {
-                posix = String(posix.dropFirst(6)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            }
-            posix = posix.precomposedStringWithCanonicalMapping
+            let posix = Self.canonicalPlaylistRelativePath(line)
 
             if !posix.isEmpty {
                 results.append(PlaylistTrackInfo(
@@ -338,6 +415,50 @@ public final class WalkmanEngine: @unchecked Sendable {
 
     public func readPlaylist(at url: URL) -> [String] {
         return readPlaylistDetailed(at: url).map(\.relativePath)
+    }
+
+    /// Reads raw playlist entries and checks if any broken `Volumes/...`, leading `/`, or `MUSIC/` entries
+    /// resolve cleanly to an existing file on `baseDirURL`, returning normalized tracks and repair count.
+    public func inspectPlaylistForPathRepairs(
+        at url: URL,
+        baseDirURL: URL
+    ) -> (tracks: [String], repairedCount: Int) {
+        guard let data = try? Data(contentsOf: url) else { return ([], 0) }
+        let content = String(data: data, encoding: .utf8)
+            ?? String(data: data, encoding: .utf16)
+            ?? String(data: data, encoding: .isoLatin1)
+            ?? String(data: data, encoding: .windowsCP1252)
+            ?? ""
+        guard !content.isEmpty else { return ([], 0) }
+
+        var cleaned = content
+        if cleaned.hasPrefix("\u{FEFF}") {
+            cleaned = String(cleaned.dropFirst())
+        }
+
+        let fm = FileManager.default
+        var results: [String] = []
+        var repairedCount = 0
+
+        for rawLine in cleaned.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            if line.isEmpty || line.hasPrefix("#") { continue }
+
+            let normalizedLine = line.replacingOccurrences(of: "\\", with: "/").precomposedStringWithCanonicalMapping
+            let candidate = Self.canonicalPlaylistRelativePath(normalizedLine, baseDirPath: baseDirURL.path)
+            guard !candidate.isEmpty else { continue }
+
+            if candidate != normalizedLine {
+                let targetURL = baseDirURL.appendingPathComponent(candidate)
+                if fm.fileExists(atPath: targetURL.path) {
+                    repairedCount += 1
+                    results.append(candidate)
+                    continue
+                }
+            }
+            results.append(candidate)
+        }
+        return (tracks: results, repairedCount: repairedCount)
     }
 
     public func renamePlaylist(at url: URL, newName: String) throws -> URL {
@@ -618,16 +739,7 @@ public final class WalkmanEngine: @unchecked Sendable {
         let usedBytes = max(0, totalBytes - freeBytes)
         let percentUsed = totalBytes > 0 ? (Double(usedBytes) / Double(totalBytes)) * 100.0 : 0.0
 
-        let musicDir: String
-        let titleMusic = url.appendingPathComponent("Music")
-        let upperMusic = url.appendingPathComponent("MUSIC")
-        if FileManager.default.fileExists(atPath: titleMusic.path) {
-            musicDir = titleMusic.path
-        } else if FileManager.default.fileExists(atPath: upperMusic.path) {
-            musicDir = upperMusic.path
-        } else {
-            musicDir = url.path
-        }
+        let musicDir = resolvedMusicDirectory(at: url, fallbackToRoot: true)
 
         return WalkmanDrive(
             name: driveName,
@@ -784,13 +896,7 @@ public final class WalkmanEngine: @unchecked Sendable {
                 displayName = cand.name.contains("(MicroSD)") ? cand.name : "\(cand.name) (MicroSD)"
             }
 
-            let musicPath: String
-            let titleMusic = cand.url.appendingPathComponent("Music")
-            if FileManager.default.fileExists(atPath: titleMusic.path) {
-                musicPath = titleMusic.path
-            } else {
-                musicPath = cand.url.appendingPathComponent("MUSIC").path
-            }
+            let musicPath = resolvedMusicDirectory(at: cand.url, fallbackToRoot: false)
 
             return WalkmanDrive(
                 name: displayName,

@@ -129,18 +129,23 @@ public struct PlaylistsView: View {
         }
         
         var list: [Playlist] = []
+        var playlistsToRepair: [(playlistURL: URL, tracks: [String], repairedCount: Int)] = []
         for dir in searchDirs {
             if let contents = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) {
                 for fileURL in contents where fileURL.pathExtension.lowercased() == "m3u8" || fileURL.pathExtension.lowercased() == "m3u" {
-                    let tracks = WalkmanEngine.shared.readPlaylist(at: fileURL)
+                    let baseDir = baseDirectoryURL(forPlaylistURL: fileURL, drive: drive)
+                    let inspected = WalkmanEngine.shared.inspectPlaylistForPathRepairs(at: fileURL, baseDirURL: baseDir)
                     let p = Playlist(
                         name: fileURL.deletingPathExtension().lastPathComponent,
                         filename: fileURL.lastPathComponent,
-                        trackCount: tracks.count,
-                        tracks: tracks,
+                        trackCount: inspected.tracks.count,
+                        tracks: inspected.tracks,
                         fullPath: fileURL.path
                     )
                     list.append(p)
+                    if inspected.repairedCount > 0 {
+                        playlistsToRepair.append((fileURL, inspected.tracks, inspected.repairedCount))
+                    }
                 }
             }
         }
@@ -160,6 +165,52 @@ public struct PlaylistsView: View {
         }
         self.updateResolvedTracks()
         self.recomputeSidebarDuplicateCounts()
+
+        if !playlistsToRepair.isEmpty {
+            let totalEntriesRepaired = playlistsToRepair.reduce(0) { $0 + $1.repairedCount }
+            let totalPlaylistsRepaired = playlistsToRepair.count
+            DispatchQueue.global(qos: .userInitiated).async {
+                var succeeded = 0
+                for item in playlistsToRepair {
+                    do {
+                        _ = try WalkmanEngine.shared.writePlaylist(
+                            musicDir: item.playlistURL.deletingLastPathComponent(),
+                            name: item.playlistURL.lastPathComponent,
+                            relativeTracks: item.tracks
+                        )
+                        succeeded += 1
+                    } catch {
+                        // Best-effort auto-repair; keep in-memory paths clean regardless
+                    }
+                }
+                if succeeded > 0 {
+                    let msg = "✓ Repaired \(totalEntriesRepaired) track path\(totalEntriesRepaired == 1 ? "" : "s") across \(totalPlaylistsRepaired) playlist\(totalPlaylistsRepaired == 1 ? "" : "s") for Walkman compatibility"
+                    DispatchQueue.main.async {
+                        withAnimation {
+                            self.messageBanner = msg
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 4.5) {
+                            if self.messageBanner == msg {
+                                withAnimation { self.messageBanner = nil }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func baseDirectoryURL(forPlaylistURL fileURL: URL, drive: WalkmanDrive) -> URL {
+        let lowerPath = fileURL.path.lowercased()
+        let lowerLearning = drive.learningDir.lowercased()
+        let lowerMusic = drive.musicDir.lowercased()
+        if lowerPath.hasPrefix(lowerLearning + "/") {
+            return URL(fileURLWithPath: drive.learningDir)
+        }
+        if lowerPath.hasPrefix(lowerMusic + "/") {
+            return URL(fileURLWithPath: drive.musicDir)
+        }
+        return fileURL.deletingLastPathComponent()
     }
     
     public static func normalizeKey(_ path: String) -> String {
@@ -190,14 +241,18 @@ public struct PlaylistsView: View {
             return tr
         }
         if let drive = activeDrive {
-            let fullURL: URL
-            if path.hasPrefix("/") {
-                fullURL = URL(fileURLWithPath: path)
-            } else {
-                fullURL = URL(fileURLWithPath: drive.musicDir).appendingPathComponent(path)
-            }
-            if FileManager.default.fileExists(atPath: fullURL.path),
-               let info = AudioTagger.shared.readMetadata(fileURL: fullURL) {
+            let cleanRel = WalkmanEngine.canonicalPlaylistRelativePath(path, baseDirPath: drive.musicDir)
+            let candidateURLs: [URL] = [
+                URL(fileURLWithPath: drive.musicDir).appendingPathComponent(cleanRel),
+                URL(fileURLWithPath: drive.learningDir).appendingPathComponent(cleanRel),
+                path.hasPrefix("/") ? URL(fileURLWithPath: path) : nil
+            ].compactMap { $0 }
+
+            for fullURL in candidateURLs {
+                guard FileManager.default.fileExists(atPath: fullURL.path),
+                      let info = AudioTagger.shared.readMetadata(fileURL: fullURL) else {
+                    continue
+                }
                 let filename = fullURL.lastPathComponent
                 let ext = fullURL.pathExtension.uppercased()
                 let stem = fullURL.deletingPathExtension().lastPathComponent
@@ -207,7 +262,7 @@ public struct PlaylistsView: View {
                 let size = (try? FileManager.default.attributesOfItem(atPath: fullURL.path)[.size] as? Int64) ?? 0
                 return Track(
                     filename: filename,
-                    relativePath: path,
+                    relativePath: cleanRel.isEmpty ? path : cleanRel,
                     fullPath: fullURL.path,
                     format: ext,
                     title: effTitle,
@@ -587,6 +642,19 @@ public struct PlaylistsView: View {
         ) != nil
     }
 
+    private func canonicalTrackPath(for rawPath: String, playlist: Playlist?, drive: WalkmanDrive) -> String {
+        let matched = libraryTracks.first(where: { $0.fullPath == rawPath || $0.relativePath == rawPath })
+        let baseURL: URL
+        if let pl = playlist, !pl.fullPath.isEmpty {
+            baseURL = baseDirectoryURL(forPlaylistURL: URL(fileURLWithPath: pl.fullPath), drive: drive)
+        } else {
+            baseURL = URL(fileURLWithPath: drive.musicDir)
+        }
+        let source = matched?.fullPath.isEmpty == false ? matched!.fullPath : (matched?.relativePath ?? rawPath)
+        let canonical = WalkmanEngine.canonicalPlaylistRelativePath(source, baseDirPath: baseURL.path)
+        return canonical.isEmpty ? rawPath : canonical
+    }
+
     private func addTrackToPlaylist(_ rawTrackPath: String, playlist: Playlist, allowDuplicate: Bool = false) {
         guard let drive = activeDrive else {
             withAnimation {
@@ -596,13 +664,9 @@ public struct PlaylistsView: View {
         }
         guard playlist.fullPath.isEmpty || playlist.fullPath.hasPrefix(drive.mountPoint) else { return }
         
-        // Resolve canonical clean relative path if track exists in library
-        let trackPath: String
-        if let matched = libraryTracks.first(where: { $0.fullPath == rawTrackPath || $0.relativePath == rawTrackPath }) {
-            trackPath = matched.relativePath
-        } else {
-            trackPath = rawTrackPath
-        }
+        // Resolve canonical clean relative path anchored to the playlist's Walkman directory
+        let trackPath = canonicalTrackPath(for: rawTrackPath, playlist: playlist, drive: drive)
+        guard !trackPath.isEmpty else { return }
         
         let candidateTrack = resolvedTrack(for: trackPath)
         let trackTitle = candidateTrack?.title ?? (trackPath as NSString).lastPathComponent
@@ -1261,7 +1325,7 @@ public struct PlaylistsView: View {
             }
         }
         .onAppear {
-            if cachedTrackLookup.isEmpty && !libraryTracks.isEmpty {
+            if !libraryTracks.isEmpty {
                 cachedTrackLookup = PlaylistsView.buildLookupTable(tracks: libraryTracks)
             }
             loadPlaylists()
@@ -1289,7 +1353,10 @@ public struct PlaylistsView: View {
                     var updated = playlistTracks
                     var addedCount = 0
                     var skippedCount = 0
-                    for candidate in addedRelativePaths {
+                    for rawCandidate in addedRelativePaths {
+                        let candidate = activeDrive.map { canonicalTrackPath(for: rawCandidate, playlist: selectedPlaylist, drive: $0) }
+                            ?? WalkmanEngine.canonicalPlaylistRelativePath(rawCandidate)
+                        guard !candidate.isEmpty else { continue }
                         let candTrack = resolvedTrack(for: candidate)
                         if trackAlreadyExists(trackPath: candidate, resolvedCandidate: candTrack, in: updated) {
                             skippedCount += 1
