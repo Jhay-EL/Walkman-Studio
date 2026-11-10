@@ -28,6 +28,21 @@ Walkman Studio focuses strictly on safe, non-destructive music library managemen
 
 ---
 
+## ✨ What's New in v3.1.1
+
+### 🖥️ Responsive In-Window Inspector & Compact Window Architecture
+* **In-Window Sliding Track Details Panel:** Track Details now opens smoothly inside the main window (`300pt`) without resizing or shifting the macOS window frame, with aligned full-height borders and automatic hiding on *Duplicates*, *Transfer & Convert*, and *Backup & Restore*.
+* **Compact `1200×660` Minimum Window Support:** Reduced minimum window constraints (default `1360×820`) while keeping every library toolbar single-lane via adaptive Liquid Glass dropdown menus and compact segmented control tiers across *Local Music Library*, *All Songs*, *Recently Added*, *Albums*, *Artists*, *Hi-Res Audio*, *Language Study*, and *Duplicates*.
+* **Consistent Liquid Glass Controls:** Standardized circular Play controls, native `.menu` dropdowns, compact *SenseMe* toolbar fallback during scanning, and unclipped multi-tier segmented control layouts on narrow windows.
+
+### ⚡ Performance, Lyrics Synchronization & Navigation Improvements
+* **Lag-Free Artists & Hi-Res Audio Inspector Toggles:** Eliminated UI stutter when toggling Track Details on large collections through discrete container width tiers, `LazyVStack` virtualization, cached artist console data, and `Equatable` row diff pruning.
+* **Table Horizontal Scrollbar Fix:** Anchored `TableScrollInsetModifier` horizontal scrollbars cleanly at the bottom edge of *Local Music Library*, *All Songs*, and *Recently Added* instead of floating over track rows.
+* **Acoustic Pregap Calibration (`AudioAcousticAligner`):** Detects mastering lead-in silence via `AVAssetReader` to calibrate `.lrc` `[offset:...]` timestamps in **LRC Fetcher** and the **Transfer Queue Item Editor**, backed by strict `<= 3.5s` LRCLIB duration verification and sample-accurate `.lrc` seek timing.
+* **Direct Artist & Album Cross-Navigation + Expanded LRC Fetcher:** Clickable Artist and Album links in *All Songs* and *Recently Added* jump directly to matching artist/album views, alongside batch `.LRC` fetching in *Local Music Library* and Album/Artist context menus and a unified Device Connection & Android MTP view.
+
+---
+
 ## The Problem Walkman Studio Solves
 
 Sony Walkman digital audio players deliver exceptional audio fidelity via their dedicated hardware **S-Master HX** digital amplifier and balanced outputs, but connecting and managing them on modern Apple Silicon or Intel-based Macs presents critical challenges:
@@ -170,7 +185,7 @@ Sony Walkman digital audio players deliver exceptional audio fidelity via their 
 * **Sony Signature Series Aesthetic:** Solid matte obsidian surfaces (#101114) and brushed aluminum accents inspired by the Sony Walkman Signature Series aluminum chassis.
 * **Optical Liquid Glass Controls:** Elegant frosted glass materials with delicate specular reflection highlights, glass segmented sliders, and tactile pill badges.
 * **Unified 38pt Baseline:** All interactive toolbar controls, search bars, sort menus, and primary buttons share a consistent **38pt height baseline**.
-* **Protected Minimum Window Size:** Enforces a minimum window size constraint ($1366\times 768$ pt) so buttons, storage gauges, table columns, and sidebar labels never get squished or clipped.
+* **Protected Minimum Window Size:** Enforces a compact minimum window constraint ($1200\times 660$ pt, default launch size $1360\times 820$ pt) with adaptive dropdown toolbars and responsive segmented bars so buttons, storage gauges, table columns, and sidebar labels never get squished or clipped.
 
 ---
 
@@ -435,6 +450,7 @@ Walkman-Studio/
 │       ├── WalkmanUSBDetector.swift      # USB mount/unmount and mass storage listener
 │       ├── SenseMeEngine.swift           # 12 Tone / SenseMe acoustic analysis bridge
 │       ├── LyricsService.swift           # LRCLIB & Lyrics.ovh synchronized lyrics engine
+│       ├── AudioAcousticAligner.swift    # Lead-in silence & pregap .LRC timestamp aligner
 │       ├── AudioTagger.swift             # ID3v2.3 binary writer, FLAC Vorbis & lyrics parser
 │       ├── AudioPlayerService.swift      # Streaming audio preview engine
 │       ├── CoverArtCache.swift           # Asynchronous image & thumbnail cache

@@ -61,33 +61,30 @@ shasum -a 256 *.zip *.dmg > SHA256SUMS.txt
 cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.md"
 # Walkman Studio v3.1.1
 
-Walkman Studio v3.1.1 is headlined by the all-new **LRC Fetcher (Batch Synchronized Lyrics Generator)**, enabling high-speed multi-threaded retrieval of timestamp-accurate `.lrc` lyrics across your entire library or selected playlists and albums, accompanied by targeted UI enhancements, playback refinements, and minor fixes across Apple Silicon (`arm64`) and Intel-based Macs (`x86_64`).
+Walkman Studio v3.1.1 is a comprehensive UI responsiveness, performance, and lyrics synchronization release across Apple Silicon (`arm64`) and Intel-based Macs (`x86_64`), featuring an in-window Track Details panel at a compact `1200×660` minimum window, smooth inspector animations across large Artists and Hi-Res Audio libraries, acoustic `.lrc` pregap calibration, and interactive library cross-navigation.
 
 ---
 
-## Headline Feature: LRC Fetcher (Batch Synchronized Lyrics Generator)
+## What's New in v3.1.1
 
-* **Universal Library Integration:** Dedicated circular 38×38pt Liquid Glass lyrics buttons (`quote.bubble`) built into every library view header: *All Songs*, *Recently Added*, *Albums*, *Artists*, *Hi-Res Audio*, *Playlists*, and *Language Study*.
-* **Flexible Contextual Selection Scopes:**
-  * **All Tracks in View:** Scans and fetches lyrics for all tracks in the currently selected view.
-  * **Selected Track(s):** Scopes fetching strictly to rows highlighted or checked in the song table.
-  * **Active Item:** Scopes fetching directly to the currently opened Album, Artist, or Playlist.
-  * **Choose Specific...:** Interactive Liquid Glass checklist sheet featuring live search, "Select All" / "Deselect All" shortcuts, real-time candidate track counts, and missing-lyrics diagnostics.
-* **Concurrent Multi-Worker Engine:** High-throughput asynchronous worker pool querying the open-source **LRCLIB** API (`/api/get` & `/api/search`) with exact millisecond duration matching and automatic fallback to **Lyrics.ovh**.
-* **Live Progress & Interactive Metric Dashboard:** Real-time animated progress bar, speed/ETA calculations, and interactive status metric pills (**Synced .LRC**, **Plain Text**, **Skipped**, **Not Found**) with a searchable per-track result breakdown card.
-* **Strict Timestamp & Date Added Preservation:** Original audio file modification dates and internal timestamps are strictly preserved, preventing existing library tracks from falsely jumping to the top of "Recently Added" smart playlists.
-* **Compliant Companion .LRC Files:** Automatically writes standardized companion `.lrc` files directly adjacent to audio tracks for instant recognition on Sony Walkman hardware and the built-in Now Playing player.
+### Responsive In-Window Inspector & Compact Window Layout
+* **In-Window Sliding Track Details Panel:** Track Details now opens smoothly inside the main window (`300pt`) without resizing or shifting your macOS window frame, with full-height divider alignment and automatic hiding on *Duplicates*, *Transfer & Convert*, and *Backup & Restore*.
+* **Compact `1200×660` Minimum Window Support:** Reduced minimum window size constraints (default `1360×820`) while keeping every library toolbar single-lane via adaptive Liquid Glass dropdown menus and compact segmented control tiers across *Local Music Library*, *All Songs*, *Recently Added*, *Albums*, *Artists*, *Hi-Res Audio*, *Language Study*, and *Duplicates*.
+* **Consistent Liquid Glass Controls:** Standardized circular Liquid Glass Play buttons, native `.menu` dropdown styling, compact *SenseMe* toolbar fallback during scanning, and unclipped multi-tier segmented bars on narrow layouts.
 
----
+### Artists & Hi-Res Audio Performance + Table Layout Fixes
+* **Lag-Free Inspector Toggling:** Eliminated UI stutter when toggling Track Details on large *Artists* and *Hi-Res Audio* collections through container-level discrete width tiers, `LazyVStack` virtualization, cached artist discography metadata, `Equatable` row diff pruning, and single-pane active mode rendering.
+* **Table Horizontal Scrollbar Anchoring:** Fixed `TableScrollInsetModifier` across *Local Music Library*, *All Songs*, and *Recently Added* so horizontal scrollbars stay anchored cleanly at the bottom edge instead of floating over track rows.
 
-## Minor Fixes & Improvements
+### Acoustic Lyrics Alignment & Sample-Accurate Playback
+* **Acoustic Lead-In Pregap Calibration (`AudioAcousticAligner`):** Inspects leading audio streams via `AVAssetReader` to detect mastering pregap silence and automatically calibrate `.lrc` `[offset:...]` timestamps in **LRC Fetcher** and the **Transfer Queue Item Editor**.
+* **Strict LRCLIB Duration Guard:** Enforces candidate scoring and `<= 3.5s` duration verification in `LyricsService` to prevent synced timestamps from mismatched edits or radio versions.
+* **Sample-Accurate `.LRC` Seeking & Expandable Lyrics Card:** Fixed `.lrc` timestamp synchronization on scrubber advances in Track Details and Fullscreen Now Playing, and added an expandable / compact lyrics view toggle in the Track Details inspector.
 
-* **Language Study Studio:** Added dedicated support for Sony Walkman's root `/LEARNING` directory for audiobooks, podcasts, and language lessons, complete with instant format filters (MP3, M4A/AAC, FLAC) and $O(1)$ cached segmented views.
-* **Authentic Sony SensMe™ Highlight Playback:** Audio surfing now tunes in directly at the 12-Tone acoustic climax position (`senseMeHighlightSec`) with zero audio leakage from 0:00, paired with *Highlight (45s)* vs *Full Track* range toggles and active gold chorus badges.
-* **Fluid Window Expansion on Track Detail:** Opening the Track Detail panel (Inspector) smoothly widens the macOS window by +300pt, preserving 100% of the table and grid space for your music library, with screen-edge boundary protection.
-* **Static Navigation Sidebar:** Navigation sidebar is locked at 260pt and never collapses or auto-hides when opening or closing inspector views.
-* **Expandable Liquid Glass Search Bar:** Compact search icon morphs into a translucent liquid glass search bar with fluid spring physics, synchronized fade transitions, and click-outside collapse.
-* **Android Walkman Heuristics & Detection:** Improved capacity heuristics, USB composite PID matching, and broader audio format support across Android Walkman models.
+### Interactive Library Navigation & Device Setup Improvements
+* **Direct Artist & Album Cross-Navigation:** Track table Artist and Album cells in *All Songs* and *Recently Added* now link directly to the matching discography or album detail view.
+* **Expanded LRC Fetcher Coverage:** Added batch `.LRC` lyrics fetching directly into *Local Music Library* and Album / Artist context menus.
+* **Redesigned Device Connection & Android MTP View:** Unified the disconnected device dashboard and Android Walkman MTP guidance card with cleaner sidebar synchronization.
 
 ---
 
@@ -114,37 +111,37 @@ EOF
 cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
 <h1>Walkman Studio v3.1.1</h1>
 
-<p>Walkman Studio v3.1.1 is headlined by the all-new <strong>LRC Fetcher (Batch Synchronized Lyrics Generator)</strong>, enabling high-speed multi-threaded retrieval of timestamp-accurate <code>.lrc</code> lyrics across your entire library or selected playlists and albums, accompanied by targeted UI enhancements, playback refinements, and minor fixes across Apple Silicon (<code>arm64</code>) and Intel-based Macs (<code>x86_64</code>).</p>
+<p>Walkman Studio v3.1.1 is a comprehensive UI responsiveness, performance, and lyrics synchronization release across Apple Silicon (<code>arm64</code>) and Intel-based Macs (<code>x86_64</code>), featuring an in-window Track Details panel at a compact <code>1200&times;660</code> minimum window, smooth inspector animations across large Artists and Hi-Res Audio libraries, acoustic <code>.lrc</code> pregap calibration, and interactive library cross-navigation.</p>
 
 <hr>
 
-<h2>Headline Feature: LRC Fetcher (Batch Synchronized Lyrics Generator)</h2>
+<h2>What's New in v3.1.1</h2>
+
+<h3>Responsive In-Window Inspector &amp; Compact Window Layout</h3>
 <ul>
-  <li><strong>Universal Library Integration:</strong> Dedicated circular 38&times;38pt Liquid Glass lyrics buttons (<code>quote.bubble</code>) built into every library view header: <em>All Songs</em>, <em>Recently Added</em>, <em>Albums</em>, <em>Artists</em>, <em>Hi-Res Audio</em>, <em>Playlists</em>, and <em>Language Study</em>.</li>
-  <li><strong>Flexible Contextual Selection Scopes:</strong>
-    <ul>
-      <li><strong>All Tracks in View:</strong> Scans and fetches lyrics for all tracks in the currently selected view.</li>
-      <li><strong>Selected Track(s):</strong> Scopes fetching strictly to rows highlighted or checked in the song table.</li>
-      <li><strong>Active Item:</strong> Scopes fetching directly to the currently opened Album, Artist, or Playlist.</li>
-      <li><strong>Choose Specific...:</strong> Interactive Liquid Glass checklist sheet featuring live search, &ldquo;Select All&rdquo; / &ldquo;Deselect All&rdquo; shortcuts, real-time candidate track counts, and missing-lyrics diagnostics.</li>
-    </ul>
-  </li>
-  <li><strong>Concurrent Multi-Worker Engine:</strong> High-throughput asynchronous worker pool querying the open-source <strong>LRCLIB</strong> API (<code>/api/get</code> &amp; <code>/api/search</code>) with exact millisecond duration matching and automatic fallback to <strong>Lyrics.ovh</strong>.</li>
-  <li><strong>Live Progress &amp; Interactive Metric Dashboard:</strong> Real-time animated progress bar, speed/ETA calculations, and interactive status metric pills (<strong>Synced .LRC</strong>, <strong>Plain Text</strong>, <strong>Skipped</strong>, <strong>Not Found</strong>) with a searchable per-track result breakdown card.</li>
-  <li><strong>Strict Timestamp &amp; Date Added Preservation:</strong> Original audio file modification dates and internal timestamps are strictly preserved, preventing existing library tracks from falsely jumping to the top of &ldquo;Recently Added&rdquo; smart playlists.</li>
-  <li><strong>Compliant Companion .LRC Files:</strong> Automatically writes standardized companion <code>.lrc</code> files directly alongside audio tracks for instant recognition on Sony Walkman hardware and the built-in Now Playing player.</li>
+  <li><strong>In-Window Sliding Track Details Panel:</strong> Track Details now opens smoothly inside the main window (<code>300pt</code>) without resizing or shifting your macOS window frame, with full-height divider alignment and automatic hiding on <em>Duplicates</em>, <em>Transfer &amp; Convert</em>, and <em>Backup &amp; Restore</em>.</li>
+  <li><strong>Compact <code>1200&times;660</code> Minimum Window Support:</strong> Reduced minimum window size constraints (default <code>1360&times;820</code>) while keeping every library toolbar single-lane via adaptive Liquid Glass dropdown menus and compact segmented control tiers across <em>Local Music Library</em>, <em>All Songs</em>, <em>Recently Added</em>, <em>Albums</em>, <em>Artists</em>, <em>Hi-Res Audio</em>, <em>Language Study</em>, and <em>Duplicates</em>.</li>
+  <li><strong>Consistent Liquid Glass Controls:</strong> Standardized circular Liquid Glass Play buttons, native <code>.menu</code> dropdown styling, compact <em>SenseMe</em> toolbar fallback during scanning, and unclipped multi-tier segmented bars on narrow layouts.</li>
 </ul>
 
-<hr>
-
-<h2>Minor Fixes &amp; Improvements</h2>
+<h3>Artists &amp; Hi-Res Audio Performance + Table Layout Fixes</h3>
 <ul>
-  <li><strong>Language Study Studio:</strong> Added dedicated support for Sony Walkman's root <code>/LEARNING</code> directory for audiobooks, podcasts, and language lessons, complete with instant format filters (MP3, M4A/AAC, FLAC) and O(1) cached segmented views.</li>
-  <li><strong>Authentic Sony SensMe&trade; Highlight Playback:</strong> Audio surfing now tunes in directly at the 12-Tone acoustic climax position (<code>senseMeHighlightSec</code>) with zero audio leakage from 0:00, paired with <em>Highlight (45s)</em> vs <em>Full Track</em> range toggles and active gold chorus badges.</li>
-  <li><strong>Fluid Window Expansion on Track Detail:</strong> Opening the Track Detail panel (Inspector) smoothly widens the macOS window by +300pt, preserving 100% of the table and grid space for your music library, with screen-edge boundary protection.</li>
-  <li><strong>Static Navigation Sidebar:</strong> Navigation sidebar is locked at 260pt and never collapses or auto-hides when opening or closing inspector views.</li>
-  <li><strong>Expandable Liquid Glass Search Bar:</strong> Compact search icon morphs into a translucent liquid glass search bar with fluid spring physics, synchronized fade transitions, and click-outside collapse.</li>
-  <li><strong>Android Walkman Heuristics &amp; Detection:</strong> Improved capacity heuristics, USB composite PID matching, and broader audio format support across Android Walkman models.</li>
+  <li><strong>Lag-Free Inspector Toggling:</strong> Eliminated UI stutter when toggling Track Details on large <em>Artists</em> and <em>Hi-Res Audio</em> collections through container-level discrete width tiers, <code>LazyVStack</code> virtualization, cached artist discography metadata, <code>Equatable</code> row diff pruning, and single-pane active mode rendering.</li>
+  <li><strong>Table Horizontal Scrollbar Anchoring:</strong> Fixed <code>TableScrollInsetModifier</code> across <em>Local Music Library</em>, <em>All Songs</em>, and <em>Recently Added</em> so horizontal scrollbars stay anchored cleanly at the bottom edge instead of floating over track rows.</li>
+</ul>
+
+<h3>Acoustic Lyrics Alignment &amp; Sample-Accurate Playback</h3>
+<ul>
+  <li><strong>Acoustic Lead-In Pregap Calibration (<code>AudioAcousticAligner</code>):</strong> Inspects leading audio streams via <code>AVAssetReader</code> to detect mastering pregap silence and automatically calibrate <code>.lrc</code> <code>[offset:...]</code> timestamps in <strong>LRC Fetcher</strong> and the <strong>Transfer Queue Item Editor</strong>.</li>
+  <li><strong>Strict LRCLIB Duration Guard:</strong> Enforces candidate scoring and <code>&le; 3.5s</code> duration verification in <code>LyricsService</code> to prevent synced timestamps from mismatched edits or radio versions.</li>
+  <li><strong>Sample-Accurate <code>.LRC</code> Seeking &amp; Expandable Lyrics Card:</strong> Fixed <code>.lrc</code> timestamp synchronization on scrubber advances in Track Details and Fullscreen Now Playing, and added an expandable / compact lyrics view toggle in the Track Details inspector.</li>
+</ul>
+
+<h3>Interactive Library Navigation &amp; Device Setup Improvements</h3>
+<ul>
+  <li><strong>Direct Artist &amp; Album Cross-Navigation:</strong> Track table Artist and Album cells in <em>All Songs</em> and <em>Recently Added</em> now link directly to the matching discography or album detail view.</li>
+  <li><strong>Expanded LRC Fetcher Coverage:</strong> Added batch <code>.LRC</code> lyrics fetching directly into <em>Local Music Library</em> and Album / Artist context menus.</li>
+  <li><strong>Redesigned Device Connection &amp; Android MTP View:</strong> Unified the disconnected device dashboard and Android Walkman MTP guidance card with cleaner sidebar synchronization.</li>
 </ul>
 
 <hr>
