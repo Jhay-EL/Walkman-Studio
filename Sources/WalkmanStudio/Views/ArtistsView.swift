@@ -8,7 +8,26 @@ fileprivate struct FilterOption: Identifiable {
     let isHiRes: Bool
 }
 
-public struct ArtistsView: View {
+fileprivate enum ArtistDetailWidthTier: Equatable {
+    case extraWide // >= 520pt
+    case wide      // 430..<520pt
+    case compact   // 340..<430pt
+    case minimal   // < 340pt
+
+    init(width: CGFloat) {
+        if width >= 520 {
+            self = .extraWide
+        } else if width >= 430 {
+            self = .wide
+        } else if width >= 340 {
+            self = .compact
+        } else {
+            self = .minimal
+        }
+    }
+}
+
+public struct ArtistsView: View, Equatable {
     let tracks: [Track]
     let precomputedArtists: [ArtistItem]?
     let showToolbar: Bool
@@ -20,6 +39,13 @@ public struct ArtistsView: View {
     var onTransferArtist: ((ArtistItem) -> Void)? = nil
     var onTransferTracks: (([Track]) -> Void)? = nil
     var onTransferTrack: ((Track) -> Void)? = nil
+
+    public static func == (lhs: ArtistsView, rhs: ArtistsView) -> Bool {
+        lhs.tracks == rhs.tracks &&
+        lhs.precomputedArtists == rhs.precomputedArtists &&
+        lhs.showToolbar == rhs.showToolbar &&
+        lhs.initialSelectedArtistName == rhs.initialSelectedArtistName
+    }
     
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var selectedArtistName: String? = nil
@@ -28,6 +54,13 @@ public struct ArtistsView: View {
     @State private var formatFilter: String = "ALL"
     @State private var cachedArtists: [ArtistItem] = []
     @State private var displayedArtists: [ArtistItem] = []
+    @State private var cachedActiveArtist: ArtistItem? = nil
+    @State private var cachedFilteredAlbums: [AlbumItem] = []
+    @State private var cachedHeroMetadata: String = ""
+    @State private var cachedHeroQuality: String = ""
+    @State private var cachedHeroAvgBitrate: String? = nil
+    @State private var detailWidthTier: ArtistDetailWidthTier = .extraWide
+    @State private var isCompactMasterColumn: Bool = false
     @State private var showBatchLyricsSheet: Bool = false
     @State private var isPreparingLyricsSheet: Bool = false
     
@@ -65,9 +98,16 @@ public struct ArtistsView: View {
         self.onTransferTrack = onTransferTrack
         
         let initial = precomputedArtists ?? []
+        let targetName = initialSelectedArtistName ?? initial.first?.name
+        let initialActive = initial.first(where: { $0.name == targetName }) ?? initial.first
         self._cachedArtists = State(initialValue: initial)
         self._displayedArtists = State(initialValue: initial)
-        self._selectedArtistName = State(initialValue: initialSelectedArtistName ?? initial.first?.name)
+        self._selectedArtistName = State(initialValue: initialActive?.name ?? targetName)
+        self._cachedActiveArtist = State(initialValue: initialActive)
+        self._cachedFilteredAlbums = State(initialValue: initialActive?.albums ?? [])
+        self._cachedHeroMetadata = State(initialValue: initialActive.map(Self.computeHeroMetadata) ?? "")
+        self._cachedHeroQuality = State(initialValue: initialActive.map(Self.computeHeroQuality) ?? "")
+        self._cachedHeroAvgBitrate = State(initialValue: initialActive.flatMap(Self.computeHeroAvgBitrate))
     }
     
     private var baseArtists: [ArtistItem] {
@@ -137,12 +177,14 @@ public struct ArtistsView: View {
             } else {
                 selectedArtistName = displayedArtists.first?.name
             }
+            recomputeActiveArtistConsole()
             return
         }
         let list = baseArtists
         if list.isEmpty {
             displayedArtists = []
             selectedArtistName = nil
+            recomputeActiveArtistConsole()
             return
         }
         let q = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -169,13 +211,32 @@ public struct ArtistsView: View {
         } else {
             selectedArtistName = displayedArtists.first?.name
         }
+        recomputeActiveArtistConsole()
     }
     
     private var activeArtist: ArtistItem? {
+        cachedActiveArtist ?? displayedArtists.first
+    }
+
+    private func recomputeActiveArtistConsole() {
+        let resolved: ArtistItem?
         if let name = selectedArtistName {
-            return displayedArtists.first(where: { $0.name == name }) ?? displayedArtists.first
+            resolved = displayedArtists.first(where: { $0.name == name }) ?? displayedArtists.first
+        } else {
+            resolved = displayedArtists.first
         }
-        return displayedArtists.first
+        cachedActiveArtist = resolved
+        if let art = resolved {
+            cachedFilteredAlbums = Self.computeFilteredAlbums(for: art, filter: formatFilter)
+            cachedHeroMetadata = Self.computeHeroMetadata(for: art)
+            cachedHeroQuality = Self.computeHeroQuality(for: art)
+            cachedHeroAvgBitrate = Self.computeHeroAvgBitrate(for: art)
+        } else {
+            cachedFilteredAlbums = []
+            cachedHeroMetadata = ""
+            cachedHeroQuality = ""
+            cachedHeroAvgBitrate = nil
+        }
     }
 
     private func selectTargetArtistIfNeeded(proxy: ScrollViewProxy? = nil) {
@@ -197,13 +258,13 @@ public struct ArtistsView: View {
         }
     }
     
-    private func filteredAlbums(for artist: ArtistItem) -> [AlbumItem] {
-        if formatFilter == "ALL" {
+    private static func computeFilteredAlbums(for artist: ArtistItem, filter: String) -> [AlbumItem] {
+        if filter == "ALL" {
             return artist.albums
         }
         return artist.albums.compactMap { alb in
             let matchingTracks = alb.tracks.filter { track in
-                switch formatFilter {
+                switch filter {
                 case "HI-RES":
                     return track.bitsPerSample > 16 || track.sampleRate > 48000
                 case "FLAC":
@@ -242,6 +303,7 @@ public struct ArtistsView: View {
             // Split Content Area: Left Master List & Right Discography Console
             HStack(spacing: 0) {
                 // Left Column: Artist Master List
+                let currentActiveName = activeArtist?.name
                 VStack(spacing: 0) {
                     if displayedArtists.isEmpty {
                         leftEmptyStateView
@@ -250,7 +312,7 @@ public struct ArtistsView: View {
                             ScrollView {
                                 LazyVStack(spacing: 3) {
                                     ForEach(displayedArtists) { art in
-                                        let isSelected = activeArtist?.name == art.name
+                                        let isSelected = currentActiveName == art.name
                                         ArtistListRowView(
                                             artist: art,
                                             isSelected: isSelected,
@@ -274,6 +336,7 @@ public struct ArtistsView: View {
                                                 showBatchLyricsSheet = true
                                             }
                                         )
+                                        .equatable()
                                         .id(art.name)
                                     }
                                 }
@@ -290,7 +353,7 @@ public struct ArtistsView: View {
                         }
                     }
                 }
-                .frame(minWidth: 140, idealWidth: 170, maxWidth: 210)
+                .frame(width: isCompactMasterColumn ? 160 : 185)
                 .background(Color.clear)
                 
                 // Vertical Hairline Divider between Master List & Detail Console
@@ -300,18 +363,19 @@ public struct ArtistsView: View {
                 
                 // Right Detail Column: Artist Discography Console
                 if let artist = activeArtist {
+                    let currentPlayingId = player.currentTrack?.id
+                    let isPlayingNow = player.isPlaying
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 22) {
+                        LazyVStack(alignment: .leading, spacing: 20) {
                             // Hero Banner
                             artistHeroBanner(for: artist)
                             
                             // Releases Section Header
-                            let albums = filteredAlbums(for: artist)
                             HStack(spacing: 8) {
                                 Text("Releases")
                                     .font(.system(size: 18, weight: .bold))
                                     .foregroundStyle(.white)
-                                Text("(\(albums.count))")
+                                Text("(\(cachedFilteredAlbums.count))")
                                     .font(WalkmanFont.calloutMedium)
                                     .foregroundStyle(WalkmanTheme.silverMuted)
                                 Spacer()
@@ -320,11 +384,16 @@ public struct ArtistsView: View {
                             .padding(.horizontal, 4)
                             
                             // Discography Albums
-                            if albums.isEmpty {
+                            if cachedFilteredAlbums.isEmpty {
                                 discographyEmptyStateView
                             } else {
-                                ForEach(albums) { alb in
-                                    artistAlbumSection(album: alb, artist: artist)
+                                ForEach(cachedFilteredAlbums) { alb in
+                                    artistAlbumSection(
+                                        album: alb,
+                                        artist: artist,
+                                        currentPlayingId: currentPlayingId,
+                                        isPlayingNow: isPlayingNow
+                                    )
                                 }
                             }
                         }
@@ -333,6 +402,18 @@ public struct ArtistsView: View {
                         .padding(.bottom, 88)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(
+                        GeometryReader { geo in
+                            let tier = ArtistDetailWidthTier(width: geo.size.width)
+                            Color.clear
+                                .onAppear {
+                                    if detailWidthTier != tier { detailWidthTier = tier }
+                                }
+                                .onChange(of: tier) { _, newTier in
+                                    detailWidthTier = newTier
+                                }
+                        }
+                    )
                 } else {
                     VStack(spacing: 12) {
                         Spacer()
@@ -347,6 +428,18 @@ public struct ArtistsView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
+            .background(
+                GeometryReader { geo in
+                    let compact = geo.size.width < 740
+                    Color.clear
+                        .onAppear {
+                            if isCompactMasterColumn != compact { isCompactMasterColumn = compact }
+                        }
+                        .onChange(of: compact) { _, newCompact in
+                            isCompactMasterColumn = newCompact
+                        }
+                }
+            )
         }
         .onAppear {
             if cachedArtists.isEmpty && precomputedArtists == nil && !tracks.isEmpty {
@@ -354,6 +447,8 @@ public struct ArtistsView: View {
                 recomputeDisplayedArtists()
             } else if precomputedArtists != nil {
                 recomputeDisplayedArtists()
+            } else {
+                recomputeActiveArtistConsole()
             }
         }
         .onChange(of: precomputedArtists) { _, newPrecomputed in
@@ -390,6 +485,12 @@ public struct ArtistsView: View {
         }
         .onChange(of: searchQuery) { _, _ in
             recomputeDisplayedArtists()
+        }
+        .onChange(of: selectedArtistName) { _, _ in
+            recomputeActiveArtistConsole()
+        }
+        .onChange(of: formatFilter) { _, _ in
+            recomputeActiveArtistConsole()
         }
         .onChange(of: cachedArtists) { _, _ in
             recomputeDisplayedArtists()
@@ -768,7 +869,7 @@ public struct ArtistsView: View {
     // ARTIST METADATA COMPUTATION HELPERS
     // -------------------------------------------------------------------------
     
-    private func artistGenreString(for artist: ArtistItem) -> String? {
+    private static func computeArtistGenre(for artist: ArtistItem) -> String? {
         let genres = artist.tracks.compactMap { tr -> String? in
             let g = tr.genre.trimmingCharacters(in: .whitespacesAndNewlines)
             return g.isEmpty ? nil : g
@@ -779,7 +880,7 @@ public struct ArtistsView: View {
         return counts.max(by: { $0.value < $1.value })?.key ?? genres.first
     }
     
-    private func artistYearsRangeString(for artist: ArtistItem) -> String? {
+    private static func computeArtistYearsRange(for artist: ArtistItem) -> String? {
         let years = artist.tracks.compactMap { tr -> Int? in
             let clean = tr.year.trimmingCharacters(in: .whitespacesAndNewlines)
             return Int(clean)
@@ -793,7 +894,7 @@ public struct ArtistsView: View {
         }
     }
     
-    private func artistDurationFormatted(for artist: ArtistItem) -> String {
+    private static func computeArtistDuration(for artist: ArtistItem) -> String {
         let total = artist.tracks.reduce(0.0) { $0 + $1.durationSeconds }
         let count = artist.trackCount
         let songsLabel = "\(count) \(count == 1 ? "Song" : "Songs")"
@@ -810,13 +911,13 @@ public struct ArtistsView: View {
         }
     }
     
-    private func artistTotalSizeFormatted(for artist: ArtistItem) -> String {
+    private static func computeArtistTotalSize(for artist: ArtistItem) -> String {
         let bytes = artist.tracks.reduce(Int64(0)) { $0 + $1.sizeBytes }
         if bytes <= 0 { return "" }
         return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
     
-    private func artistQualitySpecsString(for artist: ArtistItem) -> String {
+    private static func computeHeroQuality(for artist: ArtistItem) -> String {
         let maxBits = artist.tracks.map(\.bitsPerSample).max() ?? 0
         let maxSampleRate = artist.tracks.map(\.sampleRate).max() ?? 0
         let formats = artist.tracks.map(\.format)
@@ -834,7 +935,7 @@ public struct ArtistsView: View {
         return primaryFormat
     }
     
-    private func artistAvgBitrateString(for artist: ArtistItem) -> String? {
+    private static func computeHeroAvgBitrate(for artist: ArtistItem) -> String? {
         let bitrates = artist.tracks.map(\.bitrateKbps).filter { $0 > 0 }
         guard !bitrates.isEmpty else { return nil }
         let avg = bitrates.reduce(0, +) / bitrates.count
@@ -845,17 +946,17 @@ public struct ArtistsView: View {
     // ARTIST HERO BANNER & ALBUM SECTIONS
     // -------------------------------------------------------------------------
     
-    private func artistMetadataSummary(for artist: ArtistItem) -> String {
+    private static func computeHeroMetadata(for artist: ArtistItem) -> String {
         var components: [String] = []
-        if let genre = artistGenreString(for: artist) {
+        if let genre = computeArtistGenre(for: artist) {
             components.append(genre)
         }
-        if let years = artistYearsRangeString(for: artist) {
+        if let years = computeArtistYearsRange(for: artist) {
             components.append(years)
         }
         components.append("\(artist.albumCount) \(artist.albumCount == 1 ? "Album" : "Albums")")
-        components.append(artistDurationFormatted(for: artist))
-        let sizeStr = artistTotalSizeFormatted(for: artist)
+        components.append(computeArtistDuration(for: artist))
+        let sizeStr = computeArtistTotalSize(for: artist)
         if !sizeStr.isEmpty {
             components.append(sizeStr)
         }
@@ -884,7 +985,7 @@ public struct ArtistsView: View {
             Image(systemName: "waveform.badge.magnifyingglass")
                 .font(.system(size: 9.5, weight: .semibold))
                 .foregroundStyle(artist.isHiRes ? WalkmanTheme.hiResGoldLight : WalkmanTheme.silverLight)
-            Text(artistQualitySpecsString(for: artist))
+            Text(cachedHeroQuality)
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(WalkmanTheme.silverLight)
                 .lineLimit(1)
@@ -900,9 +1001,9 @@ public struct ArtistsView: View {
         .fixedSize(horizontal: true, vertical: false)
     }
     
-    private func artistBitrateBadge(for artist: ArtistItem) -> some View {
+    private var artistBitrateBadge: some View {
         Group {
-            if let avgBitrate = artistAvgBitrateString(for: artist) {
+            if let avgBitrate = cachedHeroAvgBitrate {
                 Text("~\(avgBitrate)")
                     .font(.system(size: 11, weight: .medium, design: .monospaced))
                     .foregroundStyle(WalkmanTheme.silverMuted)
@@ -920,26 +1021,27 @@ public struct ArtistsView: View {
         }
     }
     
+    @ViewBuilder
     private func artistSpecificationBadges(for artist: ArtistItem) -> some View {
-        ViewThatFits(in: .horizontal) {
-            // Wide layout (single horizontal row)
-            HStack(spacing: 7) {
-                if artist.isHiRes {
-                    artistHiResBadge
-                }
-                artistQualityBadge(for: artist)
-                artistBitrateBadge(for: artist)
-            }
-            
-            // Compact layout (two rows)
-            VStack(alignment: .leading, spacing: 6) {
+        Group {
+            if detailWidthTier == .extraWide {
                 HStack(spacing: 7) {
                     if artist.isHiRes {
                         artistHiResBadge
                     }
                     artistQualityBadge(for: artist)
+                    artistBitrateBadge
                 }
-                artistBitrateBadge(for: artist)
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 7) {
+                        if artist.isHiRes {
+                            artistHiResBadge
+                        }
+                        artistQualityBadge(for: artist)
+                    }
+                    artistBitrateBadge
+                }
             }
         }
         .padding(.top, 4)
@@ -966,7 +1068,7 @@ public struct ArtistsView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 
                 // 3. Primary Metadata Line (Genre • Years Active • Albums Count • Duration • Size)
-                Text(artistMetadataSummary(for: artist))
+                Text(cachedHeroMetadata)
                     .font(WalkmanFont.callout)
                     .foregroundStyle(WalkmanTheme.silverMuted)
                     .lineLimit(2)
@@ -996,34 +1098,35 @@ public struct ArtistsView: View {
         )
     }
     
+    @ViewBuilder
     private func artistActionButtonsView(for artist: ArtistItem) -> some View {
-        ViewThatFits(in: .horizontal) {
-            // Wide layout (single row with labels)
-            HStack(spacing: 8) {
-                artistPlayButton(for: artist)
-                artistShuffleButton(for: artist)
-                artistChangePhotoButton(for: artist)
-                artistMoreMenuButton(for: artist)
-            }
-            
-            // Compact layout (Apple Music style circular icons)
-            HStack(spacing: 8) {
-                artistPlayButton(for: artist)
-                artistShuffleButton(for: artist)
-                artistChangePhotoCircularButton(for: artist)
-                artistMoreMenuButton(for: artist)
-            }
-            
-            // Two rows
-            VStack(alignment: .leading, spacing: 8) {
+        Group {
+            switch detailWidthTier {
+            case .extraWide:
                 HStack(spacing: 8) {
                     artistPlayButton(for: artist)
                     artistShuffleButton(for: artist)
-                }
-                HStack(spacing: 8) {
-                    artistChangePhotoCircularButton(for: artist)
-                    artistRefreshPhotoCircularButton(for: artist)
+                    artistChangePhotoButton(for: artist)
                     artistMoreMenuButton(for: artist)
+                }
+            case .wide, .compact:
+                HStack(spacing: 8) {
+                    artistPlayButton(for: artist)
+                    artistShuffleButton(for: artist)
+                    artistChangePhotoCircularButton(for: artist)
+                    artistMoreMenuButton(for: artist)
+                }
+            case .minimal:
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        artistPlayButton(for: artist)
+                        artistShuffleButton(for: artist)
+                    }
+                    HStack(spacing: 8) {
+                        artistChangePhotoCircularButton(for: artist)
+                        artistRefreshPhotoCircularButton(for: artist)
+                        artistMoreMenuButton(for: artist)
+                    }
                 }
             }
         }
@@ -1252,7 +1355,12 @@ public struct ArtistsView: View {
         return parts.joined(separator: " • ")
     }
     
-    private func artistAlbumSection(album: AlbumItem, artist: ArtistItem) -> some View {
+    private func artistAlbumSection(
+        album: AlbumItem,
+        artist: ArtistItem,
+        currentPlayingId: String?,
+        isPlayingNow: Bool
+    ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             // Album Header Row
             HStack(spacing: 12) {
@@ -1299,7 +1407,7 @@ public struct ArtistsView: View {
                 
                 Spacer(minLength: 8)
                 
-                ViewThatFits(in: .horizontal) {
+                if detailWidthTier == .extraWide || detailWidthTier == .wide {
                     Button(action: {
                         if let first = album.tracks.first {
                             player.play(track: first, in: album.tracks)
@@ -1318,7 +1426,7 @@ public struct ArtistsView: View {
                     }
                     .buttonStyle(LiquidGlassButtonStyle(variant: .subtle, cornerRadius: 12))
                     .fixedSize(horizontal: true, vertical: false)
-                    
+                } else {
                     Button(action: {
                         if let first = album.tracks.first {
                             player.play(track: first, in: album.tracks)
@@ -1367,13 +1475,15 @@ public struct ArtistsView: View {
             }
             
             // Album Tracks Card Container
-            VStack(spacing: 1.5) {
+            LazyVStack(spacing: 1.5) {
                 ForEach(Array(album.tracks.enumerated()), id: \.element.id) { index, track in
                     ArtistTrackRowView(
                         index: index + 1,
                         track: track,
                         artistName: artist.name,
                         albumTracks: album.tracks,
+                        isPlayingThis: isPlayingNow && (currentPlayingId == track.id),
+                        widthTier: detailWidthTier,
                         onSelect: {
                             onSelectTrack(track)
                         },
@@ -1392,6 +1502,7 @@ public struct ArtistsView: View {
                         },
                         onTransferTrack: onTransferTrack != nil ? { onTransferTrack?(track) } : nil
                     )
+                    .equatable()
                 }
             }
             .padding(6)
@@ -1484,7 +1595,7 @@ private struct ArtistCoverAvatarButton: View {
 // -----------------------------------------------------------------------------
 // ARTIST LIST ROW VIEW (TACTILE HOVER & SELECTION)
 // -----------------------------------------------------------------------------
-private struct ArtistListRowView: View {
+private struct ArtistListRowView: View, Equatable {
     let artist: ArtistItem
     let isSelected: Bool
     let onSelect: () -> Void
@@ -1495,6 +1606,13 @@ private struct ArtistListRowView: View {
     var onFetchLyrics: (() -> Void)? = nil
     
     @State private var isHovered = false
+
+    static func == (lhs: ArtistListRowView, rhs: ArtistListRowView) -> Bool {
+        lhs.artist.name == rhs.artist.name &&
+        lhs.artist.albumCount == rhs.artist.albumCount &&
+        lhs.artist.trackCount == rhs.artist.trackCount &&
+        lhs.isSelected == rhs.isSelected
+    }
     
     var body: some View {
         Button(action: onSelect) {
@@ -1866,19 +1984,28 @@ private struct HoverArtistPillBackground: View {
 // -----------------------------------------------------------------------------
 // ARTIST TRACK ROW VIEW (TACTILE HOVER & AUDIO STATE)
 // -----------------------------------------------------------------------------
-private struct ArtistTrackRowView: View {
+private struct ArtistTrackRowView: View, Equatable {
     let index: Int
     let track: Track
     let artistName: String
     let albumTracks: [Track]
+    let isPlayingThis: Bool
+    let widthTier: ArtistDetailWidthTier
     let onSelect: () -> Void
     let onPlayToggle: () -> Void
     var onEdit: (() -> Void)? = nil
     var onTrimCut: (() -> Void)? = nil
     var onTransferTrack: (() -> Void)? = nil
     
-    @ObservedObject private var player = AudioPlayerService.shared
     @State private var isHovered = false
+
+    static func == (lhs: ArtistTrackRowView, rhs: ArtistTrackRowView) -> Bool {
+        lhs.index == rhs.index &&
+        lhs.track == rhs.track &&
+        lhs.artistName == rhs.artistName &&
+        lhs.isPlayingThis == rhs.isPlayingThis &&
+        lhs.widthTier == rhs.widthTier
+    }
     
     private func formatDuration(_ seconds: Double) -> String {
         if seconds <= 0 { return "—" }
@@ -1911,7 +2038,7 @@ private struct ArtistTrackRowView: View {
     }
     
     var body: some View {
-        let isPlayingThis = player.currentTrack?.id == track.id && player.isPlaying
+        let isTrackHiRes = track.bitsPerSample > 16 || track.sampleRate > 48000
         
         HStack(spacing: 8) {
             // Track Number or Play/Pause Indicator
@@ -1952,10 +2079,10 @@ private struct ArtistTrackRowView: View {
             
             Spacer(minLength: 6)
             
-            ViewThatFits(in: .horizontal) {
-                // Wide: [Hi-Res] [FLAC] 3:26
+            switch widthTier {
+            case .extraWide, .wide:
                 HStack(spacing: 6) {
-                    if track.bitsPerSample > 16 || track.sampleRate > 48000 {
+                    if isTrackHiRes {
                         hiResBadgeView
                     }
                     Text(track.format)
@@ -1963,10 +2090,9 @@ private struct ArtistTrackRowView: View {
                         .foregroundStyle(WalkmanTheme.silverMuted)
                     durationView
                 }
-                
-                // Compact: [Hi-Res] 3:26 or [FLAC] 3:26
+            case .compact:
                 HStack(spacing: 6) {
-                    if track.bitsPerSample > 16 || track.sampleRate > 48000 {
+                    if isTrackHiRes {
                         hiResBadgeView
                     } else {
                         Text(track.format)
@@ -1975,8 +2101,7 @@ private struct ArtistTrackRowView: View {
                     }
                     durationView
                 }
-                
-                // Minimal: 3:26
+            case .minimal:
                 durationView
             }
         }

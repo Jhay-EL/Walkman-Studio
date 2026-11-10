@@ -1306,6 +1306,7 @@ public struct ContentView: View {
                                         self.trackToTrimCut = track
                                     }
                                 )
+                                .equatable()
                                 .id("artists_\(activeDrive?.mountPoint ?? "no_drive")_\(targetArtistName ?? "all")")
                                 
                             case .hiRes:
@@ -1339,6 +1340,7 @@ public struct ContentView: View {
                                         deleteTrackFromDevice(track)
                                     }
                                 )
+                                .equatable()
                                 .id("hires_\(activeDrive?.mountPoint ?? "no_drive")")
                                 
                             case .languageStudy:
@@ -1687,19 +1689,24 @@ private extension View {
                 .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
 
             if isPresented.wrappedValue {
-                Rectangle()
-                    .fill(Color.black)
-                    .frame(width: 1)
-                    .ignoresSafeArea()
+                // Group divider and panel so they slide together and ignore the top toolbar safe area
+                // (avoid .clipped() on the outer HStack, which would chop off the border in the titlebar).
+                HStack(spacing: 0) {
+                    Rectangle()
+                        .fill(Color.black)
+                        .frame(width: 1)
+                        .ignoresSafeArea()
 
-                content()
-                    .frame(width: 300)
-                    .background(WalkmanTheme.background)
-                    .ignoresSafeArea()
-                    .transition(.move(edge: .trailing))
+                    content()
+                        .frame(width: 300)
+                        .frame(maxHeight: .infinity)
+                        .background(WalkmanTheme.background.ignoresSafeArea())
+                        .ignoresSafeArea()
+                }
+                .zIndex(1)
+                .transition(.move(edge: .trailing))
             }
         }
-        .clipped()
         .animation(.easeInOut(duration: 0.25), value: isPresented.wrappedValue)
     }
 

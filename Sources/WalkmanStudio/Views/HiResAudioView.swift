@@ -35,7 +35,26 @@ fileprivate struct FilterOption: Identifiable {
     let isHiRes: Bool
 }
 
-public struct HiResAudioView: View {
+fileprivate enum HiResTracksLayoutTier: Equatable {
+    case wide     // >= 630pt: wide banner + bitrate + format + duration
+    case medium   // 520..<630pt: compact banner + bitrate + format + duration
+    case compact  // 390..<520pt: compact banner + format + duration
+    case minimal  // < 390pt: compact banner + duration
+
+    init(width: CGFloat) {
+        if width >= 630 {
+            self = .wide
+        } else if width >= 520 {
+            self = .medium
+        } else if width >= 390 {
+            self = .compact
+        } else {
+            self = .minimal
+        }
+    }
+}
+
+public struct HiResAudioView: View, Equatable {
     let tracks: [Track]
     let precomputedAlbums: [AlbumItem]?
     let precomputedArtists: [ArtistItem]?
@@ -46,6 +65,12 @@ public struct HiResAudioView: View {
     var onTrimCutTrack: ((Track) -> Void)? = nil
     var onDeleteAlbum: ((AlbumItem) -> Void)? = nil
     var onDeleteTrack: ((Track) -> Void)? = nil
+
+    public static func == (lhs: HiResAudioView, rhs: HiResAudioView) -> Bool {
+        lhs.tracks == rhs.tracks &&
+        lhs.precomputedAlbums == rhs.precomputedAlbums &&
+        lhs.precomputedArtists == rhs.precomputedArtists
+    }
     
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var viewMode: HiResViewMode = .tracks
@@ -59,6 +84,7 @@ public struct HiResAudioView: View {
     @State private var displayedTrackIds: Set<String> = []
     @State private var displayedAlbums: [AlbumItem] = []
     @State private var displayedArtists: [ArtistItem] = []
+    @State private var tracksLayoutTier: HiResTracksLayoutTier = .wide
     @State private var showBatchLyricsSheet: Bool = false
     @State private var isPreparingLyricsSheet: Bool = false
     @State private var albumCount: Int = 0
@@ -340,20 +366,16 @@ public struct HiResAudioView: View {
             if displayedTracks.isEmpty {
                 emptyStateView
             } else {
-                ZStack {
+                // Only mount the active sub-tab so inactive AlbumsView/ArtistsView trees
+                // do not participate in animated width layouts during inspector toggles.
+                switch viewMode {
+                case .tracks:
                     tracksContentView
-                        .opacity(viewMode == .tracks ? 1 : 0)
-                        .allowsHitTesting(viewMode == .tracks)
-                    
+                case .albums:
                     albumsContentView
-                        .opacity(viewMode == .albums ? 1 : 0)
-                        .allowsHitTesting(viewMode == .albums)
-                    
+                case .artists:
                     artistsContentView
-                        .opacity(viewMode == .artists ? 1 : 0)
-                        .allowsHitTesting(viewMode == .artists)
                 }
-                .animation(.easeInOut(duration: 0.15), value: viewMode)
             }
         }
         .onAppear {
@@ -411,6 +433,7 @@ public struct HiResAudioView: View {
                         HiResTrackRowView(
                             track: track,
                             isPlayingThis: isPlaying && (currentId == track.id),
+                            layoutTier: tracksLayoutTier,
                             onSelect: {
                                 onSelectTrack(track)
                             },
@@ -432,6 +455,7 @@ public struct HiResAudioView: View {
                                 onDeleteTrack?(track)
                             }
                         )
+                        .equatable()
                     }
                 }
             }
@@ -439,6 +463,18 @@ public struct HiResAudioView: View {
             .padding(.top, 12)
             .padding(.bottom, 88)
         }
+        .background(
+            GeometryReader { geo in
+                let tier = HiResTracksLayoutTier(width: geo.size.width)
+                Color.clear
+                    .onAppear {
+                        if tracksLayoutTier != tier { tracksLayoutTier = tier }
+                    }
+                    .onChange(of: tier) { _, newTier in
+                        tracksLayoutTier = newTier
+                    }
+            }
+        )
     }
     
     private var albumsContentView: some View {
@@ -467,6 +503,7 @@ public struct HiResAudioView: View {
             onEditTrackWithList: onEditTrackWithList,
             onTrimCutTrack: onTrimCutTrack
         )
+        .equatable()
     }
     
     // -------------------------------------------------------------------------
@@ -876,9 +913,12 @@ public struct HiResAudioView: View {
     }
     
     private var studioConsoleBanner: some View {
-        ViewThatFits(in: .horizontal) {
-            wideStudioConsoleBanner
-            compactStudioConsoleBanner
+        Group {
+            if tracksLayoutTier == .wide {
+                wideStudioConsoleBanner
+            } else {
+                compactStudioConsoleBanner
+            }
         }
         .padding(14)
         .background(WalkmanTheme.card)
@@ -1462,19 +1502,20 @@ private struct HiResRowBackground: View {
                 )
         )
         .shadow(
-            color: Color.black.opacity(isHovered ? 0.22 : 0.08),
-            radius: isHovered ? 4 : 2,
+            color: (isHovered || isPlaying) ? Color.black.opacity(isHovered ? 0.22 : 0.14) : .clear,
+            radius: (isHovered || isPlaying) ? (isHovered ? 4 : 2.5) : 0,
             x: 0,
-            y: isHovered ? 1.5 : 1
+            y: (isHovered || isPlaying) ? (isHovered ? 1.5 : 1) : 0
         )
         .animation(.spring(response: 0.20, dampingFraction: 0.78), value: isHovered)
         .animation(.spring(response: 0.20, dampingFraction: 0.78), value: isPlaying)
     }
 }
 
-private struct HiResTrackRowView: View {
+private struct HiResTrackRowView: View, Equatable {
     let track: Track
     let isPlayingThis: Bool
+    let layoutTier: HiResTracksLayoutTier
     let onSelect: () -> Void
     let onPlayToggle: () -> Void
     var onEdit: (() -> Void)? = nil
@@ -1482,6 +1523,12 @@ private struct HiResTrackRowView: View {
     var onDelete: (() -> Void)? = nil
     
     @State private var isHovered = false
+
+    static func == (lhs: HiResTrackRowView, rhs: HiResTrackRowView) -> Bool {
+        lhs.track == rhs.track &&
+        lhs.isPlayingThis == rhs.isPlayingThis &&
+        lhs.layoutTier == rhs.layoutTier
+    }
     
     private func formatDuration(_ seconds: Double) -> String {
         if seconds <= 0 { return "—" }
@@ -1581,21 +1628,19 @@ private struct HiResTrackRowView: View {
             
             Spacer(minLength: 6)
             
-            ViewThatFits(in: .horizontal) {
-                // Wide: [1694 kbps] [FLAC] [4:12]
+            switch layoutTier {
+            case .wide, .medium:
                 HStack(spacing: 8) {
                     bitrateView
                     formatBadgeView
                     durationView
                 }
-                
-                // Compact: [FLAC] [4:12]
+            case .compact:
                 HStack(spacing: 6) {
                     formatBadgeView
                     durationView
                 }
-                
-                // Minimal: [4:12]
+            case .minimal:
                 durationView
             }
         }
