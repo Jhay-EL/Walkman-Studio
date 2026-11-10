@@ -512,7 +512,8 @@ public struct HiResAudioView: View, Equatable {
     
     private var toolbarContainer: some View {
         ViewThatFits(in: .horizontal) {
-            wideToolbarLayout
+            wideToolbarLayout(isCompactSegmented: false, minWidth: 760)
+            wideToolbarLayout(isCompactSegmented: true, minWidth: 720)
             dropdownToolbarLayout
             compactToolbarLayout
             narrowToolbarLayout
@@ -531,12 +532,12 @@ public struct HiResAudioView: View, Equatable {
         )
     }
     
-    private var wideToolbarLayout: some View {
-        HStack(spacing: 8) {
+    private func wideToolbarLayout(isCompactSegmented: Bool, minWidth: CGFloat) -> some View {
+        HStack(spacing: isCompactSegmented ? 6 : 8) {
             searchFieldView
                 .fixedSize(horizontal: true, vertical: false)
             
-            formatSegmentedBar
+            formatSegmentedBar(isCompact: isCompactSegmented)
                 .fixedSize(horizontal: true, vertical: false)
             
             filterMenuButton
@@ -545,7 +546,7 @@ public struct HiResAudioView: View, Equatable {
             Spacer(minLength: 4)
             
             if !isSearchExpanded {
-                HStack(spacing: 8) {
+                HStack(spacing: isCompactSegmented ? 6 : 8) {
                     playbackControlsView
                         .fixedSize(horizontal: true, vertical: false)
                     
@@ -565,7 +566,7 @@ public struct HiResAudioView: View, Equatable {
                 )
             }
         }
-        .frame(minWidth: 760)
+        .frame(minWidth: minWidth)
     }
     
     private var dropdownToolbarLayout: some View {
@@ -634,7 +635,7 @@ public struct HiResAudioView: View, Equatable {
             
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    formatSegmentedBar
+                    formatSegmentedBar(isCompact: true)
                         .fixedSize(horizontal: true, vertical: false)
                     
                     filterMenuButton
@@ -684,7 +685,7 @@ public struct HiResAudioView: View, Equatable {
             
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    formatSegmentedBar
+                    formatSegmentedBar(isCompact: true)
                         .fixedSize(horizontal: true, vertical: false)
                     
                     filterMenuButton
@@ -713,10 +714,11 @@ public struct HiResAudioView: View, Equatable {
         )
     }
     
-    private var formatSegmentedBar: some View {
+    private func formatSegmentedBar(isCompact: Bool = false) -> some View {
         HiResSegmentedBarView(
             options: formatFilterOptions,
             selectedFilter: $formatFilter,
+            isCompact: isCompact,
             onSelectFilter: { newFilter in
                 formatFilter = newFilter
             }
@@ -1271,17 +1273,19 @@ private struct HiResFormatDropdownMenuView: View {
 private struct HiResSegmentedBarView: View {
     let options: [FilterOption]
     @Binding var selectedFilter: String
+    var isCompact: Bool = false
     let onSelectFilter: (String) -> Void
     
     @Namespace private var highlightNamespace
     @State private var activeHighlightId: String = "ALL"
     
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: isCompact ? 2 : 4) {
             ForEach(options) { opt in
                 HiResTabPillView(
                     option: opt,
                     isSelected: activeHighlightId == opt.id,
+                    isCompact: isCompact,
                     namespace: highlightNamespace,
                     onSelect: {
                         guard selectedFilter != opt.id else { return }
@@ -1321,6 +1325,7 @@ private struct HiResSegmentedBarView: View {
 private struct HiResTabPillView: View {
     let option: FilterOption
     let isSelected: Bool
+    var isCompact: Bool = false
     let namespace: Namespace.ID
     let onSelect: () -> Void
     
@@ -1328,17 +1333,17 @@ private struct HiResTabPillView: View {
     
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: 5.5) {
+            HStack(spacing: isCompact ? 4.5 : 5.5) {
                 if let icon = option.icon {
                     Image(systemName: icon)
                         .font(.system(size: 11, weight: isSelected ? .bold : .semibold))
                 }
                 Text(option.title)
-                    .font(.system(size: 12.5, weight: isSelected ? .bold : .medium))
+                    .font(.system(size: isCompact ? 12 : 12.5, weight: isSelected ? .bold : .medium))
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, isCompact ? 10 : 14)
             .padding(.vertical, 7)
             .frame(height: 32)
             .fixedSize(horizontal: true, vertical: false)

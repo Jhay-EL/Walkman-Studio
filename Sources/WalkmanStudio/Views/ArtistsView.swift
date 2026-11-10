@@ -553,7 +553,8 @@ public struct ArtistsView: View, Equatable {
     
     private var topToolbarContainer: some View {
         ViewThatFits(in: .horizontal) {
-            wideTopToolbarLayout
+            wideTopToolbarLayout(isCompactSegmented: false, minWidth: 740)
+            wideTopToolbarLayout(isCompactSegmented: true, minWidth: 680)
             dropdownTopToolbarLayout
             compactTopToolbarLayout
             narrowTopToolbarLayout
@@ -589,18 +590,18 @@ public struct ArtistsView: View, Equatable {
         .help("LRC Fetcher: Fetch and sync .LRC lyrics for artists")
     }
     
-    private var wideTopToolbarLayout: some View {
-        HStack(spacing: 8) {
+    private func wideTopToolbarLayout(isCompactSegmented: Bool, minWidth: CGFloat) -> some View {
+        HStack(spacing: isCompactSegmented ? 6 : 8) {
             searchFieldView
                 .fixedSize(horizontal: true, vertical: false)
             
-            artistFormatSegmentedBar
+            artistFormatSegmentedBar(isCompact: isCompactSegmented)
                 .fixedSize(horizontal: true, vertical: false)
             
             Spacer(minLength: 4)
             
             if !isSearchExpanded {
-                HStack(spacing: 8) {
+                HStack(spacing: isCompactSegmented ? 6 : 8) {
                     if let artist = activeArtist {
                         artistActionButtons(for: artist)
                             .fixedSize(horizontal: true, vertical: false)
@@ -625,7 +626,7 @@ public struct ArtistsView: View, Equatable {
                 )
             }
         }
-        .frame(minWidth: 720)
+        .frame(minWidth: minWidth)
     }
     
     private var dropdownTopToolbarLayout: some View {
@@ -699,7 +700,7 @@ public struct ArtistsView: View, Equatable {
             }
             
             ScrollView(.horizontal, showsIndicators: false) {
-                artistFormatSegmentedBar
+                artistFormatSegmentedBar(isCompact: true)
                     .fixedSize(horizontal: true, vertical: false)
                     .padding(.vertical, 1)
             }
@@ -749,17 +750,18 @@ public struct ArtistsView: View, Equatable {
             }
             
             ScrollView(.horizontal, showsIndicators: false) {
-                artistFormatSegmentedBar
+                artistFormatSegmentedBar(isCompact: true)
                     .fixedSize(horizontal: true, vertical: false)
                     .padding(.vertical, 1)
             }
         }
     }
     
-    private var artistFormatSegmentedBar: some View {
+    private func artistFormatSegmentedBar(isCompact: Bool = false) -> some View {
         ArtistFormatSegmentedBarView(
             options: formatFilterOptions,
             selectedFilter: $formatFilter,
+            isCompact: isCompact,
             onSelectFilter: { newFilter in
                 formatFilter = newFilter
             }
@@ -1798,17 +1800,19 @@ private struct ArtistFormatDropdownMenuView: View {
 private struct ArtistFormatSegmentedBarView: View {
     let options: [FilterOption]
     @Binding var selectedFilter: String
+    var isCompact: Bool = false
     let onSelectFilter: (String) -> Void
     
     @Namespace private var highlightNamespace
     @State private var activeHighlightId: String = "ALL"
     
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: isCompact ? 2 : 4) {
             ForEach(options) { opt in
                 ArtistFormatTabPillView(
                     option: opt,
                     isSelected: activeHighlightId == opt.id,
+                    isCompact: isCompact,
                     namespace: highlightNamespace,
                     onSelect: {
                         guard selectedFilter != opt.id else { return }
@@ -1848,6 +1852,7 @@ private struct ArtistFormatSegmentedBarView: View {
 private struct ArtistFormatTabPillView: View {
     let option: FilterOption
     let isSelected: Bool
+    var isCompact: Bool = false
     let namespace: Namespace.ID
     let onSelect: () -> Void
     
@@ -1855,17 +1860,17 @@ private struct ArtistFormatTabPillView: View {
     
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: 5.5) {
+            HStack(spacing: isCompact ? 4.5 : 5.5) {
                 if let icon = option.icon {
                     Image(systemName: icon)
                         .font(.system(size: 11, weight: isSelected ? .bold : .semibold))
                 }
                 Text(option.title)
-                    .font(.system(size: 12.5, weight: isSelected ? .bold : .medium))
+                    .font(.system(size: isCompact ? 12 : 12.5, weight: isSelected ? .bold : .medium))
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, isCompact ? 10 : 14)
             .padding(.vertical, 7)
             .frame(height: 32)
             .fixedSize(horizontal: true, vertical: false)

@@ -229,7 +229,8 @@ public struct LanguageStudyView: View {
         VStack(spacing: 0) {
             // Top Liquid Glass Toolbar
             ViewThatFits(in: .horizontal) {
-                wideToolbarLayout
+                wideToolbarLayout(isCompactSegmented: false, minWidth: 740)
+                wideToolbarLayout(isCompactSegmented: true, minWidth: 700)
                 dropdownToolbarLayout
                 compactToolbarLayout
                 narrowToolbarLayout
@@ -321,12 +322,12 @@ public struct LanguageStudyView: View {
     // TOOLBAR SUBVIEWS
     // -------------------------------------------------------------------------
     
-    private var wideToolbarLayout: some View {
-        HStack(spacing: 8) {
+    private func wideToolbarLayout(isCompactSegmented: Bool, minWidth: CGFloat) -> some View {
+        HStack(spacing: isCompactSegmented ? 6 : 8) {
             searchFieldView
                 .fixedSize(horizontal: true, vertical: false)
             
-            displayModeSegmentedControl
+            displayModeSegmentedControl(isCompact: isCompactSegmented)
                 .fixedSize(horizontal: true, vertical: false)
             
             filterDropdownMenu
@@ -335,7 +336,7 @@ public struct LanguageStudyView: View {
             Spacer(minLength: 4)
             
             if !isSearchExpanded {
-                HStack(spacing: 8) {
+                HStack(spacing: isCompactSegmented ? 6 : 8) {
                     batchLyricsButton
                         .fixedSize(horizontal: true, vertical: false)
                     
@@ -358,7 +359,7 @@ public struct LanguageStudyView: View {
                 )
             }
         }
-        .frame(minWidth: 700)
+        .frame(minWidth: minWidth)
     }
     
     private var dropdownToolbarLayout: some View {
@@ -434,7 +435,7 @@ public struct LanguageStudyView: View {
             }
             
             ScrollView(.horizontal, showsIndicators: false) {
-                displayModeSegmentedControl
+                displayModeSegmentedControl(isCompact: true)
                     .fixedSize(horizontal: true, vertical: false)
                     .padding(.vertical, 1)
             }
@@ -486,7 +487,7 @@ public struct LanguageStudyView: View {
             }
             
             ScrollView(.horizontal, showsIndicators: false) {
-                displayModeSegmentedControl
+                displayModeSegmentedControl(isCompact: true)
                     .fixedSize(horizontal: true, vertical: false)
                     .padding(.vertical, 1)
             }
@@ -503,8 +504,8 @@ public struct LanguageStudyView: View {
         )
     }
     
-    private var displayModeSegmentedControl: some View {
-        LanguageStudyDisplayModeSegmentedControl(displayMode: $displayMode)
+    private func displayModeSegmentedControl(isCompact: Bool = false) -> some View {
+        LanguageStudyDisplayModeSegmentedControl(displayMode: $displayMode, isCompact: isCompact)
     }
     
     private var displayModeDropdownMenu: some View {
@@ -1249,15 +1250,17 @@ private struct LanguageStudyDisplayModeDropdown: View {
 
 private struct LanguageStudyDisplayModeSegmentedControl: View {
     @Binding var displayMode: LanguageStudyDisplayMode
+    var isCompact: Bool = false
     @Namespace private var highlightNamespace
     @State private var activeHighlightId: LanguageStudyDisplayMode = .tracks
     
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: isCompact ? 2 : 4) {
             ForEach(LanguageStudyDisplayMode.allCases) { mode in
                 LanguageStudyDisplayModePillView(
                     mode: mode,
                     isSelected: activeHighlightId == mode,
+                    isCompact: isCompact,
                     namespace: highlightNamespace,
                     onSelect: {
                         guard displayMode != mode else { return }
@@ -1290,6 +1293,7 @@ private struct LanguageStudyDisplayModeSegmentedControl: View {
 private struct LanguageStudyDisplayModePillView: View {
     let mode: LanguageStudyDisplayMode
     let isSelected: Bool
+    var isCompact: Bool = false
     let namespace: Namespace.ID
     let onSelect: () -> Void
     
@@ -1297,15 +1301,15 @@ private struct LanguageStudyDisplayModePillView: View {
     
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: 6) {
+            HStack(spacing: isCompact ? 4.5 : 6) {
                 Image(systemName: mode.icon)
-                    .font(.system(size: 11.5, weight: isSelected ? .bold : .medium))
+                    .font(.system(size: isCompact ? 11 : 11.5, weight: isSelected ? .bold : .medium))
                 Text(mode.rawValue)
-                    .font(.system(size: 12.5, weight: isSelected ? .semibold : .regular))
+                    .font(.system(size: isCompact ? 12 : 12.5, weight: isSelected ? .semibold : .regular))
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, isCompact ? 8.5 : 12)
             .padding(.vertical, 6)
             .frame(minHeight: 32)
             .fixedSize(horizontal: true, vertical: false)

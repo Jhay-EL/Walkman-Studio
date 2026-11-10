@@ -179,8 +179,10 @@ public struct LibraryView: View {
             // macOS 27 LIQUID GLASS TOOLBAR (Responsive Wide & Compact Layouts)
             // -----------------------------------------------------------------
             ViewThatFits(in: .horizontal) {
-                wideToolbarLayout
-                dropdownToolbarLayout
+                wideToolbarLayout(isCompactSegmented: false, minWidth: 740)
+                wideToolbarLayout(isCompactSegmented: true, minWidth: 680)
+                dropdownToolbarLayout(compactSenseMe: false)
+                dropdownToolbarLayout(compactSenseMe: true)
                 compactToolbarLayout
                 narrowToolbarLayout
             }
@@ -246,19 +248,19 @@ public struct LibraryView: View {
     // SUBVIEWS
     // -------------------------------------------------------------------------
     
-    private var wideToolbarLayout: some View {
-        HStack(spacing: 8) {
+    private func wideToolbarLayout(isCompactSegmented: Bool, minWidth: CGFloat) -> some View {
+        HStack(spacing: isCompactSegmented ? 6 : 8) {
             searchFieldView
                 .fixedSize(horizontal: true, vertical: false)
             
-            formatSegmentedBar
+            formatSegmentedBar(isCompact: isCompactSegmented)
                 .fixedSize(horizontal: true, vertical: false)
             
             Spacer(minLength: 4)
             
             if !isSearchExpanded {
-                HStack(spacing: 8) {
-                    playbackControlsView
+                HStack(spacing: isCompactSegmented ? 6 : 8) {
+                    playbackControlsView(compactSenseMe: isCompactSegmented)
                         .fixedSize(horizontal: true, vertical: false)
                     
                     statusIndicatorView
@@ -277,10 +279,10 @@ public struct LibraryView: View {
                 )
             }
         }
-        .frame(minWidth: 560)
+        .frame(minWidth: minWidth)
     }
     
-    private var dropdownToolbarLayout: some View {
+    private func dropdownToolbarLayout(compactSenseMe: Bool) -> some View {
         HStack(spacing: 6) {
             searchFieldView
                 .fixedSize(horizontal: true, vertical: false)
@@ -292,7 +294,7 @@ public struct LibraryView: View {
             
             if !isSearchExpanded {
                 HStack(spacing: 6) {
-                    playbackControlsView
+                    playbackControlsView(compactSenseMe: compactSenseMe)
                         .fixedSize(horizontal: true, vertical: false)
                     
                     statusIndicatorView
@@ -322,7 +324,7 @@ public struct LibraryView: View {
                 
                 if !isSearchExpanded {
                     HStack(spacing: 8) {
-                        playbackControlsView
+                        playbackControlsView(compactSenseMe: true)
                             .fixedSize(horizontal: true, vertical: false)
                         
                         statusIndicatorView
@@ -342,7 +344,7 @@ public struct LibraryView: View {
             }
             
             ScrollView(.horizontal, showsIndicators: false) {
-                formatSegmentedBar
+                formatSegmentedBar(isCompact: true)
                     .fixedSize(horizontal: true, vertical: false)
                     .padding(.vertical, 1)
             }
@@ -374,7 +376,7 @@ public struct LibraryView: View {
             
             if !isSearchExpanded {
                 HStack(spacing: 8) {
-                    playbackControlsView
+                    playbackControlsView(compactSenseMe: true)
                         .fixedSize(horizontal: true, vertical: false)
                     Spacer(minLength: 0)
                 }
@@ -387,7 +389,7 @@ public struct LibraryView: View {
             }
             
             ScrollView(.horizontal, showsIndicators: false) {
-                formatSegmentedBar
+                formatSegmentedBar(isCompact: true)
                     .fixedSize(horizontal: true, vertical: false)
                     .padding(.vertical, 1)
             }
@@ -404,10 +406,11 @@ public struct LibraryView: View {
         )
     }
     
-    private var formatSegmentedBar: some View {
+    private func formatSegmentedBar(isCompact: Bool = false) -> some View {
         FormatSegmentedBarView(
             options: filterOptions,
             selectedFilter: $formatFilter,
+            isCompact: isCompact,
             onSelectFilter: { newFilter in
                 formatFilter = newFilter
             }
@@ -424,7 +427,7 @@ public struct LibraryView: View {
         )
     }
     
-    private var playbackControlsView: some View {
+    private func playbackControlsView(compactSenseMe: Bool = false) -> some View {
         HStack(spacing: 7) {
             Button(action: togglePlaybackAll) {
                 Image(systemName: isPlayingFromVisibleList ? "pause.fill" : "play.fill")
@@ -489,15 +492,18 @@ public struct LibraryView: View {
                     } else {
                         Image(systemName: "waveform.path.ecg")
                             .font(.system(size: 11, weight: .semibold))
-                        ViewThatFits(in: .horizontal) {
-                            Text(hasSelection ? "Analyze SenseMe" : (unanalyzedCount > 0 ? "Analyze SenseMe (\(unanalyzedCount))" : "SenseMe Analyzed"))
-                                .font(WalkmanFont.calloutMedium)
+                        if compactSenseMe {
                             Text("SenseMe")
                                 .font(WalkmanFont.calloutMedium)
+                                .lineLimit(1)
+                        } else {
+                            Text(hasSelection ? "Analyze SenseMe" : (unanalyzedCount > 0 ? "Analyze SenseMe (\(unanalyzedCount))" : "SenseMe Analyzed"))
+                                .font(WalkmanFont.calloutMedium)
+                                .lineLimit(1)
                         }
                     }
                 }
-                .padding(.horizontal, 14)
+                .padding(.horizontal, compactSenseMe ? 11 : 14)
                 .padding(.vertical, 7)
                 .frame(height: 38)
                 .foregroundStyle(Color(red: 255/255, green: 195/255, blue: 80/255))
@@ -1036,17 +1042,19 @@ private struct FormatDropdownMenuView: View {
 private struct FormatSegmentedBarView: View {
     let options: [FilterOption]
     @Binding var selectedFilter: String
+    var isCompact: Bool = false
     let onSelectFilter: (String) -> Void
     
     @Namespace private var highlightNamespace
     @State private var activeHighlightId: String = "ALL"
     
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: isCompact ? 2 : 4) {
             ForEach(options) { opt in
                 FormatTabPillView(
                     option: opt,
                     isSelected: activeHighlightId == opt.id,
+                    isCompact: isCompact,
                     namespace: highlightNamespace,
                     onSelect: {
                         guard selectedFilter != opt.id else { return }
@@ -1086,6 +1094,7 @@ private struct FormatSegmentedBarView: View {
 private struct FormatTabPillView: View {
     let option: FilterOption
     let isSelected: Bool
+    var isCompact: Bool = false
     let namespace: Namespace.ID
     let onSelect: () -> Void
     
@@ -1093,17 +1102,17 @@ private struct FormatTabPillView: View {
     
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: 5.5) {
+            HStack(spacing: isCompact ? 4.5 : 5.5) {
                 if let icon = option.icon {
                     Image(systemName: icon)
                         .font(.system(size: 11, weight: isSelected ? .bold : .semibold))
                 }
                 Text(option.title)
-                    .font(.system(size: 12.5, weight: isSelected ? .bold : .medium))
+                    .font(.system(size: isCompact ? 12 : 12.5, weight: isSelected ? .bold : .medium))
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, isCompact ? 10 : 14)
             .padding(.vertical, 7)
             .frame(height: 32)
             .fixedSize(horizontal: true, vertical: false)

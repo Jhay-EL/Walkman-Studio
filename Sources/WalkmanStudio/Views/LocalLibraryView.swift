@@ -486,7 +486,8 @@ public struct LocalLibraryView: View {
             // macOS 27 LIQUID GLASS TOP MENU / NAVIGATION TOOLBAR
             // -----------------------------------------------------------------
             ViewThatFits(in: .horizontal) {
-                wideTopBar
+                wideTopBar(isCompactSegmented: false, minWidth: 740)
+                wideTopBar(isCompactSegmented: true, minWidth: 700)
                 dropdownTopBar
                 compactTopBar
                 narrowTopBar
@@ -806,12 +807,12 @@ public struct LocalLibraryView: View {
     // -------------------------------------------------------------------------
     // TOP NAVIGATION TOOLBAR LAYOUTS (WIDE / COMPACT / NARROW)
     // -------------------------------------------------------------------------
-    private var wideTopBar: some View {
-        HStack(spacing: 8) {
+    private func wideTopBar(isCompactSegmented: Bool, minWidth: CGFloat) -> some View {
+        HStack(spacing: isCompactSegmented ? 6 : 8) {
             searchFieldView
                 .fixedSize(horizontal: true, vertical: false)
 
-            displayBySegmentedControl
+            displayBySegmentedControl(isCompact: isCompactSegmented)
                 .fixedSize(horizontal: true, vertical: false)
 
             combinedFilterSortMenu
@@ -834,7 +835,7 @@ public struct LocalLibraryView: View {
                     )
             }
         }
-        .frame(minWidth: 700)
+        .frame(minWidth: minWidth)
     }
 
     private var dropdownTopBar: some View {
@@ -893,7 +894,11 @@ public struct LocalLibraryView: View {
                 }
             }
 
-            displayBySegmentedControl
+            ScrollView(.horizontal, showsIndicators: false) {
+                displayBySegmentedControl(isCompact: true)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(.vertical, 1)
+            }
         }
     }
 
@@ -921,7 +926,11 @@ public struct LocalLibraryView: View {
                 }
             }
 
-            displayBySegmentedControl
+            ScrollView(.horizontal, showsIndicators: false) {
+                displayBySegmentedControl(isCompact: true)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(.vertical, 1)
+            }
         }
     }
 
@@ -938,8 +947,8 @@ public struct LocalLibraryView: View {
         )
     }
 
-    private var displayBySegmentedControl: some View {
-        LocalDisplayModeSegmentedControl(displayMode: $displayMode)
+    private func displayBySegmentedControl(isCompact: Bool = false) -> some View {
+        LocalDisplayModeSegmentedControl(displayMode: $displayMode, isCompact: isCompact)
     }
 
     private var displayByDropdownMenu: some View {
@@ -2406,15 +2415,17 @@ private struct LocalDisplayModeDropdown: View {
 // MARK: - Liquid Glass Display Mode Segmented Control
 private struct LocalDisplayModeSegmentedControl: View {
     @Binding var displayMode: LocalDisplayMode
+    var isCompact: Bool = false
     @Namespace private var highlightNamespace
     @State private var activeHighlightId: LocalDisplayMode = .songs
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: isCompact ? 2 : 4) {
             ForEach(LocalDisplayMode.allCases) { mode in
                 LocalDisplayModePillView(
                     mode: mode,
                     isSelected: activeHighlightId == mode,
+                    isCompact: isCompact,
                     namespace: highlightNamespace,
                     onSelect: {
                         guard displayMode != mode else { return }
@@ -2447,6 +2458,7 @@ private struct LocalDisplayModeSegmentedControl: View {
 private struct LocalDisplayModePillView: View {
     let mode: LocalDisplayMode
     let isSelected: Bool
+    var isCompact: Bool = false
     let namespace: Namespace.ID
     let onSelect: () -> Void
 
@@ -2454,15 +2466,15 @@ private struct LocalDisplayModePillView: View {
 
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: 6) {
+            HStack(spacing: isCompact ? 4.5 : 6) {
                 Image(systemName: mode.icon)
-                    .font(.system(size: 11.5, weight: isSelected ? .bold : .medium))
+                    .font(.system(size: isCompact ? 11 : 11.5, weight: isSelected ? .bold : .medium))
                 Text(mode.rawValue)
-                    .font(.system(size: 12.5, weight: isSelected ? .semibold : .regular))
+                    .font(.system(size: isCompact ? 12 : 12.5, weight: isSelected ? .semibold : .regular))
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, isCompact ? 8.5 : 12)
             .padding(.vertical, 6)
             .frame(minHeight: 32)
             .fixedSize(horizontal: true, vertical: false)

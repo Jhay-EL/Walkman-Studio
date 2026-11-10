@@ -456,7 +456,8 @@ public struct AlbumsView: View {
     
     private var toolbarContainer: some View {
         ViewThatFits(in: .horizontal) {
-            wideToolbarLayout
+            wideToolbarLayout(isCompactSegmented: false, minWidth: 740)
+            wideToolbarLayout(isCompactSegmented: true, minWidth: 680)
             dropdownToolbarLayout
             compactToolbarLayout
             narrowToolbarLayout
@@ -500,12 +501,12 @@ public struct AlbumsView: View {
         .help("LRC Fetcher: Fetch and sync .LRC lyrics for albums")
     }
     
-    private var wideToolbarLayout: some View {
-        HStack(spacing: 8) {
+    private func wideToolbarLayout(isCompactSegmented: Bool, minWidth: CGFloat) -> some View {
+        HStack(spacing: isCompactSegmented ? 6 : 8) {
             searchFieldView
                 .fixedSize(horizontal: true, vertical: false)
             
-            formatSegmentedBar
+            formatSegmentedBar(isCompact: isCompactSegmented)
                 .fixedSize(horizontal: true, vertical: false)
             
             filterMenuButton
@@ -514,7 +515,7 @@ public struct AlbumsView: View {
             Spacer(minLength: 4)
             
             if !isSearchExpanded {
-                HStack(spacing: 8) {
+                HStack(spacing: isCompactSegmented ? 6 : 8) {
                     batchLyricsButton
                         .fixedSize(horizontal: true, vertical: false)
                     
@@ -534,7 +535,7 @@ public struct AlbumsView: View {
                 )
             }
         }
-        .frame(minWidth: 560)
+        .frame(minWidth: minWidth)
     }
     
     private var dropdownToolbarLayout: some View {
@@ -602,7 +603,7 @@ public struct AlbumsView: View {
             
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    formatSegmentedBar
+                    formatSegmentedBar(isCompact: true)
                         .fixedSize(horizontal: true, vertical: false)
                     
                     filterMenuButton
@@ -642,7 +643,7 @@ public struct AlbumsView: View {
             
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    formatSegmentedBar
+                    formatSegmentedBar(isCompact: true)
                         .fixedSize(horizontal: true, vertical: false)
                     
                     filterMenuButton
@@ -669,10 +670,11 @@ public struct AlbumsView: View {
         )
     }
     
-    private var formatSegmentedBar: some View {
+    private func formatSegmentedBar(isCompact: Bool = false) -> some View {
         AlbumFormatSegmentedBarView(
             options: formatFilterOptions,
             selectedFilter: $formatFilter,
+            isCompact: isCompact,
             onSelectFilter: { newFilter in
                 formatFilter = newFilter
             }
@@ -975,17 +977,19 @@ private struct AlbumFormatDropdownMenuView: View {
 private struct AlbumFormatSegmentedBarView: View {
     let options: [FilterOption]
     @Binding var selectedFilter: String
+    var isCompact: Bool = false
     let onSelectFilter: (String) -> Void
     
     @Namespace private var highlightNamespace
     @State private var activeHighlightId: String = "ALL"
     
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: isCompact ? 2 : 4) {
             ForEach(options) { opt in
                 AlbumFormatTabPillView(
                     option: opt,
                     isSelected: activeHighlightId == opt.id,
+                    isCompact: isCompact,
                     namespace: highlightNamespace,
                     onSelect: {
                         guard selectedFilter != opt.id else { return }
@@ -1025,6 +1029,7 @@ private struct AlbumFormatSegmentedBarView: View {
 private struct AlbumFormatTabPillView: View {
     let option: FilterOption
     let isSelected: Bool
+    var isCompact: Bool = false
     let namespace: Namespace.ID
     let onSelect: () -> Void
     
@@ -1032,17 +1037,17 @@ private struct AlbumFormatTabPillView: View {
     
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: 5.5) {
+            HStack(spacing: isCompact ? 4.5 : 5.5) {
                 if let icon = option.icon {
                     Image(systemName: icon)
                         .font(.system(size: 11, weight: isSelected ? .bold : .semibold))
                 }
                 Text(option.title)
-                    .font(.system(size: 12.5, weight: isSelected ? .bold : .medium))
+                    .font(.system(size: isCompact ? 12 : 12.5, weight: isSelected ? .bold : .medium))
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, isCompact ? 10 : 14)
             .padding(.vertical, 7)
             .frame(height: 32)
             .fixedSize(horizontal: true, vertical: false)

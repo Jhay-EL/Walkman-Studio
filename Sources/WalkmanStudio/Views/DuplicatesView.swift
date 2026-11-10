@@ -313,19 +313,21 @@ public struct DuplicatesView: View {
         ]
     }
 
-    private var scopeSegmentedBar: some View {
+    private func scopeSegmentedBar(isCompact: Bool = false) -> some View {
         DuplicateScopeSegmentedBarView(
             selectedScope: $finder.detectionScope,
+            isCompact: isCompact,
             onSelectScope: { scope in
                 finder.detectionScope = scope
             }
         )
     }
 
-    private var filterSegmentedBar: some View {
+    private func filterSegmentedBar(isCompact: Bool = false) -> some View {
         DuplicateFilterSegmentedBarView(
             items: filterItems,
             selectedFilter: $selectedFilter,
+            isCompact: isCompact,
             onSelectFilter: { filter in
                 selectedFilter = filter
             }
@@ -353,15 +355,37 @@ public struct DuplicatesView: View {
     // MARK: - Controls Bar (Liquid Glass Segmented Controls, Sort, Action)
     private var controlsBar: some View {
         ViewThatFits(in: .horizontal) {
-            // Wide single-row layout
-            HStack(spacing: 10) {
-                scopeSegmentedBar
+            singleRowControlsBar(isCompact: false)
+            singleRowControlsBar(isCompact: true)
+            twoRowControlsBar(isCompact: false)
+            twoRowControlsBar(isCompact: true)
+            narrowThreeRowControlsBar
+        }
+    }
 
-                Rectangle()
-                    .fill(Color.white.opacity(0.08))
-                    .frame(width: 1, height: 22)
+    private func singleRowControlsBar(isCompact: Bool) -> some View {
+        HStack(spacing: isCompact ? 8 : 10) {
+            scopeSegmentedBar(isCompact: isCompact)
 
-                filterSegmentedBar
+            Rectangle()
+                .fill(Color.white.opacity(0.08))
+                .frame(width: 1, height: 22)
+
+            filterSegmentedBar(isCompact: isCompact)
+
+            Spacer(minLength: 8)
+
+            sortMenu
+
+            autoResolveQualityButton
+        }
+    }
+
+    private func twoRowControlsBar(isCompact: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Row 1: Detection Scope + Sort & Quality Auto-Resolve Actions
+            HStack(spacing: isCompact ? 6 : 10) {
+                scopeSegmentedBar(isCompact: isCompact)
 
                 Spacer(minLength: 8)
 
@@ -370,31 +394,30 @@ public struct DuplicatesView: View {
                 autoResolveQualityButton
             }
 
-            // Responsive two-row layout for narrower windows
-            VStack(alignment: .leading, spacing: 10) {
-                // Row 1: Scopes & Filter Segmented Bars
-                HStack(spacing: 10) {
-                    scopeSegmentedBar
+            // Row 2: Unclipped Filter Groups Segmented Bar
+            ScrollView(.horizontal, showsIndicators: false) {
+                filterSegmentedBar(isCompact: isCompact)
+                    .padding(.vertical, 1)
+            }
+        }
+    }
 
-                    Rectangle()
-                        .fill(Color.white.opacity(0.08))
-                        .frame(width: 1, height: 22)
+    private var narrowThreeRowControlsBar: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                scopeSegmentedBar(isCompact: true)
+                    .padding(.vertical, 1)
+            }
 
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        filterSegmentedBar
-                    }
+            ScrollView(.horizontal, showsIndicators: false) {
+                filterSegmentedBar(isCompact: true)
+                    .padding(.vertical, 1)
+            }
 
-                    Spacer(minLength: 0)
-                }
-
-                // Row 2: Sort Menu + Auto-Resolve Quality Action
-                HStack(spacing: 10) {
-                    Spacer()
-
-                    sortMenu
-
-                    autoResolveQualityButton
-                }
+            HStack(spacing: 8) {
+                Spacer()
+                sortMenu
+                autoResolveQualityButton
             }
         }
     }
@@ -1282,17 +1305,19 @@ private struct MetricPill: View {
 // MARK: - Duplicate Scope Segmented Bar View (Liquid Glass Matched Geometry)
 private struct DuplicateScopeSegmentedBarView: View {
     @Binding var selectedScope: DuplicateDetectionScope
+    var isCompact: Bool = false
     let onSelectScope: (DuplicateDetectionScope) -> Void
 
     @Namespace private var scopeNamespace
     @State private var activeScopeId: String = DuplicateDetectionScope.exactSameAlbum.id
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: isCompact ? 2 : 4) {
             ForEach(DuplicateDetectionScope.allCases) { scope in
                 DuplicateScopeTabPillView(
                     scope: scope,
                     isSelected: activeScopeId == scope.id,
+                    isCompact: isCompact,
                     namespace: scopeNamespace,
                     onSelect: {
                         guard selectedScope != scope else { return }
@@ -1329,6 +1354,7 @@ private struct DuplicateScopeSegmentedBarView: View {
 private struct DuplicateScopeTabPillView: View {
     let scope: DuplicateDetectionScope
     let isSelected: Bool
+    var isCompact: Bool = false
     let namespace: Namespace.ID
     let onSelect: () -> Void
 
@@ -1336,15 +1362,15 @@ private struct DuplicateScopeTabPillView: View {
 
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: 5.5) {
+            HStack(spacing: isCompact ? 4.5 : 5.5) {
                 Image(systemName: scope == .exactSameAlbum ? "checkmark.shield.fill" : "square.stack.3d.down.right.fill")
-                    .font(.system(size: 11, weight: isSelected ? .bold : .semibold))
+                    .font(.system(size: isCompact ? 10.5 : 11, weight: isSelected ? .bold : .semibold))
                 Text(scope.label)
-                    .font(.system(size: 12.5, weight: isSelected ? .bold : .medium))
+                    .font(.system(size: isCompact ? 11.5 : 12.5, weight: isSelected ? .bold : .medium))
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
             }
-            .padding(.horizontal, 13)
+            .padding(.horizontal, isCompact ? 10 : 13)
             .padding(.vertical, 7)
             .frame(height: 32)
             .fixedSize(horizontal: true, vertical: false)
@@ -1403,17 +1429,19 @@ private struct DuplicateFilterItem: Identifiable {
 private struct DuplicateFilterSegmentedBarView: View {
     let items: [DuplicateFilterItem]
     @Binding var selectedFilter: DuplicateFilter
+    var isCompact: Bool = false
     let onSelectFilter: (DuplicateFilter) -> Void
 
     @Namespace private var filterNamespace
     @State private var activeFilterId: String = DuplicateFilter.sameDrive.rawValue
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: isCompact ? 2 : 4) {
             ForEach(items) { item in
                 DuplicateFilterTabPillView(
                     item: item,
                     isSelected: activeFilterId == item.id,
+                    isCompact: isCompact,
                     namespace: filterNamespace,
                     onSelect: {
                         guard selectedFilter != item.filter else { return }
@@ -1450,6 +1478,7 @@ private struct DuplicateFilterSegmentedBarView: View {
 private struct DuplicateFilterTabPillView: View {
     let item: DuplicateFilterItem
     let isSelected: Bool
+    var isCompact: Bool = false
     let namespace: Namespace.ID
     let onSelect: () -> Void
 
@@ -1457,17 +1486,17 @@ private struct DuplicateFilterTabPillView: View {
 
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: 6) {
+            HStack(spacing: isCompact ? 4.5 : 6) {
                 Text(item.title)
-                    .font(.system(size: 12.5, weight: isSelected ? .bold : .medium))
+                    .font(.system(size: isCompact ? 11.5 : 12.5, weight: isSelected ? .bold : .medium))
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
 
                 // Count pill inside the tab
                 Text("\(item.count)")
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .font(.system(size: isCompact ? 10.5 : 11, weight: .semibold, design: .monospaced))
                     .lineLimit(1)
-                    .padding(.horizontal, 6)
+                    .padding(.horizontal, isCompact ? 5 : 6)
                     .padding(.vertical, 1.5)
                     .background(
                         isSelected ?
@@ -1481,7 +1510,7 @@ private struct DuplicateFilterTabPillView: View {
                     )
                     .clipShape(Capsule())
             }
-            .padding(.horizontal, 11)
+            .padding(.horizontal, isCompact ? 8.5 : 11)
             .padding(.vertical, 7)
             .frame(height: 32)
             .fixedSize(horizontal: true, vertical: false)
