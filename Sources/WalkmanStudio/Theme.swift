@@ -581,8 +581,8 @@ public struct WalkmanSideActionButtonStyle: ButtonStyle {
 // =============================================================================
 // TABLE VIEW BOTTOM SCROLL INSET MODIFIER
 // Ensures NSTableView in SwiftUI Table extends edge-to-edge behind floating
-// player containers while preserving bottom padding so the final rows and
-// scrollers are never obstructed.
+// player containers while preserving bottom content padding so the final rows
+// are never obstructed and anchoring the horizontal scroller to the bottom edge.
 // =============================================================================
 
 public struct TableScrollInsetModifier: NSViewRepresentable {
@@ -615,12 +615,23 @@ public struct TableScrollInsetModifier: NSViewRepresentable {
         var attempts = 0
         while let c = current, attempts < 10 {
             if let tableView = findTableView(in: c), let scrollView = tableView.enclosingScrollView {
+                // AppKit offsets scrollers by contentInsets + scrollerInsets; negate bottomInset on
+                // scrollerInsets so the horizontal scrollbar stays anchored at the bottom edge
+                // instead of floating mid-table over rows while preserving 88pt row clearance.
                 scrollView.automaticallyAdjustsContentInsets = false
+                let targetContentInsets = NSEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0)
+                let targetScrollerInsets = NSEdgeInsets(top: 0, left: 0, bottom: -bottomInset, right: 0)
+                var needsTile = false
                 if scrollView.contentInsets.bottom != bottomInset {
-                    scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0)
+                    scrollView.contentInsets = targetContentInsets
+                    needsTile = true
                 }
-                if scrollView.scrollerInsets.bottom != bottomInset {
-                    scrollView.scrollerInsets = NSEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0)
+                if scrollView.scrollerInsets.bottom != -bottomInset {
+                    scrollView.scrollerInsets = targetScrollerInsets
+                    needsTile = true
+                }
+                if needsTile {
+                    scrollView.tile()
                 }
                 return
             }
