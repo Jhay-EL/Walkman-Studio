@@ -61,7 +61,7 @@ shasum -a 256 *.zip *.dmg > SHA256SUMS.txt
 cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.md"
 # Walkman Studio v3.1.1
 
-Walkman Studio v3.1.1 is a comprehensive UI responsiveness, performance, and lyrics synchronization release across Apple Silicon (`arm64`) and Intel-based Macs (`x86_64`), featuring an in-window Track Details panel at a compact `1200×660` minimum window, smooth inspector animations across large Artists and Hi-Res Audio libraries, acoustic `.lrc` pregap calibration, and interactive library cross-navigation.
+Walkman Studio v3.1.1 is a comprehensive UI responsiveness, performance, playlist management, and lyrics synchronization release across Apple Silicon (`arm64`) and Intel-based Macs (`x86_64`), featuring an in-window Track Details panel at a compact `1200×660` minimum window, strict duplicate track detection and cleanup on the *Playlists* tab, smooth inspector animations across large Artists and Hi-Res Audio libraries, acoustic `.lrc` pregap calibration, and interactive library cross-navigation.
 
 ---
 
@@ -81,8 +81,12 @@ Walkman Studio v3.1.1 is a comprehensive UI responsiveness, performance, and lyr
 * **Strict LRCLIB Duration Guard:** Enforces candidate scoring and `<= 3.5s` duration verification in `LyricsService` to prevent synced timestamps from mismatched edits or radio versions.
 * **Sample-Accurate `.LRC` Seeking & Expandable Lyrics Card:** Fixed `.lrc` timestamp synchronization on scrubber advances in Track Details and Fullscreen Now Playing, and added an expandable / compact lyrics view toggle in the Track Details inspector.
 
-### Interactive Library Navigation, Playlists & Device Setup Improvements
-* **In-Playlist Duplicate Track Detection & Cleanup (`PlaylistDuplicateDetector`):** Automatically detects canonical path duplicates and exact-title cross-file duplicates inside each playlist, adds sidebar duplicate count badges, `Show Duplicates Only` filtering, `Select Extras` quick selection, Liquid Glass `Review Playlist Duplicates` cleanup (`Keep Highest Quality` vs `Keep First Position`) modifying only `.m3u8` / `.m3u` sequences without deleting audio files, plus duplicate addition guardrails.
+### Playlists Tab: Duplicate Track Detection & Non-Destructive Cleanup
+* **Strict Same-Playlist Duplicate Detection (`PlaylistDuplicateDetector`):** Automatically scans each playlist independently to detect both canonical file path repeats (across slash, casing, `./`, `MUSIC/`, and `LEARNING/` prefixes) and exact-title cross-file copies (`exactTextKey` preserving `(Remastered)`, `(feat. ...)`, `(Live)`, and version suffixes with `<= 4.0s` duration matching).
+* **Sidebar Badges, Inline Row Pills & Filtering:** Displays duplicate count badges per playlist in the sidebar, inline `Keep` / `Dup` sequence indicators on playlist rows, a **Show Duplicates Only** filter toggle, and one-click **Select Extras** batch selection.
+* **Liquid Glass Cleanup Review & Addition Guardrails:** Includes an interactive **Review Playlist Duplicates** modal with a sliding **Keep Highest Quality** vs **Keep First Position** segmented bar that removes selected entries strictly from `.m3u8` / `.m3u` playlist files while keeping all audio files on Walkman storage untouched, plus duplicate confirmation alerts and bulk-add skipping.
+
+### Interactive Library Navigation & Device Setup Improvements
 * **Direct Artist & Album Cross-Navigation:** Track table Artist and Album cells in *All Songs* and *Recently Added* now link directly to the matching discography or album detail view.
 * **Expanded LRC Fetcher Coverage:** Added batch `.LRC` lyrics fetching directly into *Local Music Library* and Album / Artist context menus.
 * **Redesigned Device Connection & Android MTP View:** Unified the disconnected device dashboard and Android Walkman MTP guidance card with cleaner sidebar synchronization.
@@ -112,7 +116,7 @@ EOF
 cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
 <h1>Walkman Studio v3.1.1</h1>
 
-<p>Walkman Studio v3.1.1 is a comprehensive UI responsiveness, performance, and lyrics synchronization release across Apple Silicon (<code>arm64</code>) and Intel-based Macs (<code>x86_64</code>), featuring an in-window Track Details panel at a compact <code>1200&times;660</code> minimum window, smooth inspector animations across large Artists and Hi-Res Audio libraries, acoustic <code>.lrc</code> pregap calibration, and interactive library cross-navigation.</p>
+<p>Walkman Studio v3.1.1 is a comprehensive UI responsiveness, performance, playlist management, and lyrics synchronization release across Apple Silicon (<code>arm64</code>) and Intel-based Macs (<code>x86_64</code>), featuring an in-window Track Details panel at a compact <code>1200&times;660</code> minimum window, strict duplicate track detection and cleanup on the <em>Playlists</em> tab, smooth inspector animations across large Artists and Hi-Res Audio libraries, acoustic <code>.lrc</code> pregap calibration, and interactive library cross-navigation.</p>
 
 <hr>
 
@@ -138,9 +142,15 @@ cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
   <li><strong>Sample-Accurate <code>.LRC</code> Seeking &amp; Expandable Lyrics Card:</strong> Fixed <code>.lrc</code> timestamp synchronization on scrubber advances in Track Details and Fullscreen Now Playing, and added an expandable / compact lyrics view toggle in the Track Details inspector.</li>
 </ul>
 
-<h3>Interactive Library Navigation, Playlists &amp; Device Setup Improvements</h3>
+<h3>Playlists Tab: Duplicate Track Detection &amp; Non-Destructive Cleanup</h3>
 <ul>
-  <li><strong>In-Playlist Duplicate Track Detection &amp; Cleanup (<code>PlaylistDuplicateDetector</code>):</strong> Automatically detects canonical path duplicates and exact-title cross-file duplicates inside each playlist, with sidebar duplicate count badges, <code>Show Duplicates Only</code> filtering, <code>Select Extras</code> quick selection, Liquid Glass review &amp; cleanup (<code>Keep Highest Quality</code> vs <code>Keep First Position</code>) modifying only <code>.m3u8</code> / <code>.m3u</code> files without deleting audio files, plus duplicate addition guardrails.</li>
+  <li><strong>Strict Same-Playlist Duplicate Detection (<code>PlaylistDuplicateDetector</code>):</strong> Automatically scans each playlist independently to detect both canonical file path repeats (across slash, casing, <code>./</code>, <code>MUSIC/</code>, and <code>LEARNING/</code> prefixes) and exact-title cross-file copies (preserving <code>(Remastered)</code>, <code>(feat. ...)</code>, <code>(Live)</code>, and version suffixes with <code>&le; 4.0s</code> duration matching).</li>
+  <li><strong>Sidebar Badges, Inline Row Pills &amp; Filtering:</strong> Displays duplicate count badges per playlist in the sidebar, inline <code>Keep</code> / <code>Dup</code> sequence indicators on playlist rows, a <strong>Show Duplicates Only</strong> filter toggle, and one-click <strong>Select Extras</strong> batch selection.</li>
+  <li><strong>Liquid Glass Cleanup Review &amp; Addition Guardrails:</strong> Includes an interactive <strong>Review Playlist Duplicates</strong> modal with a sliding <strong>Keep Highest Quality</strong> vs <strong>Keep First Position</strong> segmented bar that removes selected entries strictly from <code>.m3u8</code> / <code>.m3u</code> playlist files while keeping all audio files on Walkman storage untouched, plus duplicate confirmation alerts and bulk-add skipping.</li>
+</ul>
+
+<h3>Interactive Library Navigation &amp; Device Setup Improvements</h3>
+<ul>
   <li><strong>Direct Artist &amp; Album Cross-Navigation:</strong> Track table Artist and Album cells in <em>All Songs</em> and <em>Recently Added</em> now link directly to the matching discography or album detail view.</li>
   <li><strong>Expanded LRC Fetcher Coverage:</strong> Added batch <code>.LRC</code> lyrics fetching directly into <em>Local Music Library</em> and Album / Artist context menus.</li>
   <li><strong>Redesigned Device Connection &amp; Android MTP View:</strong> Unified the disconnected device dashboard and Android Walkman MTP guidance card with cleaner sidebar synchronization.</li>

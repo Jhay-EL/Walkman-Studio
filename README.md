@@ -35,8 +35,11 @@ Walkman Studio focuses strictly on safe, non-destructive music library managemen
 * **Compact `1200×660` Minimum Window Support:** Reduced minimum window constraints (default `1360×820`) while keeping every library toolbar single-lane via adaptive Liquid Glass dropdown menus and compact segmented control tiers across *Local Music Library*, *All Songs*, *Recently Added*, *Albums*, *Artists*, *Hi-Res Audio*, *Language Study*, and *Duplicates*.
 * **Consistent Liquid Glass Controls:** Standardized circular Play controls, native `.menu` dropdowns, compact *SenseMe* toolbar fallback during scanning, and unclipped multi-tier segmented control layouts on narrow windows.
 
-### ⚡ Performance, Playlists, Lyrics Synchronization & Navigation Improvements
-* **In-Playlist Duplicate Track Detection & Non-Destructive Cleanup:** Automatically detects repeated paths and exact-title cross-file copies within each playlist, complete with sidebar duplicate badges, `Show Duplicates Only` filtering, Liquid Glass review & strategy cleanup (`Keep Highest Quality` vs `Keep First Position`) updating only `.m3u8` / `.m3u` files, and duplicate addition guardrails.
+### 🗂️ Playlists Tab: Duplicate Track Detection & Non-Destructive Cleanup
+* **Strict Same-Playlist Duplicate Detection:** Automatically detects canonical path repeats and exact-title cross-file copies within each playlist (without stripping version, live, or featured-artist tags).
+* **Sidebar Badges, Filtering & Cleanup Review Modal:** Displays duplicate count pills in the playlist sidebar, inline `Keep` / `Dup` row indicators, **Show Duplicates Only** filtering, **Select Extras** quick selection, a Liquid Glass **Review Playlist Duplicates** modal (`Keep Highest Quality` vs `Keep First Position`) modifying only `.m3u8` / `.m3u` files while leaving audio untouched, plus duplicate addition guardrails.
+
+### ⚡ Performance, Lyrics Synchronization & Navigation Improvements
 * **Lag-Free Artists & Hi-Res Audio Inspector Toggles:** Eliminated UI stutter when toggling Track Details on large collections through discrete container width tiers, `LazyVStack` virtualization, cached artist console data, and `Equatable` row diff pruning.
 * **Table Horizontal Scrollbar Fix:** Anchored `TableScrollInsetModifier` horizontal scrollbars cleanly at the bottom edge of *Local Music Library*, *All Songs*, and *Recently Added* instead of floating over track rows.
 * **Acoustic Pregap Calibration (`AudioAcousticAligner`):** Detects mastering lead-in silence via `AVAssetReader` to calibrate `.lrc` `[offset:...]` timestamps in **LRC Fetcher** and the **Transfer Queue Item Editor**, backed by strict `<= 3.5s` LRCLIB duration verification and sample-accurate `.lrc` seek timing.
