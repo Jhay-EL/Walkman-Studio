@@ -157,7 +157,7 @@ public struct ContentView: View {
 
     private func isInspectorAllowed(for tab: NavigationTab) -> Bool {
         switch tab {
-        case .duplicates, .transfer, .backupRestore:
+        case .overview, .duplicates, .transfer, .backupRestore:
             return false
         default:
             return true

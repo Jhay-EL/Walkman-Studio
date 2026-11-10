@@ -29,6 +29,13 @@ public struct PlaylistsView: View {
     @State private var isPreparingLyricsSheet: Bool = false
     @State private var messageBanner: String?
     @State private var cachedTrackLookup: [String: Track] = [:]
+
+    // In-Playlist Duplicate Detection State
+    @State private var duplicateAnalysis: PlaylistDuplicateAnalysis = .empty
+    @State private var playlistDuplicateCounts: [String: Int] = [:]
+    @State private var showDuplicatesOnly: Bool = false
+    @State private var showDuplicateCleanupSheet: Bool = false
+    @State private var pendingDuplicateAddition: (path: String, playlist: Playlist, title: String)? = nil
     
     // Direct Track Metadata Editor State
     @State private var trackToEditLocally: Track? = nil
@@ -72,6 +79,26 @@ public struct PlaylistsView: View {
         resolvedPlaylistTracks = playlistTracks.map { path in
             (path: path, track: resolvedTrack(for: path))
         }
+        let analysis = PlaylistDuplicateDetector.analyze(resolvedTracks: resolvedPlaylistTracks)
+        duplicateAnalysis = analysis
+        if let selId = selectedPlaylist?.id {
+            playlistDuplicateCounts[selId] = analysis.totalExtraCopies
+        }
+        if analysis.isEmpty && showDuplicatesOnly {
+            showDuplicatesOnly = false
+        }
+    }
+
+    private func recomputeSidebarDuplicateCounts() {
+        var counts: [String: Int] = [:]
+        for pl in playlists {
+            if pl.id == selectedPlaylist?.id {
+                counts[pl.id] = duplicateAnalysis.totalExtraCopies
+            } else {
+                counts[pl.id] = PlaylistDuplicateDetector.countExtraCopies(in: pl.tracks, trackLookup: cachedTrackLookup)
+            }
+        }
+        playlistDuplicateCounts = counts
     }
     
     private func loadPlaylists() {
@@ -132,24 +159,11 @@ public struct PlaylistsView: View {
             self.playlistTracks = sortedList.first?.tracks ?? []
         }
         self.updateResolvedTracks()
+        self.recomputeSidebarDuplicateCounts()
     }
     
-    private static let trimChars = CharacterSet(charactersIn: "/ \t\r\n")
-    private static let slashChars = CharacterSet(charactersIn: "/")
-    
     public static func normalizeKey(_ path: String) -> String {
-        var s = path.replacingOccurrences(of: "\\", with: "/")
-            .trimmingCharacters(in: trimChars)
-            .lowercased()
-        while s.hasPrefix("./") {
-            s = String(s.dropFirst(2)).trimmingCharacters(in: slashChars)
-        }
-        if s.hasPrefix("music/") {
-            s = String(s.dropFirst(6)).trimmingCharacters(in: slashChars)
-        } else if s.hasPrefix("learning/") {
-            s = String(s.dropFirst(9)).trimmingCharacters(in: slashChars)
-        }
-        return s
+        PlaylistDuplicateDetector.normalizePathKey(path)
     }
     
     public static func buildLookupTable(tracks: [Track]) -> [String: Track] {
@@ -288,6 +302,7 @@ public struct PlaylistsView: View {
                         if self.selectedPlaylist?.id == playlist.id {
                             self.selectedPlaylist = finalPl
                         }
+                        self.recomputeSidebarDuplicateCounts()
                     }
                     withAnimation {
                         if isManualSave {
@@ -563,7 +578,16 @@ public struct PlaylistsView: View {
         }
     }
     
-    private func addTrackToPlaylist(_ rawTrackPath: String, playlist: Playlist) {
+    private func trackAlreadyExists(trackPath: String, resolvedCandidate: Track?, in existingPaths: [String]) -> Bool {
+        PlaylistDuplicateDetector.matchTypeWhenAdding(
+            candidatePath: trackPath,
+            candidateTrack: resolvedCandidate,
+            to: existingPaths,
+            resolveTrack: { PlaylistDuplicateDetector.lookupTrack(for: $0, in: cachedTrackLookup) }
+        ) != nil
+    }
+
+    private func addTrackToPlaylist(_ rawTrackPath: String, playlist: Playlist, allowDuplicate: Bool = false) {
         guard let drive = activeDrive else {
             withAnimation {
                 messageBanner = "No active Walkman drive detected."
@@ -580,10 +604,15 @@ public struct PlaylistsView: View {
             trackPath = rawTrackPath
         }
         
-        let trackTitle = resolvedTrack(for: trackPath)?.title ?? (trackPath as NSString).lastPathComponent
+        let candidateTrack = resolvedTrack(for: trackPath)
+        let trackTitle = candidateTrack?.title ?? (trackPath as NSString).lastPathComponent
         
         var updatedTracks = playlist.tracks
-        let isDuplicate = updatedTracks.contains(trackPath)
+        let isDuplicate = trackAlreadyExists(trackPath: trackPath, resolvedCandidate: candidateTrack, in: updatedTracks)
+        if isDuplicate && !allowDuplicate {
+            pendingDuplicateAddition = (path: trackPath, playlist: playlist, title: trackTitle)
+            return
+        }
         updatedTracks.append(trackPath)
         
         // If adding to the currently selected playlist, use persistPlaylistChanges for unified reactive state
@@ -622,6 +651,7 @@ public struct PlaylistsView: View {
                 fullPath: playlist.fullPath
             )
             playlists[idx] = optimistic
+            recomputeSidebarDuplicateCounts()
         }
         
         withAnimation {
@@ -653,6 +683,7 @@ public struct PlaylistsView: View {
                             tracks: updatedTracks,
                             fullPath: savedURL.path
                         )
+                        self.recomputeSidebarDuplicateCounts()
                     }
                 }
             } catch {
@@ -831,6 +862,7 @@ public struct PlaylistsView: View {
         // 1. Optimistic in-memory update
         if let idx = playlists.firstIndex(where: { $0.id == playlist.id }) {
             playlists.remove(at: idx)
+            playlistDuplicateCounts.removeValue(forKey: playlist.id)
             if selectedPlaylist?.id == playlist.id {
                 if playlists.indices.contains(idx) {
                     selectedPlaylist = playlists[idx]
@@ -844,6 +876,7 @@ public struct PlaylistsView: View {
                 }
                 updateResolvedTracks()
             }
+            recomputeSidebarDuplicateCounts()
         }
         
         // 2. Background disk deletion and sync
@@ -935,6 +968,7 @@ public struct PlaylistsView: View {
                                             playlist: pl,
                                             isSelected: isSel,
                                             isEditingRow: isEditingRow,
+                                            duplicateCount: playlistDuplicateCounts[pl.id] ?? 0,
                                             editingPlaylistName: $editingPlaylistName,
                                             isRowRenameFocused: $isRowRenameFocused,
                                             onSelect: {
@@ -1000,6 +1034,15 @@ public struct PlaylistsView: View {
                             playlistDetailHeader(pl: pl)
                                 .padding(.horizontal, 4)
                                 .padding(.bottom, 2)
+
+                            if !duplicateAnalysis.isEmpty {
+                                playlistDuplicateBanner(for: pl)
+                                    .padding(.horizontal, 4)
+                                    .transition(.asymmetric(
+                                        insertion: .opacity.combined(with: .scale(scale: 0.98, anchor: .top)),
+                                        removal: .opacity
+                                    ))
+                            }
                             
                             // Batch Action Bar when tracks are selected
                             if !selectedPlaylistIndices.isEmpty {
@@ -1045,13 +1088,16 @@ public struct PlaylistsView: View {
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                             } else {
                                 ScrollView {
+                                    let visibleRows: [(offset: Int, element: (path: String, track: Track?))] = Array(resolvedPlaylistTracks.enumerated()).filter { item in
+                                        !showDuplicatesOnly || duplicateAnalysis.duplicateIndices.contains(item.offset)
+                                    }
                                     LazyVStack(spacing: 3) {
-                                        ForEach(Array(resolvedPlaylistTracks.enumerated()), id: \.offset) { index, pair in
+                                        ForEach(visibleRows, id: \.offset) { index, pair in
                                             let trackPath = pair.path
                                             let matchedTrack = pair.track
                                             let isPlayingThis = (AudioPlayerService.shared.currentTrack?.relativePath == trackPath || AudioPlayerService.shared.currentTrack?.fullPath == matchedTrack?.fullPath) && AudioPlayerService.shared.isPlaying
                                             let isDragSource = draggedTrackIndex == index
-                                            let isDropTarget = dropTargetIndex == index && draggedTrackIndex != nil && draggedTrackIndex != index
+                                            let isDropTarget = !showDuplicatesOnly && dropTargetIndex == index && draggedTrackIndex != nil && draggedTrackIndex != index
                                             let showLineAbove = isDropTarget && (draggedTrackIndex ?? 0) > index
                                             let showLineBelow = isDropTarget && (draggedTrackIndex ?? 0) < index
                                             let otherPlaylists = playlists.filter { $0.id != selectedPlaylist?.id }
@@ -1071,6 +1117,8 @@ public struct PlaylistsView: View {
                                                     isSelected: selectedPlaylistIndices.contains(index),
                                                     selectedCount: selectedPlaylistIndices.count,
                                                     otherPlaylists: otherPlaylists,
+                                                    duplicateInfo: duplicateAnalysis.annotationsByIndex[index],
+                                                    isFilteringDuplicates: showDuplicatesOnly,
                                                     onPlay: {
                                                         if let tr = matchedTrack {
                                                             if isPlayingThis {
@@ -1081,6 +1129,7 @@ public struct PlaylistsView: View {
                                                         }
                                                     },
                                                     onStartDrag: {
+                                                        guard !showDuplicatesOnly else { return }
                                                         draggedTrackIndex = index
                                                         draggedTrackPath = trackPath
                                                     },
@@ -1123,6 +1172,8 @@ public struct PlaylistsView: View {
                                                     onRemove: {
                                                         var updated = playlistTracks
                                                         updated.remove(at: index)
+                                                        selectedPlaylistIndices.removeAll()
+                                                        lastSelectedPlaylistIndex = nil
                                                         persistPlaylistChanges(newTracks: updated)
                                                     },
                                                     onMoveSelectedToTop: moveSelectedTracksToTop,
@@ -1150,7 +1201,9 @@ public struct PlaylistsView: View {
                                                     draggedPath: $draggedTrackPath,
                                                     dropTargetIndex: $dropTargetIndex,
                                                     onMove: { from, to in
-                                                        reorderTrack(from: from, to: to)
+                                                        if !showDuplicatesOnly {
+                                                            reorderTrack(from: from, to: to)
+                                                        }
                                                     }
                                                 ))
                                                 
@@ -1216,6 +1269,7 @@ public struct PlaylistsView: View {
         .onChange(of: libraryTracks) {
             cachedTrackLookup = PlaylistsView.buildLookupTable(tracks: libraryTracks)
             updateResolvedTracks()
+            recomputeSidebarDuplicateCounts()
         }
         .onChange(of: activeDrive?.mountPoint) {
             cachedTrackLookup = PlaylistsView.buildLookupTable(tracks: libraryTracks)
@@ -1224,6 +1278,7 @@ public struct PlaylistsView: View {
         .onChange(of: selectedPlaylist?.id) {
             selectedPlaylistIndices.removeAll()
             lastSelectedPlaylistIndex = nil
+            showDuplicatesOnly = false
         }
         .sheet(isPresented: $showAddTrackSheet) {
             AddTracksModal(
@@ -1231,14 +1286,80 @@ public struct PlaylistsView: View {
                 tracks: libraryTracks,
                 existingPlaylistPaths: Set(playlistTracks),
                 onAddTracks: { addedRelativePaths, shouldDismiss in
-                    let newTracks = playlistTracks + addedRelativePaths
-                    persistPlaylistChanges(newTracks: newTracks)
+                    var updated = playlistTracks
+                    var addedCount = 0
+                    var skippedCount = 0
+                    for candidate in addedRelativePaths {
+                        let candTrack = resolvedTrack(for: candidate)
+                        if trackAlreadyExists(trackPath: candidate, resolvedCandidate: candTrack, in: updated) {
+                            skippedCount += 1
+                        } else {
+                            updated.append(candidate)
+                            addedCount += 1
+                        }
+                    }
+                    if addedCount > 0 {
+                        persistPlaylistChanges(newTracks: updated)
+                    }
+                    if skippedCount > 0 {
+                        let summary: String
+                        if addedCount > 0 {
+                            summary = "Added \(addedCount) \(addedCount == 1 ? "track" : "tracks") • Skipped \(skippedCount) duplicate\(skippedCount == 1 ? "" : "s")"
+                        } else {
+                            summary = "Skipped \(skippedCount) duplicate \(skippedCount == 1 ? "track" : "tracks") already in playlist"
+                        }
+                        withAnimation {
+                            self.messageBanner = summary
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                            if self.messageBanner == summary {
+                                withAnimation { self.messageBanner = nil }
+                            }
+                        }
+                    }
                     if shouldDismiss {
                         showAddTrackSheet = false
                     }
                 },
                 onDismiss: { showAddTrackSheet = false }
             )
+        }
+        .sheet(isPresented: $showDuplicateCleanupSheet) {
+            PlaylistDuplicateCleanupSheet(
+                playlistName: selectedPlaylist?.name ?? "Playlist",
+                analysis: duplicateAnalysis,
+                onRemoveIndices: { indicesToRemove in
+                    let cleaned = PlaylistDuplicateAnalysis.deduplicatedPaths(
+                        from: playlistTracks,
+                        removing: indicesToRemove
+                    )
+                    selectedPlaylistIndices.removeAll()
+                    lastSelectedPlaylistIndex = nil
+                    showDuplicateCleanupSheet = false
+                    persistPlaylistChanges(newTracks: cleaned)
+                },
+                onDismiss: {
+                    showDuplicateCleanupSheet = false
+                }
+            )
+        }
+        .alert(
+            "Track Already in Playlist",
+            isPresented: Binding(
+                get: { pendingDuplicateAddition != nil },
+                set: { if !$0 { pendingDuplicateAddition = nil } }
+            ),
+            presenting: pendingDuplicateAddition
+        ) { pending in
+            Button("Skip Duplicate", role: .cancel) {
+                pendingDuplicateAddition = nil
+            }
+            Button("Add Copy Anyway") {
+                pendingDuplicateAddition = nil
+                addTrackToPlaylist(pending.path, playlist: pending.playlist, allowDuplicate: true)
+            }
+        } message: { pending in
+            Text("'\(pending.title)' is already in '\(pending.playlist.name)'. Do you want to add another copy?")
         }
         .sheet(isPresented: $showBatchLyricsSheet) {
             BatchLyricsGeneratorSheet(
@@ -1759,16 +1880,167 @@ public struct PlaylistsView: View {
     
 
     @ViewBuilder
+    private func duplicateBannerFilterButton(compact: Bool) -> some View {
+        Button(action: {
+            withAnimation(.easeInOut(duration: 0.16)) {
+                showDuplicatesOnly.toggle()
+            }
+        }) {
+            HStack(spacing: 4.5) {
+                Image(systemName: showDuplicatesOnly ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                    .font(.system(size: 11, weight: .semibold))
+                Text(showDuplicatesOnly ? (compact ? "Duplicates" : "Showing Duplicates") : (compact ? "Duplicates Only" : "Show Duplicates Only"))
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(showDuplicatesOnly ? Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255) : WalkmanTheme.silverLight)
+            .padding(.horizontal, 11)
+            .frame(height: 30)
+        }
+        .buttonStyle(LiquidGlassButtonStyle(variant: showDuplicatesOnly ? .gold : .glass, cornerRadius: 15))
+        .fixedSize(horizontal: true, vertical: false)
+        .help("Filter list to duplicate tracks only (reordering paused while filtering)")
+    }
+
+    @ViewBuilder
+    private func duplicateBannerSelectExtrasButton(extraIndices: Set<Int>, extrasSelected: Bool) -> some View {
+        Button(action: {
+            withAnimation(.easeInOut(duration: 0.16)) {
+                if extrasSelected {
+                    selectedPlaylistIndices.removeAll()
+                    lastSelectedPlaylistIndex = nil
+                } else {
+                    selectedPlaylistIndices = extraIndices
+                    lastSelectedPlaylistIndex = extraIndices.sorted().last
+                }
+            }
+        }) {
+            HStack(spacing: 4.5) {
+                Image(systemName: extrasSelected ? "checkmark.circle.fill" : "checkmark.circle")
+                    .font(.system(size: 11, weight: .semibold))
+                Text(extrasSelected ? "Extras Selected" : "Select Extras")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(extrasSelected ? WalkmanTheme.hiResGold : WalkmanTheme.silverLight)
+            .padding(.horizontal, 11)
+            .frame(height: 30)
+        }
+        .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 15))
+        .fixedSize(horizontal: true, vertical: false)
+        .help(extrasSelected ? "Clear highlighted extra duplicate copies" : "Highlight extra duplicate copies for batch removal or reorganization")
+    }
+
+    @ViewBuilder
+    private func duplicateBannerCleanButton(pl: Playlist, compact: Bool) -> some View {
+        Button(action: {
+            showDuplicateCleanupSheet = true
+        }) {
+            HStack(spacing: 5) {
+                Image(systemName: "wand.and.stars")
+                    .font(.system(size: 11, weight: .bold))
+                Text(compact ? "Clean..." : "Clean Duplicates...")
+                    .font(.system(size: 11.5, weight: .bold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255))
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+        }
+        .buttonStyle(LiquidGlassButtonStyle(variant: .gold, cornerRadius: 15))
+        .fixedSize(horizontal: true, vertical: false)
+        .help("Review and remove duplicate tracks from '\(pl.name)'")
+    }
+
+    @ViewBuilder
+    private func playlistDuplicateBanner(for pl: Playlist) -> some View {
+        let extra = duplicateAnalysis.totalExtraCopies
+        let groupsCount = duplicateAnalysis.groups.count
+        let defaultStrategy: PlaylistDedupeKeepStrategy = duplicateAnalysis.groups.contains(where: \.hasQualityDifference)
+            ? .keepHighestQuality
+            : .keepFirstOccurrence
+        let extraIndices = duplicateAnalysis.extraCopyIndices(strategy: defaultStrategy)
+        let extrasSelected = !extraIndices.isEmpty && selectedPlaylistIndices == extraIndices
+
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                Image(systemName: "doc.on.doc.fill")
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(WalkmanTheme.hiResGold)
+
+                Text("\(extra) extra duplicate \(extra == 1 ? "track" : "tracks") in \(groupsCount) \(groupsCount == 1 ? "group" : "groups")")
+                    .font(WalkmanFont.captionBold)
+                    .foregroundStyle(WalkmanTheme.silverLight)
+                    .lineLimit(1)
+
+                Spacer(minLength: 8)
+
+                duplicateBannerFilterButton(compact: false)
+                duplicateBannerSelectExtrasButton(extraIndices: extraIndices, extrasSelected: extrasSelected)
+                duplicateBannerCleanButton(pl: pl, compact: false)
+            }
+
+            HStack(spacing: 7) {
+                Image(systemName: "doc.on.doc.fill")
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(WalkmanTheme.hiResGold)
+
+                Text("\(extra) dup\(extra == 1 ? "" : "s")")
+                    .font(WalkmanFont.captionBold)
+                    .foregroundStyle(WalkmanTheme.silverLight)
+                    .lineLimit(1)
+
+                Spacer(minLength: 6)
+
+                duplicateBannerFilterButton(compact: true)
+                duplicateBannerSelectExtrasButton(extraIndices: extraIndices, extrasSelected: extrasSelected)
+                duplicateBannerCleanButton(pl: pl, compact: true)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 7) {
+                    Image(systemName: "doc.on.doc.fill")
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(WalkmanTheme.hiResGold)
+
+                    Text("\(extra) extra duplicate \(extra == 1 ? "track" : "tracks") • \(groupsCount) \(groupsCount == 1 ? "group" : "groups")")
+                        .font(WalkmanFont.captionBold)
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 0)
+                }
+
+                HStack(spacing: 6) {
+                    duplicateBannerFilterButton(compact: true)
+                    duplicateBannerSelectExtrasButton(extraIndices: extraIndices, extrasSelected: extrasSelected)
+                    duplicateBannerCleanButton(pl: pl, compact: true)
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(WalkmanTheme.gold.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(WalkmanTheme.gold.opacity(0.28), lineWidth: 0.85)
+        )
+    }
+
+    @ViewBuilder
     private var sortMenuButton: some View {
         PlaylistSortMenuButton(
             isDisabled: playlistTracks.isEmpty,
+            duplicateExtraCount: duplicateAnalysis.totalExtraCopies,
             onSortTitleAsc: { sortTracksByTitle(ascending: true) },
             onSortTitleDesc: { sortTracksByTitle(ascending: false) },
             onSortArtistAsc: { sortTracksByArtist(ascending: true) },
             onSortAlbum: { sortTracksByAlbum() },
             onSortFilenameAsc: { sortTracksByFilename(ascending: true) },
             onReverseOrder: { reverseTrackOrder() },
-            onShuffleOrder: { shuffleTracks() }
+            onShuffleOrder: { shuffleTracks() },
+            onOpenDuplicateCleanup: { showDuplicateCleanupSheet = true }
         )
     }
     
@@ -1970,6 +2242,7 @@ private struct PlaylistListRowView: View {
     let playlist: Playlist
     let isSelected: Bool
     let isEditingRow: Bool
+    var duplicateCount: Int = 0
     @Binding var editingPlaylistName: String
     var isRowRenameFocused: FocusState<Bool>.Binding
     let onSelect: () -> Void
@@ -2050,15 +2323,36 @@ private struct PlaylistListRowView: View {
                             .background(WalkmanTheme.hiResGold)
                             .clipShape(Capsule())
                     } else {
-                        Text("\(playlist.trackCount)")
-                            .font(WalkmanFont.monoSmall)
-                            .foregroundStyle(isSelected ? WalkmanTheme.silverLight.opacity(0.9) : WalkmanTheme.silverMuted)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 2.5)
-                            .background(
-                                isSelected ? Color.white.opacity(0.12) : Color.white.opacity(0.04)
-                            )
-                            .clipShape(Capsule())
+                        HStack(spacing: 5) {
+                            if duplicateCount > 0 {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "doc.on.doc.fill")
+                                        .font(.system(size: 8.5, weight: .bold))
+                                    Text("\(duplicateCount)")
+                                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                }
+                                .foregroundStyle(WalkmanTheme.hiResGold)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2.5)
+                                .background(WalkmanTheme.gold.opacity(0.16))
+                                .clipShape(Capsule())
+                                .overlay(
+                                    Capsule()
+                                        .strokeBorder(WalkmanTheme.gold.opacity(0.38), lineWidth: 0.7)
+                                )
+                                .help("\(duplicateCount) extra duplicate \(duplicateCount == 1 ? "track" : "tracks") in this playlist")
+                            }
+
+                            Text("\(playlist.trackCount)")
+                                .font(WalkmanFont.monoSmall)
+                                .foregroundStyle(isSelected ? WalkmanTheme.silverLight.opacity(0.9) : WalkmanTheme.silverMuted)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 2.5)
+                                .background(
+                                    isSelected ? Color.white.opacity(0.12) : Color.white.opacity(0.04)
+                                )
+                                .clipShape(Capsule())
+                        }
                     }
                 }
             }
@@ -2175,6 +2469,8 @@ private struct PlaylistTrackRow: View {
     let isSelected: Bool
     let selectedCount: Int
     let otherPlaylists: [Playlist]
+    var duplicateInfo: PlaylistDuplicateRowInfo? = nil
+    var isFilteringDuplicates: Bool = false
     let onPlay: () -> Void
     let onStartDrag: () -> Void
     let onToggleSelect: () -> Void
@@ -2285,15 +2581,21 @@ private struct PlaylistTrackRow: View {
             }
             
             Spacer()
+
+            if let info = duplicateInfo {
+                duplicateRowPill(info)
+            }
             
             // Action buttons on row: draggable handle button + remove button
             HStack(spacing: 8) {
-                // Draggable Handle Button (hold & drag to reorder or transfer to another playlist)
-                TrackDragHandleButton(
-                    trackPath: trackPath,
-                    isRowHovered: isHovered,
-                    onStartDrag: onStartDrag
-                )
+                if !isFilteringDuplicates {
+                    // Draggable Handle Button (hold & drag to reorder or transfer to another playlist)
+                    TrackDragHandleButton(
+                        trackPath: trackPath,
+                        isRowHovered: isHovered,
+                        onStartDrag: onStartDrag
+                    )
+                }
                 
                 // Remove
                 Button(action: onRemove) {
@@ -2496,6 +2798,33 @@ private struct PlaylistTrackRow: View {
             }
         }
     }
+
+    @ViewBuilder
+    private func duplicateRowPill(_ info: PlaylistDuplicateRowInfo) -> some View {
+        let isKeep = info.isRecommendedKeep
+        let tint: Color = isKeep
+            ? Color(red: 90 / 255, green: 210 / 255, blue: 150 / 255)
+            : WalkmanTheme.hiResGold
+        let label = isKeep
+            ? "Keep \(info.copyNumber)/\(info.totalCopies)"
+            : "Dup \(info.copyNumber)/\(info.totalCopies)"
+        let matchHint = info.matchType == .sameSong ? "Same song (alternate file/format)" : "Exact duplicate file entry"
+
+        HStack(spacing: 4) {
+            Image(systemName: isKeep ? "checkmark.circle.fill" : "doc.on.doc.fill")
+                .font(.system(size: 9.5, weight: .bold))
+            Text(label)
+                .font(.system(size: 10, weight: .bold))
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(tint.opacity(0.14))
+        .clipShape(Capsule())
+        .overlay(Capsule().strokeBorder(tint.opacity(0.32), lineWidth: 0.7))
+        .fixedSize(horizontal: true, vertical: false)
+        .help("\(matchHint) — Copy \(info.copyNumber) of \(info.totalCopies)\(info.hasQualityDifference && isKeep ? " (Highest quality)" : "")")
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -2503,6 +2832,7 @@ private struct PlaylistTrackRow: View {
 // -----------------------------------------------------------------------------
 private struct PlaylistSortMenuButton: View {
     let isDisabled: Bool
+    var duplicateExtraCount: Int = 0
     let onSortTitleAsc: () -> Void
     let onSortTitleDesc: () -> Void
     let onSortArtistAsc: () -> Void
@@ -2510,6 +2840,7 @@ private struct PlaylistSortMenuButton: View {
     let onSortFilenameAsc: () -> Void
     let onReverseOrder: () -> Void
     let onShuffleOrder: () -> Void
+    var onOpenDuplicateCleanup: (() -> Void)? = nil
     
     @State private var isHovered = false
     
@@ -2536,6 +2867,17 @@ private struct PlaylistSortMenuButton: View {
             }
             Button(action: onShuffleOrder) {
                 Label("Shuffle Order", systemImage: "shuffle")
+            }
+            if let onOpenDuplicateCleanup = onOpenDuplicateCleanup {
+                Divider()
+                Button(action: onOpenDuplicateCleanup) {
+                    if duplicateExtraCount > 0 {
+                        Label("Detect / Clean Duplicates (\(duplicateExtraCount))...", systemImage: "doc.on.doc.fill")
+                    } else {
+                        Label("Detect / Clean Duplicates...", systemImage: "doc.on.doc")
+                    }
+                }
+                .disabled(duplicateExtraCount == 0)
             }
         } label: {
             ZStack {
@@ -3661,9 +4003,11 @@ private struct AddTracksModal: View {
                 
                 if !selectedTrackPaths.isEmpty {
                     Button(action: {
-                        var ordered = tracks.filter { selectedTrackPaths.contains($0.relativePath) }.map(\.relativePath)
+                        var ordered = tracks.filter {
+                            selectedTrackPaths.contains($0.relativePath) && !isTrackInPlaylist($0)
+                        }.map(\.relativePath)
                         let addedSet = Set(ordered)
-                        for p in selectedTrackPaths where !addedSet.contains(p) {
+                        for p in selectedTrackPaths where !addedSet.contains(p) && !isPathInPlaylist(p) {
                             ordered.append(p)
                         }
                         onAddTracks(ordered, true)

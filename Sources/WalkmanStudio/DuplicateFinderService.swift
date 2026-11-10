@@ -81,27 +81,8 @@ public struct DuplicateGroup: Identifiable, Hashable, Sendable {
 
     public var hasQualityDifference: Bool {
         guard let first = items.first else { return false }
-        let isFirstLossless = DuplicateFinderService.isLosslessFormat(first.track.format)
-
-        return items.contains { item in
-            let itemLossless = DuplicateFinderService.isLosslessFormat(item.track.format)
-
-            // 1. Lossless vs Lossy discrepancy
-            if itemLossless != isFirstLossless {
-                return true
-            }
-
-            // 2. Both lossless: check bit depth and sample rate
-            if itemLossless {
-                return item.track.bitsPerSample != first.track.bitsPerSample ||
-                       item.track.sampleRate != first.track.sampleRate
-            }
-
-            // 3. Both lossy: check format and bitrate discrepancy
-            if item.track.format.uppercased() != first.track.format.uppercased() {
-                return true
-            }
-            return abs(item.track.bitrateKbps - first.track.bitrateKbps) >= 48
+        return items.dropFirst().contains {
+            DuplicateFinderService.hasQualityDifference(between: first.track, and: $0.track)
         }
     }
 
@@ -158,34 +139,7 @@ public struct DuplicateGroup: Identifiable, Hashable, Sendable {
     }
 
     private func qualityScore(for item: DuplicateTrackItem) -> Int {
-        let t = item.track
-        var score = 0
-        let fmt = t.format.uppercased()
-
-        if fmt == "DSF" || fmt == "DFF" {
-            score += 7000
-        } else if fmt == "FLAC" || fmt == "ALAC" || fmt == "WAV" || fmt == "AIFF" || fmt == "AIF" {
-            score += 5000
-        } else if fmt == "M4A" || fmt == "AAC" {
-            score += 2000
-        } else if fmt == "MP3" {
-            score += 1000
-        } else {
-            score += 500
-        }
-
-        if t.bitsPerSample > 16 || t.sampleRate > 48000 {
-            score += 3000 // Hi-Res Audio bonus
-        }
-
-        if DuplicateFinderService.isLosslessFormat(fmt) {
-            score += (t.bitsPerSample * 10) + (t.sampleRate / 1000)
-        } else {
-            score += min(t.bitrateKbps, 500)
-        }
-
-        if t.hasArtwork { score += 100 }
-        return score
+        DuplicateFinderService.qualityScore(for: item.track)
     }
 }
 
@@ -222,6 +176,53 @@ public final class DuplicateFinderService: ObservableObject, @unchecked Sendable
     public static func isLosslessFormat(_ fmt: String) -> Bool {
         let u = fmt.uppercased()
         return u == "FLAC" || u == "ALAC" || u == "WAV" || u == "AIFF" || u == "AIF" || u == "DSF" || u == "DFF" || u == "APE"
+    }
+
+    /// Computes a consistent audio-quality ranking score (DSD > Lossless/Hi-Res > AAC/M4A > MP3).
+    public static func qualityScore(for track: Track) -> Int {
+        var score = 0
+        let fmt = track.format.uppercased()
+
+        if fmt == "DSF" || fmt == "DFF" {
+            score += 7000
+        } else if fmt == "FLAC" || fmt == "ALAC" || fmt == "WAV" || fmt == "AIFF" || fmt == "AIF" {
+            score += 5000
+        } else if fmt == "M4A" || fmt == "AAC" {
+            score += 2000
+        } else if fmt == "MP3" {
+            score += 1000
+        } else {
+            score += 500
+        }
+
+        if track.bitsPerSample > 16 || track.sampleRate > 48000 {
+            score += 3000 // Hi-Res Audio bonus
+        }
+
+        if isLosslessFormat(fmt) {
+            score += (track.bitsPerSample * 10) + (track.sampleRate / 1000)
+        } else {
+            score += min(track.bitrateKbps, 500)
+        }
+
+        if track.hasArtwork { score += 100 }
+        return score
+    }
+
+    /// Returns true if two tracks differ meaningfully in container format, Hi-Res specs, or bitrate.
+    public static func hasQualityDifference(between lhs: Track, and rhs: Track) -> Bool {
+        let isLhsLossless = isLosslessFormat(lhs.format)
+        let isRhsLossless = isLosslessFormat(rhs.format)
+        if isLhsLossless != isRhsLossless {
+            return true
+        }
+        if isLhsLossless {
+            return lhs.bitsPerSample != rhs.bitsPerSample || lhs.sampleRate != rhs.sampleRate
+        }
+        if lhs.format.uppercased() != rhs.format.uppercased() {
+            return true
+        }
+        return abs(lhs.bitrateKbps - rhs.bitrateKbps) >= 48
     }
 
     public static func hasCopySuffix(_ filename: String) -> Bool {
