@@ -61,6 +61,9 @@ fi
 if [ -f "$DIR/assets/walkman_logo_emblem.png" ]; then
     cp "$DIR/assets/walkman_logo_emblem.png" "$RESOURCES_DIR/walkman_logo_emblem.png"
 fi
+if [ -f "$DIR/assets/bg.jpg" ]; then
+    cp "$DIR/assets/bg.jpg" "$RESOURCES_DIR/bg.jpg"
+fi
 
 # Copy SensMe Channel Cover Artworks
 if [ -d "$DIR/assets/SensMe Channel cover" ]; then
