@@ -2,69 +2,6 @@ import Foundation
 import SQLite3
 import AppKit
 import Combine
-import CoreServices
-
-// -----------------------------------------------------------------------------
-// Real-Time Filesystem Monitoring via macOS FSEvents (Recursive Directory Watcher)
-// -----------------------------------------------------------------------------
-private final class LocalLibraryFolderWatcher: @unchecked Sendable {
-    private var streamRef: FSEventStreamRef?
-    private let onChange: @Sendable () -> Void
-
-    init(onChange: @escaping @Sendable () -> Void) {
-        self.onChange = onChange
-    }
-
-    func updatePaths(_ paths: [String]) {
-        stop()
-        let validPaths = paths.filter { FileManager.default.fileExists(atPath: $0) }
-        guard !validPaths.isEmpty else { return }
-
-        var context = FSEventStreamContext(
-            version: 0,
-            info: Unmanaged.passUnretained(self).toOpaque(),
-            retain: nil,
-            release: nil,
-            copyDescription: nil
-        )
-
-        let callback: FSEventStreamCallback = { (streamRef, clientCallBackInfo, numEvents, eventPaths, eventFlags, eventIds) in
-            guard let clientCallBackInfo = clientCallBackInfo else { return }
-            let watcher = Unmanaged<LocalLibraryFolderWatcher>.fromOpaque(clientCallBackInfo).takeUnretainedValue()
-            watcher.onChange()
-        }
-
-        let cfPaths = validPaths as CFArray
-        let flags = UInt32(kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer)
-
-        guard let stream = FSEventStreamCreate(
-            kCFAllocatorDefault,
-            callback,
-            &context,
-            cfPaths,
-            FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-            1.0, // 1.0 second coalescing latency
-            flags
-        ) else { return }
-
-        self.streamRef = stream
-        FSEventStreamSetDispatchQueue(stream, DispatchQueue.global(qos: .utility))
-        FSEventStreamStart(stream)
-    }
-
-    func stop() {
-        if let stream = streamRef {
-            FSEventStreamStop(stream)
-            FSEventStreamInvalidate(stream)
-            FSEventStreamRelease(stream)
-            streamRef = nil
-        }
-    }
-
-    deinit {
-        stop()
-    }
-}
 
 public final class LocalMusicLibraryService: ObservableObject, @unchecked Sendable {
     public static let shared = LocalMusicLibraryService()
@@ -89,57 +26,32 @@ public final class LocalMusicLibraryService: ObservableObject, @unchecked Sendab
     }()
 
     private let lock = NSLock()
-    private var folderWatcher: LocalLibraryFolderWatcher?
-    private var debounceTimer: Task<Void, Never>?
+    private var scanInProgress: Bool = false
     private var hasPendingScan: Bool = false
+
+    private func tryBeginScan() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if scanInProgress {
+            hasPendingScan = true
+            return false
+        }
+        scanInProgress = true
+        return true
+    }
+
+    private func completeScanStateAndConsumePending() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        scanInProgress = false
+        let pending = hasPendingScan
+        hasPendingScan = false
+        return pending
+    }
 
     private init() {
         initDatabase()
         loadFromDatabase()
-        setupFolderWatcher()
-        setupAppLifecycleObserver()
-    }
-
-    private func setupFolderWatcher() {
-        folderWatcher = LocalLibraryFolderWatcher { [weak self] in
-            guard let self = self else { return }
-            Task { @MainActor in
-                self.handleFileSystemChange()
-            }
-        }
-        updateWatcherPaths()
-    }
-
-    public func updateWatcherPaths() {
-        let paths = folders.map(\.path)
-        folderWatcher?.updatePaths(paths)
-    }
-
-    private func setupAppLifecycleObserver() {
-        NotificationCenter.default.addObserver(
-            forName: NSApplication.didBecomeActiveNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.handleFileSystemChange()
-            }
-        }
-    }
-
-    @MainActor
-    private func handleFileSystemChange() {
-        debounceTimer?.cancel()
-        debounceTimer = Task {
-            try? await Task.sleep(nanoseconds: 1_200_000_000) // 1.2s debounce to allow Finder file writes to settle
-            guard !Task.isCancelled else { return }
-
-            if self.isScanning {
-                self.hasPendingScan = true
-                return
-            }
-            self.rescanAllFolders()
-        }
     }
 
     // -------------------------------------------------------------------------
@@ -322,7 +234,6 @@ public final class LocalMusicLibraryService: ObservableObject, @unchecked Sendab
         self.missingFolders = loadedFolders.filter { $0.isMissing }
         self.tracks = loadedTracks
         recomputeStats(with: loadedTracks)
-        reInspectAllSenseMe()
     }
 
     private func recomputeStats(with trackList: [Track]) {
@@ -389,9 +300,10 @@ public final class LocalMusicLibraryService: ObservableObject, @unchecked Sendab
 
         if !newFolders.isEmpty {
             self.folders.append(contentsOf: newFolders)
-            self.updateWatcherPaths()
-            Task {
-                await rescanFolders(newFolders)
+            if tryBeginScan() {
+                Task.detached(priority: .userInitiated) { [weak self] in
+                    await self?.rescanFolders(newFolders)
+                }
             }
         }
     }
@@ -425,7 +337,6 @@ public final class LocalMusicLibraryService: ObservableObject, @unchecked Sendab
         self.missingFolders.removeAll(where: { $0.id == id })
         self.tracks.removeAll(where: { $0.fullPath.hasPrefix(folderPath + "/") || $0.fullPath == folderPath || $0.fullPath.hasPrefix(folderPath) })
         recomputeStats(with: self.tracks)
-        self.updateWatcherPaths()
     }
 
     // -------------------------------------------------------------------------
@@ -520,7 +431,6 @@ public final class LocalMusicLibraryService: ObservableObject, @unchecked Sendab
         }
 
         recomputeStats(with: self.tracks)
-        updateWatcherPaths()
 
         // Trigger rescan of this relocated folder to pick up any changes
         rescanFolder(url: toURL)
@@ -540,44 +450,39 @@ public final class LocalMusicLibraryService: ObservableObject, @unchecked Sendab
     // Incremental Scanner
     // -------------------------------------------------------------------------
     public func rescanAllFolders() {
-        guard !self.isScanning else {
-            self.hasPendingScan = true
-            return
-        }
         let targets = self.folders
         guard !targets.isEmpty else { return }
-        Task {
-            await rescanFolders(targets)
+        guard tryBeginScan() else { return }
+        Task.detached(priority: .userInitiated) { [weak self] in
+            await self?.rescanFolders(targets)
         }
     }
 
     public func rescanFolder(url: URL) {
         let targetPath = url.standardizedFileURL.path
         if let match = folders.first(where: { targetPath.hasPrefix($0.path) || $0.path == targetPath }) {
-            guard !self.isScanning else {
-                self.hasPendingScan = true
-                return
-            }
-            Task {
-                await rescanFolders([match])
+            guard tryBeginScan() else { return }
+            Task.detached(priority: .userInitiated) { [weak self] in
+                await self?.rescanFolders([match])
             }
         }
     }
 
     private func rescanFolders(_ targets: [LocalMusicFolder]) async {
-        await MainActor.run {
+        let (existingTracks, allFoldersSnapshot): ([Track], [LocalMusicFolder]) = await MainActor.run {
             self.isScanning = true
             self.scanStatusText = "Scanning folders..."
+            return (self.tracks, self.folders)
         }
 
         let fileManager = FileManager.default
         var updatedTracksMap = [String: Track]()
-        for t in self.tracks {
+        for t in existingTracks {
             updatedTracksMap[t.fullPath] = t
         }
 
         var missingFolderIds = Set<String>()
-        for f in self.folders {
+        for f in allFoldersSnapshot {
             if !fileManager.fileExists(atPath: f.path) {
                 missingFolderIds.insert(f.id)
             }
@@ -811,19 +716,24 @@ public final class LocalMusicLibraryService: ObservableObject, @unchecked Sendab
                 sqlite3_close(db)
             }
 
-            // Update folder in memory
-            if let idx = self.folders.firstIndex(where: { $0.id == folder.id }) {
-                var f = self.folders[idx]
-                f.lastScanned = Date()
-                f.trackCount = totalFolderTracks
-                f.totalBytes = totalFolderBytes
-                f.isMissing = false
-                self.folders[idx] = f
+            let scannedAt = Date()
+            let folderId = folder.id
+            let finalFolderBytes = totalFolderBytes
+            await MainActor.run {
+                if let idx = self.folders.firstIndex(where: { $0.id == folderId }) {
+                    var f = self.folders[idx]
+                    f.lastScanned = scannedAt
+                    f.trackCount = totalFolderTracks
+                    f.totalBytes = finalFolderBytes
+                    f.isMissing = false
+                    self.folders[idx] = f
+                }
             }
         }
 
         let allFinalTracks = Array(updatedTracksMap.values)
         let finalMissingIds = missingFolderIds
+        let shouldRescanAgain = completeScanStateAndConsumePending()
         await MainActor.run {
             for idx in self.folders.indices {
                 self.folders[idx].isMissing = finalMissingIds.contains(self.folders[idx].id)
@@ -833,8 +743,7 @@ public final class LocalMusicLibraryService: ObservableObject, @unchecked Sendab
             self.recomputeStats(with: allFinalTracks)
             self.isScanning = false
             self.scanStatusText = nil
-            if self.hasPendingScan {
-                self.hasPendingScan = false
+            if shouldRescanAgain {
                 self.rescanAllFolders()
             }
         }
