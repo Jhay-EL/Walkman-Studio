@@ -14,14 +14,37 @@ public struct ManageLocalFoldersSheet: View {
 
     public var body: some View {
         VStack(spacing: 0) {
+            // Top Dismiss Control (Liquid Glass Circular Close)
+            HStack {
+                Spacer()
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 14))
+                .keyboardShortcut(.cancelAction)
+                .help("Close (Esc)")
+            }
+            .padding(.top, 14)
+            .padding(.horizontal, 20)
+
             // Header
             headerView
                 .padding(.horizontal, 24)
-                .padding(.top, 22)
+                .padding(.top, 2)
                 .padding(.bottom, 16)
 
             Divider()
-                .background(Color.white.opacity(0.08))
+                .overlay(Color.white.opacity(0.08))
+
+            // Scanning Banner (only visible during active manual/import rescan)
+            if localService.isScanning {
+                scanningStatusBanner
+                    .padding(.horizontal, 24)
+                    .padding(.top, 12)
+            }
 
             // Content
             if localService.folders.isEmpty {
@@ -33,33 +56,15 @@ public struct ManageLocalFoldersSheet: View {
             }
 
             Divider()
-                .background(Color.white.opacity(0.08))
+                .overlay(Color.white.opacity(0.08))
 
             // Footer
             footerView
                 .padding(.horizontal, 24)
                 .padding(.vertical, 14)
         }
-        .frame(width: 680, height: 560)
-        .background(WalkmanTheme.background)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(
-                    LinearGradient(
-                        stops: [
-                            .init(color: .white.opacity(0.20), location: 0.0),
-                            .init(color: .white.opacity(0.08), location: 0.5),
-                            .init(color: .white.opacity(0.04), location: 1.0)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: 0.85
-                )
-                .allowsHitTesting(false)
-        )
-        .shadow(color: Color.black.opacity(0.45), radius: 24, x: 0, y: 10)
+        .frame(width: 700, height: 580)
+        .modalGlassChassis(cornerRadius: 16)
         .confirmationDialog(
             "Remove Folder from Local Library?",
             isPresented: $showRemoveConfirmation,
@@ -76,85 +81,103 @@ public struct ManageLocalFoldersSheet: View {
 
     // MARK: - Header
     private var headerView: some View {
-        HStack(spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(Color.white.opacity(0.08))
-                    .frame(width: 44, height: 44)
-                Image(systemName: "folder.badge.gearshape")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(WalkmanTheme.silverLight)
-            }
+        let folderCount = localService.folders.count
 
-            VStack(alignment: .leading, spacing: 3) {
+        return HStack(spacing: 14) {
+            GlassIconTile(
+                symbol: "folder.badge.gearshape",
+                tint: WalkmanTheme.hiResGold,
+                size: 48,
+                cornerRadius: 12,
+                iconSize: 20
+            )
+
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Text("Manage Local Folders")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(.white)
+                        .font(WalkmanFont.title2)
+                        .foregroundStyle(WalkmanTheme.silverLight)
 
-                    Text("\(localService.folders.count) Folders")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundStyle(WalkmanTheme.silverMuted)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2.5)
-                        .background(Color.white.opacity(0.06))
+                    Text("\(folderCount) \(folderCount == 1 ? "Folder" : "Folders")")
+                        .font(WalkmanFont.badge)
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.white.opacity(0.07))
                         .clipShape(Capsule())
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.75)
+                        )
                 }
 
-                Text("Configure local folders indexed into Walkman Studio's database (~/.walkman_local_library.db)")
-                    .font(.system(size: 12))
+                Text("Manage local music directories indexed into Walkman Studio's SQLite library.")
+                    .font(WalkmanFont.callout)
                     .foregroundStyle(WalkmanTheme.silverMuted)
+                    .lineLimit(1)
             }
+
+            Spacer(minLength: 10)
+
+            HStack(spacing: 8) {
+                // Add Folder Button (Prominent Liquid Glass Capsule)
+                Button(action: openFolderPicker) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 12, weight: .bold))
+                        Text("Add Folder...")
+                            .font(WalkmanFont.calloutBold)
+                    }
+                    .foregroundStyle(Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255))
+                    .padding(.horizontal, 14)
+                    .frame(height: 36)
+                }
+                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 18))
+                .help("Select music directories from your Mac or external drive")
+
+                // Rescan All Button (Liquid Glass Icon Capsule)
+                Button(action: { localService.rescanAllFolders() }) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(localService.isScanning ? WalkmanTheme.hiResGold : WalkmanTheme.silverLight)
+                        .rotationEffect(localService.isScanning ? .degrees(360) : .zero)
+                        .animation(
+                            localService.isScanning
+                                ? .linear(duration: 1.0).repeatForever(autoreverses: false)
+                                : .default,
+                            value: localService.isScanning
+                        )
+                        .frame(width: 36, height: 36)
+                }
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 18))
+                .disabled(localService.isScanning || localService.folders.isEmpty)
+                .help("Rescan all monitored local music folders")
+            }
+        }
+    }
+
+    // MARK: - Scanning Status Banner
+    private var scanningStatusBanner: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+                .scaleEffect(0.65)
+                .tint(WalkmanTheme.hiResGold)
+                .frame(width: 16, height: 16)
+
+            Text(localService.scanStatusText ?? "Scanning local folders...")
+                .font(WalkmanFont.calloutMedium)
+                .foregroundStyle(WalkmanTheme.silverLight)
 
             Spacer()
-
-            // Add Folder Button
-            Button(action: openFolderPicker) {
-                HStack(spacing: 5) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 11, weight: .bold))
-                    Text("Add Folder...")
-                        .font(.system(size: 12, weight: .semibold))
-                }
-                .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .frame(minHeight: 32)
-                .background(WalkmanTheme.silverGradient)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .shadow(color: Color.black.opacity(0.20), radius: 3, x: 0, y: 1)
-            }
-            .buttonStyle(.plain)
-            .help("Select music directories from your Mac or external drive")
-
-            // Rescan All Button
-            Button(action: { localService.rescanAllFolders() }) {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(localService.isScanning ? WalkmanTheme.hiResGold : WalkmanTheme.silverLight)
-                    .rotationEffect(localService.isScanning ? .degrees(360) : .zero)
-                    .animation(localService.isScanning ? .linear(duration: 1.0).repeatForever(autoreverses: false) : .default, value: localService.isScanning)
-                    .frame(width: 32, height: 32)
-                    .background(Color.white.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(Color.white.opacity(0.12), lineWidth: 0.8)
-                    )
-            }
-            .buttonStyle(.plain)
-            .disabled(localService.isScanning)
-            .help("Rescan all local music folders for changes")
-
-            // Close Button
-            Button(action: onDismiss) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 20))
-                    .foregroundStyle(Color.white.opacity(0.40))
-            }
-            .buttonStyle(.plain)
-            .help("Close (Esc)")
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(WalkmanTheme.hiResGold.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(WalkmanTheme.hiResGold.opacity(0.28), lineWidth: 0.85)
+        )
     }
 
     // MARK: - Folder List View
@@ -162,7 +185,23 @@ public struct ManageLocalFoldersSheet: View {
         ScrollView(.vertical, showsIndicators: true) {
             LazyVStack(spacing: 10) {
                 ForEach(localService.folders) { folder in
-                    folderRowView(folder)
+                    LocalFolderGlassCard(
+                        folder: folder,
+                        isScanning: localService.isScanning,
+                        onRescan: {
+                            localService.rescanFolder(url: folder.url)
+                        },
+                        onRelocate: {
+                            openRelocatePicker(for: folder)
+                        },
+                        onReveal: {
+                            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folder.path)
+                        },
+                        onRemove: {
+                            self.folderToRemove = folder
+                            self.showRemoveConfirmation = true
+                        }
+                    )
                 }
             }
             .padding(.horizontal, 24)
@@ -170,154 +209,24 @@ public struct ManageLocalFoldersSheet: View {
         }
     }
 
-    // MARK: - Folder Row View
-    private func folderRowView(_ folder: LocalMusicFolder) -> some View {
-        let isMissing = folder.isMissing || !folder.existsOnDisk
-
-        return HStack(spacing: 14) {
-            // Folder Icon Badge
-            ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isMissing ? Color.orange.opacity(0.15) : Color.white.opacity(0.06))
-                    .frame(width: 40, height: 40)
-                Image(systemName: isMissing ? "folder.badge.questionmark" : "folder.fill")
-                    .font(.system(size: 18))
-                    .foregroundStyle(isMissing ? Color.orange : WalkmanTheme.silver)
-            }
-
-            // Info
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 8) {
-                    Text(folder.displayName)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.white)
-
-                    if isMissing {
-                        Text("MISSING OR RENAMED")
-                            .font(.system(size: 9.5, weight: .bold, design: .monospaced))
-                            .foregroundStyle(Color.orange)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.orange.opacity(0.20))
-                            .clipShape(Capsule())
-                    } else {
-                        Text("\(folder.trackCount) tracks")
-                            .font(.system(size: 10.5, weight: .bold, design: .monospaced))
-                            .foregroundStyle(WalkmanTheme.silverLight)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.white.opacity(0.06))
-                            .clipShape(Capsule())
-                    }
-
-                    Text(ByteCountFormatter.string(fromByteCount: folder.totalBytes, countStyle: .file))
-                        .font(.system(size: 10.5, design: .monospaced))
-                        .foregroundStyle(WalkmanTheme.silverMuted)
-                }
-
-                Text(isMissing ? "\(folder.path) (Location not found on disk)" : folder.path)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(isMissing ? Color.orange.opacity(0.85) : WalkmanTheme.silverMuted)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-
-                Text(isMissing ? "Status: Folder moved, renamed, or deleted in Finder" : "Last scanned: \(folder.lastScanned.formatted(date: .abbreviated, time: .shortened))")
-                    .font(.system(size: 10))
-                    .foregroundStyle(isMissing ? Color.orange.opacity(0.70) : Color.white.opacity(0.40))
-            }
-
-            Spacer(minLength: 8)
-
-            // Actions
-            HStack(spacing: 6) {
-                if isMissing {
-                    // Relocate
-                    Button(action: { openRelocatePicker(for: folder) }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "folder.badge.gearshape")
-                            Text("Relocate...")
-                                .font(.system(size: 11, weight: .semibold))
-                        }
-                        .foregroundStyle(Color.orange)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.orange.opacity(0.15))
-                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Select new location for renamed or moved folder")
-                } else {
-                    // Rescan
-                    Button(action: { localService.rescanFolder(url: folder.url) }) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(WalkmanTheme.silverLight)
-                            .frame(width: 28, height: 28)
-                            .background(Color.white.opacity(0.06))
-                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Rescan this folder")
-
-                    // Reveal in Finder
-                    Button(action: {
-                        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folder.path)
-                    }) {
-                        Image(systemName: "arrow.up.right.square")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(WalkmanTheme.silverLight)
-                            .frame(width: 28, height: 28)
-                            .background(Color.white.opacity(0.06))
-                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Show in Finder")
-                }
-
-                // Remove
-                Button(action: {
-                    self.folderToRemove = folder
-                    self.showRemoveConfirmation = true
-                }) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color.red.opacity(0.85))
-                        .frame(width: 28, height: 28)
-                        .background(Color.red.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .help("Remove folder from library database")
-            }
-        }
-        .padding(12)
-        .background(WalkmanTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(isMissing ? Color.orange.opacity(0.40) : Color.white.opacity(0.08), lineWidth: isMissing ? 1.0 : 0.8)
-        )
-    }
-
     // MARK: - Empty State
     private var emptyStateView: some View {
         VStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .fill(Color.white.opacity(0.06))
-                    .frame(width: 72, height: 72)
-                Image(systemName: "folder.badge.plus")
-                    .font(.system(size: 30))
-                    .foregroundStyle(WalkmanTheme.silverLight)
-            }
+            GlassIconTile(
+                symbol: "folder.badge.plus",
+                tint: WalkmanTheme.silverLight,
+                size: 72,
+                cornerRadius: 20,
+                iconSize: 30
+            )
 
             VStack(spacing: 6) {
                 Text("No Local Music Folders Added")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(.white)
+                    .font(WalkmanFont.title2)
+                    .foregroundStyle(WalkmanTheme.silverLight)
 
                 Text("Add folders from your Mac or external drive to index and manage music in Walkman Studio without requiring a connected Walkman.")
-                    .font(.system(size: 12))
+                    .font(WalkmanFont.callout)
                     .foregroundStyle(WalkmanTheme.silverMuted)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 420)
@@ -326,48 +235,56 @@ public struct ManageLocalFoldersSheet: View {
             Button(action: openFolderPicker) {
                 HStack(spacing: 6) {
                     Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 13, weight: .bold))
                     Text("Add Music Folder...")
+                        .font(WalkmanFont.calloutBold)
                 }
-                .font(.system(size: 12.5, weight: .semibold))
-                .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(WalkmanTheme.silverGradient)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .foregroundStyle(Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255))
+                .padding(.horizontal, 18)
+                .frame(height: 38)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 19))
         }
         .padding(32)
     }
 
     // MARK: - Footer
     private var footerView: some View {
-        HStack {
-            HStack(spacing: 6) {
+        let trackCount = localService.tracks.count
+
+        return HStack(spacing: 12) {
+            HStack(spacing: 7) {
                 Circle()
                     .fill(Color.green)
                     .frame(width: 6, height: 6)
                 Text("SQLite Database: ~/.walkman_local_library.db")
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(WalkmanFont.monoSmall)
                     .foregroundStyle(WalkmanTheme.silverMuted)
             }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color.white.opacity(0.04))
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.75)
+            )
 
             Spacer()
 
-            Text("\(localService.tracks.count) total tracks indexed")
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundStyle(WalkmanTheme.silverLight)
+            Text("\(trackCount) \(trackCount == 1 ? "track" : "tracks") indexed")
+                .font(WalkmanFont.mono)
+                .foregroundStyle(WalkmanTheme.silverMuted)
 
             Button(action: onDismiss) {
                 Text("Done")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .background(Color.white.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .font(WalkmanFont.calloutBold)
+                    .foregroundStyle(Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255))
+                    .padding(.horizontal, 24)
+                    .frame(height: 36)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 18))
+            .keyboardShortcut(.defaultAction)
         }
     }
 
@@ -400,6 +317,213 @@ public struct ManageLocalFoldersSheet: View {
 
         if panel.runModal() == .OK, let url = panel.url {
             _ = localService.relocateFolder(id: folder.id, toURL: url)
+        }
+    }
+}
+
+// MARK: - Liquid Glass Icon Tile
+private struct GlassIconTile: View {
+    let symbol: String
+    let tint: Color
+    var size: CGFloat = 44
+    var cornerRadius: CGFloat = 11
+    var iconSize: CGFloat = 18
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(Color.white.opacity(0.07))
+                .frame(width: size, height: size)
+
+            VStack(spacing: 0) {
+                LinearGradient(
+                    stops: [
+                        .init(color: Color.white.opacity(0.28), location: 0.0),
+                        .init(color: Color.white.opacity(0.0), location: 1.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: size * 0.30)
+                Spacer(minLength: 0)
+            }
+            .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+
+            Image(systemName: symbol)
+                .font(.system(size: iconSize, weight: .semibold))
+                .foregroundStyle(tint)
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        stops: [
+                            .init(color: Color.white.opacity(0.26), location: 0.0),
+                            .init(color: Color.white.opacity(0.08), location: 1.0)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 0.85
+                )
+        )
+    }
+}
+
+// MARK: - Liquid Glass Folder Card
+private struct LocalFolderGlassCard: View {
+    let folder: LocalMusicFolder
+    let isScanning: Bool
+    let onRescan: () -> Void
+    let onRelocate: () -> Void
+    let onReveal: () -> Void
+    let onRemove: () -> Void
+
+    @State private var isHovered: Bool = false
+
+    private var isMissing: Bool {
+        folder.isMissing || !folder.existsOnDisk
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            GlassIconTile(
+                symbol: isMissing ? "folder.badge.questionmark" : "folder.fill",
+                tint: isMissing ? Color.orange : WalkmanTheme.silverLight,
+                size: 44,
+                cornerRadius: 11,
+                iconSize: 18
+            )
+
+            // Info
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text(folder.displayName)
+                        .font(WalkmanFont.headline)
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .lineLimit(1)
+
+                    if isMissing {
+                        Text("MISSING OR RENAMED")
+                            .font(WalkmanFont.badge)
+                            .foregroundStyle(Color.orange)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2.5)
+                            .background(Color.orange.opacity(0.16))
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .strokeBorder(Color.orange.opacity(0.32), lineWidth: 0.75)
+                            )
+                    } else {
+                        Text("\(folder.trackCount) \(folder.trackCount == 1 ? "track" : "tracks")")
+                            .font(WalkmanFont.badge)
+                            .foregroundStyle(WalkmanTheme.silverLight)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2.5)
+                            .background(Color.white.opacity(0.07))
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.75)
+                            )
+                    }
+
+                    Text(ByteCountFormatter.string(fromByteCount: folder.totalBytes, countStyle: .file))
+                        .font(WalkmanFont.monoSmall)
+                        .foregroundStyle(WalkmanTheme.silverMuted)
+                }
+
+                Text(isMissing ? "\(folder.path) (Location not found on disk)" : folder.path)
+                    .font(WalkmanFont.monoSmall)
+                    .foregroundStyle(isMissing ? Color.orange.opacity(0.88) : WalkmanTheme.silverMuted)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                Text(isMissing
+                     ? "Status: Folder moved, renamed, or deleted in Finder"
+                     : "Last scanned: \(folder.lastScanned.formatted(date: .abbreviated, time: .shortened))")
+                    .font(WalkmanFont.caption)
+                    .foregroundStyle(isMissing ? Color.orange.opacity(0.75) : Color.white.opacity(0.45))
+            }
+
+            Spacer(minLength: 8)
+
+            // Actions (Liquid Glass Buttons)
+            HStack(spacing: 6) {
+                if isMissing {
+                    Button(action: onRelocate) {
+                        HStack(spacing: 5) {
+                            Image(systemName: "folder.badge.gearshape")
+                                .font(.system(size: 11, weight: .bold))
+                            Text("Relocate...")
+                                .font(WalkmanFont.subheadlineBold)
+                        }
+                        .foregroundStyle(Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255))
+                        .padding(.horizontal, 11)
+                        .frame(height: 30)
+                    }
+                    .buttonStyle(LiquidGlassButtonStyle(variant: .gold, cornerRadius: 15))
+                    .help("Select new location for renamed or moved folder")
+                } else {
+                    Button(action: onRescan) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(WalkmanTheme.silverLight)
+                            .frame(width: 30, height: 30)
+                    }
+                    .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
+                    .disabled(isScanning)
+                    .help("Rescan this folder")
+
+                    Button(action: onReveal) {
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(WalkmanTheme.silverLight)
+                            .frame(width: 30, height: 30)
+                    }
+                    .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
+                    .help("Show in Finder")
+                }
+
+                Button(action: onRemove) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.red.opacity(0.90))
+                        .frame(width: 30, height: 30)
+                }
+                .buttonStyle(LiquidGlassButtonStyle(variant: .destructive, cornerRadius: 8))
+                .help("Remove folder from library database")
+            }
+        }
+        .padding(14)
+        .liquidGlass(
+            cornerRadius: 13,
+            borderOpacity: isMissing ? 0.55 : 0.35,
+            isSelected: false,
+            isHovered: isHovered,
+            tint: isMissing ? Color.orange : nil
+        )
+        .overlay(
+            VStack(spacing: 0) {
+                LinearGradient(
+                    stops: [
+                        .init(color: Color.white.opacity(isHovered ? 0.16 : 0.10), location: 0.0),
+                        .init(color: Color.clear, location: 1.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 8)
+                Spacer(minLength: 0)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .allowsHitTesting(false)
+        )
+        .animation(.easeInOut(duration: 0.16), value: isHovered)
+        .onHover { hovering in
+            isHovered = hovering
         }
     }
 }
