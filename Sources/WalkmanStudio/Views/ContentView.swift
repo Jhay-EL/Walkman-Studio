@@ -14,6 +14,14 @@ private struct DriveLibraryCache: Sendable {
 }
 
 public struct ContentView: View {
+    private static let disconnectedBackgroundImage: NSImage? = {
+        if let bundleURL = Bundle.main.url(forResource: "bg", withExtension: "jpg"),
+           let img = NSImage(contentsOf: bundleURL) {
+            return img
+        }
+        return NSImage(contentsOfFile: "assets/bg.jpg")
+    }()
+
     @State private var drives: [WalkmanDrive] = []
     @State private var devices: [WalkmanDevice] = []
     @State private var activeDevice: WalkmanDevice? = nil
@@ -733,7 +741,39 @@ public struct ContentView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(WalkmanTheme.background)
+        .background(disconnectedDeviceBackground)
+    }
+
+    @ViewBuilder
+    private var disconnectedDeviceBackground: some View {
+        ZStack {
+            WalkmanTheme.background
+
+            if let bgImage = Self.disconnectedBackgroundImage {
+                GeometryReader { geo in
+                    Image(nsImage: bgImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .clipped()
+                }
+                .overlay(
+                    ZStack {
+                        WalkmanTheme.obsidian.opacity(0.42)
+                        LinearGradient(
+                            stops: [
+                                .init(color: WalkmanTheme.obsidian.opacity(0.68), location: 0.0),
+                                .init(color: Color.black.opacity(0.28), location: 0.45),
+                                .init(color: WalkmanTheme.obsidian.opacity(0.74), location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    }
+                )
+            }
+        }
+        .ignoresSafeArea()
     }
 
     private func resolvedUsbDeviceTitle(_ usbDev: ConnectedUSBWalkman) -> String {
@@ -749,8 +789,8 @@ public struct ContentView: View {
 
     @ViewBuilder
     private func usbMtpConnectedDeviceView(_ usbDev: ConnectedUSBWalkman) -> some View {
-        VStack(spacing: 22) {
-            Spacer()
+        VStack(spacing: 20) {
+            Spacer(minLength: 20)
             
             // Hero Icon / Hardware Avatar
             VStack(spacing: 12) {
@@ -793,12 +833,14 @@ public struct ContentView: View {
                 Text(resolvedUsbDeviceTitle(usbDev))
                     .font(WalkmanFont.title2)
                     .foregroundStyle(.white)
+                    .shadow(color: Color.black.opacity(0.55), radius: 8, x: 0, y: 2)
                 
                 Text("Android Walkmans connect in MTP mode. macOS does not mount internal storage into Finder automatically.")
                     .font(WalkmanFont.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(WalkmanTheme.silver.opacity(0.88))
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 480)
+                    .shadow(color: Color.black.opacity(0.50), radius: 6, x: 0, y: 1)
             }
             
             // Guidance Info Card
@@ -908,37 +950,41 @@ public struct ContentView: View {
             
             Spacer()
         }
+        .padding(.bottom, 76)
     }
 
     @ViewBuilder
     private var pureDisconnectedDeviceView: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: 22) {
             Spacer()
             
             ZStack {
                 Circle()
-                    .fill(Color.white.opacity(0.06))
-                    .frame(width: 88, height: 88)
+                    .fill(WalkmanTheme.card.opacity(0.62))
+                    .background(.ultraThinMaterial, in: Circle())
+                    .frame(width: 84, height: 84)
                     .overlay(
-                        Circle().stroke(Color.white.opacity(0.10), lineWidth: 1)
+                        Circle().stroke(Color.white.opacity(0.18), lineWidth: 1)
                     )
-                    .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 3)
+                    .shadow(color: Color.black.opacity(0.40), radius: 12, x: 0, y: 4)
                 
                 Image(systemName: "cable.connector.horizontal")
-                    .font(.system(size: 36))
-                    .foregroundStyle(WalkmanTheme.silver)
+                    .font(.system(size: 34))
+                    .foregroundStyle(WalkmanTheme.silverLight)
             }
             
             VStack(spacing: 8) {
                 Text("Connect Sony Walkman")
                     .font(WalkmanFont.title1)
                     .foregroundStyle(.white)
+                    .shadow(color: Color.black.opacity(0.55), radius: 8, x: 0, y: 2)
                 
                 Text("Plug in your Sony Walkman via USB cable or insert your MicroSD card. Both classic Sony OS and modern Android-based Walkmans are supported.")
                     .font(WalkmanFont.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(WalkmanTheme.silver.opacity(0.88))
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 460)
+                    .shadow(color: Color.black.opacity(0.50), radius: 6, x: 0, y: 1)
             }
             
             if let unsupported = WalkmanEngine.shared.lastUnsupportedModel {
@@ -1008,6 +1054,7 @@ public struct ContentView: View {
             
             Spacer()
         }
+        .padding(.bottom, 76)
     }
 
     @ViewBuilder
