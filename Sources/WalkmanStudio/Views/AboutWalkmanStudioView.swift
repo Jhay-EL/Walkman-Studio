@@ -1390,66 +1390,34 @@ private struct TactileLinkButton: View {
 // MARK: - Primary Done Button
 private struct PrimaryDoneButton: View {
     let action: () -> Void
-    @State private var isHovered: Bool = false
     
     var body: some View {
         Button(action: action) {
             Text("Done")
                 .font(WalkmanFont.calloutBold)
-                .foregroundStyle(Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255))
+                .foregroundStyle(WalkmanTheme.silverLight)
                 .padding(.horizontal, 24)
-                .padding(.vertical, 8.5)
-                .background(WalkmanTheme.silverGradient)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(Color.white.opacity(0.35), lineWidth: 0.85)
-                )
-                .shadow(color: Color.black.opacity(isHovered ? 0.35 : 0.20), radius: isHovered ? 6 : 3, x: 0, y: isHovered ? 2 : 1)
-                .scaleEffect(isHovered ? 1.03 : 1.0)
+                .frame(height: 36)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 18))
         .keyboardShortcut(.defaultAction)
-        .onHover { h in
-            withAnimation(.spring(response: 0.20, dampingFraction: 0.72)) {
-                isHovered = h
-            }
-            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-        }
     }
 }
 
 // MARK: - Sheet Close Button
 private struct SheetCloseButton: View {
     let action: () -> Void
-    @State private var isHovered: Bool = false
     
     var body: some View {
         Button(action: action) {
-            ZStack {
-                Circle()
-                    .fill(Color.white.opacity(isHovered ? 0.14 : 0.07))
-                    .frame(width: 28, height: 28)
-                
-                Circle()
-                    .stroke(Color.white.opacity(isHovered ? 0.25 : 0.12), lineWidth: 0.8)
-                    .frame(width: 28, height: 28)
-                
-                Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(isHovered ? Color.white : Color.white.opacity(0.65))
-            }
-            .scaleEffect(isHovered ? 1.08 : 1.0)
+            Image(systemName: "xmark")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(WalkmanTheme.silverLight)
+                .frame(width: 28, height: 28)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 14))
         .keyboardShortcut(.cancelAction)
-        .help("Close")
-        .onHover { h in
-            withAnimation(.spring(response: 0.20, dampingFraction: 0.70)) {
-                isHovered = h
-            }
-            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-        }
+        .help("Close (Esc)")
     }
 }
 
