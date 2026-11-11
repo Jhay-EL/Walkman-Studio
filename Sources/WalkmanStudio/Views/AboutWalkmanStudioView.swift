@@ -7,6 +7,7 @@ public enum AboutTab: Int, CaseIterable, Identifiable {
     case supportedDAPs = 1
     case engineRules = 2
     case developerSupport = 3
+    case updates = 4
 
     public var id: Int { rawValue }
 
@@ -16,6 +17,7 @@ public enum AboutTab: Int, CaseIterable, Identifiable {
         case .supportedDAPs: return "Supported DAPs"
         case .engineRules: return "Engine Rules"
         case .developerSupport: return "Developer & Support"
+        case .updates: return "Updates"
         }
     }
 
@@ -25,19 +27,30 @@ public enum AboutTab: Int, CaseIterable, Identifiable {
         case .supportedDAPs: return "music.note.list"
         case .engineRules: return "gearshape.2"
         case .developerSupport: return "person.crop.circle"
+        case .updates: return "arrow.down.circle"
         }
     }
 }
 
 public struct AboutWalkmanStudioView: View {
     let currentDeviceInfo: WalkmanDeviceInfo?
+    let initialTab: AboutTab
     let onDismiss: () -> Void
     
-    @State private var selectedTab: AboutTab = .hardware
+    @State private var selectedTab: AboutTab
+    @State private var showActiveTransferConfirm: Bool = false
+    @ObservedObject private var updateService = AppUpdateService.shared
+    @ObservedObject private var transferService = TransferQueueService.shared
     
-    public init(currentDeviceInfo: WalkmanDeviceInfo?, onDismiss: @escaping () -> Void) {
+    public init(
+        currentDeviceInfo: WalkmanDeviceInfo?,
+        initialTab: AboutTab = .hardware,
+        onDismiss: @escaping () -> Void
+    ) {
         self.currentDeviceInfo = currentDeviceInfo
+        self.initialTab = initialTab
         self.onDismiss = onDismiss
+        self._selectedTab = State(initialValue: initialTab)
     }
     
     private var appIcon: NSImage? {
@@ -103,7 +116,7 @@ public struct AboutWalkmanStudioView: View {
                     .font(WalkmanFont.title1)
                     .foregroundStyle(.primary)
                 
-                Text("Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "3.1.1") • Universal (Apple Silicon & Intel)")
+                Text("Version \(updateService.currentVersionString) (\(updateService.currentBuildNumberString)) • \(updateService.runningBuildArchitecture.displayName)")
                     .font(WalkmanFont.calloutMedium)
                     .foregroundStyle(.secondary)
                 
@@ -128,8 +141,11 @@ public struct AboutWalkmanStudioView: View {
             .padding(.bottom, 16)
             
             // Liquid Glass Segmented Pill Bar
-            AboutSegmentedBar(selectedTab: $selectedTab)
-                .padding(.bottom, 16)
+            AboutSegmentedBar(
+                selectedTab: $selectedTab,
+                hasAvailableUpdate: updateService.hasAvailableUpdate
+            )
+            .padding(.bottom, 16)
             
             // Tab Content
             Group {
@@ -142,6 +158,8 @@ public struct AboutWalkmanStudioView: View {
                     engineRulesTabView
                 case .developerSupport:
                     developerTabView
+                case .updates:
+                    updatesTabView
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -167,6 +185,14 @@ public struct AboutWalkmanStudioView: View {
         }
         // Studio Window Dimensions (Optimized macOS Modal Layout)
         .frame(width: 780, height: 650)
+        .onAppear {
+            selectedTab = initialTab
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .checkForUpdates)) { _ in
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
+                selectedTab = .updates
+            }
+        }
         .background(
             ZStack {
                 WalkmanTheme.card.opacity(0.88)
@@ -633,10 +659,524 @@ public struct AboutWalkmanStudioView: View {
                             .foregroundStyle(.tertiary)
                     }
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+        }
+        .padding(.vertical, 2)
+    }
+    }
+
+    // MARK: - Tab 4: Updates View
+    private var hasActiveTransfers: Bool {
+        transferService.queue.contains { $0.status == .optimizing || $0.status == .converting }
+    }
+
+    private var updatesTabView: some View {
+        let target = updateService.installTarget
+
+        return ScrollView(.vertical, showsIndicators: true) {
+            VStack(spacing: 12) {
+                // Status & Primary Action Hero Card
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 14) {
+                        updateStatusIconView
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 8) {
+                                Text(updateHeadlineTitle)
+                                    .font(WalkmanFont.title3)
+                                    .foregroundStyle(.primary)
+
+                                updateStatusBadge
+                            }
+
+                            Text("Installed: v\(updateService.currentVersionString) • \(updateService.runningBuildArchitecture.shortLabel) • Target: \(target.destinationAppURL.path)")
+                                .font(WalkmanFont.subheadline)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+
+                            if let lastChecked = updateService.lastCheckedAt {
+                                Text("Last checked \(lastChecked.formatted(date: .abbreviated, time: .shortened))")
+                                    .font(WalkmanFont.monoSmall)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+
+                        Spacer(minLength: 8)
+
+                        updatePrimaryActionControl
+                    }
+
+                    // Active download / verification / ready bar
+                    switch updateService.state {
+                    case .downloading(let rel, let progress, let written, let total):
+                        VStack(alignment: .leading, spacing: 6) {
+                            ProgressView(value: max(0.0, min(1.0, progress)))
+                                .progressViewStyle(.linear)
+                                .tint(WalkmanTheme.hiResGold)
+
+                            HStack {
+                                Text(rel.preferredAsset?.name ?? "Downloading archive...")
+                                    .font(WalkmanFont.monoSmall)
+                                    .foregroundStyle(WalkmanTheme.silverMuted)
+                                    .lineLimit(1)
+
+                                Spacer()
+
+                                Text("\(formatBytes(written)) of \(formatBytes(max(total, written))) (\(Int((progress * 100).rounded()))%)")
+                                    .font(WalkmanFont.monoSmall)
+                                    .foregroundStyle(WalkmanTheme.silverLight)
+                            }
+                        }
+                        .padding(10)
+                        .background(Color.white.opacity(0.03))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                    case .verifying(let rel, let stage):
+                        HStack(spacing: 10) {
+                            ProgressView()
+                                .scaleEffect(0.65)
+                                .frame(width: 16, height: 16)
+                            Text(stage)
+                                .font(WalkmanFont.calloutMedium)
+                                .foregroundStyle(WalkmanTheme.silverLight)
+                            Spacer()
+                            Text(rel.tagName)
+                                .font(WalkmanFont.monoSmall)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(10)
+                        .background(Color.white.opacity(0.03))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                    case .readyToInstall(_, _, let checksumVerified):
+                        HStack(spacing: 8) {
+                            Image(systemName: checksumVerified ? "checkmark.shield.fill" : "checkmark.circle.fill")
+                                .font(.system(size: 13))
+                                .foregroundStyle(checksumVerified ? Color.green : WalkmanTheme.silverLight)
+                            Text(checksumVerified
+                                 ? "Archive verified via SHA-256 checksum & code signature. Click Install & Relaunch to update cleanly."
+                                 : "Archive extracted & code-signature verified. Click Install & Relaunch to update.")
+                                .font(WalkmanFont.subheadline)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                        .padding(10)
+                        .background(Color.green.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(Color.green.opacity(0.22), lineWidth: 0.8)
+                        )
+
+                    case .installing:
+                        HStack(spacing: 10) {
+                            ProgressView()
+                                .scaleEffect(0.65)
+                                .frame(width: 16, height: 16)
+                            Text("Closing Walkman Studio, replacing app bundle, and relaunching...")
+                                .font(WalkmanFont.calloutMedium)
+                                .foregroundStyle(WalkmanTheme.silverLight)
+                            Spacer()
+                        }
+                        .padding(10)
+                        .background(Color.white.opacity(0.03))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                    case .failed(let message):
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 13))
+                                .foregroundStyle(Color.orange)
+                                .padding(.top, 1)
+                            Text(message)
+                                .font(WalkmanFont.subheadline)
+                                .foregroundStyle(Color.orange.opacity(0.95))
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer()
+                        }
+                        .padding(10)
+                        .background(Color.orange.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(Color.orange.opacity(0.25), lineWidth: 0.8)
+                        )
+
+                    default:
+                        EmptyView()
+                    }
+
+                    // Contextual Notices (Dev binary, Translocation, Read-only volume, Active Transfers)
+                    if !target.isBundledApp {
+                        updateNoticeRow(
+                            icon: "hammer.fill",
+                            color: WalkmanTheme.silverLight,
+                            text: "Running unbundled build: release updates install cleanly into /Applications/Walkman Studio.app."
+                        )
+                    } else if target.isSourceOnReadOnlyVolume || target.isAppTranslocated {
+                        updateNoticeRow(
+                            icon: "externaldrive.badge.checkmark",
+                            color: WalkmanTheme.silverLight,
+                            text: "Running from a read-only or translocated volume: update will install to /Applications/Walkman Studio.app."
+                        )
+                    }
+
+                    if hasActiveTransfers {
+                        updateNoticeRow(
+                            icon: "arrow.up.arrow.down.circle.fill",
+                            color: Color.orange,
+                            text: "A Transfer & Convert job is currently in progress. Wait for transfers to finish before relaunching."
+                        )
+                    }
+                }
+                .padding(14)
+                .background(Color.white.opacity(0.035))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.85)
+                )
+
+                // Automatic Checks & Quick Links Bar
+                HStack(spacing: 12) {
+                    Toggle(isOn: $updateService.autoCheckOnLaunch) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Check for updates automatically")
+                                .font(WalkmanFont.bodyBold)
+                                .foregroundStyle(.primary)
+                            Text("Checks GitHub Releases (Jhay-EL/Walkman-Studio) in the background on startup.")
+                                .font(WalkmanFont.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .toggleStyle(.switch)
+
+                    Spacer(minLength: 8)
+
+                    TactileLinkButton(
+                        title: "GitHub Releases",
+                        icon: "arrow.up.forward",
+                        url: updateService.availableRelease?.htmlURL.absoluteString ?? AppUpdateService.releasesPageURL.absoluteString
+                    )
+
+                    TactileLinkButton(
+                        title: "Mirror",
+                        icon: "externaldrive.fill",
+                        url: AppUpdateService.googleDriveMirrorURL.absoluteString
+                    )
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Color.white.opacity(0.03))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.07), lineWidth: 0.85)
+                )
+
+                // Release Notes Panel
+                if let release = updateService.availableRelease {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(release.title)
+                                .font(WalkmanFont.headline)
+                                .foregroundStyle(.primary)
+
+                            Spacer()
+
+                            if let published = release.publishedAt {
+                                Text(published.formatted(date: .abbreviated, time: .omitted))
+                                    .font(WalkmanFont.monoSmall)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            if let asset = release.preferredAsset {
+                                Text("• \(asset.flavorLabel) (\(formatBytes(asset.sizeBytes)))")
+                                    .font(WalkmanFont.monoSmall)
+                                    .foregroundStyle(WalkmanTheme.silverMuted)
+                            }
+                        }
+
+                        Divider()
+                            .overlay(Color.white.opacity(0.07))
+
+                        ReleaseNotesFormattedView(markdown: release.releaseNotes)
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.white.opacity(0.03))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.07), lineWidth: 0.85)
+                    )
+                } else {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.seal")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(WalkmanTheme.silverLight)
+                            Text("Direct GitHub Release Installer")
+                                .font(WalkmanFont.headline)
+                                .foregroundStyle(.primary)
+                        }
+                        Text("Updates are fetched directly from github.com/Jhay-EL/Walkman-Studio, verified against SHA256SUMS.txt, checked for code-signature integrity, and applied automatically without manual DMG mounting.")
+                            .font(WalkmanFont.callout)
+                            .foregroundStyle(.secondary)
+                            .lineSpacing(2)
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.white.opacity(0.025))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.06), lineWidth: 0.85)
+                    )
+                }
             }
             .padding(.vertical, 2)
+        }
+        .alert("Transfer in Progress", isPresented: $showActiveTransferConfirm) {
+            Button("Wait for Transfers", role: .cancel) {}
+            Button("Quit, Update & Relaunch", role: .destructive) {
+                updateService.installAndRelaunch()
+            }
+        } message: {
+            Text("Walkman Studio is currently writing or converting files for your Walkman. Installing now will terminate those tasks before relaunching.")
+        }
+    }
+
+    private func updateNoticeRow(icon: String, color: Color, text: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(color)
+            Text(text)
+                .font(WalkmanFont.subheadline)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(Color.white.opacity(0.025))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var updateStatusIconView: some View {
+        let iconSpec: (symbol: String, color: Color, isLoading: Bool) = {
+            switch updateService.state {
+            case .checking:
+                return ("arrow.triangle.2.circlepath", WalkmanTheme.silverLight, true)
+            case .upToDate:
+                return ("checkmark.seal.fill", Color.green, false)
+            case .available:
+                return ("arrow.down.circle.fill", WalkmanTheme.hiResGold, false)
+            case .downloading, .verifying, .installing:
+                return ("arrow.down.circle.fill", WalkmanTheme.silverLight, true)
+            case .readyToInstall:
+                return ("checkmark.circle.fill", Color.green, false)
+            case .failed:
+                return ("exclamationmark.triangle.fill", Color.orange, false)
+            case .idle:
+                return ("arrow.triangle.2.circlepath", WalkmanTheme.silverLight, false)
+            }
+        }()
+
+        ZStack {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(iconSpec.color.opacity(0.14))
+                .frame(width: 44, height: 44)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(iconSpec.color.opacity(0.28), lineWidth: 0.85)
+                )
+
+            if iconSpec.isLoading {
+                ProgressView()
+                    .scaleEffect(0.75)
+            } else {
+                Image(systemName: iconSpec.symbol)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(iconSpec.color)
+            }
+        }
+    }
+
+    private var updateHeadlineTitle: String {
+        switch updateService.state {
+        case .idle: return "Software Updates"
+        case .checking: return "Checking GitHub Releases..."
+        case .upToDate: return "Walkman Studio is Up to Date"
+        case .available(let rel): return "Walkman Studio \(rel.tagName) Available"
+        case .downloading(let rel, _, _, _): return "Downloading \(rel.tagName)..."
+        case .verifying(let rel, _): return "Preparing \(rel.tagName)..."
+        case .readyToInstall(let rel, _, _): return "\(rel.tagName) Ready to Install"
+        case .installing(let rel): return "Installing \(rel.tagName)..."
+        case .failed: return "Update Check Failed"
+        }
+    }
+
+    @ViewBuilder
+    private var updateStatusBadge: some View {
+        switch updateService.state {
+        case .upToDate:
+            statusPill("v\(updateService.currentVersionString)", color: .green)
+        case .available(let rel):
+            statusPill("New • \(rel.tagName)", color: WalkmanTheme.hiResGold)
+        case .readyToInstall(let rel, _, _):
+            statusPill("Staged • \(rel.tagName)", color: .green)
+        case .failed:
+            statusPill("Retry Needed", color: .orange)
+        default:
+            EmptyView()
+        }
+    }
+
+    private func statusPill(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(WalkmanFont.badge)
+            .foregroundStyle(color)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2.5)
+            .background(color.opacity(0.14))
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(color.opacity(0.32), lineWidth: 0.8)
+            )
+    }
+
+    @ViewBuilder
+    private var updatePrimaryActionControl: some View {
+        switch updateService.state {
+        case .idle, .upToDate:
+            TactileActionButton(
+                title: "Check for Updates",
+                icon: "arrow.triangle.2.circlepath",
+                isAccent: false
+            ) {
+                updateService.checkForUpdates(userInitiated: true)
+            }
+        case .checking:
+            TactileActionButton(
+                title: "Checking...",
+                icon: "hourglass",
+                isAccent: false,
+                isDisabled: true
+            ) {}
+        case .available(let rel):
+            TactileActionButton(
+                title: "Download & Prepare",
+                icon: "arrow.down.circle.fill",
+                isAccent: true,
+                accentColor: WalkmanTheme.hiResGold
+            ) {
+                updateService.downloadAndStageUpdate(rel)
+            }
+        case .downloading:
+            TactileActionButton(
+                title: "Cancel",
+                icon: "xmark",
+                isAccent: false
+            ) {
+                updateService.cancelDownload()
+            }
+        case .verifying, .installing:
+            TactileActionButton(
+                title: "Working...",
+                icon: "gearshape.2",
+                isAccent: false,
+                isDisabled: true
+            ) {}
+        case .readyToInstall:
+            TactileActionButton(
+                title: "Install & Relaunch",
+                icon: "arrow.clockwise.circle.fill",
+                isAccent: true,
+                accentColor: .green
+            ) {
+                if hasActiveTransfers {
+                    showActiveTransferConfirm = true
+                } else {
+                    updateService.installAndRelaunch()
+                }
+            }
+        case .failed:
+            TactileActionButton(
+                title: "Retry Check",
+                icon: "arrow.clockwise",
+                isAccent: false
+            ) {
+                updateService.checkForUpdates(userInitiated: true)
+            }
+        }
+    }
+
+    private func formatBytes(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: max(0, bytes), countStyle: .file)
+    }
+}
+
+// MARK: - Release Notes Formatter
+private struct ReleaseNotesFormattedView: View {
+    let markdown: String
+
+    var body: some View {
+        let lines = markdown.components(separatedBy: .newlines)
+        VStack(alignment: .leading, spacing: 5) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { _, rawLine in
+                let trimmed = rawLine.trimmingCharacters(in: .whitespaces)
+                if trimmed.isEmpty {
+                    Spacer().frame(height: 2)
+                } else if trimmed.hasPrefix("### ") {
+                    Text(trimmed.dropFirst(4))
+                        .font(WalkmanFont.bodyBold)
+                        .foregroundStyle(WalkmanTheme.silverLight)
+                        .padding(.top, 4)
+                } else if trimmed.hasPrefix("## ") {
+                    Text(trimmed.dropFirst(3))
+                        .font(WalkmanFont.headline)
+                        .foregroundStyle(.primary)
+                        .padding(.top, 5)
+                } else if trimmed.hasPrefix("# ") {
+                    Text(trimmed.dropFirst(2))
+                        .font(WalkmanFont.title3)
+                        .foregroundStyle(.primary)
+                } else if trimmed.hasPrefix("* ") || trimmed.hasPrefix("- ") {
+                    HStack(alignment: .top, spacing: 7) {
+                        Text("•")
+                            .font(WalkmanFont.calloutBold)
+                            .foregroundStyle(WalkmanTheme.hiResGold)
+                        inlineMarkdownText(String(trimmed.dropFirst(2)))
+                    }
+                    .padding(.leading, 4)
+                } else {
+                    inlineMarkdownText(trimmed)
+                }
+            }
+        }
+        .textSelection(.enabled)
+    }
+
+    @ViewBuilder
+    private func inlineMarkdownText(_ source: String) -> some View {
+        if let attr = try? AttributedString(
+            markdown: source,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        ) {
+            Text(attr)
+                .font(WalkmanFont.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            Text(source)
+                .font(WalkmanFont.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -644,14 +1184,16 @@ public struct AboutWalkmanStudioView: View {
 // MARK: - Liquid Glass Segmented Pill Bar
 private struct AboutSegmentedBar: View {
     @Binding var selectedTab: AboutTab
+    let hasAvailableUpdate: Bool
     @Namespace private var tabNamespace
     
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
             ForEach(AboutTab.allCases) { tab in
                 AboutTabButton(
                     tab: tab,
                     isSelected: selectedTab == tab,
+                    showBadgeDot: tab == .updates && hasAvailableUpdate,
                     namespace: tabNamespace,
                     action: {
                         withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
@@ -674,6 +1216,7 @@ private struct AboutSegmentedBar: View {
 private struct AboutTabButton: View {
     let tab: AboutTab
     let isSelected: Bool
+    let showBadgeDot: Bool
     let namespace: Namespace.ID
     let action: () -> Void
     
@@ -681,16 +1224,21 @@ private struct AboutTabButton: View {
     
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 7) {
+            HStack(spacing: 6) {
                 Image(systemName: tab.icon)
                     .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
                 Text(tab.title)
                     .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
+                if showBadgeDot {
+                    Circle()
+                        .fill(WalkmanTheme.hiResGold)
+                        .frame(width: 6, height: 6)
+                }
             }
             .foregroundStyle(isSelected ? Color.white : (isHovered ? Color.white : Color.white.opacity(0.68)))
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .frame(minHeight: 36)
             .background(
@@ -736,6 +1284,72 @@ private struct AboutTabButton: View {
         .buttonStyle(.plain)
         .onHover { h in
             withAnimation(.spring(response: 0.22, dampingFraction: 0.72)) {
+                isHovered = h
+            }
+            if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+    }
+}
+
+// MARK: - Tactile Action Button
+private struct TactileActionButton: View {
+    let title: String
+    let icon: String
+    var isAccent: Bool = false
+    var accentColor: Color = WalkmanTheme.hiResGold
+    var isDisabled: Bool = false
+    let action: () -> Void
+
+    @State private var isHovered: Bool = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6.5) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .bold))
+                Text(title)
+                    .font(WalkmanFont.calloutBold)
+            }
+            .foregroundStyle(
+                isDisabled
+                    ? Color.white.opacity(0.42)
+                    : (isAccent
+                        ? (isHovered ? Color(red: 20 / 255, green: 20 / 255, blue: 24 / 255) : accentColor)
+                        : (isHovered ? Color.white : WalkmanTheme.silverLight))
+            )
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7.5)
+            .background(
+                ZStack {
+                    if isAccent && !isDisabled {
+                        if isHovered {
+                            accentColor
+                        } else {
+                            accentColor.opacity(0.16)
+                        }
+                    } else {
+                        Color.white.opacity(isHovered && !isDisabled ? 0.14 : 0.07)
+                    }
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(
+                        isAccent && !isDisabled
+                            ? accentColor.opacity(isHovered ? 0.72 : 0.36)
+                            : Color.white.opacity(isHovered && !isDisabled ? 0.25 : 0.12),
+                        lineWidth: 0.85
+                    )
+            )
+            .shadow(color: Color.black.opacity(isHovered && !isDisabled ? 0.25 : 0.08), radius: isHovered ? 4 : 2, y: isHovered ? 2 : 1)
+            .scaleEffect(isHovered && !isDisabled ? 1.025 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .onHover { h in
+            guard !isDisabled else { isHovered = false; return }
+            withAnimation(.spring(response: 0.20, dampingFraction: 0.72)) {
                 isHovered = h
             }
             if h { NSCursor.pointingHand.push() } else { NSCursor.pop() }
