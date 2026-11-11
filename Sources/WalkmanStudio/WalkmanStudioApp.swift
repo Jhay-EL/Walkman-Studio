@@ -3,6 +3,7 @@ import AppKit
 
 extension Notification.Name {
     public static let showAboutWalkmanStudio = Notification.Name("showAboutWalkmanStudio")
+    public static let checkForUpdates = Notification.Name("WalkmanStudio.checkForUpdates")
     public static let trackMetadataDidUpdate = Notification.Name("WalkmanStudio.trackMetadataDidUpdate")
     public static let manageLocalFolders = Notification.Name("WalkmanStudio.manageLocalFolders")
 }
@@ -196,6 +197,9 @@ struct WalkmanStudioApp: App {
             CommandGroup(replacing: .appInfo) {
                 Button("About Walkman Studio") {
                     NotificationCenter.default.post(name: .showAboutWalkmanStudio, object: nil)
+                }
+                Button("Check for Updates...") {
+                    NotificationCenter.default.post(name: .checkForUpdates, object: nil)
                 }
                 Divider()
                 Button("Manage Local Folders...") {

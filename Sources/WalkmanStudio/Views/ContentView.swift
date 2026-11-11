@@ -29,6 +29,7 @@ public struct ContentView: View {
     @State private var queueCount: Int = 0
     @State private var deviceInfo: WalkmanDeviceInfo? = nil
     @State private var showAboutSheet: Bool = false
+    @State private var aboutInitialTab: AboutTab = .hardware
     @State private var showManageFoldersSheet: Bool = false
     @State private var trackToEdit: Track? = nil
     @State private var trackListToEdit: [Track] = []
@@ -62,6 +63,7 @@ public struct ContentView: View {
     @State private var targetAlbumArtist: String? = nil
     @State private var targetArtistName: String? = nil
     @ObservedObject private var duplicateFinder = DuplicateFinderService.shared
+    @ObservedObject private var updateService = AppUpdateService.shared
     
     private var selectedTrack: Track? {
         if let id = selectedTrackId {
@@ -1071,13 +1073,17 @@ public struct ContentView: View {
                     queueCount: queueCount,
                     deviceInfo: deviceInfo,
                     activeDrive: activeDrive,
+                    hasAvailableUpdate: updateService.hasAvailableUpdate,
+                    availableUpdateVersion: updateService.availableVersionTag,
                     onSelectDevice: { dev in
                         selectDevice(dev)
                     },
                     onSelectDrive: { drive in
                         selectDrive(drive)
                     },
-                    onOpenAbout: { self.showAboutSheet = true }
+                    onOpenAbout: {
+                        openAboutWalkmanStudio()
+                    }
                 )
                 .frame(width: 260)
                 .navigationSplitViewColumnWidth(min: 260, ideal: 260, max: 260)
@@ -1111,7 +1117,7 @@ public struct ContentView: View {
                                         selectDrive(drive)
                                     },
                                     deviceInfo: deviceInfo,
-                                    onOpenAbout: { self.showAboutSheet = true },
+                                    onOpenAbout: { openAboutWalkmanStudio() },
                                     isEjecting: isEjecting
                                 )
                             }
@@ -1473,6 +1479,12 @@ public struct ContentView: View {
                     .toolbar {
                         if !isFullScreenPlayerPresented {
                             Spacer()
+
+                            if updateService.hasAvailableUpdate {
+                                ToolbarUpdateIndicatorButton(versionTag: updateService.availableVersionTag) {
+                                    openAboutWalkmanStudio(preferringTab: .updates)
+                                }
+                            }
                             
                             // Rescan
                             Button(action: { refreshDrives() }) {
@@ -1596,7 +1608,14 @@ public struct ContentView: View {
             FullScreenNowPlayingView.setWindowToolbarVisible(!isFullScreenPlayerPresented)
         }
         .onReceive(NotificationCenter.default.publisher(for: .showAboutWalkmanStudio)) { _ in
-            self.showAboutSheet = true
+            openAboutWalkmanStudio()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .checkForUpdates)) { _ in
+            openAboutWalkmanStudio(preferringTab: .updates)
+            updateService.checkForUpdates(userInitiated: true)
+        }
+        .task {
+            updateService.performAutomaticLaunchCheckIfNeeded()
         }
         .onReceive(NotificationCenter.default.publisher(for: .manageLocalFolders)) { _ in
             self.showManageFoldersSheet = true
@@ -1604,6 +1623,7 @@ public struct ContentView: View {
         .sheet(isPresented: $showAboutSheet) {
             AboutWalkmanStudioView(
                 currentDeviceInfo: deviceInfo,
+                initialTab: aboutInitialTab,
                 onDismiss: { showAboutSheet = false }
             )
         }
@@ -1674,6 +1694,60 @@ public struct ContentView: View {
                     albumToEdit = nil
                 }
             )
+        }
+    }
+
+    private func openAboutWalkmanStudio(preferringTab tab: AboutTab? = nil) {
+        self.aboutInitialTab = tab ?? (updateService.hasAvailableUpdate ? .updates : .hardware)
+        self.showAboutSheet = true
+    }
+}
+
+private struct ToolbarUpdateIndicatorButton: View {
+    let versionTag: String?
+    let action: () -> Void
+    @State private var isHovered: Bool = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5.5) {
+                Circle()
+                    .fill(WalkmanTheme.hiResGold)
+                    .frame(width: 6, height: 6)
+
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(WalkmanTheme.hiResGold)
+
+                Text("Update available")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(isHovered ? Color.white : WalkmanTheme.hiResGoldLight)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4.5)
+            .background(WalkmanTheme.hiResGold.opacity(isHovered ? 0.24 : 0.14))
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .strokeBorder(WalkmanTheme.hiResGold.opacity(isHovered ? 0.65 : 0.38), lineWidth: 0.85)
+            )
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help(versionTag.map { "Walkman Studio \($0) is available — Open Updates" } ?? "Open Updates in About Walkman Studio")
+        .onHover { hovering in
+            guard isHovered != hovering else { return }
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+        .onDisappear {
+            if isHovered {
+                isHovered = false
+                NSCursor.pop()
+            }
         }
     }
 }

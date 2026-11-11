@@ -55,6 +55,8 @@ public struct SidebarView: View {
     let queueCount: Int
     var deviceInfo: WalkmanDeviceInfo? = nil
     var activeDrive: WalkmanDrive? = nil
+    var hasAvailableUpdate: Bool = false
+    var availableUpdateVersion: String? = nil
     var onSelectDevice: ((WalkmanDevice) -> Void)? = nil
     var onSelectDrive: ((WalkmanDrive) -> Void)? = nil
     var onOpenAbout: (() -> Void)? = nil
@@ -291,7 +293,11 @@ public struct SidebarView: View {
                 VStack(spacing: 0) {
                     Divider()
                         .overlay(Color.white.opacity(0.06))
-                    AboutSidebarButton(action: onAbout)
+                    AboutSidebarButton(
+                        hasAvailableUpdate: hasAvailableUpdate,
+                        availableUpdateVersion: availableUpdateVersion,
+                        action: onAbout
+                    )
                 }
                 .background(
                     WalkmanTheme.background
@@ -315,6 +321,8 @@ public struct SidebarView: View {
 // ABOUT SIDEBAR BUTTON (LIQUID GLASS CAPSULE)
 // -----------------------------------------------------------------------------
 private struct AboutSidebarButton: View {
+    var hasAvailableUpdate: Bool = false
+    var availableUpdateVersion: String? = nil
     let action: () -> Void
     @State private var isHovered = false
 
@@ -329,8 +337,28 @@ private struct AboutSidebarButton: View {
                 Text("About Walkman Studio")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(isHovered ? .white : WalkmanTheme.silverLight)
+                    .lineLimit(1)
 
-                Spacer()
+                Spacer(minLength: 4)
+
+                if hasAvailableUpdate {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(WalkmanTheme.hiResGold)
+                            .frame(width: 5.5, height: 5.5)
+                        Text(availableUpdateVersion ?? "Update")
+                            .font(WalkmanFont.badge)
+                            .foregroundStyle(WalkmanTheme.hiResGold)
+                    }
+                    .padding(.horizontal, 6.5)
+                    .padding(.vertical, 2.5)
+                    .background(WalkmanTheme.hiResGold.opacity(0.14))
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(WalkmanTheme.hiResGold.opacity(0.32), lineWidth: 0.75)
+                    )
+                }
             }
             .padding(.vertical, 7)
             .padding(.horizontal, 11)
