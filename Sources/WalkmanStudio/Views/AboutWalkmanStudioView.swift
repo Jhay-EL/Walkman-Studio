@@ -5,9 +5,8 @@ import AppKit
 public enum AboutTab: Int, CaseIterable, Identifiable {
     case hardware = 0
     case supportedDAPs = 1
-    case engineRules = 2
-    case developerSupport = 3
-    case updates = 4
+    case developerSupport = 2
+    case updates = 3
 
     public var id: Int { rawValue }
 
@@ -15,7 +14,6 @@ public enum AboutTab: Int, CaseIterable, Identifiable {
         switch self {
         case .hardware: return "Hardware"
         case .supportedDAPs: return "Supported DAPs"
-        case .engineRules: return "Engine Rules"
         case .developerSupport: return "Developer & Support"
         case .updates: return "Updates"
         }
@@ -25,7 +23,6 @@ public enum AboutTab: Int, CaseIterable, Identifiable {
         switch self {
         case .hardware: return "cpu"
         case .supportedDAPs: return "music.note.list"
-        case .engineRules: return "gearshape.2"
         case .developerSupport: return "person.crop.circle"
         case .updates: return "arrow.down.circle"
         }
@@ -154,8 +151,6 @@ public struct AboutWalkmanStudioView: View {
                     hardwareTabView
                 case .supportedDAPs:
                     supportedModelsTabView
-                case .engineRules:
-                    engineRulesTabView
                 case .developerSupport:
                     developerTabView
                 case .updates:
@@ -392,33 +387,7 @@ public struct AboutWalkmanStudioView: View {
         }
     }
     
-    // MARK: - Tab 2: Engine Rules View
-    private var engineRulesTabView: some View {
-        VStack(spacing: 10) {
-            RuleCard(
-                icon: "photo.artframe",
-                title: "Baseline RGB JPEG Artwork",
-                detail: "Strips progressive passes, CMYK color spaces, and limits resolution to 800×800 to prevent display engine freezes."
-            )
-            RuleCard(
-                icon: "tag",
-                title: "Strict ID3v2.3 (UTF-16)",
-                detail: "Enforces UTF-16 with BOM (encoding=1) and binary ID3v2.3 tags, avoiding ID3v2.4 database corruption."
-            )
-            RuleCard(
-                icon: "list.bullet.rectangle",
-                title: "CRLF Relative .M3U8 Playlists",
-                detail: "Writes Windows-compliant CRLF (\\r\\n) line endings and relative POSIX paths directly into /MUSIC/."
-            )
-            RuleCard(
-                icon: "sparkles",
-                title: "macOS Shadow File Purge",
-                detail: "Merges AppleDouble forks with dot_clean -m and removes ._* and .DS_Store ghost files before safe eject."
-            )
-        }
-    }
-    
-    // MARK: - Tab 3: Developer & Support View
+    // MARK: - Tab 2: Developer & Support View
     private var developerTabView: some View {
         ScrollView(.vertical, showsIndicators: true) {
             VStack(spacing: 12) {
@@ -1238,7 +1207,7 @@ private struct AboutTabButton: View {
                 }
             }
             .foregroundStyle(isSelected ? Color.white : (isHovered ? Color.white : Color.white.opacity(0.68)))
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 15)
             .padding(.vertical, 8)
             .frame(minHeight: 36)
             .background(
@@ -1502,48 +1471,5 @@ private struct SpecRow: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 8.5)
         .background(Color.white.opacity(0.035))
-    }
-}
-
-private struct RuleCard: View {
-    let icon: String
-    let title: String
-    let detail: String
-    
-    var body: some View {
-        HStack(alignment: .center, spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.white.opacity(0.06))
-                    .frame(width: 38, height: 38)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.85)
-                    )
-                
-                Image(systemName: icon)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(WalkmanTheme.silverLight)
-            }
-            
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(WalkmanFont.bodyBold)
-                    .foregroundStyle(.primary)
-                Text(detail)
-                    .font(WalkmanFont.callout)
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(2)
-            }
-            
-            Spacer()
-        }
-        .padding(14)
-        .background(Color.white.opacity(0.04))
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.85)
-        )
     }
 }
