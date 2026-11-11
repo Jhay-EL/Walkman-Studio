@@ -1486,11 +1486,18 @@ public struct ContentView: View {
                                 }
                             }
                             
-                            // Rescan
-                            Button(action: { refreshDrives() }) {
-                                Label("Refresh", systemImage: "arrow.clockwise")
+                            // Rescan connected drives & Local Music Library folders
+                            let isRefreshBusy = isRefreshingDrives || isScanning || localLibrary.isScanning
+                            Button(action: { refreshAllLibraries() }) {
+                                if isRefreshBusy {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                } else {
+                                    Label("Refresh", systemImage: "arrow.clockwise")
+                                }
                             }
-                            .help("Refresh connected drives and reload library")
+                            .disabled(isRefreshBusy)
+                            .help("Refresh connected drives and scan Local Music Library for new tracks")
                             
                             // Safe Eject (only shown if a device is connected)
                             if !drives.isEmpty {
@@ -1700,6 +1707,11 @@ public struct ContentView: View {
     private func openAboutWalkmanStudio(preferringTab tab: AboutTab? = nil) {
         self.aboutInitialTab = tab ?? (updateService.hasAvailableUpdate ? .updates : .hardware)
         self.showAboutSheet = true
+    }
+
+    private func refreshAllLibraries() {
+        refreshDrives()
+        localLibrary.rescanAllFolders()
     }
 }
 
