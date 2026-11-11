@@ -1016,22 +1016,12 @@ public struct LocalLibraryView: View {
     private var importFolderButton: some View {
         Button(action: openFolderPicker) {
             HStack(spacing: 7) {
-                if effectiveIsLoading {
-                    ProgressView()
-                        .scaleEffect(0.65)
-                        .tint(WalkmanTheme.hiResGold)
-                        .frame(width: 13, height: 13)
-                    Text("Scanning...")
-                        .font(.system(size: 12.5, weight: .semibold))
-                        .foregroundStyle(WalkmanTheme.hiResGold)
-                } else {
-                    Image(systemName: "folder.badge.plus")
-                        .font(.system(size: 13.5, weight: .semibold))
-                        .foregroundStyle(isImportHovered ? WalkmanTheme.hiResGold : WalkmanTheme.silverLight)
-                    Text("Import Folder")
-                        .font(.system(size: 12.5, weight: .semibold))
-                        .foregroundStyle(isImportHovered ? Color.white : Color.white.opacity(0.88))
-                }
+                Image(systemName: "folder.badge.plus")
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .foregroundStyle(isImportHovered ? WalkmanTheme.hiResGold : WalkmanTheme.silverLight)
+                Text("Import Folder")
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(isImportHovered ? Color.white : Color.white.opacity(0.88))
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 7)
@@ -1060,9 +1050,7 @@ public struct LocalLibraryView: View {
             .overlay(
                 Capsule()
                     .stroke(
-                        effectiveIsLoading ?
-                            WalkmanTheme.hiResGold.opacity(0.40) :
-                            Color.white.opacity(isImportHovered ? 0.32 : 0.12),
+                        Color.white.opacity(isImportHovered ? 0.32 : 0.12),
                         lineWidth: 0.85
                     )
             )
