@@ -266,8 +266,8 @@ public struct ContentView: View {
             if let current = AudioPlayerService.shared.currentTrack, !localLibrary.tracks.contains(where: { $0.id == current.id }) {
                 AudioPlayerService.shared.stopAndClear()
             }
-            if selectedTab == .overview || selectedTab == .library || selectedTab == .recentlyAdded || selectedTab == .albums || selectedTab == .artists || selectedTab == .hiRes || selectedTab == .languageStudy || selectedTab == .playlists || selectedTab == .backupRestore {
-                self.selectedTab = .localLibrary
+            if selectedTab == .library || selectedTab == .recentlyAdded || selectedTab == .albums || selectedTab == .artists || selectedTab == .hiRes || selectedTab == .languageStudy || selectedTab == .playlists || selectedTab == .backupRestore {
+                self.selectedTab = .overview
             }
         } else {
             // Clean up unmounted drives from driveCache
@@ -319,7 +319,9 @@ public struct ContentView: View {
             }
         }
 
-        isRefreshingDrives = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            self.isRefreshingDrives = false
+        }
         refreshLibrary()
     }
     
@@ -934,8 +936,13 @@ public struct ContentView: View {
                 
                 Button(action: refreshDrives) {
                     HStack(spacing: 6) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 12, weight: .semibold))
+                        if isRefreshingDrives {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
                         Text("Detect Drives")
                             .font(WalkmanFont.calloutMedium)
                     }
@@ -944,6 +951,7 @@ public struct ContentView: View {
                     .foregroundStyle(WalkmanTheme.silverLight)
                 }
                 .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 18))
+                .disabled(isRefreshingDrives)
                 .help("Scan macOS volumes for mounted Walkman storage or inserted MicroSD cards")
             }
             .padding(.top, 4)
@@ -1011,8 +1019,13 @@ public struct ContentView: View {
             HStack(spacing: 12) {
                 Button(action: refreshDrives) {
                     HStack(spacing: 6) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 12, weight: .semibold))
+                        if isRefreshingDrives {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
                         Text("Detect Drives")
                             .font(WalkmanFont.calloutMedium)
                     }
@@ -1021,6 +1034,7 @@ public struct ContentView: View {
                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                 }
                 .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 18))
+                .disabled(isRefreshingDrives)
                 .help("Scan macOS volumes for mounted Walkman storage or inserted MicroSD cards")
                 
                 Button(action: selectCustomStorageFolder) {
