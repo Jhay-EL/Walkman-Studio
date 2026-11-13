@@ -885,6 +885,14 @@ public struct LibraryView: View {
                 } label: {
                     Label(selection.count > 1 ? "Analyze \(selection.count) Tracks for SenseMe (12 Tone)..." : "Analyze for SenseMe (12 Tone)...", systemImage: "waveform.path.ecg")
                 }
+
+                Button {
+                    let targets = tracks.filter { selection.contains($0.id) }
+                    let toSync = targets.isEmpty ? [track] : targets
+                    syncCompanionLyricsForTracks(toSync)
+                } label: {
+                    Label(selection.count > 1 ? "Generate Companion .LRC for \(selection.count) Tracks (Walkman Display)..." : "Generate Companion .LRC for Walkman Display...", systemImage: "quote.bubble")
+                }
                 
                 Divider()
                 
@@ -952,6 +960,40 @@ public struct LibraryView: View {
                 self.isBatchAnalyzing = false
                 self.batchProgress = nil
                 if let first = tracksToAnalyze.first {
+                    self.onInspectTrack(first)
+                }
+            }
+        }
+    }
+
+    private func syncCompanionLyricsForTracks(_ targets: [Track]) {
+        guard !targets.isEmpty else { return }
+        Task.detached(priority: .userInitiated) {
+            for tr in targets {
+                let trackURL = URL(fileURLWithPath: tr.fullPath)
+                var rawLyrics = AudioTagger.shared.extractLyrics(fileURL: trackURL)
+                if rawLyrics == nil || rawLyrics!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    if let fetched = try? await LyricsService.shared.fetchLyrics(
+                        title: tr.title,
+                        artist: tr.artist,
+                        album: tr.album,
+                        durationSeconds: tr.durationSeconds
+                    ), !fetched.lyrics.isEmpty {
+                        rawLyrics = fetched.lyrics
+                    }
+                }
+                if let lyr = rawLyrics, !lyr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    try? WalkmanEngine.shared.writeCompanionLyrics(
+                        destinationAudioURL: trackURL,
+                        lyrics: lyr,
+                        durationSeconds: tr.durationSeconds,
+                        synthesizePlainTimestamps: true
+                    )
+                    AudioTagger.shared.invalidateCaches(fileURL: trackURL)
+                }
+            }
+            if let first = targets.first {
+                await MainActor.run {
                     self.onInspectTrack(first)
                 }
             }

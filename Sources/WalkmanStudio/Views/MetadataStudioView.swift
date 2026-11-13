@@ -17,6 +17,9 @@ public struct MetadataStudioView: View {
     @State private var isFetchingLyrics: Bool = false
     @State private var senseMeInfo: SenseMeInfo? = nil
     @State private var isLyricsExpanded: Bool = false
+    @State private var isSyncingLrc: Bool = false
+    @State private var isLrcSyncedSuccess: Bool = false
+    @State private var isPhysicalLrcPresent: Bool = false
     
     public init(
         track: Track?,
@@ -323,6 +326,7 @@ public struct MetadataStudioView: View {
         let parsedLines: [ParsedLyricLine]
         let meta: AudioFileMetadata?
         let senseMe: SenseMeInfo?
+        let hasPhysicalLrc: Bool
     }
 
     private func loadTrackData(force: Bool = false) async {
@@ -337,6 +341,9 @@ public struct MetadataStudioView: View {
             isFetchingLyrics = false
             senseMeInfo = nil
             isLyricsExpanded = false
+            isPhysicalLrcPresent = false
+            isSyncingLrc = false
+            isLrcSyncedSuccess = false
             return
         }
         
@@ -355,6 +362,9 @@ public struct MetadataStudioView: View {
                 isFetchingLyrics = false
                 senseMeInfo = nil
                 isLyricsExpanded = false
+                isPhysicalLrcPresent = false
+                isSyncingLrc = false
+                isLrcSyncedSuccess = false
             }
             
             let url = URL(fileURLWithPath: tr.fullPath)
@@ -376,13 +386,15 @@ public struct MetadataStudioView: View {
                 if senseMe.isAnalyzed && !tr.isSenseMeAnalyzed {
                     LibraryScanner.shared.updateCachedSenseMe(fullPath: tr.fullPath, info: senseMe)
                 }
+                let physicalLrc = AudioTagger.shared.hasCompanionLRC(fileURL: url)
                 return LoadedTrackDetails(
                     art: art,
                     validation: val,
                     rawLyrics: rawLyrics,
                     parsedLines: parsedLines,
                     meta: meta,
-                    senseMe: senseMe
+                    senseMe: senseMe,
+                    hasPhysicalLrc: physicalLrc
                 )
             }.value
             
@@ -398,6 +410,7 @@ public struct MetadataStudioView: View {
             self.verifiedMetadata = details.meta
             self.cachedLyricLines = details.parsedLines
             self.senseMeInfo = details.senseMe
+            self.isPhysicalLrcPresent = details.hasPhysicalLrc
             self.isFetchingLyrics = false
         }
     }
@@ -426,6 +439,39 @@ public struct MetadataStudioView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
             withAnimation(.easeInOut(duration: 0.15)) {
                 self.isLyricsCopied = false
+            }
+        }
+    }
+
+    private func syncLrcToDevice() {
+        guard let tr = track, let lyr = activeLyrics, !lyr.isEmpty else { return }
+        isSyncingLrc = true
+        let trackURL = URL(fileURLWithPath: tr.fullPath)
+        let duration = tr.durationSeconds
+        Task.detached(priority: .userInitiated) {
+            do {
+                try WalkmanEngine.shared.writeCompanionLyrics(
+                    destinationAudioURL: trackURL,
+                    lyrics: lyr,
+                    durationSeconds: duration,
+                    synthesizePlainTimestamps: true
+                )
+                AudioTagger.shared.invalidateCaches(fileURL: trackURL)
+                let reParsed = Self.parseLyrics(lyr, durationSeconds: duration, synthesizePlainTimestamps: true)
+                await MainActor.run {
+                    self.cachedLyricLines = reParsed
+                    self.isPhysicalLrcPresent = true
+                    self.isSyncingLrc = false
+                    self.isLrcSyncedSuccess = true
+                    self.onSaved?()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                        self.isLrcSyncedSuccess = false
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.isSyncingLrc = false
+                }
             }
         }
     }
@@ -606,11 +652,44 @@ public struct MetadataStudioView: View {
                                     .padding(.vertical, 2)
                                     .background(isSyncedLyrics ? WalkmanTheme.hiResGold.opacity(0.18) : Color.white.opacity(0.06))
                                     .clipShape(Capsule())
+
+                                if !isPhysicalLrcPresent {
+                                    Text("No .LRC File")
+                                        .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                                        .foregroundStyle(WalkmanTheme.hiResGold)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(WalkmanTheme.hiResGold.opacity(0.15))
+                                        .clipShape(Capsule())
+                                }
                             }
                             
                             Spacer()
                             
                             if hasLyricsOnWalkman {
+                                Button(action: syncLrcToDevice) {
+                                    HStack(spacing: 4) {
+                                        if isSyncingLrc {
+                                            ProgressView()
+                                                .controlSize(.mini)
+                                        } else {
+                                            Image(systemName: isLrcSyncedSuccess ? "checkmark.circle.fill" : (isPhysicalLrcPresent ? "arrow.clockwise" : "arrow.down.doc.fill"))
+                                                .font(.system(size: 9.5, weight: .semibold))
+                                        }
+                                        Text(isLrcSyncedSuccess ? "Saved!" : (isPhysicalLrcPresent ? "Repair .LRC" : "Save .LRC"))
+                                            .font(.system(size: 10.5, weight: .medium))
+                                    }
+                                    .foregroundStyle(isLrcSyncedSuccess ? Color.green : (isPhysicalLrcPresent ? WalkmanTheme.silverLight : WalkmanTheme.hiResGoldLight))
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3)
+                                    .background(isLrcSyncedSuccess ? Color.green.opacity(0.15) : (isPhysicalLrcPresent ? Color.white.opacity(0.06) : WalkmanTheme.hiResGold.opacity(0.18)))
+                                    .clipShape(Capsule())
+                                    .overlay(Capsule().stroke(isLrcSyncedSuccess ? Color.green.opacity(0.3) : (isPhysicalLrcPresent ? Color.white.opacity(0.12) : WalkmanTheme.hiResGold.opacity(0.35)), lineWidth: 0.75))
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(isSyncingLrc)
+                                .help("Format, sanitize, and write companion .lrc file for Sony Walkman NW-A55 Display Lyrics")
+
                                 Button(action: {
                                     withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                                         isLyricsExpanded.toggle()
@@ -638,6 +717,21 @@ public struct MetadataStudioView: View {
                         }
                         
                         if hasLyricsOnWalkman {
+                            if !isPhysicalLrcPresent {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(WalkmanTheme.hiResGold)
+                                    Text("Companion .lrc missing on storage. Tap 'Save .LRC' for NW-A55 Display Lyrics.")
+                                        .font(.system(size: 10.5))
+                                        .foregroundStyle(WalkmanTheme.silverLight)
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(WalkmanTheme.hiResGold.opacity(0.10))
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            }
                             if isLyricsExpanded {
                                 // Enlarged Mode: Isolated Live Lyrics Reader with Throttled Auto-Scrolling
                                 LiveLyricsReader(
