@@ -1021,15 +1021,15 @@ public final class WalkmanEngine: @unchecked Sendable {
 
     /// Saves companion .LRC lyrics file in the destination track folder alongside the audio file.
     /// Ensures compatibility with Sony Walkman firmware:
-    /// 1. Walkman NW-A45/A55/A50/A30 requires chronological [mm:ss.xx] timestamps to unlock the "Display Lyrics" option.
+    /// 1. Walkman NW-A45/A55/A50/A30 requires chronological [mm:ss.xx] timestamps to unlock and display lyrics in the lyrics viewer.
     ///    If plain text lyrics are provided, timestamps are synthesized sequentially across the song's duration.
-    /// 2. Enforces standard CRLF (\r\n) line endings, UTF-8 without BOM, strict [mm:ss.xx] timestamps, and chronological order.
+    /// 2. Enforces standard CRLF (\r\n) line endings, UTF-8 without BOM, strict [mm:ss.xx] timestamps, BMP sanitization, and chronological order.
     public func writeCompanionLyrics(
         destinationAudioURL: URL,
         lyrics: String,
         durationSeconds: Double = 0,
         offsetSeconds: Double = 0.0,
-        synthesizePlainTimestamps: Bool = false
+        synthesizePlainTimestamps: Bool = true
     ) throws {
         let lrcURL = destinationAudioURL.deletingPathExtension().appendingPathExtension("lrc")
         let formattedLyrics = prepareWalkmanLRC(
@@ -1055,14 +1055,16 @@ public final class WalkmanEngine: @unchecked Sendable {
     }
 
     /// Prepares lyrics text for Sony Walkman: ensures every line has [mm:ss.xx] timestamps, CRLF endings,
-    /// chronological ordering, strips incompatible headers, and adjusts for any global offset.
+    /// chronological ordering, strips incompatible headers, removes BOM and emojis/non-BMP chars, and adjusts for any global offset.
     public func prepareWalkmanLRC(
         lyrics: String,
         durationSeconds: Double = 0,
         offsetSeconds: Double = 0.0,
-        synthesizePlainTimestamps: Bool = false
+        synthesizePlainTimestamps: Bool = true
     ) -> String {
-        let rawLines = lyrics.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
+        // Strip BOM (\u{FEFF}) explicitly to prevent RTOS font parser corruption
+        let cleanInput = lyrics.replacingOccurrences(of: "\u{FEFF}", with: "")
+        let rawLines = cleanInput.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
         guard !rawLines.isEmpty else { return "" }
 
         // 1. Check for global [offset:+/-ms] tag (e.g. [offset:500] or [offset:-200])
@@ -1114,7 +1116,8 @@ public final class WalkmanEngine: @unchecked Sendable {
                 ) ?? ""
 
                 let trimmedText = rawText.trimmingCharacters(in: .whitespaces)
-                let textFormatted = trimmedText.isEmpty ? "" : (rawText.hasPrefix(" ") ? " " + trimmedText : trimmedText)
+                let sanitizedText = WalkmanEngine.sanitizeWalkmanText(trimmedText, stripExplicitMarkers: false)
+                let textFormatted = sanitizedText.isEmpty ? "" : (rawText.hasPrefix(" ") ? " " + sanitizedText : sanitizedText)
 
                 for match in matches {
                     var h = 0.0
@@ -1154,6 +1157,11 @@ public final class WalkmanEngine: @unchecked Sendable {
             // Sort chronologically as strictly required by Sony Walkman OS
             timedLines.sort { $0.timeSeconds < $1.timeSeconds }
 
+            // Drop leading empty timestamp line (e.g. [00:00.00] with no text) which causes NW-A55 parser hang
+            while let first = timedLines.first, first.formattedText.isEmpty {
+                timedLines.removeFirst()
+            }
+
             var formattedLines: [String] = []
             for item in timedLines {
                 let totalS = Int(item.timeSeconds)
@@ -1163,12 +1171,16 @@ public final class WalkmanEngine: @unchecked Sendable {
                 let lineStr = String(format: "[%02d:%02d.%02d]%@", minutes, seconds, min(99, max(0, centis)), item.formattedText)
                 formattedLines.append(lineStr)
             }
-            return formattedLines.joined(separator: "\r\n") + "\r\n"
+            if !formattedLines.isEmpty {
+                return formattedLines.joined(separator: "\r\n") + "\r\n"
+            }
         }
 
-        // Plain text lyrics: if synthesis is not explicitly requested, save plain text with CRLF line endings.
-        // This avoids confusing users with fake/random timestamps that don't match the vocals.
-        let nonEmptyLines = rawLines.filter { !$0.isEmpty }
+        // Plain text lyrics: sanitize and synthesize sequential timestamps for NW-A55 display compatibility
+        let nonEmptyLines = rawLines.compactMap { line -> String? in
+            let clean = WalkmanEngine.sanitizeWalkmanText(line, stripExplicitMarkers: false)
+            return clean.isEmpty ? nil : clean
+        }
         guard !nonEmptyLines.isEmpty else { return "" }
 
         if !synthesizePlainTimestamps {
@@ -1176,16 +1188,17 @@ public final class WalkmanEngine: @unchecked Sendable {
         }
 
         let effectiveDuration = durationSeconds > 10.0 ? durationSeconds : Double(max(60, nonEmptyLines.count * 4))
-        let startSec: Double = 3.0
+        let startSec: Double = 2.5
         let endSec: Double = max(startSec + 2.0, effectiveDuration - 3.0)
         let step: Double = (endSec - startSec) / Double(max(1, nonEmptyLines.count))
 
         var timedLinesOut: [String] = []
         for (i, line) in nonEmptyLines.enumerated() {
             let t = startSec + Double(i) * step
-            let m = Int(t) / 60
-            let s = Int(t) % 60
-            let cs = Int((t - Double(Int(t))) * 100)
+            let totalS = Int(t)
+            let m = totalS / 60
+            let s = totalS % 60
+            let cs = Int(((t - Double(totalS)) * 100.0).rounded())
             timedLinesOut.append(String(format: "[%02d:%02d.%02d]%@", m, s, min(99, max(0, cs)), line))
         }
 

@@ -1486,7 +1486,7 @@ public final class AudioTagger: @unchecked Sendable {
         lyrics: String,
         durationSeconds: Double = 0,
         offsetSeconds: Double = 0.0,
-        synthesizePlainTimestamps: Bool = false
+        synthesizePlainTimestamps: Bool = true
     ) throws {
         try WalkmanEngine.shared.writeCompanionLyrics(
             destinationAudioURL: fileURL,
@@ -1496,6 +1496,24 @@ public final class AudioTagger: @unchecked Sendable {
             synthesizePlainTimestamps: synthesizePlainTimestamps
         )
         lyricsCache.setObject(lyrics as NSString, forKey: fileURL as NSURL)
+    }
+
+    /// Checks if a physical companion .lrc or .LRC file exists on disk alongside the audio file.
+    public func hasCompanionLRC(fileURL: URL) -> Bool {
+        let baseURL = fileURL.deletingPathExtension()
+        let lrcURL = baseURL.appendingPathExtension("lrc")
+        if FileManager.default.fileExists(atPath: lrcURL.path),
+           let attr = try? FileManager.default.attributesOfItem(atPath: lrcURL.path),
+           let size = attr[.size] as? UInt64, size > 4 {
+            return true
+        }
+        let upperLrc = baseURL.appendingPathExtension("LRC")
+        if FileManager.default.fileExists(atPath: upperLrc.path),
+           let attr = try? FileManager.default.attributesOfItem(atPath: upperLrc.path),
+           let size = attr[.size] as? UInt64, size > 4 {
+            return true
+        }
+        return false
     }
 
     public func deleteLyrics(fileURL: URL) throws {
