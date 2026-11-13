@@ -3,27 +3,27 @@ import AppKit
 
 // MARK: - About Tabs
 public enum AboutTab: Int, CaseIterable, Identifiable {
-    case hardware = 0
-    case supportedDAPs = 1
-    case developerSupport = 2
+    case developerSupport = 0
+    case hardware = 1
+    case supportedDAPs = 2
     case updates = 3
 
     public var id: Int { rawValue }
 
     var title: String {
         switch self {
+        case .developerSupport: return "Developer & Support"
         case .hardware: return "Hardware"
         case .supportedDAPs: return "Supported DAPs"
-        case .developerSupport: return "Developer & Support"
         case .updates: return "Updates"
         }
     }
 
     var icon: String {
         switch self {
+        case .developerSupport: return "person.crop.circle"
         case .hardware: return "cpu"
         case .supportedDAPs: return "music.note.list"
-        case .developerSupport: return "person.crop.circle"
         case .updates: return "arrow.down.circle"
         }
     }
@@ -41,7 +41,7 @@ public struct AboutWalkmanStudioView: View {
     
     public init(
         currentDeviceInfo: WalkmanDeviceInfo?,
-        initialTab: AboutTab = .hardware,
+        initialTab: AboutTab = .developerSupport,
         onDismiss: @escaping () -> Void
     ) {
         self.currentDeviceInfo = currentDeviceInfo
@@ -147,12 +147,12 @@ public struct AboutWalkmanStudioView: View {
             // Tab Content
             Group {
                 switch selectedTab {
+                case .developerSupport:
+                    developerTabView
                 case .hardware:
                     hardwareTabView
                 case .supportedDAPs:
                     supportedModelsTabView
-                case .developerSupport:
-                    developerTabView
                 case .updates:
                     updatesTabView
                 }

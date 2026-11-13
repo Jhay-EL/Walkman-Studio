@@ -37,7 +37,7 @@ public struct ContentView: View {
     @State private var queueCount: Int = 0
     @State private var deviceInfo: WalkmanDeviceInfo? = nil
     @State private var showAboutSheet: Bool = false
-    @State private var aboutInitialTab: AboutTab = .hardware
+    @State private var aboutInitialTab: AboutTab = .developerSupport
     @State private var showManageFoldersSheet: Bool = false
     @State private var trackToEdit: Track? = nil
     @State private var trackListToEdit: [Track] = []
@@ -1766,7 +1766,7 @@ public struct ContentView: View {
     }
 
     private func openAboutWalkmanStudio(preferringTab tab: AboutTab? = nil) {
-        self.aboutInitialTab = tab ?? (updateService.hasAvailableUpdate ? .updates : .hardware)
+        self.aboutInitialTab = tab ?? (updateService.hasAvailableUpdate ? .updates : .developerSupport)
         self.showAboutSheet = true
     }
 
