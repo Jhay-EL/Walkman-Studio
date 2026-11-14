@@ -28,7 +28,7 @@ A native macOS desktop app for managing **Classic Sony OS** and **Android** Sony
 
 | Package | Architecture | Supported Mac Models | Download |
 | :--- | :--- | :--- | :--- |
-| **Apple Silicon DMG** | `arm64` | Macs with M1, M2, M3, or M4 series chips | [Walkman-Studio-3.1.1-arm64.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.1.1/Walkman-Studio-3.1.1-arm64.dmg) |
+| **Apple Silicon DMG** | `arm64` | Macs with M1, M2, M3, M4, M5, or M6 series chips | [Walkman-Studio-3.1.1-arm64.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.1.1/Walkman-Studio-3.1.1-arm64.dmg) |
 | **Intel Mac DMG** | `x86_64` | Intel-based MacBook, iMac, Mac mini, Mac Pro | [Walkman-Studio-3.1.1-intel.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.1.1/Walkman-Studio-3.1.1-intel.dmg) |
 | **Universal 2 DMG** | `arm64` + `x86_64` | Single native package for all Macs | [Walkman-Studio-3.1.1-universal.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.1.1/Walkman-Studio-3.1.1-universal.dmg) |
 
