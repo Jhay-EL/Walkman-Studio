@@ -60,7 +60,6 @@ public struct ArtistsView: View, Equatable {
     @State private var cachedHeroQuality: String = ""
     @State private var cachedHeroAvgBitrate: String? = nil
     @State private var detailWidthTier: ArtistDetailWidthTier = .extraWide
-    @State private var isCompactMasterColumn: Bool = false
     @State private var showBatchLyricsSheet: Bool = false
     @State private var isPreparingLyricsSheet: Bool = false
 
@@ -425,10 +424,22 @@ public struct ArtistsView: View, Equatable {
                             let tier = ArtistDetailWidthTier(width: geo.size.width)
                             Color.clear
                                 .onAppear {
-                                    if detailWidthTier != tier { detailWidthTier = tier }
+                                    if detailWidthTier != tier {
+                                        var transaction = Transaction()
+                                        transaction.animation = nil
+                                        withTransaction(transaction) {
+                                            detailWidthTier = tier
+                                        }
+                                    }
                                 }
                                 .onChange(of: tier) { _, newTier in
-                                    detailWidthTier = newTier
+                                    if detailWidthTier != newTier {
+                                        var transaction = Transaction()
+                                        transaction.animation = nil
+                                        withTransaction(transaction) {
+                                            detailWidthTier = newTier
+                                        }
+                                    }
                                 }
                         }
                     )
@@ -446,18 +457,6 @@ public struct ArtistsView: View, Equatable {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .background(
-                GeometryReader { geo in
-                    let compact = geo.size.width < 740
-                    Color.clear
-                        .onAppear {
-                            if isCompactMasterColumn != compact { isCompactMasterColumn = compact }
-                        }
-                        .onChange(of: compact) { _, newCompact in
-                            isCompactMasterColumn = newCompact
-                        }
-                }
-            )
         }
         .onAppear {
             if cachedArtists.isEmpty && precomputedArtists == nil && !tracks.isEmpty {
@@ -599,13 +598,17 @@ public struct ArtistsView: View, Equatable {
                     if let start = dragStartPanelWidth {
                         let proposed = start + value.translation.width
                         let clamped = min(maxPanelWidth, max(minPanelWidth, proposed))
-                        panelWidth = clamped
-                        storedPanelWidth = Double(clamped)
+                        var transaction = Transaction()
+                        transaction.animation = nil
+                        withTransaction(transaction) {
+                            panelWidth = clamped
+                        }
                     }
                 }
                 .onEnded { _ in
                     dragStartPanelWidth = nil
                     isSplitterDragging = false
+                    storedPanelWidth = Double(effectivePanelWidth)
                     updateResizeCursor(hovering: isSplitterHovered)
                 }
         )
