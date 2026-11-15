@@ -50,6 +50,8 @@ public struct AlbumsView: View {
     
     @ObservedObject private var player = AudioPlayerService.shared
     @State private var selectedAlbum: AlbumItem? = nil
+    @State private var lastViewedAlbumId: String? = nil
+    @State private var wasInitiallyNavigated: Bool = false
     @State private var searchQuery: String = ""
     @State private var isSearchExpanded: Bool = false
     @State private var sortOption: AlbumSortOption = .recentlyAdded
@@ -109,6 +111,8 @@ public struct AlbumsView: View {
                 (initialSelectedAlbumArtist == nil || $0.artist.localizedCaseInsensitiveCompare(initialSelectedAlbumArtist!) == .orderedSame)
             }) ?? initial.first(where: { $0.name.localizedCaseInsensitiveCompare(target) == .orderedSame })
             self._selectedAlbum = State(initialValue: matched)
+            self._lastViewedAlbumId = State(initialValue: matched?.id)
+            self._wasInitiallyNavigated = State(initialValue: matched != nil)
         }
     }
     
@@ -278,6 +282,8 @@ public struct AlbumsView: View {
             alb.name.localizedCaseInsensitiveCompare(target) == .orderedSame &&
             (initialSelectedAlbumArtist == nil || alb.artist.localizedCaseInsensitiveCompare(initialSelectedAlbumArtist!) == .orderedSame)
         }) ?? list.first(where: { $0.name.localizedCaseInsensitiveCompare(target) == .orderedSame }) {
+            self.lastViewedAlbumId = match.id
+            self.wasInitiallyNavigated = true
             withAnimation(.easeInOut(duration: 0.2)) {
                 self.selectedAlbum = match
             }
@@ -285,12 +291,75 @@ public struct AlbumsView: View {
     }
     
     public var body: some View {
-        VStack(spacing: 0) {
+        ZStack {
+            // Albums Grid View (permanently mounted in background to preserve exact scroll position)
+            VStack(spacing: 0) {
+                if showToolbar {
+                    toolbarContainer
+                }
+                
+                if displayedAlbums.isEmpty {
+                    emptyStateView
+                } else {
+                    ScrollViewReader { scrollProxy in
+                        ScrollView {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 155, maximum: 195), spacing: 18)], spacing: 22) {
+                                ForEach(displayedAlbums) { alb in
+                                    AlbumGridCard(
+                                        album: alb,
+                                        onOpen: {
+                                            lastViewedAlbumId = alb.id
+                                            withAnimation(.easeInOut(duration: 0.18)) {
+                                                selectedAlbum = alb
+                                            }
+                                        },
+                                        onEditAlbum: {
+                                            onEditAlbum?(alb)
+                                        },
+                                        onDeleteAlbum: {
+                                            onDeleteAlbum?(alb)
+                                        },
+                                        onTransferAlbum: onTransferAlbum != nil ? { onTransferAlbum?(alb) } : nil,
+                                        onFetchLyrics: {
+                                            lastViewedAlbumId = alb.id
+                                            selectedAlbum = alb
+                                            showBatchLyricsSheet = true
+                                        }
+                                    )
+                                    .id(alb.id)
+                                }
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.top, 20)
+                            .padding(.bottom, 88)
+                        }
+                        .onChange(of: selectedAlbum) { oldAlb, newAlb in
+                            if oldAlb != nil && newAlb == nil {
+                                if wasInitiallyNavigated, let targetId = lastViewedAlbumId {
+                                    wasInitiallyNavigated = false
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                        scrollProxy.scrollTo(targetId, anchor: .center)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .opacity(selectedAlbum == nil ? 1 : 0)
+            .allowsHitTesting(selectedAlbum == nil)
+            .accessibilityHidden(selectedAlbum != nil)
+
+            // Album Detail View (Tactile Liquid Glass Console)
             if let album = selectedAlbum {
-                // Album Detail View (Tactile Liquid Glass Console)
                 AlbumDetailView(
                     album: album,
-                    onBack: { selectedAlbum = nil },
+                    onBack: {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            selectedAlbum = nil
+                        }
+                    },
                     onSelectTrack: onSelectTrack,
                     onEditAlbum: {
                         onEditAlbum?(album)
@@ -307,7 +376,9 @@ public struct AlbumsView: View {
                         onTrimCutTrack?(tr)
                     },
                     onDeleteAlbum: {
-                        selectedAlbum = nil
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            selectedAlbum = nil
+                        }
                         onDeleteAlbum?(album)
                     },
                     onDeleteTrack: { tr in
@@ -319,44 +390,12 @@ public struct AlbumsView: View {
                         showBatchLyricsSheet = true
                     }
                 )
-            } else {
-                // Albums Grid View
-                VStack(spacing: 0) {
-                    if showToolbar {
-                        toolbarContainer
-                    }
-                    
-                    if displayedAlbums.isEmpty {
-                        emptyStateView
-                    } else {
-                        ScrollView {
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 155, maximum: 195), spacing: 18)], spacing: 22) {
-                                ForEach(displayedAlbums, id: \.self) { alb in
-                                    AlbumGridCard(
-                                        album: alb,
-                                        onOpen: { selectedAlbum = alb },
-                                        onEditAlbum: {
-                                            onEditAlbum?(alb)
-                                        },
-                                        onDeleteAlbum: {
-                                            onDeleteAlbum?(alb)
-                                        },
-                                        onTransferAlbum: onTransferAlbum != nil ? { onTransferAlbum?(alb) } : nil,
-                                        onFetchLyrics: {
-                                            selectedAlbum = alb
-                                            showBatchLyricsSheet = true
-                                        }
-                                    )
-                                }
-                            }
-                            .padding(.horizontal, 20)
-                            .padding(.top, 20)
-                            .padding(.bottom, 88)
-                        }
-                    }
-                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(WalkmanTheme.background.ignoresSafeArea())
+                .transition(.opacity)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             player.activeQueueProvider = nil
             if cachedAlbums.isEmpty && precomputedAlbums == nil && !tracks.isEmpty {
