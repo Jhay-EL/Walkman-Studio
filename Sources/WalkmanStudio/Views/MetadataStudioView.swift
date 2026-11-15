@@ -642,7 +642,7 @@ public struct MetadataStudioView: View {
                     
                     // 3. LYRICS CONTAINER
                     VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 8) {
+                        HStack(spacing: 6) {
                             sectionHeader(title: "Lyrics", icon: "quote.bubble.fill")
                             if hasLyricsOnWalkman {
                                 Text(isSyncedLyrics ? "Synced .LRC" : "Plain Lyrics")
@@ -652,61 +652,63 @@ public struct MetadataStudioView: View {
                                     .padding(.vertical, 2)
                                     .background(isSyncedLyrics ? WalkmanTheme.hiResGold.opacity(0.18) : Color.white.opacity(0.06))
                                     .clipShape(Capsule())
+                                    .lineLimit(1)
+                                    .fixedSize(horizontal: true, vertical: false)
 
                                 if !isPhysicalLrcPresent {
-                                    Text("No .LRC File")
+                                    Text("No .LRC")
                                         .font(.system(size: 9.5, weight: .bold, design: .rounded))
                                         .foregroundStyle(WalkmanTheme.hiResGold)
                                         .padding(.horizontal, 6)
                                         .padding(.vertical, 2)
                                         .background(WalkmanTheme.hiResGold.opacity(0.15))
                                         .clipShape(Capsule())
+                                        .lineLimit(1)
+                                        .fixedSize(horizontal: true, vertical: false)
                                 }
                             }
                             
-                            Spacer()
+                            Spacer(minLength: 4)
                             
                             if hasLyricsOnWalkman {
                                 Button(action: syncLrcToDevice) {
-                                    HStack(spacing: 4) {
+                                    ZStack {
                                         if isSyncingLrc {
                                             ProgressView()
                                                 .controlSize(.mini)
                                         } else {
-                                            Image(systemName: isLrcSyncedSuccess ? "checkmark.circle.fill" : (isPhysicalLrcPresent ? "arrow.clockwise" : "arrow.down.doc.fill"))
-                                                .font(.system(size: 9.5, weight: .semibold))
+                                            Image(systemName: isLrcSyncedSuccess ? "checkmark" : (isPhysicalLrcPresent ? "arrow.triangle.2.circlepath" : "arrow.down.doc.fill"))
+                                                .font(.system(size: 10.5, weight: .semibold))
                                         }
-                                        Text(isLrcSyncedSuccess ? "Saved!" : (isPhysicalLrcPresent ? "Repair .LRC" : "Save .LRC"))
-                                            .font(.system(size: 10.5, weight: .medium))
                                     }
+                                    .frame(width: 26, height: 22)
                                     .foregroundStyle(isLrcSyncedSuccess ? Color.green : (isPhysicalLrcPresent ? WalkmanTheme.silverLight : WalkmanTheme.hiResGoldLight))
-                                    .padding(.horizontal, 7)
-                                    .padding(.vertical, 3)
                                     .background(isLrcSyncedSuccess ? Color.green.opacity(0.15) : (isPhysicalLrcPresent ? Color.white.opacity(0.06) : WalkmanTheme.hiResGold.opacity(0.18)))
-                                    .clipShape(Capsule())
-                                    .overlay(Capsule().stroke(isLrcSyncedSuccess ? Color.green.opacity(0.3) : (isPhysicalLrcPresent ? Color.white.opacity(0.12) : WalkmanTheme.hiResGold.opacity(0.35)), lineWidth: 0.75))
+                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .stroke(isLrcSyncedSuccess ? Color.green.opacity(0.3) : (isPhysicalLrcPresent ? Color.white.opacity(0.12) : WalkmanTheme.hiResGold.opacity(0.35)), lineWidth: 0.75)
+                                    )
                                 }
                                 .buttonStyle(.plain)
                                 .disabled(isSyncingLrc)
-                                .help("Format, sanitize, and write companion .lrc file for Sony Walkman NW-A55 Display Lyrics")
+                                .help(isPhysicalLrcPresent ? "Repair .LRC: re-synthesize timestamps and re-save for Walkman NW-A55" : "Save companion .lrc file to device for Walkman NW-A55 Display Lyrics")
 
                                 Button(action: {
                                     withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                                         isLyricsExpanded.toggle()
                                     }
                                 }) {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: isLyricsExpanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
-                                            .font(.system(size: 9.5, weight: .semibold))
-                                        Text(isLyricsExpanded ? "Collapse" : "Expand")
-                                            .font(.system(size: 10.5, weight: .medium))
-                                    }
-                                    .foregroundStyle(WalkmanTheme.silverLight)
-                                    .padding(.horizontal, 7)
-                                    .padding(.vertical, 3)
-                                    .background(Color.white.opacity(0.06))
-                                    .clipShape(Capsule())
-                                    .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 0.75))
+                                    Image(systemName: isLyricsExpanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                                        .font(.system(size: 10.5, weight: .semibold))
+                                        .frame(width: 26, height: 22)
+                                        .foregroundStyle(WalkmanTheme.silverLight)
+                                        .background(Color.white.opacity(0.06))
+                                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                                .stroke(Color.white.opacity(0.12), lineWidth: 0.75)
+                                        )
                                 }
                                 .buttonStyle(.plain)
                                 .help(isLyricsExpanded ? "Collapse lyrics to compact view" : "Enlarge lyrics container")
@@ -722,10 +724,22 @@ public struct MetadataStudioView: View {
                                     Image(systemName: "exclamationmark.triangle.fill")
                                         .font(.system(size: 10))
                                         .foregroundStyle(WalkmanTheme.hiResGold)
-                                    Text("Companion .lrc missing on storage. Tap 'Save .LRC' for NW-A55 Display Lyrics.")
+                                    Text("Companion .lrc missing on device.")
                                         .font(.system(size: 10.5))
                                         .foregroundStyle(WalkmanTheme.silverLight)
+                                        .lineLimit(1)
                                     Spacer()
+                                    Button(action: syncLrcToDevice) {
+                                        Text(isSyncingLrc ? "Saving..." : (isLrcSyncedSuccess ? "Saved!" : "Save .LRC"))
+                                            .font(.system(size: 10, weight: .semibold))
+                                            .foregroundStyle(isLrcSyncedSuccess ? Color.green : WalkmanTheme.hiResGoldLight)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(isLrcSyncedSuccess ? Color.green.opacity(0.15) : WalkmanTheme.hiResGold.opacity(0.18))
+                                            .clipShape(Capsule())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(isSyncingLrc)
                                 }
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
