@@ -14,6 +14,26 @@ public struct AlbumMetadataEditorSheet: View {
         public var title: String
         public var artist: String
         public var isSenseMeAnalyzed: Bool
+        public var hasLyrics: Bool
+        public var isSyncedLyrics: Bool
+
+        public init(
+            track: Track,
+            trackNum: String,
+            title: String,
+            artist: String,
+            isSenseMeAnalyzed: Bool,
+            hasLyrics: Bool = false,
+            isSyncedLyrics: Bool = false
+        ) {
+            self.track = track
+            self.trackNum = trackNum
+            self.title = title
+            self.artist = artist
+            self.isSenseMeAnalyzed = isSenseMeAnalyzed
+            self.hasLyrics = hasLyrics
+            self.isSyncedLyrics = isSyncedLyrics
+        }
     }
 
     // Album-wide tags
@@ -46,6 +66,13 @@ public struct AlbumMetadataEditorSheet: View {
     @State private var showPermissionSheet: Bool = false
     @State private var permissionFileURL: URL? = nil
 
+    // Lyrics state
+    @State private var isFetchingLyrics: Bool = false
+    @State private var lyricsProgress: (current: Int, total: Int, title: String)? = nil
+    @State private var lyricsStatusMessage: String? = nil
+    @State private var showBatchLyricsSheet: Bool = false
+    @State private var selectedRowIds: Set<String> = []
+
     public init(
         album: AlbumItem,
         onSaved: @escaping () -> Void,
@@ -72,12 +99,18 @@ public struct AlbumMetadataEditorSheet: View {
 
         self.trackRows = album.tracks.map { tr in
             let isSenseMe = tr.isSenseMeAnalyzed || SenseMeEngine.shared.inspect(fileURL: URL(fileURLWithPath: tr.fullPath)).isAnalyzed
+            let url = URL(fileURLWithPath: tr.fullPath)
+            let lyr = AudioTagger.shared.extractLyrics(fileURL: url)
+            let hasLyr = lyr != nil && !lyr!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let isSynced = hasLyr && (lyr!.contains("[0") || lyr!.contains("[1") || lyr!.contains("[2"))
             return EditableTrackRow(
                 track: tr,
                 trackNum: tr.trackNum,
                 title: tr.title,
                 artist: tr.artist,
-                isSenseMeAnalyzed: isSenseMe
+                isSenseMeAnalyzed: isSenseMe,
+                hasLyrics: hasLyr,
+                isSyncedLyrics: isSynced
             )
         }
 
@@ -248,6 +281,115 @@ public struct AlbumMetadataEditorSheet: View {
 
     private var unanalyzedTracksCount: Int {
         trackRows.filter { !$0.isSenseMeAnalyzed }.count
+    }
+
+    private var missingLyricsCount: Int {
+        trackRows.filter { !$0.hasLyrics }.count
+    }
+
+    private func toggleSelectAll() {
+        if selectedRowIds.count == trackRows.count {
+            selectedRowIds.removeAll()
+        } else {
+            selectedRowIds = Set(trackRows.map(\.id))
+        }
+    }
+
+    private func toggleSelectRow(_ id: String) {
+        if selectedRowIds.contains(id) {
+            selectedRowIds.remove(id)
+        } else {
+            selectedRowIds.insert(id)
+        }
+    }
+
+    private func refreshTrackRowsLyrics() {
+        for i in 0..<trackRows.count {
+            let url = URL(fileURLWithPath: trackRows[i].track.fullPath)
+            let lyr = AudioTagger.shared.extractLyrics(fileURL: url)
+            let hasLyr = lyr != nil && !lyr!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let isSynced = hasLyr && (lyr!.contains("[0") || lyr!.contains("[1") || lyr!.contains("[2"))
+            trackRows[i].hasLyrics = hasLyr
+            trackRows[i].isSyncedLyrics = isSynced
+        }
+    }
+
+    private func fetchLyricsForSingleTrack(_ row: EditableTrackRow) {
+        guard !isFetchingLyrics else { return }
+        fetchLyricsForTracks([row])
+    }
+
+    private func fetchLyricsForTracks(_ targets: [EditableTrackRow]) {
+        guard !isFetchingLyrics && !targets.isEmpty else { return }
+        isFetchingLyrics = true
+        lyricsProgress = (0, targets.count, targets[0].title)
+        lyricsStatusMessage = nil
+
+        let curAlbumName = self.albumName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalAlbum = curAlbumName.isEmpty ? album.name : curAlbumName
+        let applyArtist = self.applyArtistToAll
+        let curAlbumArtist = self.albumArtist.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        Task {
+            var successCount = 0
+            for (idx, row) in targets.enumerated() {
+                await MainActor.run {
+                    self.lyricsProgress = (idx + 1, targets.count, row.title)
+                }
+
+                let effectiveTitle = row.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? row.track.title : row.title
+                let effectiveArtist = row.artist.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? (applyArtist ? curAlbumArtist : row.track.artist) : row.artist
+
+                let trackURL = URL(fileURLWithPath: row.track.fullPath)
+                do {
+                    var res = try await LyricsService.shared.fetchLyrics(
+                        title: effectiveTitle,
+                        artist: effectiveArtist,
+                        album: finalAlbum,
+                        durationSeconds: row.track.durationSeconds
+                    )
+
+                    if res.synced {
+                        let (calibrated, _) = await AudioAcousticAligner.shared.calibrateLRC(
+                            audioURL: trackURL,
+                            lyrics: res.lyrics,
+                            durationSeconds: row.track.durationSeconds
+                        )
+                        res = LyricsResult(synced: true, lyrics: calibrated, source: res.source)
+                    }
+
+                    try AudioTagger.shared.saveLyrics(
+                        fileURL: trackURL,
+                        lyrics: res.lyrics,
+                        durationSeconds: row.track.durationSeconds
+                    )
+
+                    await MainActor.run {
+                        if let i = self.trackRows.firstIndex(where: { $0.id == row.id }) {
+                            self.trackRows[i].hasLyrics = true
+                            self.trackRows[i].isSyncedLyrics = res.synced
+                        }
+                    }
+                    successCount += 1
+                } catch {
+                    if WalkmanStoragePermissionHelper.isPermissionError(error) {
+                        await MainActor.run {
+                            self.permissionFileURL = trackURL
+                            self.showPermissionSheet = true
+                        }
+                    }
+                }
+            }
+
+            await MainActor.run {
+                self.isFetchingLyrics = false
+                self.lyricsProgress = nil
+                self.lyricsStatusMessage = successCount > 0 ? "Saved lyrics for \(successCount) track(s)" : "No new lyrics found online"
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+                    self.lyricsStatusMessage = nil
+                }
+            }
+        }
     }
 
     private func analyzeAlbumSenseMe() {
@@ -507,6 +649,20 @@ public struct AlbumMetadataEditorSheet: View {
                 )
             }
         }
+        .sheet(isPresented: $showBatchLyricsSheet) {
+            BatchLyricsGeneratorSheet(
+                allTracks: album.tracks,
+                selectedTracks: selectedRowIds.isEmpty ? album.tracks : trackRows.filter { selectedRowIds.contains($0.id) }.map(\.track),
+                tabContext: .albums(
+                    selectedAlbumName: self.albumName.isEmpty ? album.name : self.albumName,
+                    albumTrackCount: trackRows.count
+                ),
+                onDismiss: {
+                    showBatchLyricsSheet = false
+                    refreshTrackRowsLyrics()
+                }
+            )
+        }
         .onAppear {
             loadInitialData()
         }
@@ -740,7 +896,7 @@ public struct AlbumMetadataEditorSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             // Tracklist Header & Quick Actions
             HStack {
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Text("TRACKLIST & TRACK NUMBERS")
                         .font(WalkmanFont.sectionHeader)
                         .foregroundStyle(.tertiary)
@@ -748,6 +904,22 @@ public struct AlbumMetadataEditorSheet: View {
                     Text("(\(trackRows.count))")
                         .font(WalkmanFont.badge)
                         .foregroundStyle(.secondary)
+
+                    if let msg = lyricsStatusMessage {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color.green)
+                            Text(msg)
+                                .font(WalkmanFont.captionBold)
+                                .foregroundStyle(WalkmanTheme.silverLight)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.green.opacity(0.12))
+                        .clipShape(Capsule())
+                        .transition(.opacity)
+                    }
                 }
 
                 Spacer()
@@ -822,6 +994,81 @@ public struct AlbumMetadataEditorSheet: View {
                     .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
                     .disabled(isAnalyzingSenseMe || trackRows.isEmpty)
                     .help("Analyze album tracks for Sony 12 Tone / SenseMe and embed hardware-compatible metadata")
+
+                    // Fetch Lyrics Split Button
+                    HStack(spacing: 2) {
+                        Button(action: {
+                            let targets = selectedRowIds.isEmpty ? (missingLyricsCount > 0 ? trackRows.filter { !$0.hasLyrics } : trackRows) : trackRows.filter { selectedRowIds.contains($0.id) }
+                            fetchLyricsForTracks(targets)
+                        }) {
+                            HStack(spacing: 5) {
+                                if isFetchingLyrics, let prog = lyricsProgress {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                        .scaleEffect(0.65)
+                                    Text("\(prog.current)/\(prog.total)")
+                                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                } else {
+                                    Image(systemName: "quote.bubble")
+                                        .font(.system(size: 11, weight: .semibold))
+                                    if !selectedRowIds.isEmpty {
+                                        Text("Fetch Lyrics (\(selectedRowIds.count))")
+                                            .font(WalkmanFont.calloutBold)
+                                    } else {
+                                        Text("Fetch Lyrics\(missingLyricsCount > 0 ? " (\(missingLyricsCount))" : "")")
+                                            .font(WalkmanFont.calloutBold)
+                                    }
+                                }
+                            }
+                            .foregroundStyle(WalkmanTheme.silverLight)
+                            .padding(.horizontal, 11)
+                            .frame(height: 28)
+                        }
+                        .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
+                        .disabled(isFetchingLyrics || trackRows.isEmpty)
+                        .help(selectedRowIds.isEmpty ? "Fetch lyrics for \(missingLyricsCount > 0 ? "\(missingLyricsCount) track(s) missing lyrics" : "all tracks")" : "Fetch lyrics for \(selectedRowIds.count) selected track(s)")
+
+                        Menu {
+                            Button {
+                                fetchLyricsForTracks(trackRows)
+                            } label: {
+                                Label("Fetch All Tracks in Album (\(trackRows.count))", systemImage: "quote.bubble.fill")
+                            }
+
+                            if !selectedRowIds.isEmpty {
+                                Button {
+                                    let targets = trackRows.filter { selectedRowIds.contains($0.id) }
+                                    fetchLyricsForTracks(targets)
+                                } label: {
+                                    Label("Fetch Selected Tracks Only (\(selectedRowIds.count))", systemImage: "checkmark.circle.fill")
+                                }
+                            }
+
+                            Button {
+                                let missing = trackRows.filter { !$0.hasLyrics }
+                                fetchLyricsForTracks(missing.isEmpty ? trackRows : missing)
+                            } label: {
+                                Label("Fetch Missing Lyrics Only (\(missingLyricsCount))", systemImage: "sparkles")
+                            }
+
+                            Divider()
+
+                            Button {
+                                showBatchLyricsSheet = true
+                            } label: {
+                                Label("Batch Lyrics Generator...", systemImage: "waveform.badge.magnifyingglass")
+                            }
+                        } label: {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 9.5, weight: .bold))
+                                .foregroundStyle(WalkmanTheme.silverLight)
+                                .frame(width: 22, height: 28)
+                        }
+                        .menuIndicator(.hidden)
+                        .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
+                        .disabled(isFetchingLyrics || trackRows.isEmpty)
+                        .help("More lyrics options (all, selected, missing only, or batch generator)")
+                    }
                 }
             }
 
@@ -829,6 +1076,16 @@ public struct AlbumMetadataEditorSheet: View {
             VStack(spacing: 0) {
                 // Table Column Header
                 HStack(spacing: 12) {
+                    // Select All / Deselect All Button
+                    Button(action: toggleSelectAll) {
+                        Image(systemName: selectedRowIds.isEmpty ? "circle" : (selectedRowIds.count == trackRows.count ? "checkmark.circle.fill" : "minus.circle.fill"))
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundStyle(selectedRowIds.isEmpty ? Color.white.opacity(0.35) : WalkmanTheme.hiResGold)
+                    }
+                    .buttonStyle(.plain)
+                    .frame(width: 22)
+                    .help(selectedRowIds.isEmpty ? "Select all tracks" : "Deselect all tracks")
+
                     Text("#")
                         .font(WalkmanFont.sectionHeader)
                         .foregroundStyle(.tertiary)
@@ -861,6 +1118,11 @@ public struct AlbumMetadataEditorSheet: View {
                         .foregroundStyle(.tertiary)
                         .frame(width: 65, alignment: .center)
 
+                    Text("Lyrics")
+                        .font(WalkmanFont.sectionHeader)
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 60, alignment: .center)
+
                     Text("Duration")
                         .font(WalkmanFont.sectionHeader)
                         .foregroundStyle(.tertiary)
@@ -881,9 +1143,12 @@ public struct AlbumMetadataEditorSheet: View {
                             totalCount: trackRows.count,
                             row: $trackRows[index],
                             applyArtistToAll: applyArtistToAll,
+                            isSelected: selectedRowIds.contains(row.id),
+                            onToggleSelect: { toggleSelectRow(row.id) },
                             onMoveUp: { moveTrack(from: index, up: true) },
                             onMoveDown: { moveTrack(from: index, up: false) },
                             onAnalyzeSenseMe: { analyzeSingleTrack(row) },
+                            onFetchLyrics: { fetchLyricsForSingleTrack(row) },
                             formatDuration: formatDuration
                         )
 
@@ -1014,15 +1279,27 @@ private struct TrackRowView: View {
     let totalCount: Int
     @Binding var row: AlbumMetadataEditorSheet.EditableTrackRow
     let applyArtistToAll: Bool
+    let isSelected: Bool
+    let onToggleSelect: () -> Void
     let onMoveUp: () -> Void
     let onMoveDown: () -> Void
     let onAnalyzeSenseMe: () -> Void
+    let onFetchLyrics: () -> Void
     let formatDuration: (Double) -> String
 
     @State private var isHovered: Bool = false
 
     var body: some View {
         HStack(spacing: 12) {
+            // Checkbox
+            Button(action: onToggleSelect) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : Color.white.opacity(isHovered ? 0.45 : 0.20))
+            }
+            .buttonStyle(.plain)
+            .frame(width: 22)
+
             // Track Number TextField
             TextField("", text: $row.trackNum)
                 .textFieldStyle(.plain)
@@ -1116,6 +1393,27 @@ private struct TrackRowView: View {
                     .frame(width: 65, alignment: .center)
             }
 
+            // Lyrics Badge
+            if row.hasLyrics {
+                HStack(spacing: 2.5) {
+                    Image(systemName: row.isSyncedLyrics ? "quote.bubble.fill" : "doc.text.fill")
+                        .font(.system(size: 7))
+                    Text(row.isSyncedLyrics ? ".LRC" : "TXT")
+                        .font(WalkmanFont.badge)
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(row.isSyncedLyrics ? WalkmanTheme.hiResGold.opacity(0.18) : Color.white.opacity(0.08)))
+                .overlay(Capsule().stroke(row.isSyncedLyrics ? WalkmanTheme.hiResGold.opacity(0.35) : Color.white.opacity(0.15), lineWidth: 0.8))
+                .foregroundStyle(row.isSyncedLyrics ? WalkmanTheme.hiResGoldLight : WalkmanTheme.silverLight)
+                .frame(width: 60, alignment: .center)
+            } else {
+                Text("—")
+                    .font(WalkmanFont.monoSmall)
+                    .foregroundStyle(Color.secondary.opacity(0.4))
+                    .frame(width: 60, alignment: .center)
+            }
+
             // Duration
             Text(formatDuration(row.track.durationSeconds))
                 .font(WalkmanFont.monoSmall)
@@ -1124,8 +1422,15 @@ private struct TrackRowView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 6)
-        .background(isHovered ? Color.white.opacity(0.045) : (index % 2 == 1 ? Color.white.opacity(0.015) : Color.clear))
+        .background(
+            isSelected ? WalkmanTheme.hiResGold.opacity(0.08) :
+            (isHovered ? Color.white.opacity(0.045) : (index % 2 == 1 ? Color.white.opacity(0.015) : Color.clear))
+        )
         .contextMenu {
+            Button(action: onFetchLyrics) {
+                Label(row.hasLyrics ? "Re-Fetch Lyrics (.LRC)" : "Fetch Lyrics (.LRC)", systemImage: "quote.bubble")
+            }
+            Divider()
             Button(action: onAnalyzeSenseMe) {
                 Label(row.isSenseMeAnalyzed ? "Re-Analyze SenseMe (12 Tone)" : "Analyze SenseMe (12 Tone)", systemImage: "waveform.path.ecg")
             }
