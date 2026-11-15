@@ -9,7 +9,7 @@ public struct AlbumMetadataEditorSheet: View {
 
     public struct EditableTrackRow: Identifiable {
         public var id: String { track.id }
-        public let track: Track
+        public var track: Track
         public var trackNum: String
         public var title: String
         public var artist: String
@@ -63,6 +63,7 @@ public struct AlbumMetadataEditorSheet: View {
     @State private var isFetchingOnlineInfo: Bool = false
     @State private var isAnalyzingSenseMe: Bool = false
     @State private var senseMeProgress: (current: Int, total: Int, title: String)? = nil
+    @State private var senseMeStatusMessage: String? = nil
     @State private var showPermissionSheet: Bool = false
     @State private var permissionFileURL: URL? = nil
 
@@ -365,31 +366,68 @@ public struct AlbumMetadataEditorSheet: View {
 
     private func analyzeAlbumSenseMe() {
         guard !isAnalyzingSenseMe && !trackRows.isEmpty else { return }
-        let targets = trackRows.filter { !$0.isSenseMeAnalyzed }
-        let toAnalyze = targets.isEmpty ? trackRows : targets
-        guard !toAnalyze.isEmpty else { return }
+        let unanalyzed = trackRows.filter { !$0.isSenseMeAnalyzed }
+        let isForce = unanalyzed.isEmpty
+        let targets = isForce ? trackRows : unanalyzed
+        guard !targets.isEmpty else { return }
 
         isAnalyzingSenseMe = true
-        senseMeProgress = (0, toAnalyze.count, toAnalyze[0].title)
+        senseMeProgress = (0, targets.count, targets[0].title)
+        senseMeStatusMessage = nil
 
         Task {
-            for (idx, row) in toAnalyze.enumerated() {
+            var successCount = 0
+            var permErrorURL: URL? = nil
+
+            for (idx, row) in targets.enumerated() {
                 await MainActor.run {
-                    self.senseMeProgress = (idx + 1, toAnalyze.count, row.title)
+                    self.senseMeProgress = (idx + 1, targets.count, row.title)
                 }
                 let url = URL(fileURLWithPath: row.track.fullPath)
-                if let info = try? await SenseMeEngine.shared.analyzeAndInject(fileURL: url) {
+                do {
+                    let info = try await SenseMeEngine.shared.analyzeAndInject(fileURL: url, forceReanalyze: isForce)
                     LibraryScanner.shared.updateCachedSenseMe(fullPath: row.track.fullPath, info: info)
+
                     await MainActor.run {
                         if let i = self.trackRows.firstIndex(where: { $0.id == row.id }) {
                             self.trackRows[i].isSenseMeAnalyzed = true
+                            self.trackRows[i].track.isSenseMeAnalyzed = true
+                            self.trackRows[i].track.senseMeBpm = info.bpm
+                            self.trackRows[i].track.senseMeValence = info.valence
+                            self.trackRows[i].track.senseMeArousal = info.arousal
+                            self.trackRows[i].track.senseMeChannels = info.channels
+                            self.trackRows[i].track.senseMeHighlightSec = info.highlightSec
+
+                            let updatedTrack = self.trackRows[i].track
+                            NotificationCenter.default.post(
+                                name: .trackMetadataDidUpdate,
+                                object: nil,
+                                userInfo: ["trackId": updatedTrack.id, "track": updatedTrack]
+                            )
                         }
                     }
+                    successCount += 1
+                } catch {
+                    if WalkmanStoragePermissionHelper.isPermissionError(error) {
+                        permErrorURL = url
+                    }
+                    print("[AlbumMetadataEditor] SenseMe analysis error for '\(row.title)': \(error.localizedDescription)")
                 }
             }
+
             await MainActor.run {
                 self.isAnalyzingSenseMe = false
                 self.senseMeProgress = nil
+                if let pURL = permErrorURL {
+                    self.permissionFileURL = pURL
+                    self.showPermissionSheet = true
+                }
+                if successCount > 0 {
+                    self.senseMeStatusMessage = isForce ? "Re-analyzed SenseMe for \(successCount) track(s)" : "SenseMe analyzed for \(successCount) track(s)"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+                        self.senseMeStatusMessage = nil
+                    }
+                }
             }
         }
     }
@@ -398,20 +436,49 @@ public struct AlbumMetadataEditorSheet: View {
         guard !isAnalyzingSenseMe else { return }
         isAnalyzingSenseMe = true
         senseMeProgress = (1, 1, row.title)
+        senseMeStatusMessage = nil
+
+        let isForce = row.isSenseMeAnalyzed
 
         Task {
             let url = URL(fileURLWithPath: row.track.fullPath)
-            if let info = try? await SenseMeEngine.shared.analyzeAndInject(fileURL: url) {
+            do {
+                let info = try await SenseMeEngine.shared.analyzeAndInject(fileURL: url, forceReanalyze: isForce)
                 LibraryScanner.shared.updateCachedSenseMe(fullPath: row.track.fullPath, info: info)
+
                 await MainActor.run {
                     if let i = self.trackRows.firstIndex(where: { $0.id == row.id }) {
                         self.trackRows[i].isSenseMeAnalyzed = true
+                        self.trackRows[i].track.isSenseMeAnalyzed = true
+                        self.trackRows[i].track.senseMeBpm = info.bpm
+                        self.trackRows[i].track.senseMeValence = info.valence
+                        self.trackRows[i].track.senseMeArousal = info.arousal
+                        self.trackRows[i].track.senseMeChannels = info.channels
+                        self.trackRows[i].track.senseMeHighlightSec = info.highlightSec
+
+                        let updatedTrack = self.trackRows[i].track
+                        NotificationCenter.default.post(
+                            name: .trackMetadataDidUpdate,
+                            object: nil,
+                            userInfo: ["trackId": updatedTrack.id, "track": updatedTrack]
+                        )
+                    }
+                    self.isAnalyzingSenseMe = false
+                    self.senseMeProgress = nil
+                    self.senseMeStatusMessage = "SenseMe analyzed for \(row.title)"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+                        self.senseMeStatusMessage = nil
                     }
                 }
-            }
-            await MainActor.run {
-                self.isAnalyzingSenseMe = false
-                self.senseMeProgress = nil
+            } catch {
+                await MainActor.run {
+                    self.isAnalyzingSenseMe = false
+                    self.senseMeProgress = nil
+                    if WalkmanStoragePermissionHelper.isPermissionError(error) {
+                        self.permissionFileURL = url
+                        self.showPermissionSheet = true
+                    }
+                }
             }
         }
     }
@@ -508,6 +575,14 @@ public struct AlbumMetadataEditorSheet: View {
                     updated.year = finalYear
                     updated.genre = finalGenre
                     updated.hasArtwork = hasArt
+                    updated.isSenseMeAnalyzed = row.isSenseMeAnalyzed
+                    if row.isSenseMeAnalyzed {
+                        updated.senseMeBpm = row.track.senseMeBpm
+                        updated.senseMeValence = row.track.senseMeValence
+                        updated.senseMeArousal = row.track.senseMeArousal
+                        updated.senseMeChannels = row.track.senseMeChannels
+                        updated.senseMeHighlightSec = row.track.senseMeHighlightSec
+                    }
                     updatedTracks.append(updated)
                 } catch {
                     if WalkmanStoragePermissionHelper.isPermissionError(error) {
@@ -875,6 +950,22 @@ public struct AlbumMetadataEditorSheet: View {
                     Text("(\(trackRows.count))")
                         .font(WalkmanFont.badge)
                         .foregroundStyle(.secondary)
+
+                    if let msg = senseMeStatusMessage {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(WalkmanTheme.hiResGold)
+                            Text(msg)
+                                .font(WalkmanFont.captionBold)
+                                .foregroundStyle(WalkmanTheme.silverLight)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(WalkmanTheme.hiResGold.opacity(0.12))
+                        .clipShape(Capsule())
+                        .transition(.opacity)
+                    }
                 }
 
                 Spacer()
@@ -936,9 +1027,10 @@ public struct AlbumMetadataEditorSheet: View {
                                 Text("\(prog.current)/\(prog.total)")
                                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
                             } else {
-                                Image(systemName: "waveform.path.ecg")
+                                Image(systemName: unanalyzedTracksCount > 0 ? "waveform.path.ecg" : "checkmark.circle.fill")
                                     .font(.system(size: 11, weight: .semibold))
-                                Text("Analyze SenseMe\(unanalyzedTracksCount > 0 ? " (\(unanalyzedTracksCount))" : "")")
+                                    .foregroundStyle(unanalyzedTracksCount > 0 ? WalkmanTheme.silverLight : WalkmanTheme.hiResGold)
+                                Text(unanalyzedTracksCount > 0 ? "Analyze SenseMe (\(unanalyzedTracksCount))" : "Re-Analyze SenseMe")
                                     .font(WalkmanFont.calloutBold)
                             }
                         }
@@ -948,7 +1040,7 @@ public struct AlbumMetadataEditorSheet: View {
                     }
                     .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 8))
                     .disabled(isAnalyzingSenseMe || trackRows.isEmpty)
-                    .help("Analyze album tracks for Sony 12 Tone / SenseMe and embed hardware-compatible metadata")
+                    .help(unanalyzedTracksCount > 0 ? "Analyze \(unanalyzedTracksCount) track(s) for Sony 12 Tone / SenseMe and embed hardware-compatible metadata" : "Re-analyze all tracks in this album for Sony 12 Tone / SenseMe")
 
                     Button(action: { showBatchLyricsSheet = true }) {
                         HStack(spacing: 5) {
@@ -1247,17 +1339,18 @@ private struct TrackRowView: View {
             // SenseMe Badge
             if row.isSenseMeAnalyzed {
                 HStack(spacing: 2.5) {
-                    Image(systemName: "bolt.fill")
-                        .font(.system(size: 7))
+                    Image(systemName: "waveform.path.ecg")
+                        .font(.system(size: 7.5, weight: .bold))
                     Text("12 TONE")
                         .font(WalkmanFont.badge)
                 }
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
-                .background(Capsule().fill(Color.white.opacity(0.08)))
-                .overlay(Capsule().stroke(Color.white.opacity(0.20), lineWidth: 0.8))
-                .foregroundStyle(WalkmanTheme.silverLight)
+                .background(Capsule().fill(WalkmanTheme.hiResGold.opacity(0.18)))
+                .overlay(Capsule().stroke(WalkmanTheme.hiResGold.opacity(0.40), lineWidth: 0.8))
+                .foregroundStyle(WalkmanTheme.hiResGoldLight)
                 .frame(width: 65, alignment: .center)
+                .help("Sony 12 Tone / SenseMe Analyzed" + (row.track.senseMeChannels.isEmpty ? "" : " • \(row.track.senseMeChannels.joined(separator: ", "))"))
             } else {
                 Text("—")
                     .font(WalkmanFont.monoSmall)

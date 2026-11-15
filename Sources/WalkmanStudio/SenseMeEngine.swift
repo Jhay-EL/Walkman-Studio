@@ -500,6 +500,10 @@ public final class SenseMeEngine: @unchecked Sendable {
     // 4. Non-Destructive Injection (Pure Swift)
     // -----------------------------------------------------------------------
     public func injectFLAC(fileURL: URL, payload: Data) throws {
+        let origAttr = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
+        let origCreation = origAttr?[.creationDate] as? Date
+        let origMod = origAttr?[.modificationDate] as? Date
+
         let fileData = try Data(contentsOf: fileURL)
         guard fileData.count >= 4 && fileData.starts(with: [0x66, 0x4C, 0x61, 0x43]) else {
             throw NSError(domain: "SenseMeEngine", code: 1, userInfo: [NSLocalizedDescriptionKey: "Not a valid FLAC file"])
@@ -556,10 +560,13 @@ public final class SenseMeEngine: @unchecked Sendable {
         }
         outData.append(audioFrames)
 
-        let tmpURL = fileURL.appendingPathExtension("tmp")
-        try outData.write(to: tmpURL, options: .atomic)
-        try FileManager.default.removeItem(at: fileURL)
-        try FileManager.default.moveItem(at: tmpURL, to: fileURL)
+        do {
+            try outData.write(to: fileURL, options: .atomic)
+        } catch {
+            try outData.write(to: fileURL, options: [])
+        }
+
+        AudioTagger.restoreTimestamps(fileURL: fileURL, creationDate: origCreation, modificationDate: origMod)
     }
 
     public func injectMP3(fileURL: URL, payload: Data) throws {
@@ -684,16 +691,17 @@ public final class SenseMeEngine: @unchecked Sendable {
         let synchsafe = AudioTagger.synchsafeBytes(allFrames.count)
         header.append(contentsOf: synchsafe)
 
-        // 5. Combine and atomically write
+        // 5. Combine and write safely
         var output = Data()
         output.append(header)
         output.append(allFrames)
         output.append(audioStream)
 
-        let tmpURL = fileURL.appendingPathExtension("tmp")
-        try output.write(to: tmpURL, options: .atomic)
-        try FileManager.default.removeItem(at: fileURL)
-        try FileManager.default.moveItem(at: tmpURL, to: fileURL)
+        do {
+            try output.write(to: fileURL, options: .atomic)
+        } catch {
+            try output.write(to: fileURL, options: [])
+        }
 
         AudioTagger.restoreTimestamps(fileURL: fileURL, creationDate: origCreation, modificationDate: origMod)
     }
@@ -701,14 +709,14 @@ public final class SenseMeEngine: @unchecked Sendable {
     // -----------------------------------------------------------------------
     // 5. High-Level DSP Analysis & Injection Execution
     // -----------------------------------------------------------------------
-    public func analyzeAndInject(fileURL: URL) async throws -> SenseMeInfo {
+    public func analyzeAndInject(fileURL: URL, forceReanalyze: Bool = false) async throws -> SenseMeInfo {
         // High-Speed On-Board Acoustic Analyzer (Pure Swift / AVFoundation)
         // Runs in milliseconds with zero external Python or ffmpeg processes
-        return analyzeTrackOnBoard(fileURL: fileURL, injectSMFM: true)
+        return try analyzeTrackOnBoard(fileURL: fileURL, injectSMFM: true, forceReanalyze: forceReanalyze)
     }
 
-    public func analyzeAndInjectPureSwift(fileURL: URL) throws -> SenseMeInfo {
-        return analyzeTrackOnBoard(fileURL: fileURL, injectSMFM: true)
+    public func analyzeAndInjectPureSwift(fileURL: URL, forceReanalyze: Bool = false) throws -> SenseMeInfo {
+        return try analyzeTrackOnBoard(fileURL: fileURL, injectSMFM: true, forceReanalyze: forceReanalyze)
     }
 
     // -----------------------------------------------------------------------
@@ -719,12 +727,22 @@ public final class SenseMeEngine: @unchecked Sendable {
     public func analyzeTrackOnBoard(
         fileURL: URL,
         metadata: AudioFileMetadata? = nil,
-        injectSMFM: Bool = true
-    ) -> SenseMeInfo {
-        // 1. If file already contains a valid Sony SMFM payload, parse it directly
-        let existing = inspect(fileURL: fileURL)
-        if existing.isAnalyzed && existing.bpm > 0 {
-            return existing
+        injectSMFM: Bool = true,
+        forceReanalyze: Bool = false
+    ) throws -> SenseMeInfo {
+        let didStartAccess = fileURL.startAccessingSecurityScopedResource()
+        defer {
+            if didStartAccess {
+                fileURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        // 1. If file already contains a valid Sony SMFM payload, parse it directly (unless forcing reanalysis)
+        if !forceReanalyze {
+            let existing = inspect(fileURL: fileURL)
+            if existing.isAnalyzed && existing.bpm > 0 {
+                return existing
+            }
         }
 
         // 2. Read metadata if not supplied
@@ -971,9 +989,9 @@ public final class SenseMeEngine: @unchecked Sendable {
             let payload = buildSMFMPayload(bpm: bpm, moodScores: moodScores, highlightMs: highlightMs)
             if !payload.isEmpty {
                 if ext == "flac" {
-                    try? injectFLAC(fileURL: fileURL, payload: payload)
+                    try injectFLAC(fileURL: fileURL, payload: payload)
                 } else if ext == "mp3" {
-                    try? injectMP3(fileURL: fileURL, payload: payload)
+                    try injectMP3(fileURL: fileURL, payload: payload)
                 }
             }
         }

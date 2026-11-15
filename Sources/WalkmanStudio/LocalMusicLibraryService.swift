@@ -607,7 +607,7 @@ public final class LocalMusicLibraryService: ObservableObject, @unchecked Sendab
                     let fileURL = item.url
                     let meta = AudioTagger.shared.readMetadata(fileURL: fileURL)
                     // High-speed on-board acoustic analyzer (Pure Swift / zero CPU spikes)
-                    let senseMe = SenseMeEngine.shared.analyzeTrackOnBoard(fileURL: fileURL, metadata: meta, injectSMFM: false)
+                    let senseMe = (try? SenseMeEngine.shared.analyzeTrackOnBoard(fileURL: fileURL, metadata: meta, injectSMFM: false)) ?? .notAnalyzed
                     let cleanTitle = WalkmanEngine.sanitizeWalkmanText(meta?.title ?? "")
                     let cleanArtist = WalkmanEngine.sanitizeWalkmanText(meta?.artist ?? "", stripExplicitMarkers: false)
                     let cleanAlbum = WalkmanEngine.sanitizeWalkmanText(meta?.album ?? "")
@@ -882,7 +882,7 @@ public final class LocalMusicLibraryService: ObservableObject, @unchecked Sendab
             progressHandler(idx + 1, total, tr.title)
 
             // High-speed on-board acoustic analysis
-            let info = SenseMeEngine.shared.analyzeTrackOnBoard(fileURL: url, injectSMFM: true)
+            guard let info = try? SenseMeEngine.shared.analyzeTrackOnBoard(fileURL: url, injectSMFM: true) else { continue }
             if info.isAnalyzed {
                 updatedResults.append((tr.fullPath, info))
 
