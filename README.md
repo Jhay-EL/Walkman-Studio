@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Release-v3.1.1-brightgreen?style=for-the-badge" alt="Release v3.1.1" />
+  <img src="https://img.shields.io/badge/Release-v3.1.2-brightgreen?style=for-the-badge" alt="Release v3.1.2" />
   <img src="https://img.shields.io/badge/Platform-macOS%2013%2B-black?style=for-the-badge&logo=apple" alt="macOS 13+" />
   <img src="https://img.shields.io/badge/Language-Swift%205.9%2B-orange?style=for-the-badge&logo=swift" alt="Swift 5.9+" />
   <img src="https://img.shields.io/badge/Architecture-Universal%20(arm64%20%2F%20x86__64)-blue?style=for-the-badge" alt="Universal Architecture" />
@@ -28,9 +28,9 @@ A native macOS desktop app for managing **Classic Sony OS** and **Android** Sony
 
 | Package | Architecture | Supported Mac Models | Download |
 | :--- | :--- | :--- | :--- |
-| **Apple Silicon DMG** | `arm64` | Macs with M1, M2, M3, M4, M5, or M6 series chips | [Walkman-Studio-3.1.1-arm64.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.1.1/Walkman-Studio-3.1.1-arm64.dmg) |
-| **Intel Mac DMG** | `x86_64` | Intel-based MacBook, iMac, Mac mini, Mac Pro | [Walkman-Studio-3.1.1-intel.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.1.1/Walkman-Studio-3.1.1-intel.dmg) |
-| **Universal 2 DMG** | `arm64` + `x86_64` | Single native package for all Macs | [Walkman-Studio-3.1.1-universal.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.1.1/Walkman-Studio-3.1.1-universal.dmg) |
+| **Apple Silicon DMG** | `arm64` | Macs with M1, M2, M3, M4, M5, or M6 series chips | [Walkman-Studio-3.1.2-arm64.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.1.2/Walkman-Studio-3.1.2-arm64.dmg) |
+| **Intel Mac DMG** | `x86_64` | Intel-based MacBook, iMac, Mac mini, Mac Pro | [Walkman-Studio-3.1.2-intel.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.1.2/Walkman-Studio-3.1.2-intel.dmg) |
+| **Universal 2 DMG** | `arm64` + `x86_64` | Single native package for all Macs | [Walkman-Studio-3.1.2-universal.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.1.2/Walkman-Studio-3.1.2-universal.dmg) |
 
 * **Alternative Mirror:** Standalone `.zip` archives, `.dmg` installers, and `SHA256SUMS.txt` are also hosted on the [Google Drive Mirror](https://drive.google.com/drive/folders/1wC3F0Cdy_iJwdWQvR1VFc5VnvdhyULhd?usp=share_link).
 * **Choosing a build:** Pick `arm64` on Apple Silicon for the smallest download, `intel` on x86_64 Macs, or `universal` to cover both architectures.

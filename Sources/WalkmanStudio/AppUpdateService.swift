@@ -347,17 +347,17 @@ public final class AppUpdateService: NSObject, ObservableObject {
     public var currentVersionString: String {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
-            .nonEmpty ?? "3.1.1"
+            .nonEmpty ?? "3.1.2"
     }
 
     public var currentBuildNumberString: String {
         (Bundle.main.infoDictionary?["CFBundleVersion"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
-            .nonEmpty ?? "311"
+            .nonEmpty ?? "312"
     }
 
     public var currentSemanticVersion: SemanticVersion {
-        SemanticVersion(currentVersionString) ?? SemanticVersion("3.1.1")!
+        SemanticVersion(currentVersionString) ?? SemanticVersion("3.1.2")!
     }
 
     public var runningBuildArchitecture: UpdateBuildArchitecture {

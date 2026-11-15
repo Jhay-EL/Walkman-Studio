@@ -4,8 +4,8 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
-VERSION="3.1.1"
-BUILD_NUM="311"
+VERSION="3.1.2"
+BUILD_NUM="312"
 export WALKMAN_VERSION="$VERSION"
 export WALKMAN_BUILD_NUM="$BUILD_NUM"
 DIST_DIR="$DIR/dist"
@@ -62,38 +62,26 @@ shasum -a 256 *.zip *.dmg > SHA256SUMS.txt
 
 # 5. Generate Release Notes (Markdown & HTML)
 cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.md"
-# Walkman Studio v3.1.1
+# Walkman Studio v3.1.2
 
-Walkman Studio v3.1.1 is a comprehensive UI responsiveness, performance, playlist management, and lyrics synchronization release across Apple Silicon (`arm64`) and Intel-based Macs (`x86_64`), featuring an in-window Track Details panel at a compact `1200×660` minimum window, strict duplicate track detection and cleanup on the *Playlists* tab, smooth inspector animations across large Artists and Hi-Res Audio libraries, acoustic `.lrc` pregap calibration, and interactive library cross-navigation.
+Walkman Studio v3.1.2 brings resizable side panels, enhanced metadata workflows, state preservation across navigation views, and UI responsiveness optimizations across Apple Silicon (`arm64`) and Intel-based Macs (`x86_64`).
 
 ---
 
-## What's New in v3.1.1
+## What's New in v3.1.2
 
-### Responsive In-Window Inspector & Compact Window Layout
-* **In-Window Sliding Track Details Panel:** Track Details now opens smoothly inside the main window (`300pt`) without resizing or shifting your macOS window frame, with full-height divider alignment and automatic hiding on *Device Overview*, *Duplicates*, *Transfer & Convert*, and *Backup & Restore*.
-* **Compact `1200×660` Minimum Window Support:** Reduced minimum window size constraints (default `1360×820`) while keeping every library toolbar single-lane via adaptive Liquid Glass dropdown menus and compact segmented control tiers across *Local Music Library*, *All Songs*, *Recently Added*, *Albums*, *Artists*, *Hi-Res Audio*, *Language Study*, and *Duplicates*.
-* **Consistent Liquid Glass Controls:** Standardized circular Liquid Glass Play buttons, native `.menu` dropdown styling, compact *SenseMe* toolbar fallback during scanning, and unclipped multi-tier segmented bars on narrow layouts.
+### Artists Tab: Tactile Resizable Master Panel & Stutter-Free Resizing
+* **Adjustable Splitter with Min/Max Bounds:** Added a smooth, interactive resize divider between the left artist master list and right discography console with bounded limits (`160pt` – `400pt`) and persistent width storage. Double-click the splitter to instantly snap back to the default width (`205pt`).
+* **Zero-Stutter 60/120 FPS Resizing:** Eliminated drag lag and frame drops by decoupling `@AppStorage` disk synchronization to drag completion, suppressing implicit animation transactions during continuous drag, removing redundant layout passes, and isolating detail width tier transitions.
 
-### Artists & Hi-Res Audio Performance + Table Layout Fixes
-* **Lag-Free Inspector Toggling:** Eliminated UI stutter when toggling Track Details on large *Artists* and *Hi-Res Audio* collections through container-level discrete width tiers, `LazyVStack` virtualization, cached artist discography metadata, `Equatable` row diff pruning, and single-pane active mode rendering.
-* **Table Horizontal Scrollbar Anchoring:** Fixed `TableScrollInsetModifier` across *Local Music Library*, *All Songs*, and *Recently Added* so horizontal scrollbars stay anchored cleanly at the bottom edge instead of floating over track rows.
+### Album Metadata Editor: Batch Lyrics & SenseMe Acoustic Analysis
+* **Integrated Lyrics Fetching:** Easily fetch synchronized lyrics (`.lrc`) for either all tracks or specifically selected tracks in an album directly from within the Album Metadata Editor.
+* **Refined, Intuitive UI:** Polished lyrics fetching interface with direct row-level status indicators and selection actions.
+* **SenseMe Acoustic Analysis Reliability:** Fixed SenseMe analysis pipeline inside the Album Metadata Editor to correctly compute 12-Tone channels and energy ratings across album tracks.
 
-### Acoustic Lyrics Alignment & Sample-Accurate Playback
-* **Acoustic Lead-In Pregap Calibration (`AudioAcousticAligner`):** Inspects leading audio streams via `AVAssetReader` to detect mastering pregap silence and automatically calibrate `.lrc` `[offset:...]` timestamps in **LRC Fetcher** and the **Transfer Queue Item Editor**.
-* **Strict LRCLIB Duration Guard:** Enforces candidate scoring and `<= 3.5s` duration verification in `LyricsService` to prevent synced timestamps from mismatched edits or radio versions.
-* **Sample-Accurate `.LRC` Seeking & Expandable Lyrics Card:** Fixed `.lrc` timestamp synchronization on scrubber advances in Track Details and Fullscreen Now Playing, and added an expandable / compact lyrics view toggle in the Track Details inspector.
-
-### Playlists Tab: Duplicate Track Detection, Non-Destructive Cleanup & Hardware Path Fix
-* **Hardware-Compliant Playlist Paths & Auto-Repair:** Resolved the FAT32/exFAT `Music` vs `MUSIC` case-mismatch bug that caused added playlist tracks to be written with `Volumes/<Drive>/MUSIC/...` paths (making tracks disappear on Walkman hardware). Added true on-disk directory casing resolution (`resolvedMusicDirectory`), case-insensitive `LibraryScanner` relative path extraction with automatic `~/.walkman_library_cache.db` self-healing, canonicalized `.m3u8` writes, and automatic repair of affected `.m3u8`/`.m3u` files on load.
-* **Strict Same-Playlist Duplicate Detection (`PlaylistDuplicateDetector`):** Automatically scans each playlist independently to detect both canonical file path repeats (across slash, casing, `./`, `MUSIC/`, and `LEARNING/` prefixes) and exact-title cross-file copies (`exactTextKey` preserving `(Remastered)`, `(feat. ...)`, `(Live)`, and version suffixes with `<= 4.0s` duration matching).
-* **Sidebar Badges, Inline Row Pills & Filtering:** Displays duplicate count badges per playlist in the sidebar, inline `Keep` / `Dup` sequence indicators on playlist rows, a **Show Duplicates Only** filter toggle, and one-click **Select Extras** batch selection.
-* **Liquid Glass Cleanup Review & Addition Guardrails:** Includes an interactive **Review Playlist Duplicates** modal with a sliding **Keep Highest Quality** vs **Keep First Position** segmented bar that removes selected entries strictly from `.m3u8` / `.m3u` playlist files while keeping all audio files on Walkman storage untouched, plus duplicate confirmation alerts and bulk-add skipping.
-
-### Interactive Library Navigation & Device Setup Improvements
-* **Direct Artist & Album Cross-Navigation:** Track table Artist and Album cells in *All Songs* and *Recently Added* now link directly to the matching discography or album detail view.
-* **Expanded LRC Fetcher Coverage:** Added batch `.LRC` lyrics fetching directly into *Local Music Library* and Album / Artist context menus.
-* **Redesigned Device Connection & Android MTP View:** Unified the disconnected device dashboard and Android Walkman MTP guidance card with cleaner sidebar synchronization.
+### Albums Tab Navigation & App Start State
+* **Exact Scroll Position Retention:** Returning from an album detail view back to the *Albums* grid now accurately retains your previous scroll position instead of jumping back to the top.
+* **Default Inspector Panel State:** The track details inspector panel now defaults to closed on initial launch, providing a full-width library view.
 
 ---
 
@@ -101,12 +89,12 @@ Walkman Studio v3.1.1 is a comprehensive UI responsiveness, performance, playlis
 
 | Installer | Architecture | Target System |
 | :--- | :--- | :--- |
-| **`Walkman-Studio-3.1.1-arm64.dmg`** | Apple Silicon (`arm64`) | MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4) |
-| **`Walkman-Studio-3.1.1-intel.dmg`** | Intel (`x86_64`) | Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac Pro |
-| **`Walkman-Studio-3.1.1-universal.dmg`** | Universal 2 (`arm64` + `x86_64`) | Universal package running natively on all Macs (macOS 13.0+) |
+| **`Walkman-Studio-3.1.2-arm64.dmg`** | Apple Silicon (`arm64`) | MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4) |
+| **`Walkman-Studio-3.1.2-intel.dmg`** | Intel (`x86_64`) | Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac Pro |
+| **`Walkman-Studio-3.1.2-universal.dmg`** | Universal 2 (`arm64` + `x86_64`) | Universal package running natively on all Macs (macOS 13.0+) |
 
 ### Alternative Mirror
-* **Google Drive:** [Download v3.1.1 Release Files on Google Drive](https://drive.google.com/drive/folders/1wC3F0Cdy_iJwdWQvR1VFc5VnvdhyULhd?usp=share_link)
+* **Google Drive:** [Download v3.1.2 Release Files on Google Drive](https://drive.google.com/drive/folders/1wC3F0Cdy_iJwdWQvR1VFc5VnvdhyULhd?usp=share_link)
 
 ---
 
@@ -118,47 +106,31 @@ Walkman Studio v3.1.1 is a comprehensive UI responsiveness, performance, playlis
 EOF
 
 cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
-<h1>Walkman Studio v3.1.1</h1>
+<h1>Walkman Studio v3.1.2</h1>
 
-<p>Walkman Studio v3.1.1 is a comprehensive UI responsiveness, performance, playlist management, and lyrics synchronization release across Apple Silicon (<code>arm64</code>) and Intel-based Macs (<code>x86_64</code>), featuring an in-window Track Details panel at a compact <code>1200&times;660</code> minimum window, strict duplicate track detection and cleanup on the <em>Playlists</em> tab, smooth inspector animations across large Artists and Hi-Res Audio libraries, acoustic <code>.lrc</code> pregap calibration, and interactive library cross-navigation.</p>
+<p>Walkman Studio v3.1.2 brings resizable side panels, enhanced metadata workflows, state preservation across navigation views, and UI responsiveness optimizations across Apple Silicon (<code>arm64</code>) and Intel-based Macs (<code>x86_64</code>).</p>
 
 <hr>
 
-<h2>What's New in v3.1.1</h2>
+<h2>What's New in v3.1.2</h2>
 
-<h3>Responsive In-Window Inspector &amp; Compact Window Layout</h3>
+<h3>Artists Tab: Tactile Resizable Master Panel &amp; Stutter-Free Resizing</h3>
 <ul>
-  <li><strong>In-Window Sliding Track Details Panel:</strong> Track Details now opens smoothly inside the main window (<code>300pt</code>) without resizing or shifting your macOS window frame, with full-height divider alignment and automatic hiding on <em>Device Overview</em>, <em>Duplicates</em>, <em>Transfer &amp; Convert</em>, and <em>Backup &amp; Restore</em>.</li>
-  <li><strong>Compact <code>1200&times;660</code> Minimum Window Support:</strong> Reduced minimum window size constraints (default <code>1360&times;820</code>) while keeping every library toolbar single-lane via adaptive Liquid Glass dropdown menus and compact segmented control tiers across <em>Local Music Library</em>, <em>All Songs</em>, <em>Recently Added</em>, <em>Albums</em>, <em>Artists</em>, <em>Hi-Res Audio</em>, <em>Language Study</em>, and <em>Duplicates</em>.</li>
-  <li><strong>Consistent Liquid Glass Controls:</strong> Standardized circular Liquid Glass Play buttons, native <code>.menu</code> dropdown styling, compact <em>SenseMe</em> toolbar fallback during scanning, and unclipped multi-tier segmented bars on narrow layouts.</li>
+  <li><strong>Adjustable Splitter with Min/Max Bounds:</strong> Added a smooth, interactive resize divider between the left artist master list and right discography console with bounded limits (<code>160pt</code> &ndash; <code>400pt</code>) and persistent width storage. Double-click the splitter to instantly snap back to the default width (<code>205pt</code>).</li>
+  <li><strong>Zero-Stutter 60/120 FPS Resizing:</strong> Eliminated drag lag and frame drops by decoupling <code>@AppStorage</code> disk synchronization to drag completion, suppressing implicit animation transactions during continuous drag, removing redundant layout passes, and isolating detail width tier transitions.</li>
 </ul>
 
-<h3>Artists &amp; Hi-Res Audio Performance + Table Layout Fixes</h3>
+<h3>Album Metadata Editor: Batch Lyrics &amp; SenseMe Acoustic Analysis</h3>
 <ul>
-  <li><strong>Lag-Free Inspector Toggling:</strong> Eliminated UI stutter when toggling Track Details on large <em>Artists</em> and <em>Hi-Res Audio</em> collections through container-level discrete width tiers, <code>LazyVStack</code> virtualization, cached artist discography metadata, <code>Equatable</code> row diff pruning, and single-pane active mode rendering.</li>
-  <li><strong>Table Horizontal Scrollbar Anchoring:</strong> Fixed <code>TableScrollInsetModifier</code> across <em>Local Music Library</em>, <em>All Songs</em>, and <em>Recently Added</em> so horizontal scrollbars stay anchored cleanly at the bottom edge instead of floating over track rows.</li>
+  <li><strong>Integrated Lyrics Fetching:</strong> Easily fetch synchronized lyrics (<code>.lrc</code>) for either all tracks or specifically selected tracks in an album directly from within the Album Metadata Editor.</li>
+  <li><strong>Refined, Intuitive UI:</strong> Polished lyrics fetching interface with direct row-level status indicators and selection actions.</li>
+  <li><strong>SenseMe Acoustic Analysis Reliability:</strong> Fixed SenseMe analysis pipeline inside the Album Metadata Editor to correctly compute 12-Tone channels and energy ratings across album tracks.</li>
 </ul>
 
-<h3>Acoustic Lyrics Alignment &amp; Sample-Accurate Playback</h3>
+<h3>Albums Tab Navigation &amp; App Start State</h3>
 <ul>
-  <li><strong>Acoustic Lead-In Pregap Calibration (<code>AudioAcousticAligner</code>):</strong> Inspects leading audio streams via <code>AVAssetReader</code> to detect mastering pregap silence and automatically calibrate <code>.lrc</code> <code>[offset:...]</code> timestamps in <strong>LRC Fetcher</strong> and the <strong>Transfer Queue Item Editor</strong>.</li>
-  <li><strong>Strict LRCLIB Duration Guard:</strong> Enforces candidate scoring and <code>&le; 3.5s</code> duration verification in <code>LyricsService</code> to prevent synced timestamps from mismatched edits or radio versions.</li>
-  <li><strong>Sample-Accurate <code>.LRC</code> Seeking &amp; Expandable Lyrics Card:</strong> Fixed <code>.lrc</code> timestamp synchronization on scrubber advances in Track Details and Fullscreen Now Playing, and added an expandable / compact lyrics view toggle in the Track Details inspector.</li>
-</ul>
-
-<h3>Playlists Tab: Duplicate Track Detection, Non-Destructive Cleanup &amp; Hardware Path Fix</h3>
-<ul>
-  <li><strong>Hardware-Compliant Playlist Paths &amp; Auto-Repair:</strong> Resolved the FAT32/exFAT <code>Music</code> vs <code>MUSIC</code> case-mismatch bug that caused added playlist tracks to be written with <code>Volumes/&lt;Drive&gt;/MUSIC/...</code> paths (making tracks disappear on Walkman hardware). Added true on-disk directory casing resolution (<code>resolvedMusicDirectory</code>), case-insensitive <code>LibraryScanner</code> relative path extraction with automatic <code>~/.walkman_library_cache.db</code> self-healing, canonicalized <code>.m3u8</code> writes, and automatic repair of affected <code>.m3u8</code>/<code>.m3u</code> files on load.</li>
-  <li><strong>Strict Same-Playlist Duplicate Detection (<code>PlaylistDuplicateDetector</code>):</strong> Automatically scans each playlist independently to detect both canonical file path repeats (across slash, casing, <code>./</code>, <code>MUSIC/</code>, and <code>LEARNING/</code> prefixes) and exact-title cross-file copies (preserving <code>(Remastered)</code>, <code>(feat. ...)</code>, <code>(Live)</code>, and version suffixes with <code>&le; 4.0s</code> duration matching).</li>
-  <li><strong>Sidebar Badges, Inline Row Pills &amp; Filtering:</strong> Displays duplicate count badges per playlist in the sidebar, inline <code>Keep</code> / <code>Dup</code> sequence indicators on playlist rows, a <strong>Show Duplicates Only</strong> filter toggle, and one-click <strong>Select Extras</strong> batch selection.</li>
-  <li><strong>Liquid Glass Cleanup Review &amp; Addition Guardrails:</strong> Includes an interactive <strong>Review Playlist Duplicates</strong> modal with a sliding <strong>Keep Highest Quality</strong> vs <strong>Keep First Position</strong> segmented bar that removes selected entries strictly from <code>.m3u8</code> / <code>.m3u</code> playlist files while keeping all audio files on Walkman storage untouched, plus duplicate confirmation alerts and bulk-add skipping.</li>
-</ul>
-
-<h3>Interactive Library Navigation &amp; Device Setup Improvements</h3>
-<ul>
-  <li><strong>Direct Artist &amp; Album Cross-Navigation:</strong> Track table Artist and Album cells in <em>All Songs</em> and <em>Recently Added</em> now link directly to the matching discography or album detail view.</li>
-  <li><strong>Expanded LRC Fetcher Coverage:</strong> Added batch <code>.LRC</code> lyrics fetching directly into <em>Local Music Library</em> and Album / Artist context menus.</li>
-  <li><strong>Redesigned Device Connection &amp; Android MTP View:</strong> Unified the disconnected device dashboard and Android Walkman MTP guidance card with cleaner sidebar synchronization.</li>
+  <li><strong>Exact Scroll Position Retention:</strong> Returning from an album detail view back to the <em>Albums</em> grid now accurately retains your previous scroll position instead of jumping back to the top.</li>
+  <li><strong>Default Inspector Panel State:</strong> The track details inspector panel now defaults to closed on initial launch, providing a full-width library view.</li>
 </ul>
 
 <hr>
@@ -175,17 +147,17 @@ cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
   </thead>
   <tbody>
     <tr>
-      <td><strong><code>Walkman-Studio-3.1.1-arm64.dmg</code></strong></td>
+      <td><strong><code>Walkman-Studio-3.1.2-arm64.dmg</code></strong></td>
       <td>Apple Silicon (<code>arm64</code>)</td>
       <td>MacBook Air, MacBook Pro, Mac mini, Mac Studio, iMac (M1, M2, M3, M4)</td>
     </tr>
     <tr>
-      <td><strong><code>Walkman-Studio-3.1.1-intel.dmg</code></strong></td>
+      <td><strong><code>Walkman-Studio-3.1.2-intel.dmg</code></strong></td>
       <td>Intel (<code>x86_64</code>)</td>
       <td>Intel-based MacBook, MacBook Pro, MacBook Air, iMac, Mac Pro</td>
     </tr>
     <tr>
-      <td><strong><code>Walkman-Studio-3.1.1-universal.dmg</code></strong></td>
+      <td><strong><code>Walkman-Studio-3.1.2-universal.dmg</code></strong></td>
       <td>Universal 2 (<code>arm64</code> + <code>x86_64</code>)</td>
       <td>Universal package running natively on all Macs (macOS 13.0+)</td>
     </tr>
@@ -193,7 +165,7 @@ cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
 </table>
 
 <h3>Alternative Mirror</h3>
-<p><strong>Google Drive:</strong> <a href="https://drive.google.com/drive/folders/1wC3F0Cdy_iJwdWQvR1VFc5VnvdhyULhd?usp=share_link" target="_blank" rel="noopener noreferrer">Download v3.1.1 Release Files on Google Drive</a></p>
+<p><strong>Google Drive:</strong> <a href="https://drive.google.com/drive/folders/1wC3F0Cdy_iJwdWQvR1VFc5VnvdhyULhd?usp=share_link" target="_blank" rel="noopener noreferrer">Download v3.1.2 Release Files on Google Drive</a></p>
 
 <hr>
 
