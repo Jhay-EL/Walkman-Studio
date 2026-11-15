@@ -31,7 +31,7 @@ public struct ContentView: View {
     @State private var isRefreshingDrives: Bool = false
     @State private var selectedTab: NavigationTab = .localLibrary
     @State private var selectedTrackId: String?
-    @State private var showInspector: Bool = true
+    @State private var showInspector: Bool = false
     @State private var wasInspectorOpenBeforeDisabledTab: Bool = false
     @State private var isEjecting: Bool = false
     @State private var queueCount: Int = 0
