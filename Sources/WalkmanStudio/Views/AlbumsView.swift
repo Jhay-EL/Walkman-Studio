@@ -335,11 +335,6 @@ public struct AlbumsView: View {
                                     AlbumGridCard(
                                         album: alb,
                                         onOpen: { selectedAlbum = alb },
-                                        onInspectAlbum: {
-                                            if let rep = alb.representativeTrack {
-                                                onSelectTrack(rep)
-                                            }
-                                        },
                                         onEditAlbum: {
                                             onEditAlbum?(alb)
                                         },
@@ -1169,7 +1164,6 @@ private struct HoverAlbumPillBackground: View {
 private struct AlbumGridCard: View {
     let album: AlbumItem
     let onOpen: () -> Void
-    var onInspectAlbum: (() -> Void)? = nil
     var onEditAlbum: (() -> Void)? = nil
     var onDeleteAlbum: (() -> Void)? = nil
     var onTransferAlbum: (() -> Void)? = nil
@@ -1352,12 +1346,6 @@ private struct AlbumGridCard: View {
                 ArtworkExportService.exportArtwork(for: album)
             } label: {
                 Label("Export Album Artwork to Mac...", systemImage: "square.and.arrow.down")
-            }
-            
-            Button {
-                onInspectAlbum?()
-            } label: {
-                Label("Inspect in Sidebar", systemImage: "sidebar.trailing")
             }
             
             if let rep = album.representativeTrack {
@@ -1789,7 +1777,6 @@ private struct AlbumDetailView: View {
                 playButton
                 shuffleButton
                 editLabeledButton
-                getInfoLabeledButton
                 moreMenuButton
             }
             
@@ -1798,7 +1785,6 @@ private struct AlbumDetailView: View {
                 playButton
                 shuffleButton
                 editCircularButton
-                getInfoCircularButton
                 moreMenuButton
             }
             
@@ -1810,7 +1796,6 @@ private struct AlbumDetailView: View {
                 }
                 HStack(spacing: 8) {
                     editCircularButton
-                    getInfoCircularButton
                     exportCircularButton
                     moreMenuButton
                 }
@@ -1889,28 +1874,6 @@ private struct AlbumDetailView: View {
         .help("Edit album artwork, tags, and track numbers in a popup window")
     }
     
-    @ViewBuilder
-    private var getInfoLabeledButton: some View {
-        if let rep = album.representativeTrack {
-            Button(action: { onSelectTrack(rep) }) {
-                HStack(spacing: 5.5) {
-                    Image(systemName: "info.circle")
-                        .font(.system(size: 11, weight: .semibold))
-                    Text("Get Info")
-                        .font(.system(size: 13, weight: .medium))
-                        .lineLimit(1)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .frame(minHeight: 34)
-                .foregroundStyle(WalkmanTheme.silverLight)
-            }
-            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 17))
-            .fixedSize(horizontal: true, vertical: false)
-            .help("Inspect album metadata and cover artwork in sidebar")
-        }
-    }
-    
     private var editCircularButton: some View {
         Button(action: { onEditAlbum?() }) {
             Image(systemName: "square.and.pencil")
@@ -1921,21 +1884,6 @@ private struct AlbumDetailView: View {
         .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 17))
         .fixedSize(horizontal: true, vertical: false)
         .help("Edit album artwork, tags, and track numbers")
-    }
-    
-    @ViewBuilder
-    private var getInfoCircularButton: some View {
-        if let rep = album.representativeTrack {
-            Button(action: { onSelectTrack(rep) }) {
-                Image(systemName: "info.circle")
-                    .font(.system(size: 13, weight: .semibold))
-                    .frame(width: 34, height: 34)
-                    .foregroundStyle(WalkmanTheme.silverLight)
-            }
-            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 17))
-            .fixedSize(horizontal: true, vertical: false)
-            .help("Inspect album in sidebar")
-        }
     }
     
     private var exportCircularButton: some View {
@@ -1963,14 +1911,6 @@ private struct AlbumDetailView: View {
                     onFetchLyrics()
                 } label: {
                     Label("Fetch .LRC Lyrics for Album...", systemImage: "quote.bubble")
-                }
-            }
-            
-            if let rep = album.representativeTrack {
-                Button {
-                    onSelectTrack(rep)
-                } label: {
-                    Label("Inspect in Sidebar", systemImage: "sidebar.trailing")
                 }
             }
             
