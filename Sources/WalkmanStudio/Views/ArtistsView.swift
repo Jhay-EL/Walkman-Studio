@@ -63,6 +63,22 @@ public struct ArtistsView: View, Equatable {
     @State private var isCompactMasterColumn: Bool = false
     @State private var showBatchLyricsSheet: Bool = false
     @State private var isPreparingLyricsSheet: Bool = false
+
+    // Resizable Left Panel State
+    @AppStorage("walkman_artists_panel_width") private var storedPanelWidth: Double = 205.0
+    @State private var panelWidth: CGFloat = 205.0
+    @State private var isSplitterHovered: Bool = false
+    @State private var isSplitterDragging: Bool = false
+    @State private var dragStartPanelWidth: CGFloat? = nil
+    @State private var hasPushedResizeCursor: Bool = false
+
+    private let minPanelWidth: CGFloat = 160.0
+    private let maxPanelWidth: CGFloat = 400.0
+    private let defaultPanelWidth: CGFloat = 205.0
+
+    private var effectivePanelWidth: CGFloat {
+        min(maxPanelWidth, max(minPanelWidth, panelWidth))
+    }
     
     private let formatFilterOptions: [FilterOption] = [
         FilterOption(id: "ALL", title: "All Formats", icon: nil, isHiRes: false),
@@ -108,6 +124,10 @@ public struct ArtistsView: View, Equatable {
         self._cachedHeroMetadata = State(initialValue: initialActive.map(Self.computeHeroMetadata) ?? "")
         self._cachedHeroQuality = State(initialValue: initialActive.map(Self.computeHeroQuality) ?? "")
         self._cachedHeroAvgBitrate = State(initialValue: initialActive.flatMap(Self.computeHeroAvgBitrate))
+
+        let savedWidth = UserDefaults.standard.double(forKey: "walkman_artists_panel_width")
+        let initWidth: CGFloat = savedWidth > 0 ? CGFloat(savedWidth) : 205.0
+        self._panelWidth = State(initialValue: min(400.0, max(160.0, initWidth)))
     }
     
     private var baseArtists: [ArtistItem] {
@@ -353,13 +373,11 @@ public struct ArtistsView: View, Equatable {
                         }
                     }
                 }
-                .frame(width: isCompactMasterColumn ? 160 : 185)
+                .frame(width: effectivePanelWidth)
                 .background(Color.clear)
                 
-                // Vertical Hairline Divider between Master List & Detail Console
-                Rectangle()
-                    .fill(Color.white.opacity(0.06))
-                    .frame(width: 0.8)
+                // Resizable Vertical Splitter between Master List & Detail Console
+                artistListSplitterView
                 
                 // Right Detail Column: Artist Discography Console
                 if let artist = activeArtist {
@@ -509,6 +527,95 @@ public struct ArtistsView: View, Equatable {
                 }
             )
         }
+        .onDisappear {
+            if hasPushedResizeCursor {
+                NSCursor.pop()
+                hasPushedResizeCursor = false
+            }
+        }
+    }
+    
+    // -------------------------------------------------------------------------
+    // RESIZABLE SPLITTER (TACTILE DRAG HANDLE & CURSOR MANAGEMENT)
+    // -------------------------------------------------------------------------
+    
+    private func updateResizeCursor(hovering: Bool) {
+        if hovering || isSplitterDragging {
+            if !hasPushedResizeCursor {
+                NSCursor.resizeLeftRight.push()
+                hasPushedResizeCursor = true
+            }
+        } else {
+            if hasPushedResizeCursor {
+                NSCursor.pop()
+                hasPushedResizeCursor = false
+            }
+        }
+    }
+    
+    private var artistListSplitterView: some View {
+        ZStack {
+            // Invisible wider hit-testing zone (14pt wide)
+            Rectangle()
+                .fill(Color.clear)
+                .frame(width: 14)
+                .contentShape(Rectangle())
+
+            // Hairline separator line
+            Rectangle()
+                .fill(Color.white.opacity(isSplitterDragging ? 0.30 : (isSplitterHovered ? 0.16 : 0.06)))
+                .frame(width: 0.8)
+
+            // Tactile rounded handle bar centered on divider
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(
+                    isSplitterDragging ? WalkmanTheme.hiResGold :
+                    (isSplitterHovered ? Color.white.opacity(0.45) : Color.white.opacity(0.12))
+                )
+                .frame(
+                    width: isSplitterDragging ? 3 : (isSplitterHovered ? 2.5 : 2),
+                    height: isSplitterDragging ? 38 : (isSplitterHovered ? 30 : 22)
+                )
+                .shadow(
+                    color: isSplitterDragging ? WalkmanTheme.hiResGold.opacity(0.5) : Color.clear,
+                    radius: 3
+                )
+                .animation(.easeOut(duration: 0.15), value: isSplitterHovered)
+                .animation(.easeOut(duration: 0.15), value: isSplitterDragging)
+        }
+        .frame(width: 14)
+        .onHover { hovering in
+            isSplitterHovered = hovering
+            updateResizeCursor(hovering: hovering)
+        }
+        .gesture(
+            DragGesture(minimumDistance: 1)
+                .onChanged { value in
+                    if dragStartPanelWidth == nil {
+                        dragStartPanelWidth = effectivePanelWidth
+                        isSplitterDragging = true
+                        updateResizeCursor(hovering: true)
+                    }
+                    if let start = dragStartPanelWidth {
+                        let proposed = start + value.translation.width
+                        let clamped = min(maxPanelWidth, max(minPanelWidth, proposed))
+                        panelWidth = clamped
+                        storedPanelWidth = Double(clamped)
+                    }
+                }
+                .onEnded { _ in
+                    dragStartPanelWidth = nil
+                    isSplitterDragging = false
+                    updateResizeCursor(hovering: isSplitterHovered)
+                }
+        )
+        .onTapGesture(count: 2) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                panelWidth = defaultPanelWidth
+                storedPanelWidth = Double(defaultPanelWidth)
+            }
+        }
+        .help("Drag to resize artists list (Min \(Int(minPanelWidth))px, Max \(Int(maxPanelWidth))px). Double-click to reset.")
     }
     
     // -------------------------------------------------------------------------
