@@ -94,7 +94,7 @@ Walkman Studio v3.1.2 brings resizable side panels, enhanced metadata workflows,
 | **`Walkman-Studio-3.1.2-universal.dmg`** | Universal 2 (`arm64` + `x86_64`) | Universal package running natively on all Macs (macOS 13.0+) |
 
 ### Alternative Mirror
-* **Google Drive:** [Download v3.1.2 Release Files on Google Drive](https://drive.google.com/drive/folders/1wC3F0Cdy_iJwdWQvR1VFc5VnvdhyULhd?usp=share_link)
+* **Google Drive:** [Download v3.1.2 Release Files on Google Drive](https://drive.google.com/drive/folders/1K_lnoAEbpX_2zY9xL1PG3zv0KOFlonR-?usp=share_link)
 
 ---
 
@@ -165,7 +165,7 @@ cat << 'EOF' > "$DIST_DIR/RELEASE_NOTES.html"
 </table>
 
 <h3>Alternative Mirror</h3>
-<p><strong>Google Drive:</strong> <a href="https://drive.google.com/drive/folders/1wC3F0Cdy_iJwdWQvR1VFc5VnvdhyULhd?usp=share_link" target="_blank" rel="noopener noreferrer">Download v3.1.2 Release Files on Google Drive</a></p>
+<p><strong>Google Drive:</strong> <a href="https://drive.google.com/drive/folders/1K_lnoAEbpX_2zY9xL1PG3zv0KOFlonR-?usp=share_link" target="_blank" rel="noopener noreferrer">Download v3.1.2 Release Files on Google Drive</a></p>
 
 <hr>
 

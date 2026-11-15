@@ -32,7 +32,7 @@ A native macOS desktop app for managing **Classic Sony OS** and **Android** Sony
 | **Intel Mac DMG** | `x86_64` | Intel-based MacBook, iMac, Mac mini, Mac Pro | [Walkman-Studio-3.1.2-intel.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.1.2/Walkman-Studio-3.1.2-intel.dmg) |
 | **Universal 2 DMG** | `arm64` + `x86_64` | Single native package for all Macs | [Walkman-Studio-3.1.2-universal.dmg](https://github.com/Jhay-EL/Walkman-Studio/releases/download/v3.1.2/Walkman-Studio-3.1.2-universal.dmg) |
 
-* **Alternative Mirror:** Standalone `.zip` archives, `.dmg` installers, and `SHA256SUMS.txt` are also hosted on the [Google Drive Mirror](https://drive.google.com/drive/folders/1wC3F0Cdy_iJwdWQvR1VFc5VnvdhyULhd?usp=share_link).
+* **Alternative Mirror:** Standalone `.zip` archives, `.dmg` installers, and `SHA256SUMS.txt` are also hosted on the [Google Drive Mirror](https://drive.google.com/drive/folders/1K_lnoAEbpX_2zY9xL1PG3zv0KOFlonR-?usp=share_link).
 * **Choosing a build:** Pick `arm64` on Apple Silicon for the smallest download, `intel` on x86_64 Macs, or `universal` to cover both architectures.
 
 ### Requirements

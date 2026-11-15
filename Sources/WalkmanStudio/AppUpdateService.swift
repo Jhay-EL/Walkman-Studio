@@ -318,7 +318,7 @@ public final class AppUpdateService: NSObject, ObservableObject {
     nonisolated public static let expectedBundleIdentifier = "com.sony.walkmanstudio"
     nonisolated public static let releasesPageURL = URL(string: "https://github.com/\(githubOwner)/\(githubRepo)/releases")!
     nonisolated public static let latestReleaseAPIURL = URL(string: "https://api.github.com/repos/\(githubOwner)/\(githubRepo)/releases/latest")!
-    nonisolated public static let googleDriveMirrorURL = URL(string: "https://drive.google.com/drive/folders/1wC3F0Cdy_iJwdWQvR1VFc5VnvdhyULhd?usp=share_link")!
+    nonisolated public static let googleDriveMirrorURL = URL(string: "https://drive.google.com/drive/folders/1K_lnoAEbpX_2zY9xL1PG3zv0KOFlonR-?usp=share_link")!
 
     private enum DefaultsKey {
         static let autoCheckOnLaunch = "WalkmanStudio.autoCheckUpdatesOnLaunch"
