@@ -43,6 +43,23 @@ A native macOS desktop app for managing **Classic Sony OS** and **Android** Sony
 
 ---
 
+## What's New in v3.1.2
+
+### Artists Tab: Tactile Resizable Master Panel & Stutter-Free Resizing
+* **Adjustable Splitter with Min/Max Bounds:** Added a smooth, interactive resize divider between the left artist master list and right discography console with bounded limits (`160pt` – `400pt`) and persistent width storage. Double-click the splitter to instantly snap back to the default width (`205pt`).
+* **Zero-Stutter 60/120 FPS Resizing:** Eliminated drag lag and frame drops by decoupling `@AppStorage` disk synchronization to drag completion, suppressing implicit animation transactions during continuous drag, removing redundant layout passes, and isolating detail width tier transitions.
+
+### Album Metadata Editor: Batch Lyrics & SenseMe Acoustic Analysis
+* **Integrated Lyrics Fetching:** Easily fetch synchronized lyrics (`.lrc`) for either all tracks or specifically selected tracks in an album directly from within the Album Metadata Editor.
+* **Refined, Intuitive UI:** Polished lyrics fetching interface with direct row-level status indicators and selection actions.
+* **SenseMe Acoustic Analysis Reliability:** Fixed SenseMe analysis pipeline inside the Album Metadata Editor to correctly compute 12-Tone channels and energy ratings across album tracks.
+
+### Albums Tab Navigation & App Start State
+* **Exact Scroll Position Retention:** Returning from an album detail view back to the *Albums* grid now accurately retains your previous scroll position instead of jumping back to the top.
+* **Default Inspector Panel State:** The track details inspector panel now defaults to closed on initial launch, providing an unobstructed full-width library view.
+
+---
+
 ## Supported Devices
 
 ### Android Walkman DAPs
