@@ -58,6 +58,11 @@ A native macOS desktop app for managing **Classic Sony OS** and **Android** Sony
 * **Exact Scroll Position Retention:** Returning from an album detail view back to the *Albums* grid now accurately retains your previous scroll position instead of jumping back to the top.
 * **Default Inspector Panel State:** The track details inspector panel now defaults to closed on initial launch, providing an unobstructed full-width library view.
 
+### In-App Updater in About Walkman Studio
+* **One-Click In-App Updates:** Added an interactive **Updates** tab in *About Walkman Studio* that queries the latest GitHub Releases and Google Drive mirrors directly within the app.
+* **Architecture-Aware Downloads & Staging:** Automatically matches your Mac's running architecture (Apple Silicon `arm64`, Intel `x86_64`, or Universal 2), downloads the update with live progress indicators, verifies bundle signatures, and smoothly installs and relaunches with a single click.
+* **Update Notification Badges:** Displays a non-intrusive status pill in the toolbar and sidebar when a new release is available, linking directly to the update screen.
+
 ---
 
 ## Supported Devices
