@@ -4,6 +4,11 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
+# Fallback to MacOSX26.5.sdk if available to prevent missing SwiftUIMacros in CommandLineTools
+if [ -z "$SDKROOT" ] && [ -d "/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk" ]; then
+    export SDKROOT="/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk"
+fi
+
 ARCH="${1:-universal}"
 VERSION="${2:-${WALKMAN_VERSION:-3.1.2}}"
 BUILD_NUM="${3:-${WALKMAN_BUILD_NUM:-312}}"

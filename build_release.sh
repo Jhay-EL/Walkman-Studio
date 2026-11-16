@@ -4,6 +4,11 @@ set -e
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DIR"
 
+# Fallback to MacOSX26.5.sdk if available to prevent missing SwiftUIMacros in CommandLineTools
+if [ -z "$SDKROOT" ] && [ -d "/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk" ]; then
+    export SDKROOT="/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk"
+fi
+
 VERSION="3.1.2"
 BUILD_NUM="312"
 export WALKMAN_VERSION="$VERSION"
@@ -38,6 +43,7 @@ package_dist() {
     
     local DMG_NAME="Walkman-Studio-${VERSION}-${SUFFIX}.dmg"
     echo "Packaging $DMG_NAME with custom background artwork and layout..."
+    rm -f "$DIST_DIR/$DMG_NAME"
     if command -v dmgbuild &>/dev/null; then
         dmgbuild -s "$DIR/scripts/dmg_settings.py" -D app_path="$APP_BUNDLE" -D project_dir="$DIR" "Walkman Studio" "$DIST_DIR/$DMG_NAME"
     elif python3 -m dmgbuild --help &>/dev/null; then
