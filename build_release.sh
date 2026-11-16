@@ -37,12 +37,21 @@ package_dist() {
     ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" "$DIST_DIR/$ZIP_NAME"
     
     local DMG_NAME="Walkman-Studio-${VERSION}-${SUFFIX}.dmg"
-    echo "Packaging $DMG_NAME..."
-    local DMG_TEMP_DIR="$(mktemp -d /tmp/walkman-dmg-XXXXXX)"
-    cp -R "$APP_BUNDLE" "$DMG_TEMP_DIR/"
-    ln -s /Applications "$DMG_TEMP_DIR/Applications"
-    hdiutil create -volname "Walkman Studio" -srcfolder "$DMG_TEMP_DIR" -ov -format UDZO "$DIST_DIR/$DMG_NAME"
-    rm -rf "$DMG_TEMP_DIR"
+    echo "Packaging $DMG_NAME with custom background artwork and layout..."
+    if command -v dmgbuild &>/dev/null; then
+        dmgbuild -s "$DIR/scripts/dmg_settings.py" -D app_path="$APP_BUNDLE" -D project_dir="$DIR" "Walkman Studio" "$DIST_DIR/$DMG_NAME"
+    elif python3 -m dmgbuild --help &>/dev/null; then
+        python3 -m dmgbuild -s "$DIR/scripts/dmg_settings.py" -D app_path="$APP_BUNDLE" -D project_dir="$DIR" "Walkman Studio" "$DIST_DIR/$DMG_NAME"
+    elif [ -x "$HOME/Library/Python/3.9/bin/dmgbuild" ]; then
+        "$HOME/Library/Python/3.9/bin/dmgbuild" -s "$DIR/scripts/dmg_settings.py" -D app_path="$APP_BUNDLE" -D project_dir="$DIR" "Walkman Studio" "$DIST_DIR/$DMG_NAME"
+    else
+        echo "Warning: dmgbuild not found, creating fallback DMG with hdiutil..."
+        local DMG_TEMP_DIR="$(mktemp -d /tmp/walkman-dmg-XXXXXX)"
+        cp -R "$APP_BUNDLE" "$DMG_TEMP_DIR/"
+        ln -s /Applications "$DMG_TEMP_DIR/Applications"
+        hdiutil create -volname "Walkman Studio" -srcfolder "$DMG_TEMP_DIR" -ov -format UDZO "$DIST_DIR/$DMG_NAME"
+        rm -rf "$DMG_TEMP_DIR"
+    fi
 }
 
 # 1. Package Apple Silicon (arm64) distribution
