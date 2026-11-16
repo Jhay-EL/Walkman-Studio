@@ -1484,6 +1484,26 @@ private struct DuplicateFilterTabPillView: View {
 
     @State private var isHovered = false
 
+    private var pillBackground: Color {
+        if isSelected {
+            return item.tint?.opacity(0.28) ?? Color.white.opacity(0.20)
+        } else if isHovered {
+            return Color.white.opacity(0.12)
+        } else {
+            return Color.white.opacity(0.06)
+        }
+    }
+
+    private var pillForeground: Color {
+        if isSelected {
+            return item.tint ?? Color.white
+        } else if isHovered {
+            return Color.white
+        } else {
+            return WalkmanTheme.silverMuted
+        }
+    }
+
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: isCompact ? 4.5 : 6) {
@@ -1498,16 +1518,8 @@ private struct DuplicateFilterTabPillView: View {
                     .lineLimit(1)
                     .padding(.horizontal, isCompact ? 5 : 6)
                     .padding(.vertical, 1.5)
-                    .background(
-                        isSelected ?
-                            (item.tint?.opacity(0.28) ?? Color.white.opacity(0.20)) :
-                            (isHovered ? Color.white.opacity(0.12) : Color.white.opacity(0.06))
-                    )
-                    .foregroundStyle(
-                        isSelected ?
-                            (item.tint ?? Color.white) :
-                            (isHovered ? Color.white : WalkmanTheme.silverMuted)
-                    )
+                    .background(pillBackground)
+                    .foregroundStyle(pillForeground)
                     .clipShape(Capsule())
             }
             .padding(.horizontal, isCompact ? 8.5 : 11)

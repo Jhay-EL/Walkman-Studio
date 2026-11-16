@@ -113,7 +113,7 @@ public struct AboutWalkmanStudioView: View {
                     .font(WalkmanFont.title1)
                     .foregroundStyle(.primary)
                 
-                Text("Version \(updateService.currentVersionString) (\(updateService.currentBuildNumberString)) • \(updateService.runningBuildArchitecture.displayName)")
+                Text("Version \(updateService.currentVersionString) • \(updateService.runningBuildArchitecture.displayName)")
                     .font(WalkmanFont.calloutMedium)
                     .foregroundStyle(.secondary)
                 

@@ -1286,6 +1286,56 @@ private struct EditorSegmentedBar: View {
     @Binding var selectedTab: QueueItemEditorSheet.EditorTab
     @Namespace private var tabNamespace
 
+    @ViewBuilder
+    private func tabLabel(tab: QueueItemEditorSheet.EditorTab) -> some View {
+        let isSelected = selectedTab == tab
+        HStack(spacing: 6) {
+            Image(systemName: tab.icon)
+                .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
+            Text(tab.rawValue)
+                .font(isSelected ? WalkmanFont.calloutBold : WalkmanFont.calloutMedium)
+        }
+        .foregroundStyle(isSelected ? Color.white : Color.white.opacity(0.65))
+        .padding(.horizontal, 18)
+        .padding(.vertical, 8)
+        .frame(height: 34)
+    }
+
+    @ViewBuilder
+    private func tabBackground(tab: QueueItemEditorSheet.EditorTab) -> some View {
+        if selectedTab == tab {
+            ZStack {
+                Capsule()
+                    .fill(Color.white.opacity(0.15))
+                    .matchedGeometryEffect(id: "activeTabCapsule", in: tabNamespace)
+
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white.opacity(0.35), location: 0.0),
+                            .init(color: .clear, location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 6)
+                    Spacer(minLength: 0)
+                }
+                .clipShape(Capsule())
+                .matchedGeometryEffect(id: "activeTabSheen", in: tabNamespace)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func tabOverlay(tab: QueueItemEditorSheet.EditorTab) -> some View {
+        if selectedTab == tab {
+            Capsule()
+                .stroke(Color.white.opacity(0.32), lineWidth: 0.85)
+                .matchedGeometryEffect(id: "activeTabBorder", in: tabNamespace)
+        }
+    }
+
     var body: some View {
         HStack(spacing: 4) {
             ForEach(QueueItemEditorSheet.EditorTab.allCases) { tab in
@@ -1294,50 +1344,10 @@ private struct EditorSegmentedBar: View {
                         selectedTab = tab
                     }
                 }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: tab.icon)
-                            .font(.system(size: 12, weight: selectedTab == tab ? .semibold : .medium))
-                        Text(tab.rawValue)
-                            .font(selectedTab == tab ? WalkmanFont.calloutBold : WalkmanFont.calloutMedium)
-                    }
-                    .foregroundStyle(selectedTab == tab ? Color.white : Color.white.opacity(0.65))
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 8)
-                    .frame(height: 34)
-                    .background(
-                        ZStack {
-                            if selectedTab == tab {
-                                Capsule()
-                                    .fill(Color.white.opacity(0.15))
-                                    .matchedGeometryEffect(id: "activeTabCapsule", in: tabNamespace)
-
-                                VStack(spacing: 0) {
-                                    LinearGradient(
-                                        stops: [
-                                            .init(color: .white.opacity(0.35), location: 0.0),
-                                            .init(color: .clear, location: 1.0)
-                                        ],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                    .frame(height: 6)
-                                    Spacer(minLength: 0)
-                                }
-                                .clipShape(Capsule())
-                                .matchedGeometryEffect(id: "activeTabSheen", in: tabNamespace)
-                            }
-                        }
-                    )
-                    .overlay(
-                        Group {
-                            if selectedTab == tab {
-                                Capsule()
-                                    .stroke(Color.white.opacity(0.32), lineWidth: 0.85)
-                                    .matchedGeometryEffect(id: "activeTabBorder", in: tabNamespace)
-                            }
-                        }
-                    )
-                    .contentShape(Capsule())
+                    tabLabel(tab: tab)
+                        .background(tabBackground(tab: tab))
+                        .overlay(tabOverlay(tab: tab))
+                        .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
             }
