@@ -1292,13 +1292,21 @@ public final class AudioTagger: @unchecked Sendable {
         // Fallback to AVURLAsset artwork (M4A, ALAC, WAV, MP4, MP3 fallback)
         if artData == nil {
             let asset = AVURLAsset(url: fileURL)
-            let metadata = asset.metadata
-            for item in metadata {
-                if item.commonKey == .commonKeyArtwork, let data = item.dataValue {
-                    artData = data
-                    break
+            let sem = DispatchSemaphore(value: 0)
+            var foundData: Data? = nil
+            Task {
+                if let metadata = try? await asset.load(.metadata) {
+                    for item in metadata {
+                        if item.commonKey == .commonKeyArtwork, let data = try? await item.load(.dataValue) {
+                            foundData = data
+                            break
+                        }
+                    }
                 }
+                sem.signal()
             }
+            _ = sem.wait(timeout: .now() + 0.5)
+            artData = foundData
         }
 
         // Fallback to album folder art
