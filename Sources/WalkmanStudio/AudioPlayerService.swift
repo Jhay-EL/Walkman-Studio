@@ -326,10 +326,11 @@ public final class AudioPlayerService: NSObject, ObservableObject, @unchecked Se
         let url = URL(fileURLWithPath: track.fullPath)
         
         // Asynchronous asset loading off the main UI thread with sample-accurate duration & timing
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        Task.detached(priority: .userInitiated) { [weak self] in
             let asset = AVURLAsset(url: url, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
             let item = AVPlayerItem(asset: asset)
-            let assetDur = CMTimeGetSeconds(asset.duration)
+            let loadedDuration = try? await asset.load(.duration)
+            let assetDur = loadedDuration.map { CMTimeGetSeconds($0) } ?? 0.0
             
             DispatchQueue.main.async {
                 guard let self = self, self.currentTrack?.id == track.id else { return }
