@@ -312,7 +312,7 @@ public final class SenseMeEngine: @unchecked Sendable {
         let effectiveBpm = bpm < 62.0 ? (bpm * 2.0) : (bpm > 180.0 ? bpm * 0.5 : bpm)
         let s0 = moodScores[0], s1 = moodScores[1], s2 = moodScores[2], s3 = moodScores[3]
         let s4 = moodScores[4], s5 = moodScores[5], s6 = moodScores[6], s7 = moodScores[7]
-        let s8 = moodScores[8], s9 = moodScores[9]
+        let s8 = moodScores[8]
 
         var channels: [String] = []
 
@@ -748,7 +748,24 @@ public final class SenseMeEngine: @unchecked Sendable {
         // 2. Read metadata if not supplied
         let meta = metadata ?? AudioTagger.shared.readMetadata(fileURL: fileURL)
         let asset = AVURLAsset(url: fileURL)
-        let durationSec = CMTimeGetSeconds(asset.duration)
+
+        var durationSec: Double = 0.0
+        var audioTrack: AVAssetTrack? = nil
+        let sem = DispatchSemaphore(value: 0)
+        Task {
+            if let dur = try? await asset.load(.duration) {
+                let sec = CMTimeGetSeconds(dur)
+                if sec.isFinite && sec > 0 {
+                    durationSec = sec
+                }
+            }
+            if let tracks = try? await asset.loadTracks(withMediaType: .audio) {
+                audioTrack = tracks.first
+            }
+            sem.signal()
+        }
+        _ = sem.wait(timeout: .now() + 1.0)
+
         let duration = (durationSec.isFinite && durationSec > 5.0) ? durationSec : (meta?.durationSeconds ?? 180.0)
 
         // 3. Audio Sample Extraction via AVAssetReader (5-7 seconds window around chorus/midpoint)
@@ -757,7 +774,7 @@ public final class SenseMeEngine: @unchecked Sendable {
         var zeroCrossingRate: Double = 0.15
         var pulseRate: Double = 0.0
 
-        if let audioTrack = asset.tracks(withMediaType: .audio).first,
+        if let audioTrack = audioTrack,
            let reader = try? AVAssetReader(asset: asset) {
             let startSec = min(max(10.0, duration * 0.35), max(10.0, duration - 8.0))
             reader.timeRange = CMTimeRange(
