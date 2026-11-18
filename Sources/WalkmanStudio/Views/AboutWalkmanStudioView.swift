@@ -418,23 +418,9 @@ public struct AboutWalkmanStudioView: View {
                         }
                         
                         VStack(alignment: .leading, spacing: 3) {
-                            HStack(spacing: 8) {
-                                Text("John Lloyd Malabanan")
-                                    .font(WalkmanFont.title2)
-                                    .foregroundStyle(.primary)
-                                
-                                Text("Creator")
-                                    .font(WalkmanFont.badge)
-                                    .foregroundStyle(WalkmanTheme.hiResGold)
-                                    .padding(.horizontal, 7)
-                                    .padding(.vertical, 2.5)
-                                    .background(WalkmanTheme.hiResGold.opacity(0.12))
-                                    .clipShape(Capsule())
-                                    .overlay(
-                                        Capsule()
-                                            .stroke(WalkmanTheme.hiResGold.opacity(0.30), lineWidth: 0.8)
-                                    )
-                            }
+                            Text("John Lloyd Malabanan")
+                                .font(WalkmanFont.title2)
+                                .foregroundStyle(.primary)
                             
                             Text("GitHub: @Jhay-EL • UX/UI Designer & Software Developer")
                                 .font(WalkmanFont.subheadlineMedium)
