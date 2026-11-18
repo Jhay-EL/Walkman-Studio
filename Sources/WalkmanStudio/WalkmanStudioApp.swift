@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import ObjectiveC
 
 extension Notification.Name {
     public static let showAboutWalkmanStudio = Notification.Name("showAboutWalkmanStudio")
@@ -8,8 +9,40 @@ extension Notification.Name {
     public static let manageLocalFolders = Notification.Name("WalkmanStudio.manageLocalFolders")
 }
 
+private var mainWindowDelegateKey: UInt8 = 0
+
+private final class MainWindowDelegateProxy: NSObject, NSWindowDelegate {
+    weak var originalDelegate: NSWindowDelegate?
+
+    func window(_ window: NSWindow, willPositionSheet sheet: NSWindow, using rect: NSRect) -> NSRect {
+        let proposed = originalDelegate?.window?(window, willPositionSheet: sheet, using: rect) ?? rect
+        let fullWidth = window.contentView?.bounds.width ?? window.frame.width
+        return NSRect(x: 0, y: proposed.origin.y, width: fullWidth, height: proposed.height)
+    }
+
+    override func responds(to aSelector: Selector!) -> Bool {
+        if aSelector == #selector(NSWindowDelegate.window(_:willPositionSheet:using:)) {
+            return true
+        }
+        return originalDelegate?.responds(to: aSelector) ?? super.responds(to: aSelector)
+    }
+
+    override func forwardingTarget(for aSelector: Selector!) -> Any? {
+        return originalDelegate
+    }
+}
+
 public struct WindowConfigurator: NSViewRepresentable {
     public init() {}
+    
+    public static func ensureSheetCenteringDelegate(for window: NSWindow) {
+        if !(window.delegate is MainWindowDelegateProxy) {
+            let proxy = MainWindowDelegateProxy()
+            proxy.originalDelegate = window.delegate
+            objc_setAssociatedObject(window, &mainWindowDelegateKey, proxy, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            window.delegate = proxy
+        }
+    }
     
     public func makeNSView(context: Context) -> NSView {
         let view = NSView()
@@ -40,6 +73,7 @@ public struct WindowConfigurator: NSViewRepresentable {
     }
     
     private func configure(_ window: NSWindow) {
+        Self.ensureSheetCenteringDelegate(for: window)
         window.titlebarAppearsTransparent = true
         window.titlebarSeparatorStyle = .none
         window.isOpaque = true

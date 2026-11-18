@@ -163,6 +163,7 @@ public struct AboutWalkmanStudioView: View {
         }
         // Studio Window Dimensions (Optimized macOS Modal Layout)
         .frame(width: 780, height: 650)
+        .background(SheetCenteringHelper())
         .onAppear {
             selectedTab = initialTab
         }
@@ -1408,5 +1409,68 @@ private struct SpecRow: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 8.5)
         .background(Color.white.opacity(0.035))
+    }
+}
+
+// MARK: - Sheet Centering Helper
+private struct SheetCenteringHelper: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        SheetCenteringNSView()
+    }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+private final class SheetCenteringNSView: NSView {
+    private var parentResizeObserver: Any?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard let sheet = self.window else {
+            if let obs = parentResizeObserver {
+                NotificationCenter.default.removeObserver(obs)
+                parentResizeObserver = nil
+            }
+            return
+        }
+
+        if let parent = sheet.sheetParent ?? sheet.parent ?? NSApp.mainWindow ?? NSApp.keyWindow {
+            WindowConfigurator.ensureSheetCenteringDelegate(for: parent)
+
+            if parentResizeObserver == nil {
+                parentResizeObserver = NotificationCenter.default.addObserver(
+                    forName: NSWindow.didResizeNotification,
+                    object: parent,
+                    queue: .main
+                ) { [weak self, weak sheet] _ in
+                    guard let self = self, let sheet = sheet else { return }
+                    self.centerSheet(sheet)
+                }
+            }
+        }
+
+        DispatchQueue.main.async { [weak self, weak sheet] in
+            guard let self = self, let sheet = sheet else { return }
+            self.centerSheet(sheet)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak sheet] in
+            guard let self = self, let sheet = sheet else { return }
+            self.centerSheet(sheet)
+        }
+    }
+
+    deinit {
+        if let obs = parentResizeObserver {
+            NotificationCenter.default.removeObserver(obs)
+        }
+    }
+
+    private func centerSheet(_ sheet: NSWindow) {
+        guard let parent = sheet.sheetParent ?? sheet.parent ?? NSApp.mainWindow ?? NSApp.keyWindow else { return }
+        let parentFrame = parent.frame
+        let sheetFrame = sheet.frame
+        let targetX = parentFrame.minX + round((parentFrame.width - sheetFrame.width) / 2)
+        if abs(sheetFrame.minX - targetX) > 1.0 {
+            sheet.setFrameOrigin(NSPoint(x: targetX, y: sheetFrame.minY))
+        }
     }
 }
