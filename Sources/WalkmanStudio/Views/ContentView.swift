@@ -905,52 +905,55 @@ public struct ContentView: View {
             .shadow(color: Color.black.opacity(0.25), radius: 8, x: 0, y: 3)
             
             // Single Unified Action Controls (Zero Duplication)
-            HStack(spacing: 12) {
+            HStack(spacing: 14) {
                 Button(action: selectCustomStorageFolder) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 8) {
                         Image(systemName: "folder.badge.plus")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 14, weight: .semibold))
                         Text("Select Storage Folder...")
-                            .font(WalkmanFont.calloutMedium)
+                            .font(WalkmanFont.headline)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 11)
+                    .frame(height: 44)
                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                 }
-                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 18))
+                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 22))
                 .help("Browse and select your Walkman's Music folder or MicroSD card directory")
                 
                 Button(action: { showingMtpHelpSheet = true }) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 8) {
                         Image(systemName: "questionmark.circle")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 14, weight: .semibold))
                         Text("Mac Transfer Guide")
-                            .font(WalkmanFont.calloutMedium)
+                            .font(WalkmanFont.headline)
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 11)
+                    .frame(height: 44)
                     .foregroundStyle(WalkmanTheme.silverLight)
                 }
-                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 18))
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 22))
                 .help("Open step-by-step instructions for Android Walkman file transfer on macOS")
                 
                 Button(action: refreshDrives) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 8) {
                         if isRefreshingDrives {
                             ProgressView()
                                 .controlSize(.small)
                         } else {
                             Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(.system(size: 14, weight: .semibold))
                         }
                         Text("Detect Drives")
-                            .font(WalkmanFont.calloutMedium)
+                            .font(WalkmanFont.headline)
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 11)
+                    .frame(height: 44)
                     .foregroundStyle(WalkmanTheme.silverLight)
                 }
-                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 18))
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 22))
                 .disabled(isRefreshingDrives)
                 .help("Scan macOS volumes for mounted Walkman storage or inserted MicroSD cards")
             }
@@ -1016,53 +1019,56 @@ public struct ContentView: View {
                 .frame(maxWidth: 440)
             }
             
-            HStack(spacing: 12) {
+            HStack(spacing: 14) {
                 Button(action: refreshDrives) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 8) {
                         if isRefreshingDrives {
                             ProgressView()
                                 .controlSize(.small)
                         } else {
                             Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(.system(size: 14, weight: .semibold))
                         }
                         Text("Detect Drives")
-                            .font(WalkmanFont.calloutMedium)
+                            .font(WalkmanFont.headline)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 11)
+                    .frame(height: 44)
                     .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
                 }
-                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 18))
+                .buttonStyle(LiquidGlassButtonStyle(variant: .prominent, cornerRadius: 22))
                 .disabled(isRefreshingDrives)
                 .help("Scan macOS volumes for mounted Walkman storage or inserted MicroSD cards")
                 
                 Button(action: selectCustomStorageFolder) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 8) {
                         Image(systemName: "folder")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 14, weight: .semibold))
                         Text("Select Storage Folder...")
-                            .font(WalkmanFont.calloutMedium)
+                            .font(WalkmanFont.headline)
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 11)
+                    .frame(height: 44)
                     .foregroundStyle(WalkmanTheme.silverLight)
                 }
-                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 18))
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 22))
                 .help("Select a Walkman Music folder or MicroSD card manually")
                 
                 Button(action: { showingMtpHelpSheet = true }) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: 8) {
                         Image(systemName: "questionmark.circle")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 14, weight: .semibold))
                         Text("Mac Transfer Guide")
-                            .font(WalkmanFont.calloutMedium)
+                            .font(WalkmanFont.headline)
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 11)
+                    .frame(height: 44)
                     .foregroundStyle(WalkmanTheme.silverLight)
                 }
-                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 18))
+                .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 22))
                 .help("Instructions for Android Walkman file transfer on macOS")
             }
             
