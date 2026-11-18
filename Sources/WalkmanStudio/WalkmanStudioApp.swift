@@ -117,7 +117,6 @@ public struct WindowConfigurator: NSViewRepresentable {
                 }
             }
             hideSidebarToggleButtons(in: themeFrame)
-            setupTrafficLightsScaler(for: window)
         }
         
         // Strip any synthesized or residual sidebar toggle toolbar items from window toolbar
@@ -207,17 +206,13 @@ public struct WindowConfigurator: NSViewRepresentable {
             configureSplitViews(in: sub, isRoot: isRoot)
         }
     }
-    
-    private func setupTrafficLightsScaler(for window: NSWindow) {
-        TrafficLightsScaler.setup(for: window)
-    }
 }
 
 @main
 struct WalkmanStudioApp: App {
     init() {
         if let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
-           let img = NSImage(contentsOfFile: iconURL.path) {
+           let img = NSImage(contentsOf: iconURL) {
             NSApplication.shared.applicationIconImage = img
         } else if let fallback = NSImage(contentsOfFile: "assets/icon.png") {
             NSApplication.shared.applicationIconImage = fallback
@@ -251,119 +246,6 @@ struct WalkmanStudioApp: App {
                     NotificationCenter.default.post(name: .manageLocalFolders, object: nil)
                 }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
-            }
-        }
-    }
-}
-
-// MARK: - Traffic Light Buttons Scaler
-private final class TrafficLightsScalerAnchorView: NSView {
-    var scaler: TrafficLightsScaler?
-}
-
-private final class TrafficLightsScaler: NSObject {
-    private weak var window: NSWindow?
-    private var observers: [Any] = []
-
-    static func setup(for window: NSWindow) {
-        guard let close = window.standardWindowButton(.closeButton),
-              let superview = close.superview else { return }
-
-        superview.postsFrameChangedNotifications = true
-
-        if let existing = superview.subviews.first(where: { $0 is TrafficLightsScalerAnchorView }) as? TrafficLightsScalerAnchorView {
-            existing.scaler?.apply()
-            return
-        }
-
-        let anchor = TrafficLightsScalerAnchorView(frame: .zero)
-        anchor.isHidden = true
-        superview.addSubview(anchor)
-
-        let scaler = TrafficLightsScaler(window: window)
-        anchor.scaler = scaler
-        scaler.apply()
-
-        DispatchQueue.main.async {
-            scaler.apply()
-        }
-    }
-
-    init(window: NSWindow) {
-        self.window = window
-        super.init()
-
-        guard let close = window.standardWindowButton(.closeButton),
-              let superview = close.superview else { return }
-
-        let notif1 = NotificationCenter.default.addObserver(
-            forName: NSView.frameDidChangeNotification,
-            object: superview,
-            queue: .main
-        ) { [weak self] _ in
-            DispatchQueue.main.async {
-                self?.apply()
-            }
-        }
-        observers.append(notif1)
-
-        let notif2 = NotificationCenter.default.addObserver(
-            forName: NSWindow.didResizeNotification,
-            object: window,
-            queue: .main
-        ) { [weak self] _ in
-            DispatchQueue.main.async {
-                self?.apply()
-            }
-        }
-        observers.append(notif2)
-
-        let notif3 = NotificationCenter.default.addObserver(
-            forName: NSWindow.didExitFullScreenNotification,
-            object: window,
-            queue: .main
-        ) { [weak self] _ in
-            DispatchQueue.main.async {
-                self?.apply()
-            }
-        }
-        observers.append(notif3)
-    }
-
-    deinit {
-        for obs in observers {
-            NotificationCenter.default.removeObserver(obs)
-        }
-    }
-
-    func apply() {
-        guard let window = self.window,
-              !window.styleMask.contains(.fullScreen),
-              let close = window.standardWindowButton(.closeButton),
-              let mini = window.standardWindowButton(.miniaturizeButton),
-              let zoom = window.standardWindowButton(.zoomButton),
-              close.superview != nil else { return }
-
-        // Scales traffic light buttons from standard 12pt diameter up to ~15.6pt (+30% larger)
-        // with comfortable 24pt center-to-center spacing.
-        let scale: CGFloat = 1.30
-        let spacing: CGFloat = 24.0
-        let startX: CGFloat = 11.0
-        let midY = round(close.frame.midY)
-        let btnH: CGFloat = 14.0
-        let btnW: CGFloat = 14.0
-        let originY = round(midY - (btnH / 2.0))
-
-        let buttons = [close, mini, zoom]
-        for (i, btn) in buttons.enumerated() {
-            btn.wantsLayer = true
-            btn.layer?.anchorPoint = CGPoint(x: 0.5, y: 0.5)
-            btn.layer?.transform = CATransform3DMakeScale(scale, scale, 1.0)
-
-            let x = startX + (CGFloat(i) * spacing)
-            let newFrame = NSRect(x: x, y: originY, width: btnW, height: btnH)
-            if btn.frame != newFrame {
-                btn.frame = newFrame
             }
         }
     }
