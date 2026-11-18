@@ -286,9 +286,9 @@ public struct DuplicatesView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 7)
                 .frame(height: 38)
-                .foregroundStyle(Color(red: 20/255, green: 20/255, blue: 24/255))
+                .foregroundStyle(WalkmanTheme.silverLight)
             }
-            .buttonStyle(LiquidGlassButtonStyle(variant: .gold, cornerRadius: 19))
+            .buttonStyle(LiquidGlassButtonStyle(variant: .glass, cornerRadius: 19))
             .disabled(finder.isScanning)
             .opacity(finder.isScanning ? 0.6 : 1.0)
         }
