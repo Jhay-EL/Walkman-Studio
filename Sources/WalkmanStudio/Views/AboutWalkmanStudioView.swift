@@ -116,23 +116,6 @@ public struct AboutWalkmanStudioView: View {
                 Text("Version \(updateService.currentVersionString) • \(updateService.runningBuildArchitecture.displayName)")
                     .font(WalkmanFont.calloutMedium)
                     .foregroundStyle(.secondary)
-                
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(Color.green)
-                        .frame(width: 6, height: 6)
-                    Text("Universal Sony Walkman Architecture • Sony OS & Android DAP")
-                        .font(WalkmanFont.badge)
-                        .foregroundStyle(WalkmanTheme.silver)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(Color.white.opacity(0.06))
-                .clipShape(Capsule())
-                .overlay(
-                    Capsule()
-                        .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
-                )
             }
             .padding(.top, -18)
             .padding(.bottom, 16)
