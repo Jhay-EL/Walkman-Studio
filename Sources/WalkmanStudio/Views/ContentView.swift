@@ -1152,8 +1152,8 @@ public struct ContentView: View {
                         openAboutWalkmanStudio()
                     }
                 )
-                .frame(width: 260)
-                .navigationSplitViewColumnWidth(min: 260, ideal: 260, max: 260)
+                .frame(width: 268)
+                .navigationSplitViewColumnWidth(min: 268, ideal: 268, max: 268)
                 .toolbarBackground(.hidden, for: .windowToolbar)
                 .removeSidebarToggle()
             } detail: {

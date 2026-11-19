@@ -131,7 +131,7 @@ public struct WindowConfigurator: NSViewRepresentable {
         }
         
         // Configure split view holding priorities so:
-        // 1. Sidebar (leading) is rigid at 260pt.
+        // 1. Sidebar (leading) is rigid at 268pt.
         // 2. Main Content (center) absorbs all size changes without clipping.
         // 3. Inspector (trailing) is rigid at its configured width.
         if let contentView = window.contentView {
@@ -169,8 +169,8 @@ public struct WindowConfigurator: NSViewRepresentable {
                         controller.splitViewItems[0].holdingPriority = .defaultHigh
                         controller.splitViewItems[0].canCollapse = false
                         controller.splitViewItems[0].isCollapsed = false
-                        controller.splitViewItems[0].minimumThickness = 260
-                        controller.splitViewItems[0].maximumThickness = 260
+                        controller.splitViewItems[0].minimumThickness = 268
+                        controller.splitViewItems[0].maximumThickness = 268
                         controller.splitViewItems[1].holdingPriority = .defaultLow
                         
                         for sub in splitView.subviews {

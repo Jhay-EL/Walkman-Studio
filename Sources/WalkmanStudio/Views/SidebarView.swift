@@ -369,11 +369,11 @@ private struct AboutSidebarButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 11) {
+            HStack(spacing: 10) {
                 Image(systemName: "info.circle.fill")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(isHovered ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
-                    .frame(width: 22, alignment: .center)
+                    .frame(width: 24, height: 24, alignment: .center)
 
                 Text("About Walkman Studio")
                     .font(.system(size: 13, weight: .medium))
@@ -397,12 +397,14 @@ private struct AboutSidebarButton: View {
                     .clipShape(Capsule())
                     .overlay(
                         Capsule()
-                            .stroke(WalkmanTheme.hiResGold.opacity(0.32), lineWidth: 0.75)
+                            .strokeBorder(WalkmanTheme.hiResGold.opacity(0.32), lineWidth: 0.75)
                     )
+                    .fixedSize(horizontal: true, vertical: false)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 7)
-            .padding(.horizontal, 11)
+            .padding(.horizontal, 10)
             .background(
                 ZStack {
                     Color.white.opacity(isHovered ? 0.08 : 0.03)
@@ -462,23 +464,25 @@ private struct DeviceMultiSidebarCard: View {
 
     var body: some View {
         Button(action: onSelectDevice) {
-            HStack(spacing: 11) {
+            HStack(spacing: 10) {
                 // Walkman Device Icon (Unboxed)
                 WalkmanDeviceIconView(
-                    size: 28,
+                    size: 26,
                     mountPoint: device.primaryMountPoint,
                     deviceInfo: device.deviceInfo,
                     hasBackground: false
                 )
-                .frame(width: 26, height: 28)
+                .frame(width: 24, height: 26, alignment: .center)
                 .shadow(color: Color.black.opacity(0.35), radius: 2.5, x: 0, y: 1)
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 5) {
                         Text(device.specificModel)
-                            .font(.system(size: 12.5, weight: isDeviceActive ? .bold : .medium))
+                            .font(.system(size: 13, weight: isDeviceActive ? .bold : .medium))
                             .foregroundStyle(isDeviceActive ? .white : WalkmanTheme.silverLight)
                             .lineLimit(1)
+                        .allowsTightening(true)
+                        .minimumScaleFactor(0.80)
 
                         if isDeviceActive {
                             Text("ACTIVE")
@@ -489,8 +493,9 @@ private struct DeviceMultiSidebarCard: View {
                                 .foregroundStyle(WalkmanTheme.hiResGold)
                                 .clipShape(Capsule())
                                 .overlay(
-                                    Capsule().stroke(WalkmanTheme.hiResGold.opacity(0.4), lineWidth: 0.75)
+                                    Capsule().strokeBorder(WalkmanTheme.hiResGold.opacity(0.4), lineWidth: 0.75)
                                 )
+                                .fixedSize(horizontal: true, vertical: false)
                         }
                     }
 
@@ -500,9 +505,11 @@ private struct DeviceMultiSidebarCard: View {
                         .font(.system(size: 10.5, design: .monospaced))
                         .foregroundStyle(isDeviceActive ? WalkmanTheme.silverMuted : .secondary)
                         .lineLimit(1)
+                        .allowsTightening(true)
+                        .minimumScaleFactor(0.80)
                 }
 
-                Spacer()
+                Spacer(minLength: 4)
 
                 if isOverviewSelected {
                     Image(systemName: "hifispeaker.fill")
@@ -510,8 +517,9 @@ private struct DeviceMultiSidebarCard: View {
                         .foregroundStyle(WalkmanTheme.hiResGold)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 7)
-            .padding(.horizontal, 9)
+            .padding(.horizontal, 10)
             .background(
                 ZStack {
                     if isOverviewSelected {
@@ -601,28 +609,31 @@ private struct DriveSidebarRow: View {
 
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: 9) {
+            HStack(spacing: 10) {
                 // Miniature Frosted Medallion for Drive
                 ZStack {
                     Circle()
                         .fill(isCurrent ? Color.white.opacity(0.12) : Color.white.opacity(0.05))
                         .frame(width: 24, height: 24)
                         .overlay(
-                            Circle().stroke(Color.white.opacity(isCurrent ? 0.35 : 0.08), lineWidth: 0.75)
+                            Circle().strokeBorder(Color.white.opacity(isCurrent ? 0.35 : 0.08), lineWidth: 0.75)
                         )
                     
                     Image(systemName: drive.type == .internal ? "internaldrive.fill" : "sdcard.fill")
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(isCurrent ? WalkmanTheme.silverLight : WalkmanTheme.silverMuted)
                 }
+                .frame(width: 24, height: 24, alignment: .center)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(drive.name)
-                        .font(.system(size: 12.5, weight: isCurrent ? .semibold : .medium))
+                        .font(.system(size: 13, weight: isCurrent ? .semibold : .medium))
                         .foregroundStyle(isCurrent ? .white : WalkmanTheme.silverLight)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                        .layoutPriority(1)
+                        .allowsTightening(true)
+                        .minimumScaleFactor(0.80)
+                        .allowsTightening(true)
+                        .minimumScaleFactor(0.80)
 
                     let freeGb = Double(drive.freeBytes) / (1024 * 1024 * 1024)
                     Text(String(format: "%.1f GB free", freeGb))
@@ -630,22 +641,23 @@ private struct DriveSidebarRow: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Spacer()
+                Spacer(minLength: 4)
 
                 if isCurrent {
-                    // Active Beacon Dot (Clean tactile gold dot - No Glow)
+                    // Active Beacon Dot
                     Circle()
                         .fill(WalkmanTheme.hiResGold)
-                        .frame(width: 5.5, height: 5.5)
+                        .frame(width: 6, height: 6)
                         .overlay(
-                            Circle().stroke(WalkmanTheme.hiResGoldLight.opacity(0.6), lineWidth: 0.5)
+                            Circle().strokeBorder(WalkmanTheme.hiResGoldLight.opacity(0.8), lineWidth: 0.75)
                         )
-                        .padding(.trailing, 6)
+                        .padding(.trailing, 2)
                 }
             }
-            .padding(.vertical, 7)
-            .padding(.leading, isIndented ? 16 : 9)
-            .padding(.trailing, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 6)
+            .padding(.leading, isIndented ? 18 : 10)
+            .padding(.trailing, 10)
             .background(
                 ZStack {
                     if isCurrent {
@@ -719,38 +731,44 @@ private struct DeviceConnectedSidebarRow: View {
 
     var body: some View {
         Button(action: { selectedTab = .overview }) {
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 // Walkman Device Icon (Unboxed, native HIG presentation)
                 WalkmanDeviceIconView(
-                    size: 32,
+                    size: 26,
                     mountPoint: mountPoint,
                     deviceInfo: deviceInfo,
                     hasBackground: false
                 )
-                .frame(width: 28, height: 32)
-                .shadow(color: Color.black.opacity(0.35), radius: 3, x: 0, y: 1.5)
+                .frame(width: 24, height: 26, alignment: .center)
+                .shadow(color: Color.black.opacity(0.35), radius: 2.5, x: 0, y: 1)
                 
-                VStack(alignment: .leading, spacing: 2.5) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(deviceInfo?.specificModel ?? deviceInfo?.displayName ?? "Sony Walkman")
                         .font(.system(size: 13, weight: isSelected ? .bold : .semibold))
                         .foregroundStyle(isSelected ? .white : WalkmanTheme.silverLight)
-                        .minimumScaleFactor(0.85)
                         .lineLimit(1)
+                        .allowsTightening(true)
+                        .minimumScaleFactor(0.80)
+                        .allowsTightening(true)
+                        .minimumScaleFactor(0.80)
                     
                     HStack(spacing: 4.5) {
                         Image(systemName: "hifispeaker.fill")
                             .font(.system(size: 9))
                             .foregroundStyle(isSelected ? WalkmanTheme.hiResGold : WalkmanTheme.silverMuted)
                         Text("Device Overview")
-                            .font(.system(size: 11))
+                            .font(.system(size: 10.5))
                             .foregroundStyle(isSelected ? WalkmanTheme.silverLight : .secondary)
                             .lineLimit(1)
+                        .allowsTightening(true)
+                        .minimumScaleFactor(0.80)
                     }
                 }
                 
                 Spacer(minLength: 4)
             }
-            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 7)
             .padding(.horizontal, 10)
             .background(
                 ZStack {
@@ -848,7 +866,7 @@ private struct SidebarRow: View {
             guard !isDisabled else { return }
             selectedTab = tab
         }) {
-            HStack(spacing: 9) {
+            HStack(spacing: 10) {
                 // SF Symbol
                 Image(systemName: icon)
                     .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
@@ -859,7 +877,7 @@ private struct SidebarRow: View {
                                 ? (isSelected ? WalkmanTheme.hiResGoldLight : WalkmanTheme.hiResGold)
                                 : (isSelected ? WalkmanTheme.silverLight : (isHovered ? .white : WalkmanTheme.silverMuted)))
                     )
-                    .frame(width: 20, alignment: .center)
+                    .frame(width: 24, height: 24, alignment: .center)
 
                 Text(title)
                     .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
@@ -869,8 +887,8 @@ private struct SidebarRow: View {
                             : (isSelected ? .white : (isHovered ? .white : WalkmanTheme.silverLight))
                     )
                     .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                    .layoutPriority(1)
+                    .allowsTightening(true)
+                    .minimumScaleFactor(0.80)
 
                 Spacer(minLength: 4)
 
@@ -880,8 +898,10 @@ private struct SidebarRow: View {
                         HStack(spacing: 3) {
                             Image(systemName: "waveform")
                                 .font(.system(size: 7.5, weight: .black))
+                                .fixedSize()
                             Text(b)
                                 .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                                .fixedSize()
                         }
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2.5)
@@ -902,18 +922,21 @@ private struct SidebarRow: View {
                         .foregroundStyle(Color(red: 22/255, green: 20/255, blue: 18/255))
                         .clipShape(Capsule())
                         .overlay(
-                            Capsule().stroke(WalkmanTheme.hiResGoldLight.opacity(0.8), lineWidth: 0.8)
+                            Capsule().strokeBorder(WalkmanTheme.hiResGoldLight.opacity(0.8), lineWidth: 0.8)
                         )
                         .shadow(color: Color.black.opacity(0.18), radius: 2, x: 0, y: 1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .layoutPriority(2)
                     } else {
                         // Liquid Glass Counter Pill
                         Text(b)
                             .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .fixedSize()
                             .padding(.horizontal, 7)
                             .padding(.vertical, 2.5)
                             .background(
                                 ZStack {
-                                    Color.white.opacity(isSelected ? 0.18 : 0.08)
+                                    Color.white.opacity(isSelected ? 0.20 : 0.08)
                                     VStack(spacing: 0) {
                                         LinearGradient(
                                             stops: [.init(color: .white.opacity(0.22), location: 0), .init(color: .clear, location: 1)],
@@ -928,13 +951,16 @@ private struct SidebarRow: View {
                             .foregroundStyle(isSelected ? .white : WalkmanTheme.silverLight)
                             .clipShape(Capsule())
                             .overlay(
-                                Capsule().stroke(Color.white.opacity(isSelected ? 0.28 : 0.10), lineWidth: 0.75)
+                                Capsule().strokeBorder(Color.white.opacity(isSelected ? 0.28 : 0.10), lineWidth: 0.75)
                             )
+                            .fixedSize(horizontal: true, vertical: false)
+                            .layoutPriority(2)
                     }
                 }
             }
-            .padding(.vertical, 7)
-            .padding(.horizontal, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 6)
+            .padding(.horizontal, 10)
             .background(
                 ZStack {
                     if isSelected {
@@ -1032,18 +1058,20 @@ private struct DeviceDisconnectedSidebarRow: View {
 
     var body: some View {
         Button(action: { selectedTab = .overview }) {
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 if let usb = connectedUsb {
-                    WalkmanDeviceIconView(size: 28, modelName: usb.modelName, hasBackground: false)
+                    WalkmanDeviceIconView(size: 26, modelName: usb.modelName, hasBackground: false)
+                        .frame(width: 24, height: 26, alignment: .center)
                 } else {
                     ZStack {
                         Circle()
                             .fill(Color.white.opacity(0.06))
-                            .frame(width: 28, height: 28)
+                            .frame(width: 24, height: 24)
                         Image(systemName: "cable.connector.horizontal")
-                            .font(.system(size: 13))
+                            .font(.system(size: 12))
                             .foregroundStyle(WalkmanTheme.silverMuted)
                     }
+                    .frame(width: 24, height: 24, alignment: .center)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -1051,6 +1079,8 @@ private struct DeviceDisconnectedSidebarRow: View {
                         .font(.system(size: 13, weight: isSelected ? .bold : .semibold))
                         .foregroundStyle(isSelected ? .white : WalkmanTheme.silverLight)
                         .lineLimit(1)
+                        .allowsTightening(true)
+                        .minimumScaleFactor(0.80)
 
                     HStack(spacing: 4) {
                         Circle()
@@ -1064,7 +1094,8 @@ private struct DeviceDisconnectedSidebarRow: View {
 
                 Spacer(minLength: 4)
             }
-            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 7)
             .padding(.horizontal, 10)
             .background(
                 ZStack {
