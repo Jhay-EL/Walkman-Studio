@@ -655,6 +655,10 @@ public struct TableScrollInsetModifier: NSViewRepresentable {
                 // scrollerInsets so the horizontal scrollbar stays anchored at the bottom edge
                 // instead of floating mid-table over rows while preserving 88pt row clearance.
                 scrollView.automaticallyAdjustsContentInsets = false
+                scrollView.scrollerStyle = .overlay
+                scrollView.autohidesScrollers = true
+                scrollView.verticalScroller?.scrollerStyle = .overlay
+                scrollView.horizontalScroller?.scrollerStyle = .overlay
                 let targetContentInsets = NSEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0)
                 let targetScrollerInsets = NSEdgeInsets(top: 0, left: 0, bottom: -bottomInset, right: 0)
                 var needsTile = false
@@ -689,7 +693,48 @@ public struct TableScrollInsetModifier: NSViewRepresentable {
     }
 }
 
+public struct AutohidingScrollViewModifier: NSViewRepresentable {
+    public init() {}
+
+    public func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { [weak view] in
+            guard let view = view else { return }
+            configureEnclosingScrollView(from: view)
+        }
+        return view
+    }
+
+    public func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { [weak nsView] in
+            guard let nsView = nsView else { return }
+            configureEnclosingScrollView(from: nsView)
+        }
+    }
+
+    private func configureEnclosingScrollView(from view: NSView) {
+        var current: NSView? = view
+        var attempts = 0
+        while let c = current, attempts < 10 {
+            if let scrollView = c as? NSScrollView ?? c.enclosingScrollView {
+                scrollView.scrollerStyle = .overlay
+                scrollView.autohidesScrollers = true
+                scrollView.verticalScroller?.scrollerStyle = .overlay
+                scrollView.horizontalScroller?.scrollerStyle = .overlay
+                return
+            }
+            current = c.superview
+            attempts += 1
+        }
+    }
+}
+
 public extension View {
+    func autohidingScrollIndicators() -> some View {
+        self.scrollIndicators(.automatic)
+            .background(AutohidingScrollViewModifier())
+    }
+
     func tableScrollBottomInset(_ inset: CGFloat = 88) -> some View {
         self.background(TableScrollInsetModifier(bottomInset: inset))
     }

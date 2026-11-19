@@ -287,6 +287,7 @@ public struct SidebarView: View {
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
+        .autohidingScrollIndicators()
         .background(
             ZStack {
                 VisualEffectBackground(material: .sidebar, blendingMode: .behindWindow)

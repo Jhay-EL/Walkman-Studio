@@ -130,12 +130,22 @@ public struct WindowConfigurator: NSViewRepresentable {
             }
         }
         
-        // Configure split view holding priorities so:
-        // 1. Sidebar (leading) is rigid at 268pt.
-        // 2. Main Content (center) absorbs all size changes without clipping.
-        // 3. Inspector (trailing) is rigid at its configured width.
+        // Configure autohiding overlay scrollbars and split view holding priorities
         if let contentView = window.contentView {
+            configureAutohidingScrollbars(in: contentView)
             configureSplitViews(in: contentView, isRoot: true)
+        }
+    }
+    
+    private func configureAutohidingScrollbars(in view: NSView) {
+        if let scrollView = view as? NSScrollView {
+            scrollView.scrollerStyle = .overlay
+            scrollView.autohidesScrollers = true
+            scrollView.verticalScroller?.scrollerStyle = .overlay
+            scrollView.horizontalScroller?.scrollerStyle = .overlay
+        }
+        for sub in view.subviews {
+            configureAutohidingScrollbars(in: sub)
         }
     }
     
