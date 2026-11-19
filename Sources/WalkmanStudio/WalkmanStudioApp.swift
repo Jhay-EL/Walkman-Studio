@@ -76,8 +76,10 @@ public struct WindowConfigurator: NSViewRepresentable {
         Self.ensureSheetCenteringDelegate(for: window)
         window.titlebarAppearsTransparent = true
         window.titlebarSeparatorStyle = .none
-        window.isOpaque = true
-        window.backgroundColor = NSColor(red: 16/255, green: 17/255, blue: 20/255, alpha: 1.0)
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.hasShadow = true
+        window.invalidateShadow()
         
         // Enforce 1200x660 minimum window size constraint
         let minW: CGFloat = 1200

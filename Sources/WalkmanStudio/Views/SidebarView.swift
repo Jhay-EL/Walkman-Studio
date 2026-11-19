@@ -64,13 +64,13 @@ public struct SidebarView: View {
     @ViewBuilder
     private func sidebarSectionHeader(_ title: String) -> some View {
         HStack(alignment: .center, spacing: 6) {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Color.secondary.opacity(0.82))
-                .textCase(nil)
+            Text(title.uppercased())
+                .font(.system(size: 10.5, weight: .bold))
+                .tracking(0.6)
+                .foregroundStyle(WalkmanTheme.silverMuted.opacity(0.78))
             Spacer(minLength: 0)
         }
-        .padding(.vertical, 5)
+        .padding(.vertical, 6)
         .padding(.leading, 4)
         .padding(.trailing, 4)
     }
@@ -287,12 +287,48 @@ public struct SidebarView: View {
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
-        .background(WalkmanTheme.background.ignoresSafeArea())
+        .background(
+            ZStack {
+                VisualEffectBackground(material: .sidebar, blendingMode: .behindWindow)
+                LinearGradient(
+                    stops: [
+                        .init(color: Color.white.opacity(0.08), location: 0.0),
+                        .init(color: Color.white.opacity(0.02), location: 0.15),
+                        .init(color: Color.clear, location: 0.40)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .overlay(alignment: .trailing) {
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color.white.opacity(0.18), location: 0.0),
+                                .init(color: Color.white.opacity(0.08), location: 0.35),
+                                .init(color: Color.white.opacity(0.02), location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .frame(width: 1)
+            }
+            .ignoresSafeArea()
+        )
         .safeAreaInset(edge: .bottom) {
             if let onAbout = onOpenAbout {
                 VStack(spacing: 0) {
-                    Divider()
-                        .overlay(Color.white.opacity(0.06))
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.12), Color.white.opacity(0.04)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(height: 1)
                     AboutSidebarButton(
                         hasAvailableUpdate: hasAvailableUpdate,
                         availableUpdateVersion: availableUpdateVersion,
@@ -300,17 +336,22 @@ public struct SidebarView: View {
                     )
                 }
                 .background(
-                    WalkmanTheme.background
-                        .overlay(
-                            LinearGradient(
-                                stops: [
-                                    .init(color: Color.white.opacity(0.04), location: 0.0),
-                                    .init(color: Color.clear, location: 0.8)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
+                    ZStack {
+                        VisualEffectBackground(material: .sidebar, blendingMode: .behindWindow)
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color.white.opacity(0.05), location: 0.0),
+                                .init(color: Color.clear, location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
                         )
+                    }
+                    .overlay(alignment: .trailing) {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.06))
+                            .frame(width: 1)
+                    }
                 )
             }
         }
@@ -474,37 +515,63 @@ private struct DeviceMultiSidebarCard: View {
             .background(
                 ZStack {
                     if isOverviewSelected {
-                        Color.white.opacity(0.12)
+                        Color.white.opacity(0.13)
                         LinearGradient(
                             stops: [
-                                .init(color: .white.opacity(0.14), location: 0.0),
-                                .init(color: .clear, location: 0.8)
+                                .init(color: .white.opacity(0.18), location: 0.0),
+                                .init(color: .white.opacity(0.04), location: 0.45),
+                                .init(color: .clear, location: 1.0)
                             ],
                             startPoint: .top,
                             endPoint: .bottom
                         )
                     } else if isDeviceActive {
-                        Color.white.opacity(0.06)
+                        Color.white.opacity(0.07)
+                        LinearGradient(
+                            stops: [
+                                .init(color: .white.opacity(0.08), location: 0.0),
+                                .init(color: .clear, location: 0.7)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
                     } else if isHovered {
-                        Color.white.opacity(0.04)
+                        Color.white.opacity(0.05)
                     } else {
-                        Color.clear
+                        Color.white.opacity(0.02)
                     }
                 }
             )
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(
-                        isDeviceActive ? WalkmanTheme.hiResGold.opacity(0.4) : Color.white.opacity(isHovered ? 0.15 : 0.05),
-                        lineWidth: isDeviceActive ? 1.2 : 0.8
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(
+                        isDeviceActive
+                            ? LinearGradient(
+                                stops: [
+                                    .init(color: WalkmanTheme.hiResGold.opacity(0.65), location: 0.0),
+                                    .init(color: WalkmanTheme.hiResGold.opacity(0.30), location: 0.5),
+                                    .init(color: WalkmanTheme.hiResGold.opacity(0.10), location: 1.0)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                            : LinearGradient(
+                                stops: [
+                                    .init(color: Color.white.opacity(isHovered ? 0.22 : 0.10), location: 0.0),
+                                    .init(color: Color.white.opacity(isHovered ? 0.08 : 0.03), location: 1.0)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                        lineWidth: isDeviceActive ? 1.0 : 0.8
                     )
             )
             .shadow(
-                color: Color.black.opacity(isDeviceActive ? 0.2 : 0),
-                radius: 3,
+                color: Color.black.opacity(isDeviceActive ? 0.22 : (isHovered ? 0.12 : 0.04)),
+                radius: isDeviceActive ? 4 : 2,
                 x: 0,
-                y: 1
+                y: 1.5
             )
             .animation(.easeInOut(duration: 0.15), value: isHovered)
             .contentShape(Rectangle())
@@ -582,29 +649,34 @@ private struct DriveSidebarRow: View {
             .background(
                 ZStack {
                     if isCurrent {
-                        Color.white.opacity(0.08)
+                        Color.white.opacity(0.10)
                         LinearGradient(
                             stops: [
-                                .init(color: .white.opacity(0.09), location: 0.0),
-                                .init(color: .clear, location: 0.8)
+                                .init(color: .white.opacity(0.14), location: 0.0),
+                                .init(color: .white.opacity(0.03), location: 0.4),
+                                .init(color: .clear, location: 1.0)
                             ],
                             startPoint: .top,
                             endPoint: .bottom
                         )
                     } else if isHovered {
-                        Color.white.opacity(0.04)
+                        Color.white.opacity(0.05)
                     } else {
                         Color.clear
                     }
                 }
             )
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .strokeBorder(
                         isCurrent
                             ? LinearGradient(
-                                colors: [Color.white.opacity(0.35), Color.white.opacity(0.06)],
+                                stops: [
+                                    .init(color: Color.white.opacity(0.40), location: 0.0),
+                                    .init(color: Color.white.opacity(0.15), location: 0.5),
+                                    .init(color: Color.white.opacity(0.04), location: 1.0)
+                                ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
@@ -683,48 +755,59 @@ private struct DeviceConnectedSidebarRow: View {
             .background(
                 ZStack {
                     if isSelected {
-                        Color.white.opacity(0.12)
+                        Color.white.opacity(0.13)
                         LinearGradient(
                             stops: [
-                                .init(color: .white.opacity(0.14), location: 0.0),
-                                .init(color: .white.opacity(0.04), location: 0.4),
+                                .init(color: .white.opacity(0.18), location: 0.0),
+                                .init(color: .white.opacity(0.05), location: 0.4),
                                 .init(color: .clear, location: 1.0)
                             ],
                             startPoint: .top,
                             endPoint: .bottom
                         )
                     } else if isHovered {
-                        Color.white.opacity(0.05)
+                        Color.white.opacity(0.065)
+                        LinearGradient(
+                            stops: [
+                                .init(color: .white.opacity(0.08), location: 0.0),
+                                .init(color: .clear, location: 0.7)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
                     } else {
-                        Color.white.opacity(0.02)
+                        Color.white.opacity(0.03)
                     }
                 }
             )
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(
                         isSelected
                             ? LinearGradient(
                                 stops: [
-                                    .init(color: Color.white.opacity(0.48), location: 0.0),
-                                    .init(color: Color.white.opacity(0.20), location: 0.4),
+                                    .init(color: Color.white.opacity(0.50), location: 0.0),
+                                    .init(color: Color.white.opacity(0.20), location: 0.45),
                                     .init(color: Color.white.opacity(0.06), location: 1.0)
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                             : LinearGradient(
-                                colors: [Color.white.opacity(isHovered ? 0.16 : 0.06), Color.clear],
+                                stops: [
+                                    .init(color: Color.white.opacity(isHovered ? 0.22 : 0.10), location: 0.0),
+                                    .init(color: Color.white.opacity(isHovered ? 0.08 : 0.03), location: 1.0)
+                                ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
-                        lineWidth: 1
+                        lineWidth: 0.85
                     )
             )
             .shadow(
-                color: isSelected ? Color.black.opacity(0.25) : Color.black.opacity(0.08),
-                radius: isSelected ? 5 : 2,
+                color: isSelected ? Color.black.opacity(0.25) : Color.black.opacity(0.10),
+                radius: isSelected ? 5 : 2.5,
                 x: 0,
                 y: isSelected ? 2 : 1
             )
@@ -856,33 +939,33 @@ private struct SidebarRow: View {
                 ZStack {
                     if isSelected {
                         // Liquid Glass Selected Plate
-                        Color.white.opacity(0.10)
+                        Color.white.opacity(0.12)
                         LinearGradient(
                             stops: [
-                                .init(color: .white.opacity(0.12), location: 0.0),
-                                .init(color: .white.opacity(0.03), location: 0.4),
+                                .init(color: .white.opacity(0.18), location: 0.0),
+                                .init(color: .white.opacity(0.04), location: 0.45),
                                 .init(color: .clear, location: 1.0)
                             ],
                             startPoint: .top,
                             endPoint: .bottom
                         )
                     } else if isHovered && !isDisabled {
-                        Color.white.opacity(0.045)
+                        Color.white.opacity(0.055)
                     } else {
                         Color.clear
                     }
                 }
             )
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .strokeBorder(
                         isSelected
                             ? LinearGradient(
                                 stops: [
-                                    .init(color: Color.white.opacity(0.40), location: 0.0),
-                                    .init(color: Color.white.opacity(0.15), location: 0.5),
-                                    .init(color: Color.white.opacity(0.04), location: 1.0)
+                                    .init(color: Color.white.opacity(0.42), location: 0.0),
+                                    .init(color: Color.white.opacity(0.16), location: 0.5),
+                                    .init(color: Color.white.opacity(0.05), location: 1.0)
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -892,11 +975,11 @@ private struct SidebarRow: View {
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
-                        lineWidth: 1
+                        lineWidth: 0.85
                     )
             )
             .shadow(
-                color: isSelected ? Color.black.opacity(0.22) : .clear,
+                color: isSelected ? Color.black.opacity(0.20) : .clear,
                 radius: 4,
                 x: 0,
                 y: 1.5
@@ -986,18 +1069,53 @@ private struct DeviceDisconnectedSidebarRow: View {
             .background(
                 ZStack {
                     if isSelected {
-                        Color.white.opacity(0.10)
+                        Color.white.opacity(0.12)
+                        LinearGradient(
+                            stops: [
+                                .init(color: .white.opacity(0.16), location: 0.0),
+                                .init(color: .white.opacity(0.04), location: 0.4),
+                                .init(color: .clear, location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
                     } else if isHovered {
-                        Color.white.opacity(0.04)
+                        Color.white.opacity(0.06)
                     } else {
-                        Color.white.opacity(0.02)
+                        Color.white.opacity(0.025)
                     }
                 }
             )
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(isSelected ? Color.white.opacity(0.35) : Color.white.opacity(0.06), lineWidth: 0.8)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(
+                        isSelected
+                            ? LinearGradient(
+                                stops: [
+                                    .init(color: Color.white.opacity(0.48), location: 0.0),
+                                    .init(color: Color.white.opacity(0.18), location: 0.45),
+                                    .init(color: Color.white.opacity(0.06), location: 1.0)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                            : LinearGradient(
+                                stops: [
+                                    .init(color: Color.white.opacity(isHovered ? 0.20 : 0.10), location: 0.0),
+                                    .init(color: Color.white.opacity(isHovered ? 0.07 : 0.03), location: 1.0)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                        lineWidth: 0.85
+                    )
+            )
+            .shadow(
+                color: isSelected ? Color.black.opacity(0.24) : Color.black.opacity(0.08),
+                radius: isSelected ? 5 : 2.5,
+                x: 0,
+                y: isSelected ? 2 : 1
             )
         }
         .buttonStyle(.plain)

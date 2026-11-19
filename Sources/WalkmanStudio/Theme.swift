@@ -177,6 +177,42 @@ public extension View {
     }
 }
 
+// MARK: - Native macOS Visual Effect Background (Liquid Glass Vibrancy)
+public struct VisualEffectBackground: NSViewRepresentable {
+    public var material: NSVisualEffectView.Material
+    public var blendingMode: NSVisualEffectView.BlendingMode
+    public var state: NSVisualEffectView.State
+    public var emphasized: Bool
+
+    public init(
+        material: NSVisualEffectView.Material = .sidebar,
+        blendingMode: NSVisualEffectView.BlendingMode = .behindWindow,
+        state: NSVisualEffectView.State = .active,
+        emphasized: Bool = false
+    ) {
+        self.material = material
+        self.blendingMode = blendingMode
+        self.state = state
+        self.emphasized = emphasized
+    }
+
+    public func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = material
+        view.blendingMode = blendingMode
+        view.state = state
+        view.isEmphasized = emphasized
+        return view
+    }
+
+    public func updateNSView(_ view: NSVisualEffectView, context: Context) {
+        view.material = material
+        view.blendingMode = blendingMode
+        view.state = state
+        view.isEmphasized = emphasized
+    }
+}
+
 // MARK: - Studio Glass Card Modifier (§5)
 public struct StudioGlassCardModifier: ViewModifier {
     public var cornerRadius: CGFloat = 14
