@@ -220,11 +220,40 @@ public struct WindowConfigurator: NSViewRepresentable {
     }
 }
 
+// =============================================================================
+// GLOBAL OVERLAY SCROLLER ENFORCEMENT
+// Swizzles NSScroller.preferredScrollerStyle and registers AppleShowScrollBars
+// so that all scrollbars throughout the app strictly use macOS overlay scrollers
+// which automatically hide when not utilized, regardless of connected hardware
+// or system-level "Always show scroll bars" preferences.
+// =============================================================================
+
+public extension NSScroller {
+    private static var hasSwizzledPreferredScrollerStyle = false
+    
+    static func enableOverlayScrollersGlobally() {
+        guard !hasSwizzledPreferredScrollerStyle else { return }
+        hasSwizzledPreferredScrollerStyle = true
+        
+        UserDefaults.standard.register(defaults: ["AppleShowScrollBars": "WhenScrolling"])
+        UserDefaults.standard.set("WhenScrolling", forKey: "AppleShowScrollBars")
+        
+        guard let originalMethod = class_getClassMethod(NSScroller.self, #selector(getter: NSScroller.preferredScrollerStyle)) else { return }
+        let swizzledBlock: @convention(block) (AnyObject) -> NSScroller.Style = { _ in
+            return .overlay
+        }
+        let swizzledImp = imp_implementationWithBlock(swizzledBlock)
+        method_setImplementation(originalMethod, swizzledImp)
+    }
+}
+
 @main
 struct WalkmanStudioApp: App {
     init() {
+        NSScroller.enableOverlayScrollersGlobally()
+
         if let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
-           let img = NSImage(contentsOf: iconURL) {
+           let img = NSImage(contentsOfFile: iconURL.path) ?? NSImage(contentsOf: iconURL) {
             NSApplication.shared.applicationIconImage = img
         } else if let fallback = NSImage(contentsOfFile: "assets/icon.png") {
             NSApplication.shared.applicationIconImage = fallback
